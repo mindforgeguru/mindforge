@@ -1,0 +1,100 @@
+"""
+MIND FORGE — AI Assisted Learning Platform
+FastAPI application entry point
+"""
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import logging
+
+from app.core.config import settings
+from app.core.database import engine, Base
+from app.core.redis_client import redis_manager
+from app.websockets.manager import ws_manager
+from app.routers import auth, teacher, student, parent, admin
+import app.models  # noqa: F401 — registers all models with Base
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown lifecycle handler."""
+    logger.info("Starting MIND FORGE backend...")
+    # Run Alembic migrations to apply any pending schema changes
+    import subprocess, sys, os
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        capture_output=True, text=True, cwd=backend_dir,
+    )
+    logger.info(f"Alembic: {result.stdout.strip()}")
+    if result.returncode != 0:
+        logger.error(f"Alembic migration failed: {result.stderr.strip()}")
+    else:
+        logger.info("Alembic migrations applied.")
+    # Create any tables not covered by migrations (idempotent)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables ready.")
+    # Initialize Redis connection
+    await redis_manager.connect()
+    # Start Redis subscriber in background
+    import asyncio
+    asyncio.create_task(redis_manager.start_subscriber(ws_manager))
+    logger.info("MIND FORGE backend is ready.")
+    yield
+    logger.info("Shutting down MIND FORGE backend...")
+    await redis_manager.disconnect()
+
+
+app = FastAPI(
+    title="MIND FORGE API",
+    description="AI Assisted Learning Platform — Backend API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# ─── CORS ─────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ─── Routers ──────────────────────────────────────────────────────────────────
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(teacher.router, prefix="/api/teacher", tags=["Teacher"])
+app.include_router(student.router, prefix="/api/student", tags=["Student"])
+app.include_router(parent.router, prefix="/api/parent", tags=["Parent"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+
+
+# ─── WebSocket endpoint ───────────────────────────────────────────────────────
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: int):
+    """
+    WebSocket endpoint for real-time events.
+    Client connects with their user_id; the server fans out
+    events (attendance updates, grade updates, new test published, etc.)
+    using Redis pub/sub across multiple backend instances.
+    """
+    await ws_manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Keep connection alive; receive any client-side pings
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        await ws_manager.disconnect(websocket, user_id)
+
+
+# ─── Health check ─────────────────────────────────────────────────────────────
+@app.get("/api/health", tags=["Health"])
+async def health_check():
+    return {"status": "ok", "app": "MIND FORGE"}
