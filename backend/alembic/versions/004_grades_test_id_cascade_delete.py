@@ -1,13 +1,13 @@
 """Change grades.test_id FK from SET NULL to CASCADE DELETE
 
-Revision ID: 004_grades_test_id_cascade_delete
+Revision ID: 004_grades_cascade_del
 Revises: 003_add_is_graded_to_tests
 Create Date: 2026-03-21
 """
 
 from alembic import op
 
-revision = "004_grades_test_id_cascade_delete"
+revision = "004_grades_cascade_del"
 down_revision = "003_add_is_graded_to_tests"
 branch_labels = None
 depends_on = None

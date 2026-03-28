@@ -6,8 +6,8 @@ class AppConstants {
   static const String tagline = 'AI Assisted Learning';
 
   /// Change this to your deployed backend URL in production.
-  static const String apiBaseUrl = 'https://mindforge-production-4d7e.up.railway.app/api';
-  static const String wsBaseUrl = 'wss://mindforge-production-4d7e.up.railway.app/ws';
+  static const String apiBaseUrl = 'https://mindforge-production-3e9b.up.railway.app/api';
+  static const String wsBaseUrl = 'wss://mindforge-production-3e9b.up.railway.app/ws';
 
   /// Supported grades (ICSE)
   static const List<int> grades = [8, 9, 10];

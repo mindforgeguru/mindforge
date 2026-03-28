@@ -1,7 +1,7 @@
 """Add homework and broadcast tables
 
 Revision ID: 005_add_homework_and_broadcast
-Revises: 004_grades_test_id_cascade_delete
+Revises: 004_grades_cascade_del
 Create Date: 2026-03-23
 """
 
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "005_add_homework_and_broadcast"
-down_revision = "004_grades_test_id_cascade_delete"
+down_revision = "004_grades_cascade_del"
 branch_labels = None
 depends_on = None
 
