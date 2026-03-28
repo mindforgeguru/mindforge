@@ -215,9 +215,9 @@ class _AttendanceCalendarDialogState
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _LegendDot(color: AppColors.accent, label: 'Attendance marked'),
+                  const _LegendDot(color: AppColors.accent, label: 'Attendance marked'),
                   SizedBox(width: _s(context, 16, min: 10, max: 20)),
-                  _LegendDot(color: AppColors.primary, label: 'Selected'),
+                  const _LegendDot(color: AppColors.primary, label: 'Selected'),
                 ],
               ),
 
@@ -689,7 +689,7 @@ class _FilterBar extends StatelessWidget {
             SizedBox(
               width: gradeW,
               child: DropdownButtonFormField<int>(
-                value: selectedGrade,
+                initialValue: selectedGrade,
                 isExpanded: true,
                 decoration: dropDecoration.copyWith(labelText: 'Grade'),
                 style: valueStyle,
@@ -739,7 +739,7 @@ class _FilterBar extends StatelessWidget {
             SizedBox(
               width: periodW,
               child: DropdownButtonFormField<int>(
-                value: selectedPeriod,
+                initialValue: selectedPeriod,
                 isExpanded: true,
                 decoration: dropDecoration.copyWith(labelText: 'Period'),
                 style: valueStyle,

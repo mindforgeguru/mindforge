@@ -60,7 +60,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _clearPin() {
     setState(() {
-      for (int i = 0; i < 6; i++) _pin[i] = '';
+      for (int i = 0; i < 6; i++) {
+        _pin[i] = '';
+      }
       _pinIndex = 0;
     });
   }
@@ -237,7 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         if (_isRegister) ...[
                           const SizedBox(height: 10),
                           DropdownButtonFormField<String>(
-                            value: _selectedRole,
+                            initialValue: _selectedRole,
                             decoration: const InputDecoration(
                               labelText: 'Register as',
                               prefixIcon: Icon(Icons.badge_outlined),
@@ -341,7 +343,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           if (_selectedRole == 'student') ...[
                             const SizedBox(height: 10),
                             DropdownButtonFormField<int>(
-                              value: _selectedGrade,
+                              initialValue: _selectedGrade,
                               decoration: const InputDecoration(
                                 labelText: 'Grade',
                                 prefixIcon: Icon(Icons.school_outlined),

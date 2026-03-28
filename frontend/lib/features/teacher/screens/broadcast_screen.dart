@@ -304,7 +304,7 @@ class _SendBroadcastDialogState extends ConsumerState<_SendBroadcastDialog> {
                 if (_targetType == 'grade') ...[
                   SizedBox(height: _s(context, 10, min: 8, max: 14)),
                   DropdownButtonFormField<int>(
-                    value: _targetGrade,
+                    initialValue: _targetGrade,
                     decoration:
                         const InputDecoration(labelText: 'Select Grade'),
                     isExpanded: true,

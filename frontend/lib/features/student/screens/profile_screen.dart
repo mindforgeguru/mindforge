@@ -172,7 +172,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                   Wrap(
                     spacing: 8,
                     children: [
-                      _Pill(label: 'STUDENT', color: AppColors.secondary),
+                      const _Pill(label: 'STUDENT', color: AppColors.secondary),
                       gradeAsync.when(
                         loading: () => const SizedBox.shrink(),
                         error: (_, __) => const SizedBox.shrink(),
@@ -229,7 +229,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                                   ),
                                 ),
                                 Text(
-                                  linked ? parentName! : 'Not linked',
+                                  linked ? parentName : 'Not linked',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,

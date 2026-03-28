@@ -307,8 +307,9 @@ class _EditUserSheetState extends State<_EditUserSheet> {
     final data = <String, dynamic>{};
     if (newUsername != widget.user.username) data['username'] = newUsername;
     if (_selectedRole != widget.user.role) data['role'] = _selectedRole;
-    if (_selectedRole == 'student' && _selectedGrade != widget.user.grade)
+    if (_selectedRole == 'student' && _selectedGrade != widget.user.grade) {
       data['grade'] = _selectedGrade;
+    }
     if (_showMpinReset && newMpin.length == 6) data['new_mpin'] = newMpin;
     // Parent field for students:
     // - If a parent is already linked → renaming the parent user
@@ -431,7 +432,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
 
             // Role
             DropdownButtonFormField<String>(
-              value: _selectedRole,
+              initialValue: _selectedRole,
               decoration: const InputDecoration(
                 labelText: 'Role',
                 prefixIcon: Icon(Icons.badge_outlined),
@@ -445,8 +446,9 @@ class _EditUserSheetState extends State<_EditUserSheet> {
               onChanged: (v) => setState(() {
                 _selectedRole = v ?? _selectedRole;
                 if (_selectedRole != 'student') _selectedGrade = null;
-                if (_selectedRole == 'student' && _selectedGrade == null)
+                if (_selectedRole == 'student' && _selectedGrade == null) {
                   _selectedGrade = 8;
+                }
               }),
             ),
 
@@ -454,7 +456,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
             if (_selectedRole == 'student') ...[
               const SizedBox(height: 14),
               DropdownButtonFormField<int>(
-                value: _selectedGrade,
+                initialValue: _selectedGrade,
                 decoration: const InputDecoration(
                   labelText: 'Grade',
                   prefixIcon: Icon(Icons.school_outlined),
@@ -508,7 +510,9 @@ class _EditUserSheetState extends State<_EditUserSheet> {
               onTap: () => setState(() {
                 _showMpinReset = !_showMpinReset;
                 if (!_showMpinReset) {
-                  for (int i = 0; i < 6; i++) _mpin[i] = '';
+                  for (int i = 0; i < 6; i++) {
+                    _mpin[i] = '';
+                  }
                   _mpinIndex = 0;
                 }
               }),
@@ -710,7 +714,7 @@ class _ActiveUsersTabState extends ConsumerState<_ActiveUsersTab> {
           child: Column(
             children: [
               DropdownButtonFormField<String>(
-                value: _selectedRole,
+                initialValue: _selectedRole,
                 decoration: const InputDecoration(
                   labelText: 'User Type',
                   prefixIcon: Icon(Icons.badge_outlined),
@@ -729,7 +733,7 @@ class _ActiveUsersTabState extends ConsumerState<_ActiveUsersTab> {
               if (_needsGrade) ...[
                 const SizedBox(height: 10),
                 DropdownButtonFormField<int?>(
-                  value: _selectedGrade,
+                  initialValue: _selectedGrade,
                   decoration: const InputDecoration(
                     labelText: 'Grade',
                     prefixIcon: Icon(Icons.school_outlined),
@@ -928,24 +932,31 @@ class _ActiveUserTileState extends ConsumerState<_ActiveUserTile> {
     if (result != null && mounted) {
       // Build a human-readable summary of what changed
       final changes = <String>[];
-      if (result.containsKey('username'))
+      if (result.containsKey('username')) {
         changes.add('Username → "${result['username']}"');
-      if (result.containsKey('role'))
+      }
+      if (result.containsKey('role')) {
         changes.add('Role → ${result['role']}');
-      if (result.containsKey('grade'))
+      }
+      if (result.containsKey('grade')) {
         changes.add('Grade → ${result['grade']}');
-      if (result.containsKey('new_mpin'))
+      }
+      if (result.containsKey('new_mpin')) {
         changes.add('MPIN reset');
-      if (result.containsKey('parent_username'))
+      }
+      if (result.containsKey('parent_username')) {
         changes.add(result['parent_username'].toString().isEmpty
             ? 'Parent unlinked'
             : 'Parent linked → "${result['parent_username']}"');
-      if (result.containsKey('_rename_parent_to'))
+      }
+      if (result.containsKey('_rename_parent_to')) {
         changes.add('Parent username → "${result['_rename_parent_to']}"');
-      if (result.containsKey('student_username'))
+      }
+      if (result.containsKey('student_username')) {
         changes.add(result['student_username'].toString().isEmpty
             ? 'Student unlinked'
             : 'Student → "${result['student_username']}"');
+      }
 
       final summary = changes.isEmpty
           ? 'No changes made.'

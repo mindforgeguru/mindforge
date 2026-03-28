@@ -2,7 +2,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
-import 'package:dio/dio.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/models/test.dart';

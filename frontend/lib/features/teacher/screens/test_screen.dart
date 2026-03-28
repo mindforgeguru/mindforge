@@ -177,7 +177,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
           Row(children: [
             Expanded(
               child: DropdownButtonFormField<int>(
-                value: _selectedGrade,
+                initialValue: _selectedGrade,
                 decoration: const InputDecoration(labelText: 'Grade'),
                 hint: const Text('Select Grade'),
                 items: AppConstants.grades
@@ -192,7 +192,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: _selectedSubject,
+                initialValue: _selectedSubject,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Subject'),
                 hint: const Text('Select Subject'),

@@ -267,7 +267,7 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
                         title: const Text('Enable Weekend Classes'),
                         subtitle:
                             const Text('Allow Saturday & Sunday scheduling'),
-                        activeColor: AppColors.primary,
+                        activeThumbColor: AppColors.primary,
                         contentPadding: EdgeInsets.zero,
                         onChanged: (v) => setState(() => _enableWeekends = v),
                       ),

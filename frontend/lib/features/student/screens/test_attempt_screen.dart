@@ -231,7 +231,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 14)),
             Text(
-              '${_answeredCount}/${_questions.length} answered',
+              '$_answeredCount/${_questions.length} answered',
               style: const TextStyle(
                   fontSize: 11, color: AppColors.textSecondary),
             ),

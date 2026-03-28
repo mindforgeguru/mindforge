@@ -9,15 +9,15 @@ Widget parentErrorWidget(Object error, {String? context}) {
   final is404 = error is DioException && error.response?.statusCode == 404;
 
   if (is404) {
-    return Center(
+    return const Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.link_off, size: 64, color: AppColors.textSecondary),
-            const SizedBox(height: 16),
-            const Text(
+            Icon(Icons.link_off, size: 64, color: AppColors.textSecondary),
+            SizedBox(height: 16),
+            Text(
               'No Child Account Linked',
               style: TextStyle(
                   fontSize: 18,
@@ -25,8 +25,8 @@ Widget parentErrorWidget(Object error, {String? context}) {
                   color: AppColors.textPrimary),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-            const Text(
+            SizedBox(height: 8),
+            Text(
               'Your account is not linked to a child account.\n'
               'Ask your child to enter your username when registering.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
