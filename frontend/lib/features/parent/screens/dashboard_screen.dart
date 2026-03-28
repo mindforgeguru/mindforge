@@ -277,7 +277,7 @@ class _ParentDashboardScreenState
                                 spacing: _s(context, 8, min: 6, max: 12),
                                 runSpacing: _s(context, 6, min: 4, max: 8),
                                 alignment: WrapAlignment.center,
-                                children: [
+                                children: const [
                                   _Badge(label: 'PARENT'),
                                 ],
                               ),

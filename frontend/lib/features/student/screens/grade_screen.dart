@@ -215,7 +215,7 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
 
                 // Subject dropdown
                 DropdownButtonFormField<String?>(
-                  value: _subject,
+                  initialValue: _subject,
                   decoration: const InputDecoration(
                     labelText: 'Subject',
                     isDense: true,
@@ -279,7 +279,7 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
                               size: 48, color: AppColors.textMuted),
                           const SizedBox(height: 12),
                           Text(
-                            'No ${_testType} test grades for $_subject yet.',
+                            'No $_testType test grades for $_subject yet.',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                                 color: AppColors.textSecondary,
@@ -778,7 +778,7 @@ class _GradesTabBody extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: DropdownButtonFormField<String?>(
-            value: filterSubject,
+            initialValue: filterSubject,
             decoration: const InputDecoration(
               labelText: 'Filter by Subject',
               isDense: true,

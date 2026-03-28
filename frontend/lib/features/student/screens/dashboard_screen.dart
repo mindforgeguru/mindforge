@@ -531,7 +531,7 @@ class _WelcomeContent extends ConsumerWidget {
             runSpacing: 6,
             alignment: WrapAlignment.center,
             children: [
-              _Badge(label: 'STUDENT'),
+              const _Badge(label: 'STUDENT'),
               gradeAsync.when(
                 loading: () => const SizedBox.shrink(),
                 error: (_, __) => const SizedBox.shrink(),

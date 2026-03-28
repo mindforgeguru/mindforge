@@ -243,16 +243,16 @@ class _StudentTimetableScreenState
                     ref.refresh(studentTimetableProvider(_dateString).future),
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  children: [
-                    const SizedBox(height: 60),
+                  children: const [
+                    SizedBox(height: 60),
                     Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.error_outline,
+                          Icon(Icons.error_outline,
                               size: 40, color: AppColors.error),
-                          const SizedBox(height: 8),
-                          const Text('Could not load timetable.\nPull down to retry.',
+                          SizedBox(height: 8),
+                          Text('Could not load timetable.\nPull down to retry.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                   color: AppColors.textMuted, fontSize: 13)),

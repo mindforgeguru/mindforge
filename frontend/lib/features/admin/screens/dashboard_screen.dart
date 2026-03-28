@@ -37,16 +37,16 @@ class AdminDashboardScreen extends ConsumerWidget {
     final double headerH = navyH + cardInternalH - cardIntoNavy + avatarRadius;
 
     final cards = [
-      _DashCard(icon: Icons.account_balance_wallet_outlined, label: 'Fees',
+      const _DashCard(icon: Icons.account_balance_wallet_outlined, label: 'Fees',
           subtitle: 'Payment records', color: AppColors.accent,
           route: '${RouteNames.adminDashboard}/fees', badge: 0),
-      _DashCard(icon: Icons.calendar_month_outlined, label: 'Timetable',
+      const _DashCard(icon: Icons.calendar_month_outlined, label: 'Timetable',
           subtitle: 'Manage schedule', color: AppColors.primary,
           route: '${RouteNames.adminDashboard}/timetable', badge: 0),
       _DashCard(icon: Icons.people_outlined, label: 'Users',
           subtitle: 'Manage accounts', color: AppColors.secondary,
           route: '${RouteNames.adminDashboard}/users', badge: pendingCount),
-      _DashCard(icon: Icons.auto_awesome_outlined, label: 'New Year',
+      const _DashCard(icon: Icons.auto_awesome_outlined, label: 'New Year',
           subtitle: 'Academic year', color: AppColors.error,
           route: '${RouteNames.adminDashboard}/academic-year', badge: 0),
     ];
@@ -153,7 +153,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                                 spacing: 8,
                                 alignment: WrapAlignment.center,
                                 children: [
-                                  _Badge(label: 'ADMIN'),
+                                  const _Badge(label: 'ADMIN'),
                                   if (currentYear != null)
                                     _Badge(
                                         label: currentYear,

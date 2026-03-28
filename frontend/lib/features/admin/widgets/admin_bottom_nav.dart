@@ -53,8 +53,7 @@ class _NavItem extends StatelessWidget {
   final VoidCallback onTap;
   final bool isActive;
 
-  const _NavItem({required this.icon, required this.label, required this.onTap,
-      this.isActive = false});
+  const _NavItem({required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

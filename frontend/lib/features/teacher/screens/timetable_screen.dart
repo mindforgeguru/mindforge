@@ -434,7 +434,9 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
       List<TimetableSlotModel> slots, List<UserModel> teachers) {
     final currentDate = _dateString;
     if (_populatedGrade == _selectedGrade &&
-        _populatedDate == currentDate) return;
+        _populatedDate == currentDate) {
+      return;
+    }
     _populatedGrade = _selectedGrade;
     _populatedDate = currentDate;
 
@@ -1421,7 +1423,7 @@ class _CalendarGrid extends StatelessWidget {
     return LayoutBuilder(builder: (context, constraints) {
       // Responsive cell size: fit 7 columns, cap between 16–22px
       final cellSize = (constraints.maxWidth / 7).clamp(16.0, 22.0);
-      final dotSize = 2.0;
+      const dotSize = 2.0;
 
       final rows = <Widget>[];
       for (int week = 0; week < numWeeks; week++) {
@@ -1648,7 +1650,7 @@ class _PeriodRow extends StatelessWidget {
 
           // Teacher dropdown — full width
           DropdownButtonFormField<int?>(
-            value: selectedTeacherId,
+            initialValue: selectedTeacherId,
             decoration: const InputDecoration(
               labelText: 'Teacher',
               isDense: true,
@@ -1681,7 +1683,7 @@ class _PeriodRow extends StatelessWidget {
 
           // Subject dropdown — full width
           DropdownButtonFormField<String?>(
-            value: selectedSubject != null &&
+            initialValue: selectedSubject != null &&
                     allowedSubjects.contains(selectedSubject)
                 ? selectedSubject
                 : null,

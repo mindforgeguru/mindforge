@@ -288,7 +288,7 @@ class _TeacherDashboardScreenState
                                 runSpacing: 6,
                                 alignment: WrapAlignment.center,
                                 children: [
-                                  _Badge(label: 'TEACHER'),
+                                  const _Badge(label: 'TEACHER'),
                                   ...subjects.map((s) => _SubjectChip(subject: s)),
                                 ],
                               ),

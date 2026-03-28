@@ -175,7 +175,7 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
               ),
             ),
             data: (list) => list.isEmpty
-                ? _EmptyState(
+                ? const _EmptyState(
                     icon: Icons.assignment_outlined,
                     message: 'No homework assigned yet',
                   )
@@ -284,7 +284,7 @@ class _CreateHomeworkDialogState
               children: [
                 // Grade
                 DropdownButtonFormField<int>(
-                  value: _grade,
+                  initialValue: _grade,
                   decoration: const InputDecoration(labelText: 'Grade'),
                   items: AppConstants.grades
                       .map((g) => DropdownMenuItem(
@@ -297,7 +297,7 @@ class _CreateHomeworkDialogState
                 SizedBox(height: _s(context, 10, min: 8, max: 14)),
                 // Subject
                 DropdownButtonFormField<String>(
-                  value: _subject,
+                  initialValue: _subject,
                   decoration: const InputDecoration(labelText: 'Subject'),
                   isExpanded: true,
                   items: AppConstants.subjects

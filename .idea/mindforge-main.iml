@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/flutter/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/bots/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/bots/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/bots/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/devicelab/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/devicelab/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/devicelab/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/docs/platform_integration/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/docs/platform_integration/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/docs/platform_integration/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/docs/renderers/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/docs/renderers/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/docs/renderers/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/snippets/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/snippets/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/snippets/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/android_driver_extensions/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/android_driver_extensions/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/android_driver_extensions/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/gen_defaults/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/gen_defaults/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/gen_defaults/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/gen_keycodes/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/gen_keycodes/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/gen_keycodes/build" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/vitool/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/vitool/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/flutter/dev/tools/vitool/build" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

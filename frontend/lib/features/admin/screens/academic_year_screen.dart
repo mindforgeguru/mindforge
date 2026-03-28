@@ -55,8 +55,8 @@ class AdminAcademicYearScreen extends ConsumerWidget {
               ),
 
               if (current == null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
                   child: Text(
                     'No active academic year. Start one so users can register.',
                     style: TextStyle(

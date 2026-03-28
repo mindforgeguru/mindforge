@@ -52,9 +52,9 @@ class _TeacherGradeScreenState extends ConsumerState<TeacherGradeScreen>
       ),
       body: TabBarView(
         controller: _tabCtrl,
-        children: [
-          const _AllGradesTab(),
-          const _EnterOfflineMarksTab(),
+        children: const [
+          _AllGradesTab(),
+          _EnterOfflineMarksTab(),
         ],
       ),
       bottomNavigationBar: const TeacherBottomNav(),
@@ -101,7 +101,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<int?>(
-                      value: _filterGrade,
+                      initialValue: _filterGrade,
                       decoration: const InputDecoration(
                           labelText: 'Grade', isDense: true),
                       items: [
@@ -120,7 +120,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      value: _filterSubject,
+                      initialValue: _filterSubject,
                       isExpanded: true,
                       decoration: const InputDecoration(
                           labelText: 'Subject', isDense: true),
@@ -147,7 +147,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                   loading: () => const LinearProgressIndicator(),
                   error: (e, _) => const SizedBox.shrink(),
                   data: (studs) => DropdownButtonFormField<int?>(
-                    value: _filterStudentId,
+                    initialValue: _filterStudentId,
                     decoration: const InputDecoration(
                         labelText: 'Student', isDense: true),
                     items: [
@@ -352,7 +352,7 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: DropdownButtonFormField<int>(
-            value: _selectedGrade,
+            initialValue: _selectedGrade,
             decoration: const InputDecoration(labelText: 'Grade', isDense: true),
             items: [8, 9, 10]
                 .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))

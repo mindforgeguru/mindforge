@@ -539,11 +539,11 @@ class _Legend extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _LegendDot(color: AppColors.success, label: 'Present'),
+        const _LegendDot(color: AppColors.success, label: 'Present'),
         SizedBox(width: gap),
-        _LegendDot(color: AppColors.error, label: 'Absent'),
+        const _LegendDot(color: AppColors.error, label: 'Absent'),
         SizedBox(width: gap),
-        _LegendDot(color: AppColors.warning, label: 'Partial'),
+        const _LegendDot(color: AppColors.warning, label: 'Partial'),
       ],
     );
   }
