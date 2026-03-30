@@ -1503,7 +1503,7 @@ class _CalendarGrid extends StatelessWidget {
                       ),
                     )
                   else
-                    SizedBox(height: dotSize + 1),
+                    const SizedBox(height: dotSize + 1),
                 ],
               ),
             ),
