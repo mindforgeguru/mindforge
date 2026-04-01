@@ -15,7 +15,20 @@ class AdminAcademicYearScreen extends ConsumerWidget {
     final currentAsync = ref.watch(currentAcademicYearProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Academic Year')),
+      appBar: AppBar(
+        title: const Text('Academic Year'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+              padding: const EdgeInsets.all(3),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+            ),
+          ),
+        ],
+      ),
       body: yearsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),

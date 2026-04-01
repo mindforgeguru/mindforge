@@ -191,6 +191,15 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
             tooltip: 'Clear All Slots',
             onPressed: () => _clearAllSlots(),
           ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+              padding: const EdgeInsets.all(3),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+            ),
+          ),
         ],
       ),
       body: configAsync.when(

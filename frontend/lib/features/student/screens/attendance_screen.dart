@@ -76,6 +76,17 @@ class _StudentAttendanceScreenState
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+              padding: const EdgeInsets.all(3),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+            ),
+          ),
+        ],
         title: FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(

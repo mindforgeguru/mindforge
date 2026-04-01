@@ -85,6 +85,17 @@ class AdminDashboardScreen extends ConsumerWidget {
                     right: 6,
                     child: Row(
                       children: [
+                        Container(
+                          height: 40,
+                          width: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                        ),
+                        const SizedBox(width: 10),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,

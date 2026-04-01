@@ -39,6 +39,17 @@ class _TeacherGradeScreenState extends ConsumerState<TeacherGradeScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Grades'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+              padding: const EdgeInsets.all(3),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+            ),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabCtrl,
           labelColor: Colors.white,

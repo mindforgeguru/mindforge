@@ -28,9 +28,14 @@ class MindForgeLogo extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Logo image
-        SizedBox(
+        Container(
           width: 80 * size,
           height: 80 * size,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12 * size),
+          ),
+          padding: EdgeInsets.all(6 * size),
           child: Image.asset(
             'assets/images/logo.png',
             fit: BoxFit.contain,
@@ -75,9 +80,14 @@ class MindForgeAppBarTitle extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
+        Container(
           width: 30,
           height: 30,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          padding: const EdgeInsets.all(3),
           child: Image.asset(
             'assets/images/logo.png',
             fit: BoxFit.contain,
@@ -184,9 +194,14 @@ class MindForgeFooter extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        SizedBox(
+                        Container(
                           width: 26,
                           height: 26,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          padding: const EdgeInsets.all(2),
                           child: Image.asset(
                             'assets/images/logo.png',
                             fit: BoxFit.contain,

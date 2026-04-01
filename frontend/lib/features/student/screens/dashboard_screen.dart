@@ -184,10 +184,18 @@ class _StudentDashboardScreenState
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Image.asset(
-                              'assets/images/logo.png',
+                            Container(
                               height: logoH,
-                              fit: BoxFit.contain,
+                              width: logoH,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(logoH * 0.15),
+                              ),
+                              padding: EdgeInsets.all(logoH * 0.08),
+                              child: Image.asset(
+                                'assets/images/logo.png',
+                                fit: BoxFit.contain,
+                              ),
                             ),
                             SizedBox(width: _s(context, 10, min: 6, max: 14)),
                             Column(
