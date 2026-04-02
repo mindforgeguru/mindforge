@@ -36,6 +36,7 @@ import '../../features/admin/screens/timetable_screen.dart' as admin;
 import '../../features/admin/screens/users_screen.dart' as admin;
 import '../../features/admin/screens/profile_screen.dart' as admin;
 import '../../features/admin/screens/academic_year_screen.dart';
+import '../../features/admin/screens/reports_screen.dart';
 
 // ─── RouterNotifier ───────────────────────────────────────────────────────────
 // A ChangeNotifier that tells GoRouter to re-run redirect whenever auth changes.
@@ -243,6 +244,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'academic-year',
             builder: (_, __) => const AdminAcademicYearScreen(),
+          ),
+          GoRoute(
+            path: 'reports',
+            builder: (_, __) => const AdminReportsScreen(),
           ),
         ],
       ),

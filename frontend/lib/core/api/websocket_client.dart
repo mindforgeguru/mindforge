@@ -30,6 +30,13 @@ class WebSocketClient {
     try {
       final uri = Uri.parse('${AppConstants.wsBaseUrl}/$userId');
       _channel = WebSocketChannel.connect(uri);
+      // Await the ready future so connection errors are caught here
+      _channel!.ready.catchError((_) {
+        _channel = null;
+        Future.delayed(const Duration(seconds: 5), () {
+          if (_connectedUserId != null) _connect(_connectedUserId!);
+        });
+      });
 
       _channel!.stream.listen(
         (data) {

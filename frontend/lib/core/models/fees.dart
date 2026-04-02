@@ -62,6 +62,8 @@ class FeePaymentModel {
 
 class PaymentInfoModel {
   final int id;
+  final int slot;
+  final String? label;
   final String? bankName;
   final String? accountHolder;
   final String? accountNumber;
@@ -72,6 +74,8 @@ class PaymentInfoModel {
 
   const PaymentInfoModel({
     required this.id,
+    required this.slot,
+    this.label,
     this.bankName,
     this.accountHolder,
     this.accountNumber,
@@ -84,6 +88,8 @@ class PaymentInfoModel {
   factory PaymentInfoModel.fromJson(Map<String, dynamic> json) =>
       PaymentInfoModel(
         id: json['id'] as int,
+        slot: json['slot'] as int? ?? 1,
+        label: json['label'] as String?,
         bankName: json['bank_name'] as String?,
         accountHolder: json['account_holder'] as String?,
         accountNumber: json['account_number'] as String?,
@@ -106,7 +112,7 @@ class StudentFeeSummaryModel {
   final double computerFee;
   final double aiFee;
   final List<FeePaymentModel> payments;
-  final PaymentInfoModel? paymentInfo;
+  final List<PaymentInfoModel> paymentOptions;
 
   const StudentFeeSummaryModel({
     required this.studentId,
@@ -120,7 +126,7 @@ class StudentFeeSummaryModel {
     this.computerFee = 0.0,
     this.aiFee = 0.0,
     required this.payments,
-    this.paymentInfo,
+    this.paymentOptions = const [],
   });
 
   factory StudentFeeSummaryModel.fromJson(Map<String, dynamic> json) =>
@@ -138,9 +144,8 @@ class StudentFeeSummaryModel {
         payments: (json['payments'] as List<dynamic>)
             .map((p) => FeePaymentModel.fromJson(p as Map<String, dynamic>))
             .toList(),
-        paymentInfo: json['payment_info'] != null
-            ? PaymentInfoModel.fromJson(
-                json['payment_info'] as Map<String, dynamic>)
-            : null,
+        paymentOptions: (json['payment_options'] as List<dynamic>? ?? [])
+            .map((p) => PaymentInfoModel.fromJson(p as Map<String, dynamic>))
+            .toList(),
       );
 }

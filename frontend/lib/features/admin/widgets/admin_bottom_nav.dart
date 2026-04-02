@@ -35,6 +35,8 @@ class AdminBottomNav extends StatelessWidget {
                   onTap: () => context.go('${RouteNames.adminDashboard}/users')),
               _NavItem(icon: Icons.account_balance_wallet_outlined, label: 'Fees',
                   onTap: () => context.go('${RouteNames.adminDashboard}/fees')),
+              _NavItem(icon: Icons.bar_chart_outlined, label: 'Reports',
+                  onTap: () => context.go('${RouteNames.adminDashboard}/reports')),
               _NavItem(icon: Icons.calendar_month_outlined, label: 'Timetable',
                   onTap: () => context.go('${RouteNames.adminDashboard}/timetable')),
               _NavItem(icon: Icons.person_outline_rounded, label: 'Profile',
@@ -97,6 +99,8 @@ class _NavItem extends StatelessWidget {
         return path.contains('/users');
       case 'Fees':
         return path.contains('/fees');
+      case 'Reports':
+        return path.contains('/reports');
       case 'Timetable':
         return path.contains('/timetable');
       case 'Profile':

@@ -19,6 +19,9 @@ from reportlab.platypus import (
 logger = logging.getLogger(__name__)
 
 # ─── Brand colors ─────────────────────────────────────────────────────────────
+NAVY = colors.HexColor("#1D3557")
+ORANGE = colors.HexColor("#E87722")
+
 BRAND_PURPLE = colors.HexColor("#4A1F8B")
 BRAND_BLUE = colors.HexColor("#1565C0")
 BRAND_GOLD = colors.HexColor("#F9A825")
@@ -408,6 +411,191 @@ async def generate_answer_key_pdf(
         )
     ))
 
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
+# ─── Shared report header ─────────────────────────────────────────────────────
+
+def _report_header(story: list, styles: dict, title: str, subtitle: str) -> None:
+    story.append(Paragraph("MIND FORGE", styles["brand_title"]))
+    story.append(Paragraph("AI Assisted Learning", styles["tagline"]))
+    story.append(HRFlowable(width="100%", thickness=2, color=BRAND_PURPLE, spaceAfter=6))
+    story.append(Paragraph(title, styles["test_title"]))
+    story.append(Paragraph(subtitle, styles["meta"]))
+    story.append(Spacer(1, 4 * mm))
+
+
+# ─── Report: Pending Fees (grade-wise) ────────────────────────────────────────
+
+async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic_year: str) -> bytes:
+    from collections import defaultdict
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            rightMargin=2*cm, leftMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
+    styles = _get_styles()
+    story = []
+
+    _report_header(story, styles,
+                   title=f"PENDING FEES REPORT — {academic_year}",
+                   subtitle=f"Generated on {date.today().strftime('%d %B %Y')}")
+
+    by_grade: Dict[int, list] = defaultdict(list)
+    for s in summaries:
+        if s["balance_due"] > 0:
+            by_grade[s["grade"]].append(s)
+
+    if not by_grade:
+        story.append(Paragraph("No pending fees found for this academic year.", styles["meta"]))
+    else:
+        grand_total = 0.0
+        for grade in sorted(by_grade.keys()):
+            students = by_grade[grade]
+            story.append(Paragraph(f"Grade {grade}", styles["section_header"]))
+            rows = [["Student", "Total Fee (Rs.)", "Paid (Rs.)", "Balance Due (Rs.)"]]
+            grade_total = 0.0
+            for s in students:
+                rows.append([s["username"], f"{s['total_fee']:,.2f}",
+                              f"{s['total_paid']:,.2f}", f"{s['balance_due']:,.2f}"])
+                grade_total += s["balance_due"]
+            grand_total += grade_total
+            rows.append(["Grade Total", "", "", f"{grade_total:,.2f}"])
+            t = Table(rows, colWidths=[7*cm, 3.5*cm, 3.5*cm, 3.5*cm])
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F5F7FA")]),
+                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFF3E0")),
+                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]))
+            story.append(t)
+            story.append(Spacer(1, 6*mm))
+
+        story.append(HRFlowable(width="100%", thickness=1, color=BRAND_PURPLE, spaceAfter=4))
+        story.append(Paragraph(
+            f"Grand Total Pending: Rs.{grand_total:,.2f}",
+            ParagraphStyle("grand", parent=getSampleStyleSheet()["Normal"],
+                           fontSize=12, fontName="Helvetica-Bold",
+                           textColor=BRAND_PURPLE, alignment=2, spaceAfter=4)))
+
+    story.append(HRFlowable(width="100%", thickness=1, color=BRAND_PURPLE, spaceBefore=10, spaceAfter=4))
+    story.append(Paragraph("MIND FORGE | AI Assisted Learning — Confidential",
+                            ParagraphStyle("footer", parent=getSampleStyleSheet()["Normal"],
+                                           fontSize=8, textColor=colors.gray, alignment=1)))
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
+
+# ─── Report: Student Ledger ────────────────────────────────────────────────────
+
+async def generate_student_ledger_report(student: Dict[str, Any], academic_year: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            rightMargin=2*cm, leftMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
+    styles = _get_styles()
+    story = []
+
+    _report_header(story, styles,
+                   title=f"STUDENT FEE LEDGER — {academic_year}",
+                   subtitle=f"Student: {student['username']}  |  Grade: {student['grade']}  |  Generated: {date.today().strftime('%d %B %Y')}")
+
+    # ── Fee Breakdown ─────────────────────────────────────────────────────────
+    fee_breakdown = student.get("fee_breakdown", [])
+    if fee_breakdown:
+        story.append(Paragraph("Fee Breakdown", styles["section_header"]))
+        bd_rows = [["Description", "Amount (Rs.)"]]
+        for item in fee_breakdown:
+            bd_rows.append([item["label"], f"{item['amount']:,.2f}"])
+        bd_rows.append(["Total Fee", f"{student['total_fee']:,.2f}"])
+        bd_table = Table(bd_rows, colWidths=[12*cm, 5.5*cm])
+        bd_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F5F7FA")]),
+            ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#EDE7F6")),
+            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(bd_table)
+        story.append(Spacer(1, 6*mm))
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    summary_data = [
+        ["Total Fee", "Total Paid", "Balance Due"],
+        [f"Rs.{student['total_fee']:,.2f}", f"Rs.{student['total_paid']:,.2f}", f"Rs.{student['balance_due']:,.2f}"],
+    ]
+    st = Table(summary_data, colWidths=[5.5*cm, 5.5*cm, 5.5*cm])
+    st.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("BACKGROUND", (2, 1), (2, 1),
+         colors.HexColor("#FFEBEE") if student["balance_due"] > 0 else colors.HexColor("#E8F5E9")),
+        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(st)
+    story.append(Spacer(1, 6*mm))
+
+    story.append(Paragraph("Payment History", styles["section_header"]))
+    payments = student.get("payments", [])
+    if not payments:
+        story.append(Paragraph("No payments recorded.", styles["meta"]))
+    else:
+        pay_rows = [["#", "Date", "Amount (Rs.)", "Notes"]]
+        for i, p in enumerate(payments, 1):
+            paid_at = p.get("paid_at", "")
+            if paid_at:
+                try:
+                    from datetime import datetime as _dt
+                    paid_at = _dt.fromisoformat(paid_at).strftime("%d %b %Y")
+                except Exception:
+                    pass
+            pay_rows.append([str(i), paid_at, f"{float(p['amount']):,.2f}", p.get("notes") or "—"])
+        pt = Table(pay_rows, colWidths=[1*cm, 4*cm, 4*cm, 8.5*cm])
+        pt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F7FA")]),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(pt)
+
+    story.append(Spacer(1, 6*mm))
+    status_text = "FULLY PAID" if student["balance_due"] <= 0 else f"BALANCE DUE: Rs.{student['balance_due']:,.2f}"
+    status_color = colors.HexColor("#2E7D32") if student["balance_due"] <= 0 else colors.HexColor("#B71C1C")
+    story.append(Paragraph(status_text, ParagraphStyle("status", parent=getSampleStyleSheet()["Normal"],
+                                                        fontSize=13, fontName="Helvetica-Bold",
+                                                        textColor=status_color, alignment=1, spaceAfter=4)))
+    story.append(HRFlowable(width="100%", thickness=1, color=BRAND_PURPLE, spaceBefore=10, spaceAfter=4))
+    story.append(Paragraph("MIND FORGE | AI Assisted Learning — Confidential",
+                            ParagraphStyle("footer", parent=getSampleStyleSheet()["Normal"],
+                                           fontSize=8, textColor=colors.gray, alignment=1)))
     doc.build(story)
     pdf_bytes = buffer.getvalue()
     buffer.close()

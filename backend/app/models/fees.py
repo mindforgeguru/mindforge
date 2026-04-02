@@ -60,6 +60,8 @@ class PaymentInfo(Base):
     __tablename__ = "payment_info"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=1, unique=True)
+    label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     bank_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     account_holder: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     account_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

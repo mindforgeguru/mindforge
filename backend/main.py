@@ -39,6 +39,24 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables ready.")
+    # Seed default admin if not exists
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy import select, text
+    from app.models.user import User, UserRole
+    import bcrypt
+    async with AsyncSession(engine) as session:
+        result = await session.execute(
+            select(User).where(User.username == "admin", User.deleted_at.is_(None))
+        )
+        if not result.scalar_one_or_none():
+            hashed = bcrypt.hashpw(b"123456", bcrypt.gensalt(12)).decode()
+            admin_user = User(
+                username="admin", mpin_hash=hashed,
+                role=UserRole.admin, is_active=True, is_approved=True,
+            )
+            session.add(admin_user)
+            await session.commit()
+            logger.info("Default admin seeded (username=admin, mpin=123456)")
     # Initialize Redis connection
     await redis_manager.connect()
     # Start Redis subscriber in background

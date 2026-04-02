@@ -101,9 +101,9 @@ class _PayTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final info = fees.paymentInfo;
+    final options = fees.paymentOptions;
 
-    if (info == null) {
+    if (options.isEmpty) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32),
@@ -143,10 +143,12 @@ class _PayTab extends StatelessWidget {
                   const Icon(Icons.warning_amber_rounded,
                       color: AppColors.error, size: 20),
                   const SizedBox(width: 8),
-                  Text(
-                    'Balance Due: ${NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(fees.balanceDue)}',
-                    style: const TextStyle(
-                        color: AppColors.error, fontWeight: FontWeight.bold),
+                  Expanded(
+                    child: Text(
+                      'Balance Due: ${NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(fees.balanceDue)}',
+                      style: const TextStyle(
+                          color: AppColors.error, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -154,31 +156,81 @@ class _PayTab extends StatelessWidget {
             const SizedBox(height: 16),
           ],
 
-          // Bank details card
-          if (info.bankName != null ||
-              info.accountHolder != null ||
-              info.accountNumber != null ||
-              info.ifsc != null) ...[
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: mindForgeCardDecoration(
-                  color: AppColors.primary.withOpacity(0.03)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.account_balance,
-                          color: AppColors.primary, size: 20),
-                      const SizedBox(width: 8),
-                      Text('Bank Transfer',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(color: AppColors.primary)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+          // One card per payment option
+          for (int i = 0; i < options.length; i++) ...[
+            _PaymentOptionCard(info: options[i], context: context),
+            if (i < options.length - 1) const SizedBox(height: 16),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentOptionCard extends StatelessWidget {
+  final PaymentInfoModel info;
+  final BuildContext context;
+  const _PaymentOptionCard({required this.info, required this.context});
+
+  @override
+  Widget build(BuildContext ctx) {
+    final hasBankDetails = info.bankName != null ||
+        info.accountHolder != null ||
+        info.accountNumber != null ||
+        info.ifsc != null;
+    final hasUpi = info.upiId != null || info.qrCodeUrl != null;
+
+    return Container(
+      decoration: mindForgeCardDecoration(
+          color: AppColors.primary.withOpacity(0.02)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Option header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                  child: Text('${info.slot}',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary)),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  info.label ?? 'Option ${info.slot}',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Bank details
+                if (hasBankDetails) ...[
+                  Row(children: [
+                    const Icon(Icons.account_balance,
+                        color: AppColors.primary, size: 16),
+                    const SizedBox(width: 6),
+                    Text('Bank Transfer',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: AppColors.primary)),
+                  ]),
+                  const SizedBox(height: 10),
                   if (info.bankName != null)
                     _DetailRow(
                         icon: Icons.account_balance_outlined,
@@ -196,57 +248,43 @@ class _PayTab extends StatelessWidget {
                         value: info.accountNumber!),
                   if (info.ifsc != null)
                     _DetailRow(
-                        icon: Icons.tag,
-                        label: 'IFSC',
-                        value: info.ifsc!),
+                        icon: Icons.tag, label: 'IFSC', value: info.ifsc!),
                 ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
 
-          // UPI + QR Code card
-          if (info.upiId != null || info.qrCodeUrl != null) ...[
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: mindForgeCardDecoration(
-                  color: AppColors.secondary.withOpacity(0.03)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.qr_code_2,
-                          color: AppColors.secondary, size: 20),
-                      const SizedBox(width: 8),
-                      Text('UPI Payment',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(color: AppColors.secondary)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                // UPI + QR
+                if (hasUpi) ...[
+                  if (hasBankDetails) const SizedBox(height: 14),
+                  Row(children: [
+                    const Icon(Icons.qr_code_2,
+                        color: AppColors.secondary, size: 16),
+                    const SizedBox(width: 6),
+                    Text('UPI Payment',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: AppColors.secondary)),
+                  ]),
+                  const SizedBox(height: 10),
                   if (info.upiId != null)
                     _DetailRow(
                         icon: Icons.qr_code,
                         label: 'UPI ID',
                         value: info.upiId!),
                   if (info.qrCodeUrl != null) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     const Text('Scan to Pay',
                         style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: AppColors.textSecondary,
                             fontSize: 13)),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Center(
                       child: Container(
-                        width: R.fluid(context, 220, min: 160, max: 260),
-                        height: R.fluid(context, 220, min: 160, max: 260),
+                        width: R.fluid(context, 200, min: 150, max: 240),
+                        height: R.fluid(context, 200, min: 150, max: 240),
                         decoration: BoxDecoration(
-                          border: Border.all(
-                              color: AppColors.divider, width: 2),
+                          border:
+                              Border.all(color: AppColors.divider, width: 2),
                           borderRadius: BorderRadius.circular(12),
                           color: Colors.white,
                         ),
@@ -255,11 +293,11 @@ class _PayTab extends StatelessWidget {
                           child: Image.network(
                             info.qrCodeUrl!,
                             fit: BoxFit.contain,
-                            loadingBuilder: (context, child, progress) {
-                              if (progress == null) return child;
-                              return const Center(
-                                  child: CircularProgressIndicator());
-                            },
+                            loadingBuilder: (_, child, progress) =>
+                                progress == null
+                                    ? child
+                                    : const Center(
+                                        child: CircularProgressIndicator()),
                             errorBuilder: (_, __, ___) => const Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
@@ -281,9 +319,9 @@ class _PayTab extends StatelessWidget {
                     ),
                   ],
                 ],
-              ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );

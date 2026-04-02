@@ -454,11 +454,11 @@ class ApiClient {
     return res.data as List<dynamic>;
   }
 
-  Future<Map<String, dynamic>> uploadQrCode(List<int> bytes, String filename) async {
+  Future<Map<String, dynamic>> uploadQrCode(List<int> bytes, String filename, int slot) async {
     final formData = dio_pkg.FormData.fromMap({
       'file': dio_pkg.MultipartFile.fromBytes(bytes, filename: filename),
     });
-    final res = await _dio.post('/admin/fees/payment-info/qr', data: formData);
+    final res = await _dio.post('/admin/fees/payment-info/$slot/qr', data: formData);
     return res.data as Map<String, dynamic>;
   }
 
@@ -502,18 +502,17 @@ class ApiClient {
     await _dio.delete('/admin/fees/payments/$paymentId');
   }
 
-  Future<Map<String, dynamic>?> getPaymentInfo() async {
+  Future<List<dynamic>> getPaymentInfo() async {
     try {
       final res = await _dio.get('/admin/fees/payment-info');
-      if (res.data == null) return null;
-      return res.data as Map<String, dynamic>;
+      return res.data as List<dynamic>;
     } catch (_) {
-      return null;
+      return [];
     }
   }
 
-  Future<Map<String, dynamic>> updatePaymentInfo(Map<String, dynamic> data) async {
-    final res = await _dio.put('/admin/fees/payment-info', data: data);
+  Future<Map<String, dynamic>> updatePaymentInfo(int slot, Map<String, dynamic> data) async {
+    final res = await _dio.put('/admin/fees/payment-info/$slot', data: data);
     return res.data as Map<String, dynamic>;
   }
 
@@ -619,5 +618,23 @@ class ApiClient {
   Future<List<dynamic>> getParentBroadcasts() async {
     final res = await _dio.get('/parent/broadcasts');
     return res.data as List<dynamic>;
+  }
+
+  Future<List<int>> downloadPendingFeesReport(String academicYear) async {
+    final res = await _dio.get(
+      '/admin/reports/pending-fees',
+      queryParameters: {'academic_year': academicYear},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data as List<int>;
+  }
+
+  Future<List<int>> downloadStudentLedger(int studentId, String academicYear) async {
+    final res = await _dio.get(
+      '/admin/reports/student-ledger/$studentId',
+      queryParameters: {'academic_year': academicYear},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data as List<int>;
   }
 }

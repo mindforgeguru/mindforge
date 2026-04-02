@@ -15,9 +15,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Create homework_type enum
-    op.execute("CREATE TYPE homework_type AS ENUM ('online_test', 'written')")
-
     # Create homework table
     op.create_table(
         "homework",

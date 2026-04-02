@@ -26,6 +26,8 @@ from app.schemas.fees import (
 from app.schemas.timetable import TimetableConfigCreate, TimetableConfigResponse
 from app.schemas.user import AdminMpinUpdate, AdminUserEdit, UserResponse, UserUpdate, UserWithProfileResponse
 from app.services import storage_service
+from app.services import pdf_service
+from fastapi.responses import Response
 
 router = APIRouter()
 
@@ -685,52 +687,58 @@ async def record_fee_payment(
 
 # ─── Payment Info (bank/UPI) ──────────────────────────────────────────────────
 
-@router.get("/fees/payment-info", response_model=Optional[PaymentInfoResponse])
+@router.get("/fees/payment-info", response_model=list[PaymentInfoResponse])
 async def get_payment_info(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Get the current payment info (bank details, UPI, QR)."""
-    result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.id.desc()))
-    return result.scalars().first()
+    """Get all payment options (up to 3 slots)."""
+    result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.slot))
+    return result.scalars().all()
 
 
-@router.put("/fees/payment-info", response_model=PaymentInfoResponse)
+@router.put("/fees/payment-info/{slot}", response_model=PaymentInfoResponse)
 async def update_payment_info(
+    slot: int,
     payload: PaymentInfoCreate,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Update or create payment info."""
-    result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.id.desc()))
-    info = result.scalars().first()
+    """Update or create a payment option by slot (1, 2, or 3)."""
+    if slot not in (1, 2, 3):
+        raise HTTPException(status_code=400, detail="Slot must be 1, 2, or 3.")
+    result = await db.execute(select(PaymentInfo).where(PaymentInfo.slot == slot))
+    info = result.scalar_one_or_none()
     if info:
-        for field, value in payload.model_dump(exclude_none=True).items():
+        for field, value in payload.model_dump().items():
             setattr(info, field, value)
     else:
-        info = PaymentInfo(**payload.model_dump())
+        info = PaymentInfo(slot=slot, **payload.model_dump())
         db.add(info)
     await db.commit()
     await db.refresh(info)
     return info
 
 
-@router.post("/fees/payment-info/qr", response_model=PaymentInfoResponse)
+@router.post("/fees/payment-info/{slot}/qr", response_model=PaymentInfoResponse)
 async def upload_qr_code(
+    slot: int,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Upload a QR code image for UPI payments."""
+    """Upload a QR code image for a specific payment slot."""
+    if slot not in (1, 2, 3):
+        raise HTTPException(status_code=400, detail="Slot must be 1, 2, or 3.")
     file_bytes = await file.read()
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else "png"
-    key = f"payment/qr_code.{ext}"
+    key = f"payment/qr_code_slot{slot}.{ext}"
     url = await storage_service.upload_file("mindforge-profiles", key, file_bytes)
 
-    result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.id.desc()))
-    info = result.scalars().first()
+    result = await db.execute(select(PaymentInfo).where(PaymentInfo.slot == slot))
+    info = result.scalar_one_or_none()
     if not info:
-        info = PaymentInfo(qr_code_url=url)
+        info = PaymentInfo(slot=slot, qr_code_url=url)
         db.add(info)
     else:
         info.qr_code_url = url
@@ -1005,3 +1013,142 @@ async def init_academic_year(
         "is_current": year.is_current,
         "started_at": year.started_at.isoformat(),
     }
+
+
+# ─── Reports ──────────────────────────────────────────────────────────────────
+
+@router.get("/reports/pending-fees")
+async def download_pending_fees_report(
+    academic_year: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Generate and stream a grade-wise pending fees PDF report."""
+    students_result = await db.execute(
+        select(User, StudentProfile)
+        .join(StudentProfile, StudentProfile.user_id == User.id)
+        .where(User.role == UserRole.student, User.deleted_at.is_(None), User.is_approved == True)
+        .order_by(StudentProfile.grade, User.username)
+    )
+    rows = students_result.all()
+
+    summaries = []
+    for user, profile in rows:
+        fs_result = await db.execute(
+            select(FeeStructure).where(
+                FeeStructure.grade == profile.grade,
+                FeeStructure.academic_year == academic_year,
+            )
+        )
+        fs = fs_result.scalar_one_or_none()
+        if fs:
+            total_fee = float(fs.base_amount)
+            for subj in (profile.additional_subjects or []):
+                if subj == "economics":
+                    total_fee += float(fs.economics_fee)
+                elif subj == "computer":
+                    total_fee += float(fs.computer_fee)
+                elif subj == "ai":
+                    total_fee += float(fs.ai_fee)
+        else:
+            total_fee = 0.0
+
+        payments_result = await db.execute(
+            select(FeePayment).where(FeePayment.student_id == user.id).order_by(FeePayment.paid_at)
+        )
+        payments = payments_result.scalars().all()
+        total_paid = sum(float(p.amount) for p in payments)
+
+        summaries.append({
+            "student_id": user.id,
+            "username": user.username,
+            "grade": profile.grade,
+            "total_fee": total_fee,
+            "total_paid": total_paid,
+            "balance_due": max(0.0, total_fee - total_paid),
+        })
+
+    pdf_bytes = await pdf_service.generate_pending_fees_report(summaries, academic_year)
+    filename = f"pending_fees_{academic_year.replace('-', '_')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/reports/student-ledger/{student_id}")
+async def download_student_ledger(
+    student_id: int,
+    academic_year: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Generate and stream a fee ledger PDF for a specific student."""
+    result = await db.execute(
+        select(User, StudentProfile)
+        .join(StudentProfile, StudentProfile.user_id == User.id)
+        .where(User.id == student_id, User.deleted_at.is_(None))
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    user, profile = row
+
+    fs_result = await db.execute(
+        select(FeeStructure).where(
+            FeeStructure.grade == profile.grade,
+            FeeStructure.academic_year == academic_year,
+        )
+    )
+    fs = fs_result.scalar_one_or_none()
+    if fs:
+        total_fee = float(fs.base_amount)
+        for subj in (profile.additional_subjects or []):
+            if subj == "economics":
+                total_fee += float(fs.economics_fee)
+            elif subj == "computer":
+                total_fee += float(fs.computer_fee)
+            elif subj == "ai":
+                total_fee += float(fs.ai_fee)
+    else:
+        total_fee = 0.0
+
+    payments_result = await db.execute(
+        select(FeePayment).where(FeePayment.student_id == user.id).order_by(FeePayment.paid_at)
+    )
+    payments = payments_result.scalars().all()
+    total_paid = sum(float(p.amount) for p in payments)
+
+    # Build fee breakdown
+    fee_breakdown = []
+    if fs:
+        fee_breakdown.append({"label": "Base Tuition Fee", "amount": float(fs.base_amount)})
+        for subj in (profile.additional_subjects or []):
+            if subj == "economics":
+                fee_breakdown.append({"label": "Economics (Additional)", "amount": float(fs.economics_fee)})
+            elif subj == "computer":
+                fee_breakdown.append({"label": "Computer Applications (Additional)", "amount": float(fs.computer_fee)})
+            elif subj == "ai":
+                fee_breakdown.append({"label": "Artificial Intelligence (Additional)", "amount": float(fs.ai_fee)})
+
+    student_data = {
+        "username": user.username,
+        "grade": profile.grade,
+        "total_fee": total_fee,
+        "total_paid": total_paid,
+        "balance_due": max(0.0, total_fee - total_paid),
+        "fee_breakdown": fee_breakdown,
+        "payments": [
+            {"id": p.id, "amount": float(p.amount), "paid_at": p.paid_at.isoformat(), "notes": p.notes}
+            for p in payments
+        ],
+    }
+
+    pdf_bytes = await pdf_service.generate_student_ledger_report(student_data, academic_year)
+    filename = f"ledger_{user.username}_{academic_year.replace('-', '_')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

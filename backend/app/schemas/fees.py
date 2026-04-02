@@ -60,6 +60,7 @@ class FeePaymentResponse(BaseModel):
 
 
 class PaymentInfoCreate(BaseModel):
+    label: Optional[str] = None
     bank_name: Optional[str] = None
     account_holder: Optional[str] = None
     account_number: Optional[str] = None
@@ -70,6 +71,8 @@ class PaymentInfoCreate(BaseModel):
 
 class PaymentInfoResponse(BaseModel):
     id: int
+    slot: int = 1
+    label: Optional[str] = None
     bank_name: Optional[str] = None
     account_holder: Optional[str] = None
     account_number: Optional[str] = None
@@ -95,4 +98,4 @@ class StudentFeeSummary(BaseModel):
     computer_fee: float = 0.0
     ai_fee: float = 0.0
     payments: list[FeePaymentResponse]
-    payment_info: Optional[PaymentInfoResponse] = None
+    payment_options: list[PaymentInfoResponse] = []

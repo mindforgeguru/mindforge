@@ -43,13 +43,14 @@ final feeStructuresProvider =
 });
 
 final paymentInfoProvider =
-    FutureProvider.autoDispose<PaymentInfoModel?>((ref) async {
+    FutureProvider.autoDispose<List<PaymentInfoModel>>((ref) async {
   final token = ref.watch(authProvider.select((s) => s.token));
-  if (token == null) return null;
+  if (token == null) return [];
   final api = ref.watch(apiClientProvider);
   final raw = await api.getPaymentInfo();
-  if (raw == null) return null;
-  return PaymentInfoModel.fromJson(raw);
+  return raw
+      .map((e) => PaymentInfoModel.fromJson(e as Map<String, dynamic>))
+      .toList();
 });
 
 final feeSummariesProvider =

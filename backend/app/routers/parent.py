@@ -213,12 +213,20 @@ async def get_child_fees(
     """Get the child's fee summary including total, paid, and balance due."""
     profile = await _get_child_profile(current_parent, db)
 
-    # Determine academic year (default to current)
-    from datetime import date
+    # Determine academic year — use the active year from DB, fall back to calendar heuristic
     if not academic_year:
-        today = date.today()
-        year_start = today.year if today.month >= 6 else today.year - 1
-        academic_year = f"{year_start}-{str(year_start + 1)[2:]}"
+        from app.models.academic_year import AcademicYear
+        from datetime import date
+        ay_result = await db.execute(
+            select(AcademicYear).where(AcademicYear.is_current == True)
+        )
+        current_ay = ay_result.scalar_one_or_none()
+        if current_ay:
+            academic_year = current_ay.year_label
+        else:
+            today = date.today()
+            year_start = today.year if today.month >= 6 else today.year - 1
+            academic_year = f"{year_start}-{str(year_start + 1)[2:]}"
 
     # Fetch fee structure for this grade/year
     structure_result = await db.execute(
@@ -255,23 +263,24 @@ async def get_child_fees(
     payments = payments_result.scalars().all()
     total_paid = sum(p.amount for p in payments)
 
-    # Fetch payment info (bank/UPI details) and resolve QR code presigned URL
-    pi_result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.id.desc()))
-    payment_info = pi_result.scalars().first()
+    # Fetch all payment options and resolve QR presigned URLs
+    from app.services import storage_service
+    pi_result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.slot))
+    payment_options_raw = pi_result.scalars().all()
 
-    payment_info_response = None
-    if payment_info:
-        payment_info_response = PaymentInfoResponse.model_validate(payment_info)
-        if payment_info.qr_code_url and not payment_info.qr_code_url.startswith("http"):
-            from app.services import storage_service
-            parts = payment_info.qr_code_url.split("/", 1)
+    payment_options = []
+    for pi in payment_options_raw:
+        resp = PaymentInfoResponse.model_validate(pi)
+        if pi.qr_code_url and not pi.qr_code_url.startswith("http"):
+            parts = pi.qr_code_url.split("/", 1)
             if len(parts) == 2:
                 try:
-                    payment_info_response.qr_code_url = await storage_service.get_presigned_url(
+                    resp.qr_code_url = await storage_service.get_presigned_url(
                         parts[0], parts[1], expires_seconds=604800
                     )
                 except Exception:
-                    payment_info_response.qr_code_url = None
+                    resp.qr_code_url = None
+        payment_options.append(resp)
 
     return StudentFeeSummary(
         student_id=profile.user_id,
@@ -285,7 +294,7 @@ async def get_child_fees(
         computer_fee=computer_fee,
         ai_fee=ai_fee,
         payments=[FeePaymentResponse.model_validate(p) for p in payments],
-        payment_info=payment_info_response,
+        payment_options=payment_options,
     )
 
 

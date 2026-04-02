@@ -16,20 +16,17 @@ class AdminFeesScreen extends ConsumerStatefulWidget {
   ConsumerState<AdminFeesScreen> createState() => _AdminFeesScreenState();
 }
 
-// Compute current academic year the same way the backend does:
-// year starts June, so Jan–May → previous year
+// Fallback academic year label (used only before DB year loads)
 String _currentAcademicYear() {
   final now = DateTime.now();
-  final yearStart = now.month >= 6 ? now.year : now.year - 1;
-  return '$yearStart-${(yearStart + 1).toString().substring(2)}';
+  return '${now.year}-${(now.year + 1).toString().substring(2)}';
 }
 
-// Show current year + 2 previous years in the dropdown
+// Show current calendar year + 2 previous years
 List<String> _yearOptions() {
   final now = DateTime.now();
-  final base = now.month >= 6 ? now.year : now.year - 1;
   return List.generate(3, (i) {
-    final y = base - i;
+    final y = now.year - i;
     return '$y-${(y + 1).toString().substring(2)}';
   });
 }
@@ -37,13 +34,21 @@ List<String> _yearOptions() {
 class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  late String _selectedYear;
+  String _selectedYear = _currentAcademicYear();
 
   @override
   void initState() {
     super.initState();
-    _selectedYear = _currentAcademicYear();
     _tabController = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initYear());
+  }
+
+  Future<void> _initYear() async {
+    try {
+      final data = await ref.read(currentAcademicYearProvider.future);
+      final year = data?['year_label'] as String?;
+      if (year != null && mounted) setState(() => _selectedYear = year);
+    } catch (_) {}
   }
 
   @override
@@ -63,13 +68,13 @@ class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
             padding: const EdgeInsets.only(right: 8),
             child: DropdownButton<String>(
               value: _selectedYear,
-              dropdownColor: AppColors.surface,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
+              dropdownColor: Colors.white,
+              style: const TextStyle(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.w700),
               underline: const SizedBox.shrink(),
-              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+              icon: const Icon(Icons.arrow_drop_down, color: AppColors.accent),
               items: _yearOptions().map((y) => DropdownMenuItem(
                 value: y,
-                child: Text(y, style: const TextStyle(color: Colors.white)),
+                child: Text(y, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
               )).toList(),
               onChanged: (v) {
                 if (v != null) setState(() => _selectedYear = v);
@@ -708,25 +713,78 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
 // Tab 3: Payment Info
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _PaymentInfoTab extends ConsumerStatefulWidget {
+class _PaymentInfoTab extends ConsumerWidget {
   const _PaymentInfoTab();
 
   @override
-  ConsumerState<_PaymentInfoTab> createState() => _PaymentInfoTabState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final infoAsync = ref.watch(paymentInfoProvider);
+    return infoAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (options) {
+        // Build a map slot→info for quick lookup
+        final bySlot = {for (final o in options) o.slot: o};
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text('Payment Options',
+                style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 4),
+            const Text(
+              'Set up to 3 payment options shown to parents.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            for (int slot = 1; slot <= 3; slot++) ...[
+              _PaymentSlotCard(key: ValueKey('slot_$slot'), slot: slot, existing: bySlot[slot]),
+              const SizedBox(height: 16),
+            ],
+          ],
+        );
+      },
+    );
+  }
 }
 
-class _PaymentInfoTabState extends ConsumerState<_PaymentInfoTab> {
-  final _bankNameCtrl = TextEditingController();
-  final _holderCtrl = TextEditingController();
-  final _accountCtrl = TextEditingController();
-  final _ifscCtrl = TextEditingController();
-  final _upiCtrl = TextEditingController();
-  bool _initialized = false;
+class _PaymentSlotCard extends ConsumerStatefulWidget {
+  final int slot;
+  final PaymentInfoModel? existing;
+  const _PaymentSlotCard({super.key, required this.slot, this.existing});
+
+  @override
+  ConsumerState<_PaymentSlotCard> createState() => _PaymentSlotCardState();
+}
+
+class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
+  late final TextEditingController _labelCtrl;
+  late final TextEditingController _bankNameCtrl;
+  late final TextEditingController _holderCtrl;
+  late final TextEditingController _accountCtrl;
+  late final TextEditingController _ifscCtrl;
+  late final TextEditingController _upiCtrl;
+  bool _expanded = false;
+  bool _saving = false;
   bool _uploadingQr = false;
   String? _qrUrl;
 
   @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _labelCtrl = TextEditingController(text: e?.label ?? 'Option ${widget.slot}');
+    _bankNameCtrl = TextEditingController(text: e?.bankName ?? '');
+    _holderCtrl = TextEditingController(text: e?.accountHolder ?? '');
+    _accountCtrl = TextEditingController(text: e?.accountNumber ?? '');
+    _ifscCtrl = TextEditingController(text: e?.ifsc ?? '');
+    _upiCtrl = TextEditingController(text: e?.upiId ?? '');
+    _qrUrl = e?.qrCodeUrl;
+    _expanded = e != null;
+  }
+
+  @override
   void dispose() {
+    _labelCtrl.dispose();
     _bankNameCtrl.dispose();
     _holderCtrl.dispose();
     _accountCtrl.dispose();
@@ -735,224 +793,238 @@ class _PaymentInfoTabState extends ConsumerState<_PaymentInfoTab> {
     super.dispose();
   }
 
-  void _initControllers(PaymentInfoModel? info) {
-    if (_initialized || info == null) return;
-    _bankNameCtrl.text = info.bankName ?? '';
-    _holderCtrl.text = info.accountHolder ?? '';
-    _accountCtrl.text = info.accountNumber ?? '';
-    _ifscCtrl.text = info.ifsc ?? '';
-    _upiCtrl.text = info.upiId ?? '';
-    _qrUrl = info.qrCodeUrl;
-    _initialized = true;
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.updatePaymentInfo(widget.slot, {
+        'label': _labelCtrl.text.trim(),
+        'bank_name': _bankNameCtrl.text.trim(),
+        'account_holder': _holderCtrl.text.trim(),
+        'account_number': _accountCtrl.text.trim(),
+        'ifsc': _ifscCtrl.text.trim().toUpperCase(),
+        'upi_id': _upiCtrl.text.trim(),
+      });
+      ref.invalidate(paymentInfoProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Option ${widget.slot} saved!'),
+            backgroundColor: AppColors.success));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error: $e'), backgroundColor: AppColors.error));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
-  Future<void> _pickAndUploadQr() async {
+  Future<void> _uploadQr() async {
     final picker = ImagePicker();
-    final picked =
-        await picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
     if (picked == null) return;
-
     setState(() => _uploadingQr = true);
     try {
       final bytes = await picked.readAsBytes();
       final api = ref.read(apiClientProvider);
-      final result =
-          await api.uploadQrCode(bytes, picked.name);
-      setState(() {
-        _qrUrl = result['qr_code_url'] as String?;
-        _uploadingQr = false;
-      });
+      final result = await api.uploadQrCode(bytes, picked.name, widget.slot);
+      setState(() => _qrUrl = result['qr_code_url'] as String?);
       ref.invalidate(paymentInfoProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('QR code uploaded!'),
-            backgroundColor: AppColors.success));
+            content: Text('QR uploaded!'), backgroundColor: AppColors.success));
       }
     } catch (e) {
-      setState(() => _uploadingQr = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Upload failed: $e'),
-            backgroundColor: AppColors.error));
+            content: Text('Upload failed: $e'), backgroundColor: AppColors.error));
       }
+    } finally {
+      if (mounted) setState(() => _uploadingQr = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final infoAsync = ref.watch(paymentInfoProvider);
-    return infoAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) {
-        _initialized = false;
-        return _buildForm(null);
-      },
-      data: (info) {
-        _initControllers(info);
-        return _buildForm(info);
-      },
-    );
-  }
-
-  Widget _buildForm(PaymentInfoModel? info) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+    final hasData = widget.existing != null;
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Bank & UPI Details',
-              style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 16),
-          TextField(
-              controller: _bankNameCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'Bank Name',
-                  prefixIcon: Icon(Icons.account_balance))),
-          const SizedBox(height: 10),
-          TextField(
-              controller: _holderCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'Account Holder',
-                  prefixIcon: Icon(Icons.person_outline))),
-          const SizedBox(height: 10),
-          TextField(
-              controller: _accountCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'Account Number',
-                  prefixIcon: Icon(Icons.credit_card)),
-              keyboardType: TextInputType.number),
-          const SizedBox(height: 10),
-          TextField(
-              controller: _ifscCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'IFSC Code', prefixIcon: Icon(Icons.tag)),
-              textCapitalization: TextCapitalization.characters),
-          const SizedBox(height: 10),
-          TextField(
-              controller: _upiCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'UPI ID', prefixIcon: Icon(Icons.qr_code))),
-          const SizedBox(height: 20),
-
-          // QR Code section
-          Text('UPI QR Code',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text(
-            'Upload a QR code image from your photos so parents can scan and pay.',
-            style:
-                TextStyle(fontSize: 12, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 12),
-
-          // QR preview + upload button
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // QR preview box
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.divider, width: 2),
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.grey.shade50,
-                ),
-                child: _qrUrl != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.network(
-                          _qrUrl!,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const Center(
-                              child: Icon(Icons.broken_image,
-                                  color: AppColors.textMuted, size: 40)),
-                        ),
-                      )
-                    : const Center(
-                        child: Icon(Icons.qr_code_2,
-                            size: 48, color: AppColors.textMuted),
-                      ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text('QR code will be shown to parents for payment.',
+          // Header row
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: hasData
+                        ? AppColors.primary.withOpacity(0.15)
+                        : Colors.grey.shade200,
+                    child: Text('${widget.slot}',
                         style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary)),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 44,
-                      child: ElevatedButton.icon(
-                        icon: _uploadingQr
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white))
-                            : const Icon(Icons.photo_library, size: 18),
-                        label: Text(_uploadingQr
-                            ? 'Uploading...'
-                            : _qrUrl != null
-                                ? 'Change QR'
-                                : 'Upload QR'),
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.secondary),
-                        onPressed:
-                            _uploadingQr ? null : _pickAndUploadQr,
-                      ),
+                            fontWeight: FontWeight.bold,
+                            color: hasData ? AppColors.primary : Colors.grey)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _labelCtrl.text.isEmpty
+                              ? 'Option ${widget.slot}'
+                              : _labelCtrl.text,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 15),
+                        ),
+                        if (hasData && widget.existing!.bankName != null)
+                          Text(widget.existing!.bankName!,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary)),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  if (hasData)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                          color: AppColors.success.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: const Text('Set',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  const SizedBox(width: 8),
+                  Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+                      color: AppColors.textSecondary),
+                ],
               ),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 50,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.save),
-              label: const Text('Save Payment Info'),
-              onPressed: _savePaymentInfo,
             ),
           ),
-          const SizedBox(height: 16),
+          // Expanded form
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  TextField(
+                      controller: _labelCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Label (e.g. HDFC Bank)',
+                          prefixIcon: Icon(Icons.label_outline))),
+                  const SizedBox(height: 10),
+                  TextField(
+                      controller: _bankNameCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Bank Name',
+                          prefixIcon: Icon(Icons.account_balance))),
+                  const SizedBox(height: 10),
+                  TextField(
+                      controller: _holderCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Account Holder',
+                          prefixIcon: Icon(Icons.person_outline))),
+                  const SizedBox(height: 10),
+                  TextField(
+                      controller: _accountCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Account Number',
+                          prefixIcon: Icon(Icons.credit_card)),
+                      keyboardType: TextInputType.number),
+                  const SizedBox(height: 10),
+                  TextField(
+                      controller: _ifscCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'IFSC Code',
+                          prefixIcon: Icon(Icons.tag)),
+                      textCapitalization: TextCapitalization.characters),
+                  const SizedBox(height: 10),
+                  TextField(
+                      controller: _upiCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'UPI ID',
+                          prefixIcon: Icon(Icons.qr_code))),
+                  const SizedBox(height: 16),
+                  // QR section
+                  Row(
+                    children: [
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          border:
+                              Border.all(color: AppColors.divider, width: 2),
+                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.grey.shade50,
+                        ),
+                        child: _qrUrl != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(_qrUrl!,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.broken_image,
+                                        color: AppColors.textMuted)))
+                            : const Center(
+                                child: Icon(Icons.qr_code_2,
+                                    size: 40, color: AppColors.textMuted)),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: _uploadingQr
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.photo_library, size: 18),
+                          label: Text(_uploadingQr
+                              ? 'Uploading...'
+                              : _qrUrl != null
+                                  ? 'Change QR'
+                                  : 'Upload QR'),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.secondary),
+                          onPressed: _uploadingQr ? null : _uploadQr,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 46,
+                    child: ElevatedButton.icon(
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.save),
+                      label: Text(_saving ? 'Saving...' : 'Save Option ${widget.slot}'),
+                      onPressed: _saving ? null : _save,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
-  }
-
-  Future<void> _savePaymentInfo() async {
-    try {
-      final api = ref.read(apiClientProvider);
-      await api.updatePaymentInfo({
-        'bank_name': _bankNameCtrl.text,
-        'account_holder': _holderCtrl.text,
-        'account_number': _accountCtrl.text,
-        'ifsc': _ifscCtrl.text,
-        'upi_id': _upiCtrl.text,
-      });
-      ref.invalidate(paymentInfoProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Payment info updated!'),
-            backgroundColor: AppColors.success));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppColors.error));
-      }
-    }
   }
 }
 
