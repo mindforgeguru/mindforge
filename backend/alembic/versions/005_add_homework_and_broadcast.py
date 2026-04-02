@@ -26,7 +26,7 @@ def upgrade() -> None:
         sa.Column("description", sa.String(2000), nullable=True),
         sa.Column(
             "homework_type",
-            sa.Enum("online_test", "written", name="homework_type"),
+            sa.Enum("online_test", "written", name="homework_type", create_type=False),
             nullable=False,
             server_default="written",
         ),
@@ -74,4 +74,4 @@ def downgrade() -> None:
     op.drop_index("ix_homework_grade", table_name="homework")
     op.drop_index("ix_homework_id", table_name="homework")
     op.drop_table("homework")
-    op.execute("DROP TYPE homework_type")
+    op.execute("DROP TYPE IF EXISTS homework_type")
