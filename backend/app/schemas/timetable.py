@@ -34,7 +34,7 @@ class TimetableSlotCreate(BaseModel):
     grade: int
     slot_date: date          # specific calendar date
     period_number: int
-    subject: str
+    subject: Optional[str] = None
     teacher_id: Optional[int] = None
     start_time: Optional[time] = None
     end_time: Optional[time] = None
@@ -56,7 +56,7 @@ class TimetableSlotResponse(BaseModel):
     grade: int
     slot_date: date
     period_number: int
-    subject: str
+    subject: Optional[str] = None
     teacher_id: Optional[int] = None
     start_time: Optional[time] = None
     end_time: Optional[time] = None
@@ -73,7 +73,7 @@ class TimetableSlotWithTeacherResponse(BaseModel):
     grade: int
     slot_date: str           # "YYYY-MM-DD" string
     period_number: int
-    subject: str
+    subject: Optional[str] = None
     teacher_id: Optional[int] = None
     teacher_username: Optional[str] = None
     start_time: Optional[str] = None   # "HH:MM" string

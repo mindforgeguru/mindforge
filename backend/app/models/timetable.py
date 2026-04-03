@@ -37,7 +37,7 @@ class TimetableSlot(Base):
     grade: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     slot_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     period_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    subject: Mapped[str] = mapped_column(String(100), nullable=False)
+    subject: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     teacher_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

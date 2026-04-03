@@ -122,7 +122,7 @@ def _build_prompt(params: Any, source_text: str = "") -> str:
     if params.short_answer_count > 0:
         question_spec_lines.append(f"- {params.short_answer_count} Short Answer questions — 2 marks each. Answer should be 3-5 sentences.")
     if params.long_answer_count > 0:
-        question_spec_lines.append(f"- {params.long_answer_count} Long Answer questions — 5 marks each. Answer should be a detailed paragraph.")
+        question_spec_lines.append(f"- {params.long_answer_count} Long Answer questions — 3 marks each. Answer should be a detailed paragraph.")
     if params.include_numericals:
         question_spec_lines.append("- 2 Numerical/Calculation-based problems — 2 marks each. Provide the numerical answer with units.")
 
@@ -167,6 +167,18 @@ Each object must have:
 JSON array:"""
 
 
+# Enforced marks per question type — must match what the prompt tells the AI
+_TYPE_MARKS: Dict[str, int] = {
+    "mcq": 1,
+    "true_false": 1,
+    "fill_blank": 1,
+    "vsa": 1,
+    "short_answer": 2,
+    "long_answer": 3,
+    "numerical": 2,
+}
+
+
 # ─── Response parsing ─────────────────────────────────────────────────────────
 
 def _parse_questions(raw: str) -> List[Dict[str, Any]]:
@@ -198,13 +210,14 @@ def _parse_questions(raw: str) -> List[Dict[str, Any]]:
         options = None
         if isinstance(raw_options, dict) and raw_options:
             options = {str(k): str(v) for k, v in raw_options.items()}
+        q_type = q.get("type", "mcq")
         validated.append({
             "id": len(validated) + 1,
-            "type": q.get("type", "mcq"),
+            "type": q_type,
             "question": q_text,
             "options": options,
             "answer": a_text,
-            "marks": int(q.get("marks", 1)),
+            "marks": _TYPE_MARKS.get(q_type, 1),
         })
     return validated
 

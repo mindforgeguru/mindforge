@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+
+import '../../../core/models/grade.dart';
 
 import '../../../core/api/websocket_client.dart';
 import '../../../core/models/homework.dart';
@@ -17,6 +20,7 @@ import '../../../core/widgets/badge_dot.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
+import '../widgets/teacher_scaffold.dart';
 
 // Responsive scale helper — base ref width 390 px
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
@@ -51,15 +55,30 @@ class _TeacherDashboardScreenState
     if (userId == null) return;
     final ws = ref.read(webSocketClientProvider);
     _wsSub = ws.connect(userId).listen((event) {
+      if (!mounted) return;
       final eventType = event['event'] as String?;
-      if (eventType == 'profile_updated' && mounted) {
+      if (eventType == 'profile_updated') {
         _showProfileUpdatedDialog(event['new_username'] as String?);
-      } else if ((eventType == 'test_completed' ||
-              eventType == 'test_status_changed') &&
-          mounted) {
+      } else if (eventType == 'test_completed' || eventType == 'test_status_changed') {
         ref.invalidate(teacherTestsProvider);
+      } else if (eventType == 'timetable_updated') {
+        ref.invalidate(myTimetableProvider);
+      } else if (eventType == 'grade_added') {
+        ref.invalidate(teacherGradesProvider((null, null)));
+      } else if (eventType == 'broadcast_created' || eventType == 'homework_added') {
+        ref.invalidate(teacherBroadcastsProvider);
+        ref.invalidate(teacherHomeworkProvider(null));
       }
     });
+  }
+
+  Future<void> _refreshDashboard() async {
+    ref.invalidate(myTimetableProvider);
+    ref.invalidate(teacherBroadcastsProvider);
+    ref.invalidate(teacherHomeworkProvider(null));
+    ref.invalidate(teacherGradesProvider((null, null)));
+    ref.invalidate(teacherTestsProvider(null));
+    await ref.read(myTimetableProvider.future).catchError((_) => <dynamic>[]);
   }
 
   Future<void> _showProfileUpdatedDialog(String? newUsername) async {
@@ -138,15 +157,277 @@ class _TeacherDashboardScreenState
         : (avatarRadius + 116).clamp(152.0, 185.0);
     final double headerH = navyH + cardInternalH - cardIntoNavy + avatarRadius;
 
+    // ── Web layout ─────────────────────────────────────────────────────────
+    if (screenWidth >= 900) {
+      final hour = DateTime.now().hour;
+      final greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+      return TeacherScaffold(
+        backgroundColor: const Color(0xFFF0F4F8),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Hero section ───────────────────────────────────────────
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0A1628), Color(0xFF1D3557), Color(0xFF1A4A6E)],
+                  stops: [0.0, 0.55, 1.0],
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(top: -50, right: 180,
+                    child: Container(width: 220, height: 220,
+                      decoration: BoxDecoration(shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.04)))),
+                  Positioned(bottom: -70, right: -40,
+                    child: Container(width: 260, height: 260,
+                      decoration: BoxDecoration(shape: BoxShape.circle,
+                        color: AppColors.accent.withOpacity(0.08)))),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(28, 22, 28, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Row 1: avatar + greeting + date
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            GestureDetector(
+                              onTap: () => context.go('${RouteNames.teacherDashboard}/profile'),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white.withOpacity(0.3), width: 2.5),
+                                ),
+                                child: _ProfileAvatar(
+                                  username: auth.username ?? 'T',
+                                  photoUrl: auth.profilePicUrl,
+                                  radius: 26,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$greeting, ${auth.username ?? 'Teacher'}!',
+                                    style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700,
+                                      color: Colors.white, letterSpacing: -0.3),
+                                  ),
+                                  if (subjects.isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      subjects.join('  ·  '),
+                                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withOpacity(0.6)),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(DateFormat('EEEE').format(DateTime.now()),
+                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withOpacity(0.5))),
+                                Text(DateFormat('d MMMM yyyy').format(DateTime.now()),
+                                  style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Row 2: stat cards + quick actions
+                        Row(
+                          children: [
+                            _HeroStatCard(
+                              value: '${todaySlots.length}',
+                              label: 'Classes Today',
+                              icon: Icons.today_rounded,
+                              accent: const Color(0xFF64B5F6),
+                              onTap: () => context.go('${RouteNames.teacherDashboard}/timetable'),
+                            ),
+                            const SizedBox(width: 10),
+                            Consumer(builder: (ctx, r, _) {
+                              final count = r.watch(teacherGradesProvider((null, null))).maybeWhen(data: (l) => l.length, orElse: () => 0);
+                              return _HeroStatCard(
+                                value: '$count',
+                                label: 'Grade Records',
+                                icon: Icons.grade_rounded,
+                                accent: const Color(0xFFFFB74D),
+                                onTap: () => context.go('${RouteNames.teacherDashboard}/grades'),
+                              );
+                            }),
+                            const SizedBox(width: 10),
+                            Consumer(builder: (ctx, r, _) {
+                              final count = r.watch(teacherTestsProvider(null)).maybeWhen(data: (l) => l.length, orElse: () => 0);
+                              return _HeroStatCard(
+                                value: '$count',
+                                label: 'Tests',
+                                icon: Icons.quiz_rounded,
+                                accent: AppColors.secondary,
+                                onTap: () => context.go('${RouteNames.teacherDashboard}/tests'),
+                              );
+                            }),
+                            const SizedBox(width: 10),
+                            Consumer(builder: (ctx, r, _) {
+                              final count = r.watch(teacherBroadcastsProvider).maybeWhen(data: (l) => l.length, orElse: () => 0);
+                              return _HeroStatCard(
+                                value: '$count',
+                                label: 'Broadcasts',
+                                icon: Icons.campaign_rounded,
+                                accent: const Color(0xFFCE93D8),
+                                showBadge: hasBroadcastBadge,
+                                onTap: () {
+                                  ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen();
+                                  context.go('${RouteNames.teacherDashboard}/broadcasts');
+                                },
+                              );
+                            }),
+                            const Spacer(),
+                            _WebQuickAction(
+                              icon: Icons.how_to_reg_outlined,
+                              label: 'Attendance',
+                              onTap: () => context.go('${RouteNames.teacherDashboard}/attendance'),
+                            ),
+                            const SizedBox(width: 8),
+                            _WebQuickAction(
+                              icon: Icons.assignment_outlined,
+                              label: 'Add Homework',
+                              onTap: () => context.go('${RouteNames.teacherDashboard}/homework'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Content ────────────────────────────────────────────────
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Grade Analysis Chart
+                    Consumer(builder: (context, ref, _) {
+                      final gradesAsync = ref.watch(teacherGradesProvider((null, null)));
+                      return gradesAsync.maybeWhen(
+                        data: (grades) {
+                          if (grades.isEmpty) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 20),
+                            child: _GradeAnalysisChart(grades: grades),
+                          );
+                        },
+                        orElse: () => const SizedBox.shrink(),
+                      );
+                    }),
+
+                    // Two columns
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 6,
+                          child: _WebSection(
+                            icon: Icons.calendar_today_rounded,
+                            title: "Today's Timetable",
+                            trailing: Text(
+                              DateFormat('EEE, d MMM').format(DateTime.now()),
+                              style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textMuted),
+                            ),
+                            onSeeAll: () => context.go('${RouteNames.teacherDashboard}/timetable'),
+                            child: timetableAsync.when(
+                              loading: () => const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()),
+                              error: (_, __) => const SizedBox.shrink(),
+                              data: (_) => todaySlots.isEmpty
+                                  ? _WebEmptyState(icon: Icons.event_busy_rounded, message: 'No classes scheduled for today')
+                                  : Wrap(
+                                      spacing: 12,
+                                      runSpacing: 12,
+                                      children: todaySlots.map((slot) => SizedBox(
+                                        width: 180,
+                                        child: _WebTimetableCard(slot: slot),
+                                      )).toList(),
+                                    ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          flex: 4,
+                          child: Column(
+                            children: [
+                              _WebSection(
+                                icon: Icons.assignment_outlined,
+                                title: 'Recent Homework',
+                                onSeeAll: () => context.go('${RouteNames.teacherDashboard}/homework'),
+                                child: Consumer(builder: (context, ref, _) {
+                                  final hwAsync = ref.watch(teacherHomeworkProvider(null));
+                                  return hwAsync.when(
+                                    loading: () => const LinearProgressIndicator(),
+                                    error: (_, __) => const SizedBox.shrink(),
+                                    data: (list) => list.isEmpty
+                                        ? _WebEmptyState(icon: Icons.assignment_outlined, message: 'No homework assigned yet')
+                                        : Column(children: list.take(3).map((h) => _DashHomeworkTile(hw: h)).toList()),
+                                  );
+                                }),
+                              ),
+                              const SizedBox(height: 16),
+                              _WebSection(
+                                icon: Icons.campaign_outlined,
+                                title: 'Announcements',
+                                showBadge: hasBroadcastBadge,
+                                onSeeAll: () {
+                                  ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen();
+                                  context.go('${RouteNames.teacherDashboard}/broadcasts');
+                                },
+                                child: Consumer(builder: (context, ref, _) {
+                                  final bcAsync = ref.watch(teacherBroadcastsProvider);
+                                  return bcAsync.when(
+                                    loading: () => const LinearProgressIndicator(),
+                                    error: (_, __) => const SizedBox.shrink(),
+                                    data: (list) => list.isEmpty
+                                        ? _WebEmptyState(icon: Icons.campaign_outlined, message: 'No announcements yet')
+                                        : Column(children: list.take(3).map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast)).toList()),
+                                  );
+                                }),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     // Responsive logo / text sizes for header
     final double logoH = (screenWidth * 0.142).clamp(42.0, 58.0);
     final double titleFs = (screenWidth * 0.062).clamp(18.0, 25.0);
 
-    return Scaffold(
+    return TeacherScaffold(
       backgroundColor: AppColors.background,
-      bottomNavigationBar: const TeacherBottomNav(),
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: _refreshDashboard,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           // ── Header ───────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: SizedBox(
@@ -297,7 +578,7 @@ class _TeacherDashboardScreenState
                                 alignment: WrapAlignment.center,
                                 children: [
                                   const _Badge(label: 'TEACHER'),
-                                  ...subjects.map((s) => _SubjectChip(subject: s)),
+                                  ...subjects.whereType<String>().map((s) => _SubjectChip(subject: s)),
                                 ],
                               ),
                             ],
@@ -484,6 +765,7 @@ class _TeacherDashboardScreenState
           SliverToBoxAdapter(child: SizedBox(height: _s(context, 16, min: 12, max: 24))),
 
         ],
+        ),
       ),
     );
   }
@@ -940,7 +1222,9 @@ class _TimetableCard extends StatelessWidget {
           const Spacer(),
           // Subject
           Text(
-            slot.isHoliday ? 'Holiday' : slot.subject,
+            slot.isHoliday
+                ? 'Holiday'
+                : (slot.subject?.isNotEmpty == true ? slot.subject! : slot.teacherUsername ?? 'Period ${slot.periodNumber}'),
             style: GoogleFonts.poppins(
               fontSize: (sw * 0.031).clamp(11.0, 14.0),
               fontWeight: FontWeight.w700,
@@ -1048,7 +1332,9 @@ class _TimetableTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  slot.isHoliday ? 'Holiday' : slot.subject,
+                  slot.isHoliday
+                      ? 'Holiday'
+                      : (slot.subject?.isNotEmpty == true ? slot.subject! : slot.teacherUsername ?? 'Period ${slot.periodNumber}'),
                   style: GoogleFonts.poppins(
                     fontSize: R.fs(context, 14, min: 12, max: 16),
                     fontWeight: FontWeight.w600,
@@ -1100,5 +1386,492 @@ class _TimetableTile extends StatelessWidget {
     final parts = t.split(':');
     return DateTime(base.year, base.month, base.day,
         int.parse(parts[0]), int.parse(parts[1]));
+  }
+}
+
+// ─── Web-only widgets ─────────────────────────────────────────────────────────
+
+class _WebSection extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onSeeAll;
+  final Widget child;
+  final Widget? trailing;
+  final bool showBadge;
+
+  const _WebSection({
+    required this.icon,
+    required this.title,
+    required this.onSeeAll,
+    required this.child,
+    this.trailing,
+    this.showBadge = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: mindForgeCardDecoration(),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              BadgeDot(
+                show: showBadge,
+                child: Icon(icon, size: 16, color: AppColors.primary),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              if (trailing != null) ...[trailing!, const SizedBox(width: 8)],
+              TextButton(
+                onPressed: onSeeAll,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: const Size(48, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'See all →',
+                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.accent),
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _WebQuickAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _WebQuickAction({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withOpacity(0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: Colors.white),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.poppins(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WebTimetableCard extends StatelessWidget {
+  final TimetableSlotModel slot;
+  const _WebTimetableCard({required this.slot});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.iconContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              'P${slot.periodNumber}',
+              style: GoogleFonts.poppins(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            slot.subject?.isNotEmpty == true ? slot.subject! : slot.teacherUsername ?? 'Period ${slot.periodNumber}',
+            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+          ),
+          Text(
+            'Grade ${slot.grade}',
+            style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
+          ),
+          if (slot.startTime != null)
+            Text(
+              '${slot.startTime} – ${slot.endTime ?? ''}',
+              style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textMuted, fontStyle: FontStyle.italic),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroStatCard extends StatelessWidget {
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color accent;
+  final VoidCallback onTap;
+  final bool showBadge;
+
+  const _HeroStatCard({
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.accent,
+    required this.onTap,
+    this.showBadge = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.15)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(
+                color: accent.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: BadgeDot(
+                show: showBadge,
+                child: Icon(icon, size: 19, color: accent),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w800,
+                    color: Colors.white, height: 1.1),
+                ),
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.white.withOpacity(0.6)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WebNavCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final bool showBadge;
+  const _WebNavCard({required this.icon, required this.label, required this.color, required this.onTap, this.showBadge = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                BadgeDot(
+                  show: showBadge,
+                  child: Container(
+                    width: 42, height: 42,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, size: 22, color: color),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebEmptyState extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  const _WebEmptyState({required this.icon, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 36, color: AppColors.divider),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textMuted),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Grade Analysis Chart (web only) ─────────────────────────────────────────
+
+class _GradeAnalysisChart extends StatefulWidget {
+  final List<GradeModel> grades;
+  const _GradeAnalysisChart({required this.grades});
+
+  @override
+  State<_GradeAnalysisChart> createState() => _GradeAnalysisChartState();
+}
+
+class _GradeAnalysisChartState extends State<_GradeAnalysisChart> {
+  int _touchedIndex = -1;
+
+  @override
+  Widget build(BuildContext context) {
+    // Compute average percentage per subject
+    final Map<String, List<double>> bySubject = {};
+    for (final g in widget.grades) {
+      bySubject.putIfAbsent(g.subject, () => []).add(g.percentage);
+    }
+    final subjects = bySubject.keys.toList()..sort();
+    final averages = subjects
+        .map((s) => bySubject[s]!.reduce((a, b) => a + b) / bySubject[s]!.length)
+        .toList();
+
+    if (subjects.isEmpty) return const SizedBox.shrink();
+
+    // Bar colors cycle through a palette
+    const palette = [
+      Color(0xFF457B9D),
+      Color(0xFFD4653B),
+      Color(0xFF2E7D52),
+      Color(0xFFB07A20),
+      Color(0xFF6A3B9E),
+      Color(0xFF1D3557),
+      Color(0xFF2E5F8A),
+      Color(0xFFAA4A27),
+    ];
+
+    final bars = subjects.asMap().entries.map((e) {
+      final i = e.key;
+      final isTouched = i == _touchedIndex;
+      final color = palette[i % palette.length];
+      return BarChartGroupData(
+        x: i,
+        barRods: [
+          BarChartRodData(
+            toY: averages[i],
+            color: isTouched ? color : color.withOpacity(0.75),
+            width: isTouched ? 22 : 18,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+            backDrawRodData: BackgroundBarChartRodData(
+              show: true,
+              toY: 100,
+              color: Colors.white.withOpacity(0.05),
+            ),
+          ),
+        ],
+      );
+    }).toList();
+
+    return Container(
+      decoration: mindForgeCardDecoration(),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              const Icon(Icons.bar_chart_rounded, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text('Grade Analysis — Average % by Subject',
+                  style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.iconContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('${widget.grades.length} records',
+                    style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('Tap a bar for details',
+              style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textMuted)),
+          const SizedBox(height: 16),
+
+          // Chart
+          SizedBox(
+            height: 200,
+            child: BarChart(
+              BarChartData(
+                maxY: 100,
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => AppColors.primaryDark,
+                    tooltipRoundedRadius: 8,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final subject = subjects[group.x];
+                      final count = bySubject[subject]!.length;
+                      return BarTooltipItem(
+                        '$subject\n',
+                        GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                        children: [
+                          TextSpan(
+                            text: '${rod.toY.toStringAsFixed(1)}%  ·  $count tests',
+                            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  touchCallback: (event, response) {
+                    setState(() {
+                      _touchedIndex = (event is FlTapUpEvent || event is FlPointerHoverEvent)
+                          ? (response?.spot?.touchedBarGroupIndex ?? -1)
+                          : -1;
+                    });
+                  },
+                ),
+                titlesData: FlTitlesData(
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (val, meta) {
+                        final i = val.toInt();
+                        if (i < 0 || i >= subjects.length) return const SizedBox.shrink();
+                        final label = subjects[i].length > 8
+                            ? '${subjects[i].substring(0, 7)}…'
+                            : subjects[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(label,
+                              style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textMuted),
+                              textAlign: TextAlign.center),
+                        );
+                      },
+                      reservedSize: 30,
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 36,
+                      interval: 25,
+                      getTitlesWidget: (val, meta) => Text(
+                        '${val.toInt()}%',
+                        style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textMuted),
+                      ),
+                    ),
+                  ),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  horizontalInterval: 25,
+                  getDrawingHorizontalLine: (_) => FlLine(color: AppColors.divider, strokeWidth: 1),
+                  drawVerticalLine: false,
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: bars,
+                groupsSpace: 12,
+              ),
+              swapAnimationDuration: const Duration(milliseconds: 400),
+              swapAnimationCurve: Curves.easeOut,
+            ),
+          ),
+
+          // Legend
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: subjects.asMap().entries.map((e) {
+              final color = palette[e.key % palette.length];
+              final avg = averages[e.key];
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 10, height: 10,
+                      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(width: 5),
+                  Text('${e.value}  ${avg.toStringAsFixed(0)}%',
+                      style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary)),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
   }
 }

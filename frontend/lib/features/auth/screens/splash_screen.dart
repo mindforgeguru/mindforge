@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
-import '../../../core/utils/responsive.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,61 +14,44 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-  // ── Controllers ─────────────────────────────────────────────────────────────
-  late final AnimationController _logoCtrl;
-  late final AnimationController _wordCtrl;
-  late final AnimationController _tagCtrl;
-  late final AnimationController _expCtrl;
-  late final AnimationController _exitCtrl;
+  // Logo: scale + fade in
+  late AnimationController _logoCtrl;
+  late Animation<double> _logoScale;
+  late Animation<double> _logoOpacity;
 
-  // ── Animations ──────────────────────────────────────────────────────────────
-  late final Animation<double> _logoScale;
-  late final Animation<double> _logoOpacity;
-  late final Animation<double> _wordOpacity;
-  late final Animation<Offset> _wordSlide;
-  late final Animation<double> _tagOpacity;
-  late final Animation<double> _expOpacity;
-  late final Animation<Offset> _expSlide;
-  late final Animation<double> _exitOpacity;
+  // Capsule: slide up + fade in (delayed)
+  late AnimationController _capsuleCtrl;
+  late Animation<double> _capsuleSlide;
+  late Animation<double> _capsuleOpacity;
+
+  // Exit: fade out everything
+  late AnimationController _exitCtrl;
+  late Animation<double> _exitOpacity;
 
   @override
   void initState() {
     super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
+    // ── Logo animates in (900ms)
     _logoCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 700));
-    _wordCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 600));
-    _tagCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 500));
-    _expCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 600));
-    _exitCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 450));
-
-    _logoScale = Tween<double>(begin: 0.45, end: 1.0).animate(
-        CurvedAnimation(parent: _logoCtrl, curve: Curves.elasticOut));
+        vsync: this, duration: const Duration(milliseconds: 900));
+    _logoScale = Tween<double>(begin: 0.6, end: 1.0).animate(
+        CurvedAnimation(parent: _logoCtrl, curve: Curves.easeOutBack));
     _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(
-            parent: _logoCtrl, curve: const Interval(0.0, 0.45)));
+        CurvedAnimation(parent: _logoCtrl, curve: Curves.easeIn));
 
-    _wordOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _wordCtrl, curve: Curves.easeOut));
-    _wordSlide =
-        Tween<Offset>(begin: const Offset(0, 0.35), end: Offset.zero)
-            .animate(CurvedAnimation(
-                parent: _wordCtrl, curve: Curves.easeOutCubic));
+    // ── Capsule slides up (700ms, starts after logo finishes)
+    _capsuleCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 700));
+    _capsuleSlide = Tween<double>(begin: 30.0, end: 0.0).animate(
+        CurvedAnimation(parent: _capsuleCtrl, curve: Curves.easeOut));
+    _capsuleOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _capsuleCtrl, curve: Curves.easeIn));
 
-    _tagOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _tagCtrl, curve: Curves.easeOut));
-
-    _expOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _expCtrl, curve: Curves.easeOut));
-    _expSlide =
-        Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero)
-            .animate(CurvedAnimation(
-                parent: _expCtrl, curve: Curves.easeOutCubic));
-
+    // ── Exit fade out (400ms)
+    _exitCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 400));
     _exitOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
         CurvedAnimation(parent: _exitCtrl, curve: Curves.easeIn));
 
@@ -77,227 +59,125 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _runSequence() async {
-    // Stagger in
-    await Future.delayed(const Duration(milliseconds: 150));
-    _logoCtrl.forward();
-
-    await Future.delayed(const Duration(milliseconds: 450));
-    _wordCtrl.forward();
-
-    await Future.delayed(const Duration(milliseconds: 350));
-    _tagCtrl.forward();
-
-    await Future.delayed(const Duration(milliseconds: 350));
-    _expCtrl.forward();
-
-    // Hold for a moment, then fade out
-    await Future.delayed(const Duration(milliseconds: 1400));
+    // 1. Logo fades + scales in
+    await _logoCtrl.forward();
+    // 2. Short pause
+    await Future.delayed(const Duration(milliseconds: 300));
+    // 3. Capsule slides up
+    await _capsuleCtrl.forward();
+    // 4. Hold for a moment
+    await Future.delayed(const Duration(milliseconds: 1800));
+    // 5. Fade everything out
     await _exitCtrl.forward();
-
-    if (mounted) context.go(RouteNames.login);
+    // 6. Navigate
+    if (mounted) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      context.go(RouteNames.login);
+    }
   }
 
   @override
   void dispose() {
     _logoCtrl.dispose();
-    _wordCtrl.dispose();
-    _tagCtrl.dispose();
-    _expCtrl.dispose();
+    _capsuleCtrl.dispose();
     _exitCtrl.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Responsive values — CSS vw/vh equivalents
-    final c1 = R.vw(context, 56);   // large top-left circle  (~220px @ 390)
-    final c2 = R.vw(context, 38);   // top-right circle       (~150px @ 390)
-    final c3 = R.vw(context, 23);   // bottom-left circle     (~90px @ 390)
-    final c4 = R.vw(context, 51);   // large bottom-right     (~200px @ 390)
-    final logoSz = R.fluid(context, 100, min: 72, max: 120);
-    final titleFs = R.fluid(context, 26, min: 20, max: 32);
-    final tagFs = R.fluid(context, 11, min: 9, max: 14);
-    final badgeFs = R.fluid(context, 11, min: 9, max: 13);
-    final badgeSubFs = R.fluid(context, 10, min: 8, max: 12);
+    final sw = MediaQuery.of(context).size.width;
+    final logoSize = (sw * 0.65).clamp(200.0, 300.0);
 
     return AnimatedBuilder(
       animation: _exitCtrl,
-      builder: (context, child) =>
+      builder: (_, child) =>
           Opacity(opacity: _exitOpacity.value, child: child),
       child: Scaffold(
-        backgroundColor: AppColors.primary,
-        body: Stack(
-          children: [
-            // ── Decorative circles — sized as % of viewport width (vw) ──
-            Positioned(
-              top: -c1 * 0.27,
-              left: -c1 * 0.27,
-              child: _Circle(size: c1, opacity: 0.05),
-            ),
-            Positioned(
-              top: R.vh(context, 10),
-              right: -c2 * 0.27,
-              child: _Circle(size: c2, opacity: 0.04),
-            ),
-            Positioned(
-              bottom: R.vh(context, 13),
-              left: R.vw(context, 8),
-              child: _Circle(size: c3, opacity: 0.04),
-            ),
-            Positioned(
-              bottom: -c4 * 0.25,
-              right: -c4 * 0.15,
-              child: _Circle(size: c4, opacity: 0.05),
-            ),
-
-            // ── Centered content ────────────────────────────────────────
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // ── Logo ──────────────────────────────────────────────
-                  AnimatedBuilder(
-                    animation: _logoCtrl,
-                    builder: (_, child) => Opacity(
-                      opacity: _logoOpacity.value,
-                      child: Transform.scale(
-                        scale: _logoScale.value,
-                        child: child,
-                      ),
-                    ),
-                    child: Container(
-                      width: logoSz,
-                      height: logoSz,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(logoSz * 0.15),
-                      ),
-                      padding: EdgeInsets.all(logoSz * 0.08),
-                      child: Image.asset('assets/images/logo.png',
-                          fit: BoxFit.contain),
-                    ),
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Logo: scale + fade in ──────────────────────────────
+              AnimatedBuilder(
+                animation: _logoCtrl,
+                builder: (_, child) => Opacity(
+                  opacity: _logoOpacity.value,
+                  child: Transform.scale(
+                    scale: _logoScale.value,
+                    child: child,
                   ),
+                ),
+                child: Image.asset(
+                  'assets/images/splash_logo.png',
+                  width: logoSize,
+                  height: logoSize,
+                ),
+              ),
 
-                  SizedBox(height: R.sp(context, 24)),
+              const SizedBox(height: 16),
 
-                  // ── MIND FORGE wordmark ───────────────────────────────
-                  AnimatedBuilder(
-                    animation: _wordCtrl,
-                    builder: (_, child) => SlideTransition(
-                      position: _wordSlide,
-                      child:
-                          Opacity(opacity: _wordOpacity.value, child: child),
-                    ),
-                    child: Text(
-                      'MIND FORGE',
-                      style: GoogleFonts.poppins(
-                        fontSize: titleFs,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textOnDark,
-                        letterSpacing: 5,
-                      ),
-                    ),
+              // ── Capsule: slide up + fade in ───────────────────────
+              AnimatedBuilder(
+                animation: _capsuleCtrl,
+                builder: (_, child) => Opacity(
+                  opacity: _capsuleOpacity.value,
+                  child: Transform.translate(
+                    offset: Offset(0, _capsuleSlide.value),
+                    child: child,
                   ),
-
-                  SizedBox(height: R.sp(context, 7)),
-
-                  // ── Tagline ───────────────────────────────────────────
-                  AnimatedBuilder(
-                    animation: _tagCtrl,
-                    builder: (_, child) =>
-                        Opacity(opacity: _tagOpacity.value, child: child),
-                    child: Text(
-                      'AI ASSISTED LEARNING',
-                      style: GoogleFonts.poppins(
-                        fontSize: tagFs,
-                        color: AppColors.textOnDark.withValues(alpha: 0.65),
-                        letterSpacing: 3,
-                      ),
-                    ),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 11),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                        color: const Color(0xFF606060).withOpacity(0.3),
+                        width: 1),
+                    color: const Color(0xFFB8B8B8).withOpacity(0.25),
                   ),
-
-                  SizedBox(height: R.sp(context, 32)),
-
-                  // ── 30 Years badge ────────────────────────────────────
-                  AnimatedBuilder(
-                    animation: _expCtrl,
-                    builder: (_, child) => SlideTransition(
-                      position: _expSlide,
-                      child:
-                          Opacity(opacity: _expOpacity.value, child: child),
-                    ),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: R.sp(context, 20),
-                        vertical: R.sp(context, 10),
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                            color: Colors.white.withOpacity(0.3), width: 1),
-                        color: Colors.white.withOpacity(0.1),
-                      ),
-                      child: Row(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.workspace_premium_rounded,
+                          size: 17,
+                          color: const Color(0xFF404040).withOpacity(0.8)),
+                      const SizedBox(width: 9),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.workspace_premium_rounded,
-                            size: R.fluid(context, 18, min: 14, max: 22),
-                            color: Colors.white.withOpacity(0.85),
+                          Text(
+                            '25+ YEARS OF EXCELLENCE',
+                            style: GoogleFonts.poppins(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF303030),
+                              letterSpacing: 1.4,
+                            ),
                           ),
-                          SizedBox(width: R.sp(context, 10)),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '25+ YEARS OF EXCELLENCE',
-                                style: GoogleFonts.poppins(
-                                  fontSize: badgeFs,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textOnDark,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                              SizedBox(height: R.sp(context, 2)),
-                              Text(
-                                'Trusted education since 1997',
-                                style: TextStyle(
-                                  fontSize: badgeSubFs,
-                                  color: Colors.white.withOpacity(0.6),
-                                  letterSpacing: 0.3,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(height: 1),
+                          Text(
+                            'Trusted education since 1997',
+                            style: GoogleFonts.poppins(
+                              fontSize: 9.5,
+                              color: const Color(0xFF505050),
+                              letterSpacing: 0.2,
+                            ),
                           ),
                         ],
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
-}
-
-// ── Helper ────────────────────────────────────────────────────────────────────
-
-class _Circle extends StatelessWidget {
-  final double size;
-  final double opacity;
-  const _Circle({required this.size, required this.opacity});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white.withOpacity(opacity),
-        ),
-      );
 }

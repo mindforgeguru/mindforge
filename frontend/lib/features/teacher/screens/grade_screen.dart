@@ -10,6 +10,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
+import '../widgets/teacher_scaffold.dart';
 
 class TeacherGradeScreen extends ConsumerStatefulWidget {
   const TeacherGradeScreen({super.key});
@@ -36,7 +37,7 @@ class _TeacherGradeScreenState extends ConsumerState<TeacherGradeScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return TeacherScaffold(
       appBar: AppBar(
         title: const Text('Grades'),
         actions: [
@@ -68,7 +69,6 @@ class _TeacherGradeScreenState extends ConsumerState<TeacherGradeScreen>
           _EnterOfflineMarksTab(),
         ],
       ),
-      bottomNavigationBar: const TeacherBottomNav(),
     );
   }
 }

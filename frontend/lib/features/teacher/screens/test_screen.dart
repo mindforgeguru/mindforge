@@ -11,6 +11,7 @@ import '../../../core/utils/responsive.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
+import '../widgets/teacher_scaffold.dart';
 import 'test_detail_screen.dart';
 
 class TeacherTestScreen extends ConsumerStatefulWidget {
@@ -38,7 +39,7 @@ class _TeacherTestScreenState extends ConsumerState<TeacherTestScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return TeacherScaffold(
       appBar: AppBar(
         title: const Text('Tests'),
         actions: [
@@ -70,7 +71,6 @@ class _TeacherTestScreenState extends ConsumerState<TeacherTestScreen>
           _TestsTab(testType: 'offline'),
         ],
       ),
-      bottomNavigationBar: const TeacherBottomNav(),
     );
   }
 }
@@ -113,7 +113,10 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
   Widget build(BuildContext context) {
     final testsAsync = ref.watch(teacherTestsProvider(null));
 
-    return SingleChildScrollView(
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(teacherTestsProvider(null)),
+      child: SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -163,6 +166,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
             },
           ),
         ],
+      ),
       ),
     );
   }

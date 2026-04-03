@@ -11,6 +11,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
+import '../widgets/teacher_scaffold.dart';
 
 // Responsive scale helper — base ref width 390 px
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
@@ -482,7 +483,7 @@ class _TeacherAttendanceScreenState
     final existingAsync = ref.watch(
         teacherAttendanceProvider((_selectedGrade, _dateStr)));
 
-    return Scaffold(
+    return TeacherScaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
@@ -582,7 +583,13 @@ class _TeacherAttendanceScreenState
 
                         // ── Student list + action buttons at bottom ─
                         Expanded(
-                          child: ListView.separated(
+                          child: RefreshIndicator(
+                            onRefresh: () async {
+                              ref.invalidate(teacherAttendanceProvider((_selectedGrade, _dateStr)));
+                              ref.invalidate(studentsInGradeProvider(_selectedGrade));
+                            },
+                            child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
                             padding: EdgeInsets.fromLTRB(
                                 16, 12, 16,
                                 R.sp(context, 16, min: 12, max: 24)),
@@ -609,6 +616,7 @@ class _TeacherAttendanceScreenState
                               );
                             },
                           ),
+                          ),
                         ),
                       ],
                     );
@@ -620,7 +628,6 @@ class _TeacherAttendanceScreenState
         ],
       ),
 
-      bottomNavigationBar: const TeacherBottomNav(),
     );
   }
 }

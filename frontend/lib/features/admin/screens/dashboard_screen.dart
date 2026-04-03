@@ -10,11 +10,22 @@ import '../../auth/providers/auth_provider.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_bottom_nav.dart';
 
-class AdminDashboardScreen extends ConsumerWidget {
+class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
+  Future<void> _refreshDashboard() async {
+    ref.invalidate(pendingUsersProvider);
+    ref.invalidate(currentAcademicYearProvider);
+    await ref.read(pendingUsersProvider.future).catchError((_) => <dynamic>[]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final pendingAsync = ref.watch(pendingUsersProvider);
     final currentYearAsync = ref.watch(currentAcademicYearProvider);
@@ -54,8 +65,11 @@ class AdminDashboardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       bottomNavigationBar: const AdminBottomNav(),
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: _refreshDashboard,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           // ── Header ───────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: SizedBox(
@@ -240,6 +254,7 @@ class AdminDashboardScreen extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

@@ -117,6 +117,14 @@ final studentHomeworkProvider =
       .toList();
 });
 
+// ── Fees ───────────────────────────────────────────────────────────────────
+
+final studentFeesProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  return api.getStudentFees();
+});
+
 // ── Broadcasts ─────────────────────────────────────────────────────────────
 
 final studentBroadcastsProvider =
