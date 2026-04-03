@@ -10,6 +10,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
+import '../widgets/teacher_scaffold.dart';
 
 class TeacherTimetableScreen extends ConsumerStatefulWidget {
   const TeacherTimetableScreen({super.key});
@@ -54,7 +55,7 @@ class _TeacherTimetableScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return TeacherScaffold(
       appBar: AppBar(
         title: const Text('Timetable'),
         actions: [
@@ -92,7 +93,6 @@ class _TeacherTimetableScreenState
           _FullTimetableTab(onEditTimetable: _editTimetable),
         ],
       ),
-      bottomNavigationBar: const TeacherBottomNav(),
     );
   }
 }
@@ -110,14 +110,12 @@ class _ViewTab extends ConsumerStatefulWidget {
 }
 
 class _ViewTabState extends ConsumerState<_ViewTab> {
-  late DateTime _calendarMonth;
   late DateTime _selectedDate;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _calendarMonth = DateTime(now.year, now.month);
     // Default to a weekday — jump to next Monday on weekends
     _selectedDate = now.weekday >= 6
         ? now.add(Duration(days: 8 - now.weekday))
@@ -164,132 +162,44 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
             _selectedDate.month == today.month &&
             _selectedDate.day == today.day;
 
-        return Column(
-          children: [
-            // ── Calendar card ────────────────────────────────────────────
-            Container(
-              margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-              decoration: mindForgeCardDecoration(),
-              padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
-              child: Column(
-                children: [
-                  // Month navigation
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.chevron_left, size: 16),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                            minWidth: 28, minHeight: 28),
-                        onPressed: () => setState(() {
-                          _calendarMonth = DateTime(
-                              _calendarMonth.year, _calendarMonth.month - 1);
-                        }),
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.cardBackground,
-                          foregroundColor: AppColors.primary,
-                        ),
-                      ),
-                      Text(
-                        DateFormat('MMMM yyyy').format(_calendarMonth),
-                        style: const TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right, size: 16),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                            minWidth: 28, minHeight: 28),
-                        onPressed: () => setState(() {
-                          _calendarMonth = DateTime(
-                              _calendarMonth.year, _calendarMonth.month + 1);
-                        }),
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.cardBackground,
-                          foregroundColor: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // Weekday labels
-                  Row(
-                    children: ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-                        .map((d) => Expanded(
-                              child: Center(
-                                child: Text(d,
-                                    style: const TextStyle(
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textMuted)),
-                              ),
-                            ))
-                        .toList(),
-                  ),
-                  _CalendarGrid(
-                    month: _calendarMonth,
-                    selectedDate: _selectedDate,
-                    datesWithTimetable: datesWithTimetable,
-                    onDateTapped: (date) =>
-                        setState(() => _selectedDate = date),
-                  ),
-                ],
-              ),
+        final isWide = MediaQuery.of(context).size.width >= 900;
+
+
+        // ── Day header (mobile only) ───────────────────────────────────────
+        final dayHeader = Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isToday ? AppColors.primary : AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
             ),
-
-            const SizedBox(height: 6),
-
-            // ── Selected day header ──────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isToday
-                      ? AppColors.primary
-                      : AppColors.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${DateFormat('EEE').format(_selectedDate)}  ·  '
-                        '${DateFormat('d MMM yyyy').format(_selectedDate)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: isToday ? Colors.white : AppColors.primary,
-                        ),
-                      ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${DateFormat('EEE').format(_selectedDate)}  ·  ${DateFormat('d MMM yyyy').format(_selectedDate)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: isToday ? Colors.white : AppColors.primary,
                     ),
-                    if (isToday)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text('TODAY',
-                            style: TextStyle(
-                                fontSize: 9,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1)),
-                      ),
-                  ],
+                  ),
                 ),
-              ),
+                if (isToday)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(20)),
+                    child: const Text('TODAY', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ),
+              ],
             ),
+          ),
+        );
 
-            const SizedBox(height: 4),
-
-            // ── Period list for selected day ──────────────────────────────
-            Expanded(
-              child: selectedSlots.isEmpty
+        // ── Period list for selected day ──────────────────────────────────
+        final periodList = selectedSlots.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -337,7 +247,10 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
                                       fontWeight: FontWeight.bold,
                                       color: AppColors.secondary)),
                             ),
-                            title: Text(slot.subject,
+                            title: Text(
+                                slot.subject?.isNotEmpty == true
+                                    ? slot.subject!
+                                    : slot.teacherUsername ?? 'Period ${slot.periodNumber}',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 13)),
@@ -375,8 +288,102 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
                           ),
                         );
                       },
-                    ),
+                    );
+
+        // ── Assemble layout ───────────────────────────────────────────────
+        if (isWide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Calendar left panel — scrollable months
+              SizedBox(
+                width: 380,
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(16, 16, 0, 16),
+                  decoration: mindForgeCardDecoration(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 14, 16, 10),
+                        child: Row(children: [
+                          Icon(Icons.calendar_month_rounded, size: 16, color: AppColors.primary),
+                          SizedBox(width: 8),
+                          Text('Select Date',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                        ]),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: _ScrollableCalendar(
+                          selectedDate: _selectedDate,
+                          datesWithTimetable: datesWithTimetable,
+                          onDateSelected: (date) => setState(() => _selectedDate = date),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Period list right panel
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+                  decoration: mindForgeCardDecoration(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.schedule_rounded, size: 16, color: AppColors.primary),
+                          const SizedBox(width: 8),
+                          Text(
+                            DateFormat('EEEE, d MMMM').format(_selectedDate),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (isToday) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text('TODAY', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const Divider(height: 16),
+                      Expanded(child: periodList),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Column(
+          children: [
+            SizedBox(
+              height: 270,
+              child: _ScrollableCalendar(
+                selectedDate: _selectedDate,
+                datesWithTimetable: datesWithTimetable,
+                onDateSelected: (date) => setState(() => _selectedDate = date),
+              ),
             ),
+            const Divider(height: 1),
+            const SizedBox(height: 4),
+            dayHeader,
+            const SizedBox(height: 4),
+            Expanded(child: periodList),
           ],
         );
       },
@@ -407,8 +414,8 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
   late int _selectedGrade;
 
   // Calendar state
-  late DateTime _calendarMonth;
   late DateTime _selectedDate;
+  late DateTime _weekStart; // Monday of the displayed week
 
   String get _dateString =>
       DateFormat('yyyy-MM-dd').format(_selectedDate);
@@ -426,8 +433,9 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
     super.initState();
     _selectedGrade = widget.initialGrade;
     final initial = widget.initialDate ?? DateTime.now();
-    _calendarMonth = DateTime(initial.year, initial.month);
     _selectedDate = initial;
+    // Monday of the week containing the initial date
+    _weekStart = initial.subtract(Duration(days: initial.weekday - 1));
   }
 
   void _onDateTapped(DateTime date) {
@@ -508,163 +516,240 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
             .toSet() ??
         const <String>{};
 
-    final displayDate = _selectedDate;
-    final dateLabel = DateFormat('d MMM yyyy').format(displayDate);
+    final isWide = MediaQuery.of(context).size.width >= 900;
 
-    return Column(
-      children: [
-        // ── 2-pill selector row (Grade + Date) ──────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          child: Row(
-            children: [
-              // Grade pill
-              Expanded(
-                flex: 2,
-                child: _SelectorPill(
-                  label: 'Grade',
-                  value: 'Grade $_selectedGrade',
-                  showArrow: true,
-                  onTap: () => _showGradePicker(context),
-                ),
+    // ── Period editor widget (built from async data) ─────────────────────
+    Widget periodEditor = timetableAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (slots) {
+        final busyByPeriod = _computeBusyTeachers();
+        final existingSlots = slots
+            .where((s) => s.slotDate == _dateString)
+            .toList()
+          ..sort((a, b) => a.periodNumber.compareTo(b.periodNumber));
+        final isUpdate = existingSlots.isNotEmpty;
+
+        return teachersAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Error: $e')),
+          data: (teachers) {
+            _populateFromSlots(slots, teachers);
+
+            final teacherSubjectsMap = <int, List<String>>{
+              for (final t in teachers)
+                if (t.teachableSubjects != null &&
+                    t.teachableSubjects!.isNotEmpty)
+                  t.id: t.teachableSubjects!,
+            };
+
+            final actionButtons = Padding(
+              padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _saving
+                          ? null
+                          : () => _saveAll(context, periodsPerDay),
+                      icon: _saving
+                          ? const SizedBox(
+                              height: 18, width: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : Icon(isUpdate ? Icons.update : Icons.save_outlined),
+                      label: Text(
+                        _saving
+                            ? 'Saving…'
+                            : isUpdate ? 'Update Timetable' : 'Save Timetable',
+                        style: TextStyle(fontSize: R.fs(context, 14, min: 12, max: 16)),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: isUpdate ? AppColors.success : null,
+                        padding: EdgeInsets.symmetric(
+                            vertical: R.sp(context, 14, min: 10, max: 16)),
+                      ),
+                    ),
+                  ),
+                  if (isUpdate) ...[
+                    const SizedBox(width: 10),
+                    FilledButton.icon(
+                      onPressed: _saving ? null : () => _confirmDelete(context),
+                      icon: Icon(Icons.delete_outline,
+                          size: R.fluid(context, 18, min: 16, max: 20)),
+                      label: Text('Delete',
+                          style: TextStyle(fontSize: R.fs(context, 14, min: 12, max: 16))),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: R.sp(context, 16, min: 12, max: 20),
+                          vertical: R.sp(context, 14, min: 10, max: 16),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(width: 8),
-              // Date pill
-              Expanded(
-                flex: 3,
-                child: _SelectorPill(
-                  label: 'Date',
-                  value: dateLabel,
-                  leadingIcon: Icons.calendar_month_outlined,
-                  onTap: () => _showDatePicker(context, datesWithTimetable),
-                ),
-              ),
-            ],
-          ),
-        ),
+            );
 
-        const SizedBox(height: 12),
+            return _PeriodList(
+              periodsPerDay: periodsPerDay,
+              periodTimes: periodTimes,
+              teachers: teachers,
+              teacherIds: _teacherIds,
+              subjects: _subjects,
+              comments: _comments,
+              busyByPeriod: busyByPeriod,
+              teacherSubjectsMap: teacherSubjectsMap,
+              footer: actionButtons,
+              onTeacherChanged: (p, id) => setState(() {
+                _teacherIds[p] = id;
+                if (id != null && teacherSubjectsMap.containsKey(id)) {
+                  final allowed = teacherSubjectsMap[id]!;
+                  if (_subjects[p] != null && !allowed.contains(_subjects[p])) {
+                    _subjects[p] = null;
+                  }
+                }
+              }),
+              onSubjectChanged: (p, s) => setState(() => _subjects[p] = s),
+              onCommentChanged: (p, c) =>
+                  setState(() => _comments[p] = c.isEmpty ? null : c),
+            );
+          },
+        );
+      },
+    );
 
-        // ── Period rows ──────────────────────────────────────────────────
-        Expanded(
-          child: timetableAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
-            data: (slots) {
-              final busyByPeriod = _computeBusyTeachers();
-              final existingSlots = slots
-                  .where((s) => s.slotDate == _dateString)
-                  .toList()
-                ..sort((a, b) => a.periodNumber.compareTo(b.periodNumber));
-              final isUpdate = existingSlots.isNotEmpty;
+    // ── Calendar panel widget ────────────────────────────────────────────
+    final calendarPanel = _ScrollableCalendar(
+      selectedDate: _selectedDate,
+      datesWithTimetable: datesWithTimetable,
+      onDateSelected: (date) => _onDateTapped(date),
+    );
 
-              return teachersAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Error: $e')),
-                data: (teachers) {
-                  _populateFromSlots(slots, teachers);
-
-                  final teacherSubjectsMap = <int, List<String>>{
-                    for (final t in teachers)
-                      if (t.teachableSubjects != null &&
-                          t.teachableSubjects!.isNotEmpty)
-                        t.id: t.teachableSubjects!,
-                  };
-
-                  // ── Action buttons (scrolls with the list) ────────
-                  final actionButtons = Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
+    // ── Web layout ───────────────────────────────────────────────────────
+    if (isWide) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Left: calendar + grade selector
+          SizedBox(
+            width: 380,
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 16, 0, 16),
+              decoration: mindForgeCardDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header: grade selector + selected date
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: Row(
                       children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: _saving
-                                ? null
-                                : () => _saveAll(context, periodsPerDay),
-                            icon: _saving
-                                ? const SizedBox(
-                                    height: 18, width: 18,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white),
-                                  )
-                                : Icon(isUpdate
-                                    ? Icons.update
-                                    : Icons.save_outlined),
-                            label: Text(
-                              _saving
-                                  ? 'Saving…'
-                                  : isUpdate
-                                      ? 'Update Timetable'
-                                      : 'Save Timetable',
-                              style: TextStyle(
-                                  fontSize: R.fs(context, 14, min: 12, max: 16)),
+                        const Icon(Icons.school_outlined, size: 15, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Text('Grade $_selectedGrade',
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => _showGradePicker(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.07),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                             ),
-                            style: FilledButton.styleFrom(
-                              backgroundColor:
-                                  isUpdate ? AppColors.success : null,
-                              padding: EdgeInsets.symmetric(
-                                vertical: R.sp(context, 14, min: 10, max: 16),
-                              ),
-                            ),
+                            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                              Text('Change', style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500)),
+                              Icon(Icons.arrow_drop_down, size: 16, color: AppColors.primary),
+                            ]),
                           ),
                         ),
-                        if (isUpdate) ...[
-                          const SizedBox(width: 10),
-                          FilledButton.icon(
-                            onPressed:
-                                _saving ? null : () => _confirmDelete(context),
-                            icon: Icon(Icons.delete_outline,
-                                size: R.fluid(context, 18, min: 16, max: 20)),
-                            label: Text('Delete',
-                                style: TextStyle(
-                                    fontSize:
-                                        R.fs(context, 14, min: 12, max: 16))),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.error,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: R.sp(context, 16, min: 12, max: 20),
-                                vertical: R.sp(context, 14, min: 10, max: 16),
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
-                  );
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: Row(children: [
+                      const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.textMuted),
+                      const SizedBox(width: 6),
+                      Text(
+                        DateFormat('EEEE, d MMMM yyyy').format(_selectedDate),
+                        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      ),
+                    ]),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(child: calendarPanel),
+                ],
+              ),
+            ),
+          ),
+          // Right: period editor
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+              decoration: mindForgeCardDecoration(),
+              child: periodEditor,
+            ),
+          ),
+        ],
+      );
+    }
 
-                  return _PeriodList(
-                      periodsPerDay: periodsPerDay,
-                      periodTimes: periodTimes,
-                      teachers: teachers,
-                      teacherIds: _teacherIds,
-                      subjects: _subjects,
-                      comments: _comments,
-                      busyByPeriod: busyByPeriod,
-                      teacherSubjectsMap: teacherSubjectsMap,
-                      footer: actionButtons,
-                      onTeacherChanged: (p, id) => setState(() {
-                        _teacherIds[p] = id;
-                        if (id != null &&
-                            teacherSubjectsMap.containsKey(id)) {
-                          final allowed = teacherSubjectsMap[id]!;
-                          if (_subjects[p] != null &&
-                              !allowed.contains(_subjects[p])) {
-                            _subjects[p] = null;
-                          }
-                        }
-                      }),
-                      onSubjectChanged: (p, s) =>
-                          setState(() => _subjects[p] = s),
-                      onCommentChanged: (p, c) =>
-                          setState(() => _comments[p] = c.isEmpty ? null : c),
-                    );
-                },
-              );
-            },
+    // ── Mobile layout ────────────────────────────────────────────────────
+    return Column(
+      children: [
+        // Grade selector pill
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: _SelectorPill(
+            label: 'Grade',
+            value: 'Grade $_selectedGrade',
+            showArrow: true,
+            onTap: () => _showGradePicker(context),
           ),
         ),
+        const SizedBox(height: 8),
+        // Week strip
+        _WeekStrip(
+          weekStart: _weekStart,
+          selectedDate: _selectedDate,
+          datesWithTimetable: datesWithTimetable,
+          onDateSelected: (date) {
+            setState(() {
+              _selectedDate = date;
+              _weekStart = date.subtract(Duration(days: date.weekday - 1));
+              _teacherIds.clear();
+              _subjects.clear();
+              _comments.clear();
+              _populatedGrade = null;
+              _populatedDate = null;
+            });
+          },
+          onWeekChanged: (newWeekStart) =>
+              setState(() => _weekStart = newWeekStart),
+        ),
+        const Divider(height: 1),
+        // Selected date label
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          color: AppColors.primary.withValues(alpha: 0.06),
+          child: Row(children: [
+            const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(
+              DateFormat('EEE, d MMMM yyyy').format(_selectedDate),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+            ),
+          ]),
+        ),
+        // Period rows
+        Expanded(child: periodEditor),
       ],
     );
   }
@@ -780,96 +865,71 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
   }
 
   void _showDatePicker(BuildContext context, Set<String> datesWithTimetable) {
-    // Local state for bottom-sheet month navigation
-    DateTime sheetMonth = _calendarMonth;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setSheetState) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Drag handle
-                Container(
-                  width: 36, height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.divider,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Month navigation header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left),
-                      onPressed: () => setSheetState(() {
-                        sheetMonth = DateTime(sheetMonth.year, sheetMonth.month - 1);
-                      }),
-                    ),
-                    Text(
-                      DateFormat('MMMM yyyy').format(sheetMonth),
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right),
-                      onPressed: () => setSheetState(() {
-                        sheetMonth = DateTime(sheetMonth.year, sheetMonth.month + 1);
-                      }),
-                    ),
-                  ],
-                ),
-                // Weekday labels
-                Row(
-                  children: ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) {
-                    return Expanded(
-                      child: Center(
-                        child: Text(d,
-                            style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textMuted)),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.72,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36, height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.divider,
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 4),
-                _CalendarGrid(
-                  month: sheetMonth,
-                  selectedDate: _selectedDate,
-                  datesWithTimetable: datesWithTimetable,
-                  onDateTapped: (date) {
-                    _onDateTapped(date);
-                    setState(() => _calendarMonth = sheetMonth);
-                    Navigator.pop(context);
-                  },
-                ),
-                const SizedBox(height: 8),
-              ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Row(children: [
+                    Icon(Icons.calendar_month_outlined, size: 18, color: AppColors.primary),
+                    SizedBox(width: 8),
+                    Text('Select Date',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ]),
+                  const SizedBox(height: 10),
+                ],
+              ),
             ),
-          );
-        },
+            const Divider(height: 1),
+            Expanded(
+              child: _ScrollableCalendar(
+                selectedDate: _selectedDate,
+                datesWithTimetable: datesWithTimetable,
+                onDateSelected: (date) {
+                  _onDateTapped(date);
+                  Navigator.pop(ctx);
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _saveAll(BuildContext context, int periodsPerDay) async {
     final allPeriods = List.generate(periodsPerDay, (i) => i + 1);
-    final hasAny = allPeriods
-        .any((p) => _subjects[p] != null && _subjects[p]!.isNotEmpty);
+    // A period is worth saving if it has a subject, teacher, or comment
+    final hasAny = allPeriods.any((p) {
+      final hasSubject = _subjects[p] != null && _subjects[p]!.isNotEmpty;
+      final hasTeacher = _teacherIds[p] != null;
+      final hasComment = _comments[p] != null && _comments[p]!.isNotEmpty;
+      return hasSubject || hasTeacher || hasComment;
+    });
     if (!hasAny) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Please assign at least one subject.')),
+            content: Text('Please fill in at least one period.')),
       );
       return;
     }
@@ -879,17 +939,21 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
     try {
       for (final p in allPeriods) {
         final subject = _subjects[p];
-        if (subject == null || subject.isEmpty) continue;
         final teacherId = _teacherIds[p];
         final comment = _comments[p];
+        // Skip empty periods (no subject, no teacher, no comment)
+        final hasSubject = subject != null && subject.isNotEmpty;
+        final hasTeacher = teacherId != null;
+        final hasComment = comment != null && comment.isNotEmpty;
+        if (!hasSubject && !hasTeacher && !hasComment) continue;
         await api.createTimetableSlot({
           'grade': _selectedGrade,
           'slot_date': _dateString,
           'period_number': p,
-          'subject': subject,
-          if (teacherId != null) 'teacher_id': teacherId,
+          'subject': hasSubject ? subject : '',
+          if (hasTeacher) 'teacher_id': teacherId,
           'is_holiday': false,
-          if (comment != null && comment.isNotEmpty) 'comment': comment,
+          if (hasComment) 'comment': comment,
         });
       }
       ref.invalidate(teacherTimetableProvider((_selectedGrade, _dateString)));
@@ -964,17 +1028,101 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
         _selectedDate.month == today.month &&
         _selectedDate.day == today.day;
 
+    final isWide = MediaQuery.of(context).size.width >= 900;
+
+    final gradeList = ListView(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+      children: AppConstants.grades
+          .map((grade) => _GradeSection(
+                grade: grade,
+                dateString: _dateString,
+                selectedDate: _selectedDate,
+                periodTimes: periodTimes,
+                onEditTimetable: widget.onEditTimetable,
+              ))
+          .toList(),
+    );
+
+    if (isWide) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 380,
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 16, 0, 16),
+              decoration: mindForgeCardDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                    child: Row(children: [
+                      const Icon(Icons.calendar_month_rounded, size: 16, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          DateFormat('EEEE, d MMMM yyyy').format(_selectedDate),
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isToday)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(6)),
+                          child: const Text('TODAY', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                        ),
+                    ]),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: _ScrollableCalendar(
+                      selectedDate: _selectedDate,
+                      datesWithTimetable: const {},
+                      onDateSelected: (date) => setState(() => _selectedDate = date),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+              decoration: mindForgeCardDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 14, 16, 10),
+                    child: Row(children: [
+                      Icon(Icons.school_outlined, size: 16, color: AppColors.primary),
+                      SizedBox(width: 8),
+                      Text('All Grades',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    ]),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(child: gradeList),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       children: [
-        // ── Date header pill ──────────────────────────────────────────────
+        // ── Date header pill (mobile) ─────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
           child: GestureDetector(
             onTap: () => _pickDate(context),
             child: Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isToday
                     ? AppColors.primary
@@ -983,91 +1131,94 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.calendar_month_outlined,
-                    size: 16,
-                    color: isToday ? Colors.white70 : AppColors.primary,
-                  ),
+                  Icon(Icons.calendar_month_outlined, size: 16,
+                      color: isToday ? Colors.white70 : AppColors.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          DateFormat('EEEE').format(_selectedDate),
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color:
-                                isToday ? Colors.white : AppColors.primary,
-                          ),
-                        ),
-                        Text(
-                          DateFormat('d MMMM yyyy').format(_selectedDate),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isToday
-                                ? Colors.white70
-                                : AppColors.primary.withValues(alpha: 0.7),
-                          ),
-                        ),
+                        Text(DateFormat('EEEE').format(_selectedDate),
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold,
+                                color: isToday ? Colors.white : AppColors.primary)),
+                        Text(DateFormat('d MMMM yyyy').format(_selectedDate),
+                            style: TextStyle(fontSize: 12,
+                                color: isToday ? Colors.white70 : AppColors.primary.withValues(alpha: 0.7))),
                       ],
                     ),
                   ),
                   if (isToday)
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(20)),
                       child: const Text('TODAY',
-                          style: TextStyle(
-                              fontSize: 9,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1)),
+                          style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
                     )
                   else
-                    Icon(Icons.edit_outlined,
-                        size: 16,
+                    Icon(Icons.edit_outlined, size: 16,
                         color: AppColors.primary.withValues(alpha: 0.6)),
                 ],
               ),
             ),
           ),
         ),
-
         const SizedBox(height: 8),
-
-        // ── Grade sections ────────────────────────────────────────────────
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-            children: AppConstants.grades
-                .map((grade) => _GradeSection(
-                      grade: grade,
-                      dateString: _dateString,
-                      selectedDate: _selectedDate,
-                      periodTimes: periodTimes,
-                      onEditTimetable: widget.onEditTimetable,
-                    ))
-                .toList(),
-          ),
-        ),
+        Expanded(child: gradeList),
       ],
     );
   }
 
-  Future<void> _pickDate(BuildContext context) async {
-    final picked = await showDatePicker(
+  void _pickDate(BuildContext context) {
+    showModalBottomSheet(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.72,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36, height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.divider,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Row(children: [
+                    Icon(Icons.calendar_month_outlined, size: 18, color: AppColors.primary),
+                    SizedBox(width: 8),
+                    Text('Select Date',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ]),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: _ScrollableCalendar(
+                selectedDate: _selectedDate,
+                datesWithTimetable: const {},
+                onDateSelected: (date) {
+                  setState(() => _selectedDate = date);
+                  Navigator.pop(ctx);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
-    if (picked != null) setState(() => _selectedDate = picked);
   }
 }
 
@@ -1236,7 +1387,11 @@ class _GradeSectionState extends ConsumerState<_GradeSection> {
                                 color: AppColors.primary)),
                       ),
                       title: Text(
-                        slot.isHoliday ? 'Holiday' : slot.subject,
+                        slot.isHoliday
+                            ? 'Holiday'
+                            : (slot.subject?.isNotEmpty == true
+                                ? slot.subject!
+                                : slot.teacherUsername ?? 'Period ${slot.periodNumber}'),
                         style: const TextStyle(
                             fontWeight: FontWeight.w600, fontSize: 13),
                       ),
@@ -1414,12 +1569,14 @@ class _CalendarGrid extends StatelessWidget {
   final DateTime? selectedDate;
   final Set<String> datesWithTimetable; // "YYYY-MM-DD" strings already configured
   final void Function(DateTime) onDateTapped;
+  final bool compact;
 
   const _CalendarGrid({
     required this.month,
     required this.selectedDate,
     required this.datesWithTimetable,
     required this.onDateTapped,
+    this.compact = true,
   });
 
   @override
@@ -1432,9 +1589,10 @@ class _CalendarGrid extends StatelessWidget {
     final numWeeks = totalCells ~/ 7;
 
     return LayoutBuilder(builder: (context, constraints) {
-      // Responsive cell size: fit 7 columns, cap between 16–22px
-      final cellSize = (constraints.maxWidth / 7).clamp(16.0, 22.0);
-      const dotSize = 2.0;
+      final cellSize = compact
+          ? (constraints.maxWidth / 7).clamp(16.0, 22.0)
+          : (constraints.maxWidth / 7).clamp(28.0, 36.0);
+      final dotSize = compact ? 2.0 : 4.0;
 
       final rows = <Widget>[];
       for (int week = 0; week < numWeeks; week++) {
@@ -1498,7 +1656,9 @@ class _CalendarGrid extends StatelessWidget {
                                   ? AppColors.accent
                                   : hasTimetable
                                       ? AppColors.success
-                                      : AppColors.textSecondary,
+                                      : col >= 5
+                                          ? AppColors.error.withValues(alpha: 0.55)
+                                          : AppColors.textSecondary,
                         ),
                       ),
                     ),
@@ -1514,7 +1674,7 @@ class _CalendarGrid extends StatelessWidget {
                       ),
                     )
                   else
-                    const SizedBox(height: dotSize + 1),
+                    SizedBox(height: dotSize + 1),
                 ],
               ),
             ),
@@ -1526,6 +1686,135 @@ class _CalendarGrid extends StatelessWidget {
 
       return Column(children: rows);
     });
+  }
+}
+
+// ─── Scrollable multi-month calendar ─────────────────────────────────────────
+
+class _ScrollableCalendar extends StatefulWidget {
+  final DateTime selectedDate;
+  final Set<String> datesWithTimetable;
+  final void Function(DateTime) onDateSelected;
+  final int monthsBack;
+  final int monthsForward;
+
+  const _ScrollableCalendar({
+    required this.selectedDate,
+    required this.datesWithTimetable,
+    required this.onDateSelected,
+    this.monthsBack = 3,
+    this.monthsForward = 9,
+  });
+
+  @override
+  State<_ScrollableCalendar> createState() => _ScrollableCalendarState();
+}
+
+class _ScrollableCalendarState extends State<_ScrollableCalendar> {
+  // Approximate rendered height of one month block (header + weekdays + 5-6 rows)
+  static const double _kMonthHeight = 370.0;
+  final ScrollController _ctrl = ScrollController();
+  late final List<DateTime> _months;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _months = List.generate(
+      widget.monthsBack + 1 + widget.monthsForward,
+      (i) => DateTime(now.year, now.month - widget.monthsBack + i),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToSelected());
+  }
+
+  void _jumpToSelected() {
+    final sel = DateTime(widget.selectedDate.year, widget.selectedDate.month);
+    final idx = _months.indexWhere(
+        (m) => m.year == sel.year && m.month == sel.month);
+    if (idx < 0 || !_ctrl.hasClients) return;
+    final offset =
+        (idx * _kMonthHeight).clamp(0.0, _ctrl.position.maxScrollExtent);
+    _ctrl.jumpTo(offset);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      controller: _ctrl,
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 32),
+      itemCount: _months.length,
+      itemBuilder: (context, i) => _MonthSection(
+        month: _months[i],
+        selectedDate: widget.selectedDate,
+        datesWithTimetable: widget.datesWithTimetable,
+        onDateTapped: widget.onDateSelected,
+      ),
+    );
+  }
+}
+
+class _MonthSection extends StatelessWidget {
+  final DateTime month;
+  final DateTime? selectedDate;
+  final Set<String> datesWithTimetable;
+  final void Function(DateTime) onDateTapped;
+
+  const _MonthSection({
+    required this.month,
+    required this.selectedDate,
+    required this.datesWithTimetable,
+    required this.onDateTapped,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+            child: Text(
+              DateFormat('MMMM yyyy').format(month),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primary,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+          Row(
+            children: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                .map((d) => Expanded(
+                      child: Center(
+                        child: Text(d,
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textMuted)),
+                      ),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 6),
+          _CalendarGrid(
+            month: month,
+            selectedDate: selectedDate,
+            datesWithTimetable: datesWithTimetable,
+            onDateTapped: onDateTapped,
+            compact: false,
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1729,6 +2018,148 @@ class _PeriodRow extends StatelessWidget {
             ),
             maxLength: 300,
             onChanged: onCommentChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Week Strip ───────────────────────────────────────────────────────────────
+
+class _WeekStrip extends StatelessWidget {
+  final DateTime weekStart; // always a Monday
+  final DateTime selectedDate;
+  final Set<String> datesWithTimetable;
+  final void Function(DateTime) onDateSelected;
+  final void Function(DateTime) onWeekChanged;
+
+  const _WeekStrip({
+    required this.weekStart,
+    required this.selectedDate,
+    required this.datesWithTimetable,
+    required this.onDateSelected,
+    required this.onWeekChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final days = List.generate(7, (i) => weekStart.add(Duration(days: i)));
+    final monthLabel = DateFormat('MMMM yyyy').format(weekStart);
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Month label + prev/next arrows
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                onPressed: () =>
+                    onWeekChanged(weekStart.subtract(const Duration(days: 7))),
+              ),
+              Expanded(
+                child: Text(
+                  monthLabel,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                onPressed: () =>
+                    onWeekChanged(weekStart.add(const Duration(days: 7))),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Day cells
+          Row(
+            children: days.map((date) {
+              final isSelected = date.year == selectedDate.year &&
+                  date.month == selectedDate.month &&
+                  date.day == selectedDate.day;
+              final isToday = date.year == today.year &&
+                  date.month == today.month &&
+                  date.day == today.day;
+              final dateStr = DateFormat('yyyy-MM-dd').format(date);
+              final hasTimetable = datesWithTimetable.contains(dateStr);
+              final isWeekend = date.weekday >= 6;
+
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onDateSelected(date),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        DateFormat('E').format(date)[0], // M T W T F S S
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isWeekend
+                              ? AppColors.error.withOpacity(0.7)
+                              : AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected
+                              ? AppColors.primary
+                              : isToday
+                                  ? AppColors.primary.withOpacity(0.12)
+                                  : Colors.transparent,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${date.day}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected
+                                  ? Colors.white
+                                  : isToday
+                                      ? AppColors.primary
+                                      : AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      // Dot if timetable exists
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: hasTimetable
+                              ? (isSelected
+                                  ? Colors.white
+                                  : AppColors.accent)
+                              : Colors.transparent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),

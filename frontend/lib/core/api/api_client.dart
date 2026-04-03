@@ -613,6 +613,13 @@ class ApiClient {
     return res.data as List<dynamic>;
   }
 
+  Future<Map<String, dynamic>> getStudentFees({String? academicYear}) async {
+    final res = await _dio.get('/student/fees', queryParameters: {
+      if (academicYear != null) 'academic_year': academicYear,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
   // ── Broadcasts (Parent) ───────────────────────────────────────────────────
 
   Future<List<dynamic>> getParentBroadcasts() async {

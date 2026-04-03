@@ -463,7 +463,9 @@ class _PeriodTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  slot.isHoliday ? 'Holiday' : slot.subject,
+                  slot.isHoliday
+                      ? 'Holiday'
+                      : (slot.subject?.isNotEmpty == true ? slot.subject! : slot.teacherUsername ?? 'Period ${slot.periodNumber}'),
                   style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: R.fs(context, 14, min: 12, max: 16)),

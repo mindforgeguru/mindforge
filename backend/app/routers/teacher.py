@@ -258,7 +258,6 @@ async def get_my_timetable(
         select(TimetableSlot)
         .where(
             TimetableSlot.teacher_id == current_teacher.id,
-            TimetableSlot.slot_date >= today,
         )
         .order_by(TimetableSlot.slot_date, TimetableSlot.period_number)
     )
@@ -328,6 +327,17 @@ async def create_timetable_slot(
         db.add(slot)
     await db.commit()
     await db.refresh(slot)
+
+    await redis_manager.publish({
+        "target_type": "grade",
+        "target_grade": payload.grade,
+        "payload": {
+            "event": "timetable_updated",
+            "grade": payload.grade,
+            "slot_date": str(payload.slot_date),
+        },
+    })
+
     return slot
 
 
@@ -455,7 +465,7 @@ async def generate_test(
         short_answer_count=short_answer_count,
         long_answer_count=long_answer_count,
         include_numericals=include_numericals,
-        time_limit_minutes=time_limit_minutes or (mcq_count + fill_blank_count + true_false_count + vsa_count),
+        time_limit_minutes=time_limit_minutes if time_limit_minutes is not None else (mcq_count + fill_blank_count + true_false_count + vsa_count),
     )
 
     source_file_url = None
@@ -492,7 +502,7 @@ async def generate_test(
     expires_at = now + timedelta(days=3) if test_type == "online" else None
 
     # For online tests: 1 minute per question, auto-publish immediately
-    time_limit = len(questions) if test_type == "online" else (params.time_limit_minutes or len(questions))
+    time_limit = len(questions) if test_type == "online" else (params.time_limit_minutes if params.time_limit_minutes is not None else len(questions))
 
     test = Test(
         title=title,

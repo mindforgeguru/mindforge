@@ -23,7 +23,10 @@ from app.schemas.grade import GradeResponse, GradeStats
 from app.schemas.test import TestResponse, TestSubmissionCreate, TestSubmissionResponse
 from app.schemas.timetable import TimetableSlotWithTeacherResponse
 from app.schemas.homework import HomeworkResponse, BroadcastResponse
+from app.schemas.fees import StudentFeeSummary
 from app.models.homework import Homework, Broadcast
+from app.models.fees import FeeStructure, FeePayment, PaymentInfo
+from app.schemas.fees import FeePaymentResponse, PaymentInfoResponse
 from app.services import storage_service
 
 router = APIRouter()
@@ -585,3 +588,98 @@ async def get_student_broadcasts(
         )
         for b, u in rows
     ]
+
+
+# ─── Fees ──────────────────────────────────────────────────────────────────────
+
+@router.get("/fees", response_model=StudentFeeSummary)
+async def get_my_fees(
+    academic_year: Optional[str] = Query(None, description="e.g. '2024-25'"),
+    db: AsyncSession = Depends(get_db),
+    current_student: User = Depends(get_current_student),
+):
+    """Get the current student's own fee summary."""
+    result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
+    )
+    profile = result.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Student profile not found.")
+
+    if not academic_year:
+        from app.models.academic_year import AcademicYear
+        from datetime import date
+        ay_result = await db.execute(
+            select(AcademicYear).where(AcademicYear.is_current == True)
+        )
+        current_ay = ay_result.scalar_one_or_none()
+        if current_ay:
+            academic_year = current_ay.year_label
+        else:
+            today = date.today()
+            year_start = today.year if today.month >= 6 else today.year - 1
+            academic_year = f"{year_start}-{str(year_start + 1)[2:]}"
+
+    structure_result = await db.execute(
+        select(FeeStructure).where(
+            FeeStructure.grade == profile.grade,
+            FeeStructure.academic_year == academic_year,
+        )
+    )
+    structure = structure_result.scalar_one_or_none()
+
+    if structure:
+        base_amount = structure.base_amount
+        economics_fee = 0.0
+        computer_fee = 0.0
+        ai_fee = 0.0
+        for subj in (profile.additional_subjects or []):
+            if subj == "economics":
+                economics_fee = structure.economics_fee
+            elif subj == "computer":
+                computer_fee = structure.computer_fee
+            elif subj == "ai":
+                ai_fee = structure.ai_fee
+        total_fee = base_amount + economics_fee + computer_fee + ai_fee
+    else:
+        base_amount = economics_fee = computer_fee = ai_fee = total_fee = 0.0
+
+    payments_result = await db.execute(
+        select(FeePayment)
+        .where(FeePayment.student_id == current_student.id)
+        .order_by(FeePayment.paid_at.desc())
+    )
+    payments = payments_result.scalars().all()
+    total_paid = sum(p.amount for p in payments)
+
+    pi_result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.slot))
+    payment_options_raw = pi_result.scalars().all()
+
+    payment_options = []
+    for pi in payment_options_raw:
+        resp = PaymentInfoResponse.model_validate(pi)
+        if pi.qr_code_url and not pi.qr_code_url.startswith("http"):
+            parts = pi.qr_code_url.split("/", 1)
+            if len(parts) == 2:
+                try:
+                    resp.qr_code_url = await storage_service.get_presigned_url(
+                        parts[0], parts[1], expires_seconds=604800
+                    )
+                except Exception:
+                    resp.qr_code_url = None
+        payment_options.append(resp)
+
+    return StudentFeeSummary(
+        student_id=current_student.id,
+        academic_year=academic_year,
+        grade=profile.grade,
+        total_fee=total_fee,
+        total_paid=total_paid,
+        balance_due=max(0.0, total_fee - total_paid),
+        base_amount=base_amount,
+        economics_fee=economics_fee,
+        computer_fee=computer_fee,
+        ai_fee=ai_fee,
+        payments=[FeePaymentResponse.model_validate(p) for p in payments],
+        payment_options=payment_options,
+    )

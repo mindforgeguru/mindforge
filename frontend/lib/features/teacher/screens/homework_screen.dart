@@ -9,6 +9,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/api/api_client.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
+import '../widgets/teacher_scaffold.dart';
 
 // ─── Responsive helpers (local) ───────────────────────────────────────────────
 // Scale a base value linearly with screen width (reference = 390 px).
@@ -35,7 +36,7 @@ class _TeacherHomeworkScreenState
     extends ConsumerState<TeacherHomeworkScreen> {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return TeacherScaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: FittedBox(
@@ -51,7 +52,6 @@ class _TeacherHomeworkScreenState
         ),
         backgroundColor: AppColors.primary,
       ),
-      bottomNavigationBar: const TeacherBottomNav(),
       body: const _HomeworkTab(),
     );
   }
@@ -179,23 +179,28 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
                     icon: Icons.assignment_outlined,
                     message: 'No homework assigned yet',
                   )
-                : ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                      hPad, _s(context, 4, min: 2, max: 8),
-                      hPad, _s(context, 24, min: 16, max: 32),
-                    ),
-                    itemCount: list.length,
-                    separatorBuilder: (_, __) =>
-                        SizedBox(height: _s(context, 8, min: 6, max: 12)),
-                    itemBuilder: (ctx, i) => _HomeworkCard(
-                      hw: list[i],
-                      screenWidth: sw,
-                      onDelete: () async {
-                        final api = ref.read(apiClientProvider);
-                        await api.deleteHomework(list[i].id);
-                        ref.invalidate(
-                            teacherHomeworkProvider(_selectedGrade));
-                      },
+                : RefreshIndicator(
+                    onRefresh: () async =>
+                        ref.invalidate(teacherHomeworkProvider(_selectedGrade)),
+                    child: ListView.separated(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                        hPad, _s(context, 4, min: 2, max: 8),
+                        hPad, _s(context, 24, min: 16, max: 32),
+                      ),
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) =>
+                          SizedBox(height: _s(context, 8, min: 6, max: 12)),
+                      itemBuilder: (ctx, i) => _HomeworkCard(
+                        hw: list[i],
+                        screenWidth: sw,
+                        onDelete: () async {
+                          final api = ref.read(apiClientProvider);
+                          await api.deleteHomework(list[i].id);
+                          ref.invalidate(
+                              teacherHomeworkProvider(_selectedGrade));
+                        },
+                      ),
                     ),
                   ),
           ),

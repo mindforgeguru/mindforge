@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
+import '../widgets/teacher_scaffold.dart';
 
 // ─── Responsive helpers ───────────────────────────────────────────────────────
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
@@ -30,7 +31,7 @@ class TeacherBroadcastScreen extends ConsumerWidget {
     final hPad = _s(context, 14, min: 10, max: 20);
     final bcAsync = ref.watch(teacherBroadcastsProvider);
 
-    return Scaffold(
+    return TeacherScaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: FittedBox(
@@ -46,7 +47,6 @@ class TeacherBroadcastScreen extends ConsumerWidget {
         ),
         backgroundColor: AppColors.primary,
       ),
-      bottomNavigationBar: const TeacherBottomNav(),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -52,10 +52,32 @@ class _ParentDashboardScreenState
     if (userId == null) return;
     final ws = ref.read(webSocketClientProvider);
     _wsSub = ws.connect(userId).listen((event) {
-      if (event['event'] == 'profile_updated' && mounted) {
+      if (!mounted) return;
+      final eventType = event['event'] as String?;
+      if (eventType == 'profile_updated') {
         _showProfileUpdatedDialog(event['new_username'] as String?);
+      } else if (eventType == 'timetable_updated') {
+        ref.invalidate(parentChildTimetableProvider(_todayString));
+      } else if (eventType == 'new_test' || eventType == 'test_status_changed') {
+        ref.invalidate(parentChildTestsProvider);
+      } else if (eventType == 'child_grade_added') {
+        ref.invalidate(parentChildGradesProvider(null));
+        ref.invalidate(parentChildOfflineGradesProvider(null));
+      } else if (eventType == 'broadcast_created' || eventType == 'homework_added') {
+        ref.invalidate(parentBroadcastsProvider);
+        ref.invalidate(parentHomeworkProvider);
       }
     });
+  }
+
+  Future<void> _refreshDashboard() async {
+    ref.invalidate(parentChildTimetableProvider(_todayString));
+    ref.invalidate(parentBroadcastsProvider);
+    ref.invalidate(parentHomeworkProvider);
+    ref.invalidate(parentChildGradesProvider(null));
+    ref.invalidate(parentChildTestsProvider);
+    ref.invalidate(parentChildFeesProvider);
+    await ref.read(parentChildTimetableProvider(_todayString).future).catchError((_) => <dynamic>[]);
   }
 
   Future<void> _showProfileUpdatedDialog(String? newUsername) async {
@@ -130,8 +152,11 @@ class _ParentDashboardScreenState
     return Scaffold(
       backgroundColor: AppColors.background,
       bottomNavigationBar: const ParentBottomNav(),
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: _refreshDashboard,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
 
           // ── Header: navy + white welcome card ─────────────────────────
           SliverToBoxAdapter(
@@ -509,6 +534,7 @@ class _ParentDashboardScreenState
           SliverToBoxAdapter(
               child: SizedBox(height: _s(context, 24, min: 16, max: 32))),
         ],
+        ),
       ),
     );
   }
@@ -873,7 +899,9 @@ class _TimetableCard extends StatelessWidget {
           const Spacer(),
           // Subject
           Text(
-            slot.isHoliday ? 'Holiday' : slot.subject,
+            slot.isHoliday
+                ? 'Holiday'
+                : (slot.subject?.isNotEmpty == true ? slot.subject! : slot.teacherUsername ?? 'Period ${slot.periodNumber}'),
             style: GoogleFonts.poppins(
               fontSize: (sw * 0.031).clamp(11.0, 14.0),
               fontWeight: FontWeight.w700,

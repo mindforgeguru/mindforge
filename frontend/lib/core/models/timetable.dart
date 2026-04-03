@@ -3,7 +3,7 @@ class TimetableSlotModel {
   final int grade;
   final String slotDate;   // "YYYY-MM-DD" — specific calendar date
   final int periodNumber;
-  final String subject;
+  final String? subject;
   final int? teacherId;
   final String? teacherUsername;
   final String? startTime;
@@ -16,7 +16,7 @@ class TimetableSlotModel {
     required this.grade,
     required this.slotDate,
     required this.periodNumber,
-    required this.subject,
+    this.subject,
     this.teacherId,
     this.teacherUsername,
     this.startTime,
@@ -31,7 +31,7 @@ class TimetableSlotModel {
         grade: json['grade'] as int,
         slotDate: json['slot_date'] as String,
         periodNumber: json['period_number'] as int,
-        subject: json['subject'] as String,
+        subject: json['subject'] as String?,
         teacherId: json['teacher_id'] as int?,
         teacherUsername: json['teacher_username'] as String?,
         startTime: json['start_time'] as String?,

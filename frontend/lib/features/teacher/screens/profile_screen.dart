@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
+import '../widgets/teacher_scaffold.dart';
 
 class TeacherProfileScreen extends ConsumerStatefulWidget {
   const TeacherProfileScreen({super.key});
@@ -200,10 +201,8 @@ class _TeacherProfileScreenState
     final username = auth.username ?? 'Teacher';
     final photoUrl = auth.profilePicUrl;
 
-    return Scaffold(
+    return TeacherScaffold(
       appBar: AppBar(title: const Text('My Profile')),
-      resizeToAvoidBottomInset: false,
-      bottomNavigationBar: const TeacherBottomNav(),
       body: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
