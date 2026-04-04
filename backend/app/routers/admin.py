@@ -539,16 +539,31 @@ async def get_all_fee_summaries(
     )
     rows = students_result.all()
 
+    student_ids = [user.id for user, _ in rows]
+    grades = {profile.grade for _, profile in rows}
+
+    # Batch fetch: one query for all fee structures, one for all payments
+    fs_result = await db.execute(
+        select(FeeStructure).where(
+            FeeStructure.academic_year == academic_year,
+            FeeStructure.grade.in_(grades),
+        )
+    )
+    fee_structures: dict[int, FeeStructure] = {fs.grade: fs for fs in fs_result.scalars().all()}
+
+    payments_result = await db.execute(
+        select(FeePayment)
+        .where(FeePayment.student_id.in_(student_ids))
+        .order_by(FeePayment.paid_at.desc())
+    )
+    all_payments = payments_result.scalars().all()
+    payments_by_student: dict[int, list] = {}
+    for p in all_payments:
+        payments_by_student.setdefault(p.student_id, []).append(p)
+
     summaries = []
     for user, profile in rows:
-        # Get fee structure for this grade/year
-        fs_result = await db.execute(
-            select(FeeStructure).where(
-                FeeStructure.grade == profile.grade,
-                FeeStructure.academic_year == academic_year,
-            )
-        )
-        fs = fs_result.scalar_one_or_none()
+        fs = fee_structures.get(profile.grade)
         if fs:
             total_fee = float(fs.base_amount)
             for subj in (profile.additional_subjects or []):
@@ -561,13 +576,7 @@ async def get_all_fee_summaries(
         else:
             total_fee = 0.0
 
-        # Get all payments for this student
-        payments_result = await db.execute(
-            select(FeePayment)
-            .where(FeePayment.student_id == user.id)
-            .order_by(FeePayment.paid_at.desc())
-        )
-        payments = payments_result.scalars().all()
+        payments = payments_by_student.get(user.id, [])
         total_paid = sum(float(p.amount) for p in payments)
 
         summaries.append({
@@ -1086,15 +1095,31 @@ async def download_pending_fees_report(
     )
     rows = students_result.all()
 
+    student_ids = [user.id for user, _ in rows]
+    grades = {profile.grade for _, profile in rows}
+
+    # Batch fetch: one query for all fee structures, one for all payments
+    fs_result = await db.execute(
+        select(FeeStructure).where(
+            FeeStructure.academic_year == academic_year,
+            FeeStructure.grade.in_(grades),
+        )
+    )
+    fee_structures: dict[int, FeeStructure] = {fs.grade: fs for fs in fs_result.scalars().all()}
+
+    payments_result = await db.execute(
+        select(FeePayment)
+        .where(FeePayment.student_id.in_(student_ids))
+        .order_by(FeePayment.paid_at)
+    )
+    all_payments = payments_result.scalars().all()
+    payments_by_student: dict[int, list] = {}
+    for p in all_payments:
+        payments_by_student.setdefault(p.student_id, []).append(p)
+
     summaries = []
     for user, profile in rows:
-        fs_result = await db.execute(
-            select(FeeStructure).where(
-                FeeStructure.grade == profile.grade,
-                FeeStructure.academic_year == academic_year,
-            )
-        )
-        fs = fs_result.scalar_one_or_none()
+        fs = fee_structures.get(profile.grade)
         if fs:
             total_fee = float(fs.base_amount)
             for subj in (profile.additional_subjects or []):
@@ -1107,10 +1132,7 @@ async def download_pending_fees_report(
         else:
             total_fee = 0.0
 
-        payments_result = await db.execute(
-            select(FeePayment).where(FeePayment.student_id == user.id).order_by(FeePayment.paid_at)
-        )
-        payments = payments_result.scalars().all()
+        payments = payments_by_student.get(user.id, [])
         total_paid = sum(float(p.amount) for p in payments)
 
         summaries.append({
