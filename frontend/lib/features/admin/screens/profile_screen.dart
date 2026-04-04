@@ -27,6 +27,9 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
 
   bool _uploadingPhoto = false;
   bool _changingMpin = false;
+  bool _editingUsername = false;
+  bool _savingUsername = false;
+  late TextEditingController _usernameCtrl;
 
   String get _currentPinStr => _currentPin.join();
   String get _newPinStr => _newPin.join();
@@ -105,6 +108,45 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
       _confirmPinIndex = 0;
       _activePinField = 0;
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _usernameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveUsername(String currentUsername) async {
+    final newName = _usernameCtrl.text.trim();
+    if (newName.isEmpty || newName == currentUsername) {
+      setState(() => _editingUsername = false);
+      return;
+    }
+    setState(() => _savingUsername = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.editAdminUsername(newName);
+      await ref.read(authProvider.notifier).updateUsername(newName);
+      if (mounted) {
+        setState(() => _editingUsername = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Username updated!'),
+            backgroundColor: AppColors.success));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed: $e'), backgroundColor: AppColors.error));
+      }
+    } finally {
+      if (mounted) setState(() => _savingUsername = false);
+    }
   }
 
   Future<void> _pickAndUploadPhoto() async {
@@ -253,9 +295,53 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
             ),
 
             const SizedBox(height: 12),
+            // ── Username (editable) ───────────────────────────────────
             Center(
-              child: Text(username,
-                  style: Theme.of(context).textTheme.headlineSmall),
+              child: _editingUsername
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 180,
+                          child: TextField(
+                            controller: _usernameCtrl,
+                            autofocus: true,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.headlineSmall,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: _savingUsername
+                              ? const SizedBox(width: 18, height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.check, color: AppColors.success),
+                          onPressed: _savingUsername ? null : () => _saveUsername(username),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppColors.error),
+                          onPressed: () => setState(() => _editingUsername = false),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(username, style: Theme.of(context).textTheme.headlineSmall),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.textMuted),
+                          onPressed: () {
+                            _usernameCtrl.text = username;
+                            setState(() => _editingUsername = true);
+                          },
+                        ),
+                      ],
+                    ),
             ),
             Center(
               child: Container(

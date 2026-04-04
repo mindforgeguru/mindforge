@@ -63,6 +63,28 @@ async def upload_admin_photo(
     return {"profile_pic_url": public_url}
 
 
+@router.put("/profile/username", status_code=status.HTTP_200_OK)
+async def change_admin_username(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Change the admin's own username."""
+    new_username = (payload.get("username") or "").strip()
+    if not new_username or len(new_username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters.")
+    conflict = await db.execute(
+        select(User).where(User.username == new_username, User.id != current_admin.id, User.deleted_at.is_(None))
+    )
+    if conflict.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Username already taken.")
+    result = await db.execute(select(User).where(User.id == current_admin.id))
+    admin_user = result.scalar_one()
+    admin_user.username = new_username
+    await db.commit()
+    return {"username": new_username}
+
+
 @router.put("/profile/mpin", status_code=status.HTTP_200_OK)
 async def change_admin_mpin(
     payload: AdminMpinUpdate,
@@ -127,7 +149,7 @@ async def get_all_users(
     result = await db.execute(base_query.order_by(User.created_at.desc()))
     rows = result.all()
 
-    # Collect parent_user_ids to batch-fetch parent usernames
+    # Batch-fetch parent usernames
     parent_ids = {
         profile.parent_user_id
         for user, profile in rows
@@ -135,15 +157,13 @@ async def get_all_users(
     }
     parent_username_map: dict[int, str] = {}
     if parent_ids:
-        pu_result = await db.execute(
-            select(User).where(User.id.in_(parent_ids))
-        )
+        pu_result = await db.execute(select(User).where(User.id.in_(parent_ids)))
         for pu in pu_result.scalars().all():
             parent_username_map[pu.id] = pu.username
 
-    # Collect parent user IDs from this result set to batch-fetch linked student usernames
+    # Batch-fetch linked student usernames for parent rows
     parent_user_ids_in_result = {user.id for user, _ in rows if user.role == UserRole.parent}
-    student_username_map: dict[int, str] = {}  # parent_user_id → student username
+    student_username_map: dict[int, str] = {}
     if parent_user_ids_in_result:
         linked_students_result = await db.execute(
             select(User, StudentProfile)
@@ -152,6 +172,16 @@ async def get_all_users(
         )
         for su, sp in linked_students_result.all():
             student_username_map[sp.parent_user_id] = su.username
+
+    # Batch-fetch teacher profiles for subjects
+    teacher_ids = {user.id for user, _ in rows if user.role == UserRole.teacher}
+    teacher_subjects_map: dict[int, list] = {}
+    if teacher_ids:
+        tp_result = await db.execute(
+            select(TeacherProfile).where(TeacherProfile.user_id.in_(teacher_ids))
+        )
+        for tp in tp_result.scalars().all():
+            teacher_subjects_map[tp.user_id] = tp.teachable_subjects or []
 
     return [
         UserWithProfileResponse(
@@ -166,6 +196,8 @@ async def get_all_users(
             parent_user_id=profile.parent_user_id if profile else None,
             parent_username=parent_username_map.get(profile.parent_user_id) if profile and profile.parent_user_id else None,
             student_username=student_username_map.get(user.id) if user.role == UserRole.parent else None,
+            teachable_subjects=teacher_subjects_map.get(user.id) if user.role == UserRole.teacher else None,
+            additional_subjects=profile.additional_subjects if profile else None,
         )
         for user, profile in rows
     ]
@@ -249,6 +281,8 @@ async def edit_user(
             if sp:
                 if payload.grade is not None:
                     sp.grade = payload.grade
+                if payload.additional_subjects is not None:
+                    sp.additional_subjects = payload.additional_subjects
                 if payload.parent_username is not None:
                     if payload.parent_username.strip() == "":
                         sp.parent_user_id = None
@@ -301,6 +335,15 @@ async def edit_user(
                 if student_profile:
                     student_profile.parent_user_id = user_id
 
+        # No role change — update teachable_subjects if teacher
+        elif user.role == UserRole.teacher and payload.teachable_subjects is not None:
+            tp_result = await db.execute(
+                select(TeacherProfile).where(TeacherProfile.user_id == user_id)
+            )
+            tp = tp_result.scalar_one_or_none()
+            if tp:
+                tp.teachable_subjects = payload.teachable_subjects
+
     await db.commit()
     await db.refresh(user)
 
@@ -308,6 +351,7 @@ async def edit_user(
     final_profile = None
     parent_username = None
     student_username = None
+    teachable_subjects = None
 
     if user.role == UserRole.student:
         pr = await db.execute(
@@ -331,6 +375,14 @@ async def edit_user(
         if linked_student:
             student_username = linked_student.username
 
+    elif user.role == UserRole.teacher:
+        tp_res = await db.execute(
+            select(TeacherProfile).where(TeacherProfile.user_id == user_id)
+        )
+        tp = tp_res.scalar_one_or_none()
+        if tp:
+            teachable_subjects = tp.teachable_subjects or []
+
     # Notify the edited user so their app can refresh / prompt re-login
     await redis_manager.publish({
         "target_type": "user",
@@ -350,6 +402,8 @@ async def edit_user(
         parent_user_id=final_profile.parent_user_id if final_profile else None,
         parent_username=parent_username,
         student_username=student_username,
+        teachable_subjects=teachable_subjects,
+        additional_subjects=final_profile.additional_subjects if final_profile else None,
     )
 
 

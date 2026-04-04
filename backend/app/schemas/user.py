@@ -117,6 +117,8 @@ class UserWithProfileResponse(UserResponse):
     parent_user_id: Optional[int] = None
     parent_username: Optional[str] = None
     student_username: Optional[str] = None  # parents only — username of linked student
+    teachable_subjects: Optional[List[str]] = None  # teachers only
+    additional_subjects: Optional[List[str]] = None  # students only
 
 
 class TeacherWithSubjectsResponse(UserResponse):
@@ -136,6 +138,8 @@ class AdminUserEdit(BaseModel):
     new_mpin: Optional[str] = None     # reset MPIN
     parent_username: Optional[str] = None   # students only — link to parent account
     student_username: Optional[str] = None  # parents only — link to student account
+    teachable_subjects: Optional[List[str]] = None  # teachers only
+    additional_subjects: Optional[List[str]] = None  # students only
 
     @field_validator("username")
     @classmethod
