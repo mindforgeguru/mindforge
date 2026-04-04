@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -974,7 +975,7 @@ class _ProfileAvatar extends StatelessWidget {
       ),
       child: ClipOval(
         child: photoUrl != null
-            ? Image.network(photoUrl!, fit: BoxFit.cover)
+            ? CachedNetworkImage(imageUrl: photoUrl!, fit: BoxFit.cover)
             : Container(
                 color: AppColors.iconContainer,
                 child: Center(

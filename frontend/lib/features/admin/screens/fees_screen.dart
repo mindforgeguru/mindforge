@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -983,9 +984,10 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
                         child: _qrUrl != null
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
-                                child: Image.network(_qrUrl!,
+                                child: CachedNetworkImage(
+                                    imageUrl: _qrUrl!,
                                     fit: BoxFit.contain,
-                                    errorBuilder: (_, __, ___) => const Icon(
+                                    errorWidget: (_, __, ___) => const Icon(
                                         Icons.broken_image,
                                         color: AppColors.textMuted)))
                             : const Center(

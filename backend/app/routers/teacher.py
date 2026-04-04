@@ -2,6 +2,7 @@
 Teacher router — all endpoints require teacher role.
 """
 
+import asyncio
 import io
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -645,22 +646,28 @@ async def delete_test(
     await db.commit()
 
     # Notify affected students and their parents
-    for student_id in affected_student_ids:
-        await redis_manager.publish({
-            "target_type": "user",
-            "user_id": student_id,
-            "payload": {"event": "grade_deleted", "test_id": test_id},
-        })
-        profile_result = await db.execute(
-            select(StudentProfile).where(StudentProfile.user_id == student_id)
+    # Batch-fetch all profiles in one query instead of one per student
+    if affected_student_ids:
+        profiles_result = await db.execute(
+            select(StudentProfile).where(StudentProfile.user_id.in_(affected_student_ids))
         )
-        profile = profile_result.scalar_one_or_none()
-        if profile and profile.parent_user_id:
-            await redis_manager.publish({
+        profiles_map = {p.user_id: p for p in profiles_result.scalars().all()}
+
+        notify_tasks = []
+        for student_id in affected_student_ids:
+            notify_tasks.append(redis_manager.publish({
                 "target_type": "user",
-                "user_id": profile.parent_user_id,
-                "payload": {"event": "child_grade_deleted", "test_id": test_id},
-            })
+                "user_id": student_id,
+                "payload": {"event": "grade_deleted", "test_id": test_id},
+            }))
+            profile = profiles_map.get(student_id)
+            if profile and profile.parent_user_id:
+                notify_tasks.append(redis_manager.publish({
+                    "target_type": "user",
+                    "user_id": profile.parent_user_id,
+                    "payload": {"event": "child_grade_deleted", "test_id": test_id},
+                }))
+        await asyncio.gather(*notify_tasks)
 
 
 @router.get("/tests/{test_id}/pdf-urls")

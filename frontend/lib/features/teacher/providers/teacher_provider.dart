@@ -16,14 +16,14 @@ import '../../../core/models/user.dart';
 /// Returns distinct dates (YYYY-MM-DD strings) that have attendance for (grade, month).
 /// month = "YYYY-MM"
 final teacherAttendanceDatesProvider =
-    FutureProvider.autoDispose.family<List<String>, (int, String)>(
+    FutureProvider.family<List<String>, (int, String)>(
         (ref, params) async {
   final api = ref.watch(apiClientProvider);
   return api.getTeacherAttendanceDates(params.$1, params.$2);
 });
 
 final teacherAttendanceProvider =
-    FutureProvider.autoDispose.family<List<AttendanceModel>, (int, String)>(
+    FutureProvider.family<List<AttendanceModel>, (int, String)>(
         (ref, params) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTeacherAttendance(params.$1, date: params.$2);
@@ -33,7 +33,7 @@ final teacherAttendanceProvider =
 });
 
 final studentsInGradeProvider =
-    FutureProvider.autoDispose.family<List<UserModel>, int>((ref, grade) async {
+    FutureProvider.family<List<UserModel>, int>((ref, grade) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentsInGrade(grade);
   return raw
@@ -44,7 +44,7 @@ final studentsInGradeProvider =
 // ── Timetable ──────────────────────────────────────────────────────────────
 
 final teacherTimetableProvider =
-    FutureProvider.autoDispose.family<List<TimetableSlotModel>, (int, String)>(
+    FutureProvider.family<List<TimetableSlotModel>, (int, String)>(
         (ref, params) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTeacherTimetable(params.$1, date: params.$2);
@@ -54,7 +54,7 @@ final teacherTimetableProvider =
 });
 
 final teachersListProvider =
-    FutureProvider.autoDispose<List<UserModel>>((ref) async {
+    FutureProvider<List<UserModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTeachers();
   return raw
@@ -63,7 +63,7 @@ final teachersListProvider =
 });
 
 final teacherTimetableConfigProvider =
-    FutureProvider.autoDispose<TimetableConfigModel?>((ref) async {
+    FutureProvider<TimetableConfigModel?>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTeacherTimetableConfig();
   if (raw == null) return null;
@@ -71,7 +71,7 @@ final teacherTimetableConfigProvider =
 });
 
 final myTimetableProvider =
-    FutureProvider.autoDispose<List<TimetableSlotModel>>((ref) async {
+    FutureProvider<List<TimetableSlotModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getMyTimetable();
   return raw
@@ -83,7 +83,7 @@ final myTimetableProvider =
 // Using (String? subject, int? studentId) record for structural equality.
 
 final teacherGradesProvider =
-    FutureProvider.autoDispose.family<List<GradeModel>, (String?, int?)>(
+    FutureProvider.family<List<GradeModel>, (String?, int?)>(
         (ref, params) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTeacherGrades(
@@ -98,7 +98,7 @@ final teacherGradesProvider =
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 final teacherTestsProvider =
-    FutureProvider.autoDispose.family<List<TestModel>, int?>((ref, grade) async {
+    FutureProvider.family<List<TestModel>, int?>((ref, grade) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTeacherTests(grade: grade);
   return raw
@@ -107,7 +107,7 @@ final teacherTestsProvider =
 });
 
 final testSubmissionsProvider =
-    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, int>(
+    FutureProvider.family<List<Map<String, dynamic>>, int>(
         (ref, testId) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTestSubmissions(testId);
@@ -115,7 +115,7 @@ final testSubmissionsProvider =
 });
 
 final testGradesProvider =
-    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, int>(
+    FutureProvider.family<List<Map<String, dynamic>>, int>(
         (ref, testId) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTestGrades(testId);
@@ -129,7 +129,7 @@ final selectedGradeProvider = StateProvider<int>((ref) => 8);
 // ── Homework ───────────────────────────────────────────────────────────────
 
 final teacherHomeworkProvider =
-    FutureProvider.autoDispose.family<List<HomeworkModel>, int?>(
+    FutureProvider.family<List<HomeworkModel>, int?>(
         (ref, grade) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTeacherHomework(grade: grade);
@@ -141,7 +141,7 @@ final teacherHomeworkProvider =
 // ── Broadcasts ─────────────────────────────────────────────────────────────
 
 final teacherBroadcastsProvider =
-    FutureProvider.autoDispose<List<BroadcastModel>>((ref) async {
+    FutureProvider<List<BroadcastModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getTeacherBroadcasts();
   return raw

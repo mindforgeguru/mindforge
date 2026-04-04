@@ -8,7 +8,7 @@ import '../../../core/models/test.dart';
 import '../../../core/models/timetable.dart';
 
 final studentAttendanceProvider =
-    FutureProvider.autoDispose<List<AttendanceModel>>((ref) async {
+    FutureProvider<List<AttendanceModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentAttendance();
   return raw
@@ -17,14 +17,14 @@ final studentAttendanceProvider =
 });
 
 final studentAttendanceSummaryProvider =
-    FutureProvider.autoDispose<AttendanceSummaryModel>((ref) async {
+    FutureProvider<AttendanceSummaryModel>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentAttendanceSummary();
   return AttendanceSummaryModel.fromJson(raw);
 });
 
 final studentTimetableProvider =
-    FutureProvider.autoDispose.family<List<TimetableSlotModel>, String>(
+    FutureProvider.family<List<TimetableSlotModel>, String>(
         (ref, date) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentTimetable(date: date);
@@ -35,20 +35,20 @@ final studentTimetableProvider =
 
 /// Fetches the student's profile (grade + parent_username) from the backend.
 final studentProfileProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+    FutureProvider<Map<String, dynamic>>((ref) async {
   final api = ref.watch(apiClientProvider);
   return api.getStudentProfile();
 });
 
 /// Derives the student's grade number from attendance records.
-final studentGradeProvider = FutureProvider.autoDispose<int?>((ref) async {
+final studentGradeProvider = FutureProvider<int?>((ref) async {
   final attendance = await ref.watch(studentAttendanceProvider.future);
   if (attendance.isNotEmpty) return attendance.first.grade;
   return null;
 });
 
 final studentGradesProvider =
-    FutureProvider.autoDispose.family<List<GradeModel>, String?>(
+    FutureProvider.family<List<GradeModel>, String?>(
         (ref, subject) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentGrades(subject: subject);
@@ -58,7 +58,7 @@ final studentGradesProvider =
 });
 
 final studentOnlineGradesProvider =
-    FutureProvider.autoDispose.family<List<GradeModel>, String?>(
+    FutureProvider.family<List<GradeModel>, String?>(
         (ref, subject) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentGrades(subject: subject, gradeType: 'online');
@@ -68,7 +68,7 @@ final studentOnlineGradesProvider =
 });
 
 final studentOfflineGradesProvider =
-    FutureProvider.autoDispose.family<List<GradeModel>, String?>(
+    FutureProvider.family<List<GradeModel>, String?>(
         (ref, subject) async {
   final api = ref.watch(apiClientProvider);
   final raw =
@@ -79,28 +79,28 @@ final studentOfflineGradesProvider =
 });
 
 final pendingTestsProvider =
-    FutureProvider.autoDispose<List<TestModel>>((ref) async {
+    FutureProvider<List<TestModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getPendingTests();
   return raw.map((e) => TestModel.fromJson(e as Map<String, dynamic>)).toList();
 });
 
 final offlineTestsProvider =
-    FutureProvider.autoDispose<List<TestModel>>((ref) async {
+    FutureProvider<List<TestModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentOfflineTests();
   return raw.map((e) => TestModel.fromJson(e as Map<String, dynamic>)).toList();
 });
 
 final completedTestsProvider =
-    FutureProvider.autoDispose<List<TestModel>>((ref) async {
+    FutureProvider<List<TestModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentCompletedTests();
   return raw.map((e) => TestModel.fromJson(e as Map<String, dynamic>)).toList();
 });
 
 final testReviewProvider =
-    FutureProvider.autoDispose.family<Map<String, dynamic>, int>(
+    FutureProvider.family<Map<String, dynamic>, int>(
         (ref, testId) async {
   final api = ref.watch(apiClientProvider);
   return api.getTestReview(testId);
@@ -109,7 +109,7 @@ final testReviewProvider =
 // ── Homework ───────────────────────────────────────────────────────────────
 
 final studentHomeworkProvider =
-    FutureProvider.autoDispose<List<HomeworkModel>>((ref) async {
+    FutureProvider<List<HomeworkModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentHomework();
   return raw
@@ -120,7 +120,7 @@ final studentHomeworkProvider =
 // ── Fees ───────────────────────────────────────────────────────────────────
 
 final studentFeesProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+    FutureProvider<Map<String, dynamic>>((ref) async {
   final api = ref.watch(apiClientProvider);
   return api.getStudentFees();
 });
@@ -128,7 +128,7 @@ final studentFeesProvider =
 // ── Broadcasts ─────────────────────────────────────────────────────────────
 
 final studentBroadcastsProvider =
-    FutureProvider.autoDispose<List<BroadcastModel>>((ref) async {
+    FutureProvider<List<BroadcastModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentBroadcasts();
   return raw

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -296,15 +297,12 @@ class _PaymentOptionCard extends StatelessWidget {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
-                            info.qrCodeUrl!,
+                          child: CachedNetworkImage(
+                            imageUrl: info.qrCodeUrl!,
                             fit: BoxFit.contain,
-                            loadingBuilder: (_, child, progress) =>
-                                progress == null
-                                    ? child
-                                    : const Center(
-                                        child: CircularProgressIndicator()),
-                            errorBuilder: (_, __, ___) => const Center(
+                            placeholder: (_, __) => const Center(
+                                child: CircularProgressIndicator()),
+                            errorWidget: (_, __, ___) => const Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [

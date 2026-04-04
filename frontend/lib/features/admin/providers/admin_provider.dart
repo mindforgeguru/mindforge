@@ -7,7 +7,7 @@ import '../../../core/models/user.dart';
 import '../../auth/providers/auth_provider.dart';
 
 final pendingUsersProvider =
-    FutureProvider.autoDispose<List<UserModel>>((ref) async {
+    FutureProvider<List<UserModel>>((ref) async {
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return [];
   final api = ref.watch(apiClientProvider);
@@ -19,7 +19,7 @@ final pendingUsersProvider =
 
 // Parameter: (role, grade) — use Dart record for structural equality
 final allUsersProvider =
-    FutureProvider.autoDispose.family<List<UserModel>, (String?, int?)>(
+    FutureProvider.family<List<UserModel>, (String?, int?)>(
         (ref, params) async {
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return [];
@@ -31,7 +31,7 @@ final allUsersProvider =
 });
 
 final feeStructuresProvider =
-    FutureProvider.autoDispose.family<List<FeeStructureModel>, String?>(
+    FutureProvider.family<List<FeeStructureModel>, String?>(
         (ref, academicYear) async {
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return [];
@@ -43,7 +43,7 @@ final feeStructuresProvider =
 });
 
 final paymentInfoProvider =
-    FutureProvider.autoDispose<List<PaymentInfoModel>>((ref) async {
+    FutureProvider<List<PaymentInfoModel>>((ref) async {
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return [];
   final api = ref.watch(apiClientProvider);
@@ -54,7 +54,7 @@ final paymentInfoProvider =
 });
 
 final feeSummariesProvider =
-    FutureProvider.autoDispose.family<List<dynamic>, String>(
+    FutureProvider.family<List<dynamic>, String>(
         (ref, academicYear) async {
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return [];
@@ -63,7 +63,7 @@ final feeSummariesProvider =
 });
 
 final timetableConfigProvider =
-    FutureProvider.autoDispose<TimetableConfigModel?>((ref) async {
+    FutureProvider<TimetableConfigModel?>((ref) async {
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return null;
   final api = ref.watch(apiClientProvider);
@@ -73,7 +73,7 @@ final timetableConfigProvider =
 });
 
 final academicYearsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return [];
   final api = ref.watch(apiClientProvider);
@@ -82,7 +82,7 @@ final academicYearsProvider =
 });
 
 final currentAcademicYearProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+    FutureProvider<Map<String, dynamic>?>((ref) async {
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return null;
   final api = ref.watch(apiClientProvider);

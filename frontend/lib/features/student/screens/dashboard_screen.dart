@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -83,8 +84,16 @@ class _StudentDashboardScreenState
     ref.invalidate(offlineTestsProvider);
     ref.invalidate(studentFeesProvider);
     ref.invalidate(studentGradesProvider(null));
-    // Wait for timetable to finish loading
-    await ref.read(studentTimetableProvider(_todayString).future).catchError((_) => <dynamic>[]);
+    await Future.wait([
+      ref.read(studentTimetableProvider(_todayString).future).catchError((_) => <dynamic>[]),
+      ref.read(studentBroadcastsProvider.future).catchError((_) => <dynamic>[]),
+      ref.read(studentHomeworkProvider.future).catchError((_) => <dynamic>[]),
+      ref.read(studentAttendanceSummaryProvider.future).catchError((_) => null),
+      ref.read(pendingTestsProvider.future).catchError((_) => <dynamic>[]),
+      ref.read(offlineTestsProvider.future).catchError((_) => <dynamic>[]),
+      ref.read(studentFeesProvider.future).catchError((_) => <dynamic>{}),
+      ref.read(studentGradesProvider(null).future).catchError((_) => <dynamic>[]),
+    ]);
   }
 
   Future<void> _showProfileUpdatedDialog(String? newUsername) async {
@@ -573,7 +582,7 @@ class _ProfileAvatar extends StatelessWidget {
       ),
       child: ClipOval(
         child: photoUrl != null
-            ? Image.network(photoUrl!, fit: BoxFit.cover)
+            ? CachedNetworkImage(imageUrl: photoUrl!, fit: BoxFit.cover)
             : Container(
                 color: AppColors.iconContainer,
                 child: Center(
@@ -1325,7 +1334,7 @@ class _StudentWebHeroSection extends ConsumerWidget {
                   ),
                   child: ClipOval(
                     child: photoUrl != null
-                        ? Image.network(photoUrl, fit: BoxFit.cover)
+                        ? CachedNetworkImage(imageUrl: photoUrl, fit: BoxFit.cover)
                         : Center(
                             child: Text(
                               username.isNotEmpty ? username[0].toUpperCase() : 'S',
