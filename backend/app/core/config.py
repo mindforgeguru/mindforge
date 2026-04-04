@@ -35,9 +35,9 @@ class Settings(BaseSettings):
     MINIO_BUCKET_PROFILES: str = "mindforge-profiles"
     MINIO_BUCKET_PDFS: str = "mindforge-pdfs"
     MINIO_USE_SSL: bool = False
-    # Public base URL used to build profile-picture URLs (no presigned, no minio:9000)
-    # In production set this to e.g. https://api.mindforge.guru/storage
-    MINIO_PUBLIC_BASE_URL: str = "http://localhost:9000"
+    # Public base URL of the backend itself — used to build media proxy URLs
+    # e.g. https://api.mindforge.guru  (no trailing slash)
+    BACKEND_PUBLIC_URL: str = "https://api.mindforge.guru"
 
     # ── JWT ───────────────────────────────────────────────────────────────────
     JWT_SECRET: str = "change_me_super_secret_jwt_key_at_least_32_chars"

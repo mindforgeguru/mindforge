@@ -73,11 +73,11 @@ def _ensure_buckets(client: Minio):
 
 def get_public_url(bucket: str, key: str) -> str:
     """
-    Return a public (non-expiring) URL for an object via the public MinIO base URL.
-    Use this for profile pictures and other non-sensitive public assets.
+    Return a permanent public URL for an object served through the backend media proxy.
+    The URL never contains internal hostnames (minio:9000, minio.railway.internal, etc.)
     """
-    base = settings.MINIO_PUBLIC_BASE_URL.rstrip("/")
-    return f"{base}/{bucket}/{key}"
+    base = settings.BACKEND_PUBLIC_URL.rstrip("/")
+    return f"{base}/api/media/{bucket}/{key}"
 
 
 async def upload_file(
