@@ -97,6 +97,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
   int _vsaCount = 0;
   int _shortAnswerCount = 0;
   int _longAnswerCount = 0;
+  int _diagramCount = 0;
   bool _includeNumericals = false;
   int _timeLimitMinutes = 0;
   final List<PlatformFile> _pickedFiles = [];
@@ -246,6 +247,8 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
                 onChanged: (v) => setState(() => _shortAnswerCount = v)),
             _CountRow(label: 'Long Answer (3 marks)', value: _longAnswerCount,
                 onChanged: (v) => setState(() => _longAnswerCount = v)),
+            _CountRow(label: 'Diagram Based (5 marks)', value: _diagramCount,
+                onChanged: (v) => setState(() => _diagramCount = v)),
           ],
 
           SwitchListTile(
@@ -302,7 +305,9 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
                 _fillBlankCount * 1 +
                 _vsaCount * 1 +
                 _shortAnswerCount * 2 +
-                _longAnswerCount * 3;
+                _longAnswerCount * 3 +
+                _diagramCount * 5 +
+                (_includeNumericals ? 4 : 0); // 2 numericals × 2 marks
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -411,6 +416,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
       MapEntry('vsa_count', _vsaCount.toString()),
       MapEntry('short_answer_count', _shortAnswerCount.toString()),
       MapEntry('long_answer_count', _longAnswerCount.toString()),
+      MapEntry('diagram_count', _diagramCount.toString()),
       MapEntry('include_numericals', _includeNumericals.toString()),
       MapEntry('time_limit_minutes', _timeLimitMinutes.toString()),
     ]);

@@ -123,6 +123,7 @@ def _group_questions_by_type(questions: List[Dict[str, Any]]) -> Dict[str, List]
         "vsa": [],
         "short_answer": [],
         "long_answer": [],
+        "diagram": [],
         "numerical": [],
     }
     for q in questions:
@@ -141,13 +142,15 @@ SECTION_LABELS = {
     "vsa": "Section D — Very Short Answer",
     "short_answer": "Section E — Short Answer Questions",
     "long_answer": "Section F — Long Answer Questions",
-    "numerical": "Section G — Numerical Problems",
+    "diagram": "Section G — Diagram Based Questions",
+    "numerical": "Section H — Numerical Problems",
 }
 
 ANSWER_LINES = {
     "vsa": 2,
     "short_answer": 4,
     "long_answer": 8,
+    "diagram": 12,
     "numerical": 3,
 }
 

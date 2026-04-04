@@ -123,6 +123,8 @@ def _build_prompt(params: Any, source_text: str = "") -> str:
         question_spec_lines.append(f"- {params.short_answer_count} Short Answer questions — 2 marks each. Answer should be 3-5 sentences.")
     if params.long_answer_count > 0:
         question_spec_lines.append(f"- {params.long_answer_count} Long Answer questions — 3 marks each. Answer should be a detailed paragraph.")
+    if params.diagram_count > 0:
+        question_spec_lines.append(f"- {params.diagram_count} Diagram-Based questions — 5 marks each. Each question must require the student to draw, label, or interpret a diagram. Describe what diagram is required in the question text.")
     if params.include_numericals:
         question_spec_lines.append("- 2 Numerical/Calculation-based problems — 2 marks each. Provide the numerical answer with units.")
 
@@ -157,7 +159,7 @@ Respond ONLY with a valid JSON array. No markdown, no explanation.
 Each object must have:
 {{
   "id": <integer starting from 1>,
-  "type": "<mcq | true_false | fill_blank | vsa | short_answer | long_answer | numerical>",
+  "type": "<mcq | true_false | fill_blank | vsa | short_answer | long_answer | diagram | numerical>",
   "question": "<question text>",
   "options": <for MCQ: {{"A": "...", "B": "...", "C": "...", "D": "..."}} | for all others: null>,
   "answer": "<correct answer>",
@@ -175,6 +177,7 @@ _TYPE_MARKS: Dict[str, int] = {
     "vsa": 1,
     "short_answer": 2,
     "long_answer": 3,
+    "diagram": 5,
     "numerical": 2,
 }
 
@@ -353,6 +356,9 @@ def _generate_stub_questions(params: Any) -> List[Dict[str, Any]]:
         questions.append({"id": q_id, "type": "short_answer", "question": f"[STUB SA] Explain in brief the importance of {chapter} in {subject}.", "options": None, "answer": "Sample short answer.", "marks": 2})
         q_id += 1
     for _ in range(params.long_answer_count):
-        questions.append({"id": q_id, "type": "long_answer", "question": f"[STUB LA] Describe in detail the concepts covered in {chapter}.", "options": None, "answer": "Sample detailed answer.", "marks": 5})
+        questions.append({"id": q_id, "type": "long_answer", "question": f"[STUB LA] Describe in detail the concepts covered in {chapter}.", "options": None, "answer": "Sample detailed answer.", "marks": 3})
+        q_id += 1
+    for _ in range(params.diagram_count):
+        questions.append({"id": q_id, "type": "diagram", "question": f"[STUB DIAGRAM] Draw and label a diagram to illustrate a key concept from {chapter} in {subject}.", "options": None, "answer": "Refer to textbook diagram.", "marks": 5})
         q_id += 1
     return questions

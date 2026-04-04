@@ -438,6 +438,7 @@ async def generate_test(
     vsa_count: int = Form(2),
     short_answer_count: int = Form(0),
     long_answer_count: int = Form(0),
+    diagram_count: int = Form(0),
     include_numericals: bool = Form(False),
     time_limit_minutes: Optional[int] = Form(None),
     source_files: List[UploadFile] = File(default=[]),
@@ -464,6 +465,7 @@ async def generate_test(
         vsa_count=vsa_count,
         short_answer_count=short_answer_count,
         long_answer_count=long_answer_count,
+        diagram_count=diagram_count,
         include_numericals=include_numericals,
         time_limit_minutes=time_limit_minutes if time_limit_minutes is not None else (mcq_count + fill_blank_count + true_false_count + vsa_count),
     )
@@ -494,15 +496,30 @@ async def generate_test(
     # Generate questions — Gemini reads the files natively
     questions = await ai_service.generate_test_questions(file_list, params)
 
-    # Calculate total marks
-    total_marks = sum(q.get("marks", 1) for q in questions)
+    # For offline tests: use teacher-configured counts × marks per type so the
+    # total never drifts even if the AI returns a slightly different question count.
+    # For online tests: derive from actual questions (AI controls counts there).
+    if test_type == "offline":
+        from app.services.ai_service import _TYPE_MARKS as _TM
+        total_marks = (
+            params.mcq_count * _TM["mcq"] +
+            params.true_false_count * _TM["true_false"] +
+            params.fill_blank_count * _TM["fill_blank"] +
+            params.vsa_count * _TM["vsa"] +
+            params.short_answer_count * _TM["short_answer"] +
+            params.long_answer_count * _TM["long_answer"] +
+            params.diagram_count * _TM["diagram"] +
+            (2 * _TM["numerical"] if params.include_numericals else 0)
+        )
+    else:
+        total_marks = sum(q.get("marks", 1) for q in questions)
 
     # Set expiry for online tests (3-day window)
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=3) if test_type == "online" else None
 
-    # For online tests: 1 minute per question, auto-publish immediately
-    time_limit = len(questions) if test_type == "online" else (params.time_limit_minutes if params.time_limit_minutes is not None else len(questions))
+    # For online tests: 1 minute per question. For offline: use the slider value exactly.
+    time_limit = len(questions) if test_type == "online" else (params.time_limit_minutes or 0)
 
     test = Test(
         title=title,

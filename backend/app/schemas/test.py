@@ -24,7 +24,8 @@ class TestGenerationParams(BaseModel):
     vsa_count: int = 2           # Very Short Answer (1 mark)
     # Offline-only question types
     short_answer_count: int = 0  # 2 marks each
-    long_answer_count: int = 0   # 5 marks each
+    long_answer_count: int = 0   # 3 marks each
+    diagram_count: int = 0       # 5 marks each
     include_numericals: bool = False
     time_limit_minutes: Optional[int] = None
 

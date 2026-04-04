@@ -111,15 +111,16 @@ class _ViewTab extends ConsumerStatefulWidget {
 
 class _ViewTabState extends ConsumerState<_ViewTab> {
   late DateTime _selectedDate;
+  late DateTime _weekStart;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
-    // Default to a weekday — jump to next Monday on weekends
     _selectedDate = now.weekday >= 6
         ? now.add(Duration(days: 8 - now.weekday))
         : now;
+    _weekStart = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
   }
 
   @override
@@ -295,7 +296,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Calendar left panel — scrollable months
+              // Week strip left panel
               SizedBox(
                 width: 380,
                 child: Container(
@@ -314,12 +315,12 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
                         ]),
                       ),
                       const Divider(height: 1),
-                      Expanded(
-                        child: _ScrollableCalendar(
-                          selectedDate: _selectedDate,
-                          datesWithTimetable: datesWithTimetable,
-                          onDateSelected: (date) => setState(() => _selectedDate = date),
-                        ),
+                      _WeekStrip(
+                        weekStart: _weekStart,
+                        selectedDate: _selectedDate,
+                        datesWithTimetable: datesWithTimetable,
+                        onDateSelected: (date) => setState(() => _selectedDate = date),
+                        onWeekChanged: (newWeekStart) => setState(() => _weekStart = newWeekStart),
                       ),
                     ],
                   ),
@@ -371,13 +372,12 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
 
         return Column(
           children: [
-            SizedBox(
-              height: 270,
-              child: _ScrollableCalendar(
-                selectedDate: _selectedDate,
-                datesWithTimetable: datesWithTimetable,
-                onDateSelected: (date) => setState(() => _selectedDate = date),
-              ),
+            _WeekStrip(
+              weekStart: _weekStart,
+              selectedDate: _selectedDate,
+              datesWithTimetable: datesWithTimetable,
+              onDateSelected: (date) => setState(() => _selectedDate = date),
+              onWeekChanged: (newWeekStart) => setState(() => _weekStart = newWeekStart),
             ),
             const Divider(height: 1),
             const SizedBox(height: 4),
@@ -705,7 +705,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
       children: [
         // Grade selector pill
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
           child: _SelectorPill(
             label: 'Grade',
             value: 'Grade $_selectedGrade',
@@ -713,7 +713,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
             onTap: () => _showGradePicker(context),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         // Week strip
         _WeekStrip(
           weekStart: _weekStart,
@@ -998,6 +998,7 @@ class _FullTimetableTab extends ConsumerStatefulWidget {
 
 class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
   late DateTime _selectedDate;
+  late DateTime _weekStart;
 
   String get _dateString => DateFormat('yyyy-MM-dd').format(_selectedDate);
 
@@ -1008,6 +1009,7 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
     _selectedDate = now.weekday >= 6
         ? now.add(Duration(days: 8 - now.weekday))
         : now;
+    _weekStart = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
   }
 
   @override
@@ -1076,12 +1078,12 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
                     ]),
                   ),
                   const Divider(height: 1),
-                  Expanded(
-                    child: _ScrollableCalendar(
-                      selectedDate: _selectedDate,
-                      datesWithTimetable: const {},
-                      onDateSelected: (date) => setState(() => _selectedDate = date),
-                    ),
+                  _WeekStrip(
+                    weekStart: _weekStart,
+                    selectedDate: _selectedDate,
+                    datesWithTimetable: const {},
+                    onDateSelected: (date) => setState(() => _selectedDate = date),
+                    onWeekChanged: (newWeekStart) => setState(() => _weekStart = newWeekStart),
                   ),
                 ],
               ),
@@ -1113,111 +1115,39 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
       );
     }
 
+    // ── Mobile layout ─────────────────────────────────────────────────────
     return Column(
       children: [
-        // ── Date header pill (mobile) ─────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-          child: GestureDetector(
-            onTap: () => _pickDate(context),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: isToday
-                    ? AppColors.primary
-                    : AppColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.calendar_month_outlined, size: 16,
-                      color: isToday ? Colors.white70 : AppColors.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(DateFormat('EEEE').format(_selectedDate),
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold,
-                                color: isToday ? Colors.white : AppColors.primary)),
-                        Text(DateFormat('d MMMM yyyy').format(_selectedDate),
-                            style: TextStyle(fontSize: 12,
-                                color: isToday ? Colors.white70 : AppColors.primary.withValues(alpha: 0.7))),
-                      ],
-                    ),
-                  ),
-                  if (isToday)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(20)),
-                      child: const Text('TODAY',
-                          style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                    )
-                  else
-                    Icon(Icons.edit_outlined, size: 16,
-                        color: AppColors.primary.withValues(alpha: 0.6)),
-                ],
-              ),
-            ),
-          ),
+        _WeekStrip(
+          weekStart: _weekStart,
+          selectedDate: _selectedDate,
+          datesWithTimetable: const {},
+          onDateSelected: (date) => setState(() => _selectedDate = date),
+          onWeekChanged: (newWeekStart) => setState(() => _weekStart = newWeekStart),
         ),
-        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          color: AppColors.primary.withValues(alpha: 0.06),
+          child: Row(children: [
+            const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(
+              DateFormat('EEE, d MMMM yyyy').format(_selectedDate),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+            ),
+            if (isToday) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(20)),
+                child: const Text('TODAY', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ),
+            ],
+          ]),
+        ),
         Expanded(child: gradeList),
       ],
-    );
-  }
-
-  void _pickDate(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SizedBox(
-        height: MediaQuery.of(context).size.height * 0.72,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36, height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.divider,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Row(children: [
-                    Icon(Icons.calendar_month_outlined, size: 18, color: AppColors.primary),
-                    SizedBox(width: 8),
-                    Text('Select Date',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ]),
-                  const SizedBox(height: 10),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: _ScrollableCalendar(
-                selectedDate: _selectedDate,
-                datesWithTimetable: const {},
-                onDateSelected: (date) {
-                  setState(() => _selectedDate = date);
-                  Navigator.pop(ctx);
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1514,47 +1444,37 @@ class _SelectorPill extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
-          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+          borderRadius: BorderRadius.circular(8),
           color: AppColors.primary.withValues(alpha: 0.04),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (leadingIcon != null) ...[
+              Icon(leadingIcon, size: 13, color: AppColors.primary),
+              const SizedBox(width: 4),
+            ],
             Text(
-              label,
+              '$label: ',
               style: TextStyle(
-                fontSize: 10,
-                color: AppColors.primary.withValues(alpha: 0.8),
-                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                color: AppColors.primary.withValues(alpha: 0.7),
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                if (leadingIcon != null) ...[
-                  Icon(leadingIcon, size: 14, color: AppColors.primary),
-                  const SizedBox(width: 4),
-                ],
-                Expanded(
-                  child: Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (showArrow)
-                  const Icon(Icons.arrow_drop_down,
-                      size: 18, color: AppColors.primary),
-              ],
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
             ),
+            if (showArrow)
+              const Icon(Icons.arrow_drop_down, size: 16, color: AppColors.primary),
           ],
         ),
       ),
@@ -2050,7 +1970,7 @@ class _WeekStrip extends StatelessWidget {
 
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -2058,9 +1978,9 @@ class _WeekStrip extends StatelessWidget {
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.chevron_left, size: 20),
+                icon: const Icon(Icons.chevron_left, size: 16),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
                 onPressed: () =>
                     onWeekChanged(weekStart.subtract(const Duration(days: 7))),
               ),
@@ -2069,22 +1989,22 @@ class _WeekStrip extends StatelessWidget {
                   monthLabel,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: AppColors.primary,
                   ),
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.chevron_right, size: 20),
+                icon: const Icon(Icons.chevron_right, size: 16),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
                 onPressed: () =>
                     onWeekChanged(weekStart.add(const Duration(days: 7))),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           // Day cells
           Row(
             children: days.map((date) {
@@ -2105,19 +2025,19 @@ class _WeekStrip extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        DateFormat('E').format(date)[0], // M T W T F S S
+                        DateFormat('E').format(date)[0],
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 9,
                           fontWeight: FontWeight.w600,
                           color: isWeekend
                               ? AppColors.error.withOpacity(0.7)
                               : AppColors.textMuted,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Container(
-                        width: 34,
-                        height: 34,
+                        width: 26,
+                        height: 26,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: isSelected
@@ -2130,7 +2050,7 @@ class _WeekStrip extends StatelessWidget {
                           child: Text(
                             '${date.day}',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 11,
                               fontWeight: FontWeight.w700,
                               color: isSelected
                                   ? Colors.white
@@ -2141,11 +2061,11 @@ class _WeekStrip extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 2),
                       // Dot if timetable exists
                       Container(
-                        width: 5,
-                        height: 5,
+                        width: 4,
+                        height: 4,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: hasTimetable
@@ -2161,6 +2081,7 @@ class _WeekStrip extends StatelessWidget {
               );
             }).toList(),
           ),
+          const SizedBox(height: 2),
         ],
       ),
     );
