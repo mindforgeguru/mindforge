@@ -66,7 +66,6 @@ services:
       DB_URL: postgresql+asyncpg://${POSTGRES_USER:-mindforge}:${POSTGRES_PASSWORD:-mindforge_secret}@postgres:5432/${POSTGRES_DB:-mindforge}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
       MINIO_ENDPOINT: minio:9000
-      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-https://api.mindforge.guru/storage}
     depends_on:
       postgres:
         condition: service_healthy

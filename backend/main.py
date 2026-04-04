@@ -3,8 +3,9 @@ MIND FORGE — AI Assisted Learning Platform
 FastAPI application entry point
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
 import logging
 
@@ -116,3 +117,27 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
 @app.get("/api/health", tags=["Health"])
 async def health_check():
     return {"status": "ok", "app": "MIND FORGE"}
+
+
+# ─── Media proxy ──────────────────────────────────────────────────────────────
+@app.get("/api/media/{bucket}/{key:path}", tags=["Media"])
+async def serve_media(bucket: str, key: str):
+    """
+    Proxy a file from MinIO through the backend.
+    Used for profile pictures so URLs never contain internal MinIO hostnames.
+    Only allows the profiles bucket to prevent arbitrary bucket access.
+    """
+    from app.services import storage_service
+    from minio.error import S3Error
+
+    ALLOWED_BUCKETS = {settings.MINIO_BUCKET_PROFILES}
+    if bucket not in ALLOWED_BUCKETS:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    try:
+        client = storage_service._get_client()
+        response = client.get_object(bucket, key)
+        content_type = response.headers.get("content-type", "image/jpeg")
+        return StreamingResponse(response, media_type=content_type)
+    except S3Error as e:
+        raise HTTPException(status_code=404, detail="File not found")

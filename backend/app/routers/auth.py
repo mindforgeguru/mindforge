@@ -159,15 +159,33 @@ async def login(
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     """Return the currently authenticated user's profile."""
+    from urllib.parse import urlparse
     pic = current_user.profile_pic_url
-    # Legacy: if stored value is "bucket/key" path (old format), convert to public URL
-    if pic and not pic.startswith("http"):
-        parts = pic.split("/", 1)
-        if len(parts) == 2:
-            try:
-                pic = storage_service.get_public_url(parts[0], parts[1])
-            except Exception:
-                pic = None
+
+    if pic:
+        if not pic.startswith("http"):
+            # Legacy format: "bucket/key" path stored directly
+            parts = pic.split("/", 1)
+            if len(parts) == 2:
+                try:
+                    pic = storage_service.get_public_url(parts[0], parts[1])
+                except Exception:
+                    pic = None
+        else:
+            # Check for internal MinIO hostname (minio:9000, minio.railway.internal, etc.)
+            parsed = urlparse(pic)
+            is_internal = (
+                "minio" in parsed.hostname
+                and not parsed.hostname.startswith("api.")
+            ) if parsed.hostname else False
+            if is_internal:
+                # Extract bucket and key from the URL path and rebuild as proxy URL
+                try:
+                    path = parsed.path.lstrip("/")  # e.g. "mindforge-profiles/profiles/7/avatar.jpg"
+                    bucket, key = path.split("/", 1)
+                    pic = storage_service.get_public_url(bucket, key)
+                except Exception:
+                    pic = None
 
     return UserResponse(
         id=current_user.id,
