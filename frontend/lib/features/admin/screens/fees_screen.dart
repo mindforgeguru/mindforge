@@ -759,6 +759,7 @@ class _PaymentSlotCard extends ConsumerStatefulWidget {
 class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
   late final TextEditingController _labelCtrl;
   late final TextEditingController _bankNameCtrl;
+  late final TextEditingController _branchCtrl;
   late final TextEditingController _holderCtrl;
   late final TextEditingController _accountCtrl;
   late final TextEditingController _ifscCtrl;
@@ -774,6 +775,7 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
     final e = widget.existing;
     _labelCtrl = TextEditingController(text: e?.label ?? 'Option ${widget.slot}');
     _bankNameCtrl = TextEditingController(text: e?.bankName ?? '');
+    _branchCtrl = TextEditingController(text: e?.branch ?? '');
     _holderCtrl = TextEditingController(text: e?.accountHolder ?? '');
     _accountCtrl = TextEditingController(text: e?.accountNumber ?? '');
     _ifscCtrl = TextEditingController(text: e?.ifsc ?? '');
@@ -786,6 +788,7 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
   void dispose() {
     _labelCtrl.dispose();
     _bankNameCtrl.dispose();
+    _branchCtrl.dispose();
     _holderCtrl.dispose();
     _accountCtrl.dispose();
     _ifscCtrl.dispose();
@@ -800,6 +803,7 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
       await api.updatePaymentInfo(widget.slot, {
         'label': _labelCtrl.text.trim(),
         'bank_name': _bankNameCtrl.text.trim(),
+        'branch': _branchCtrl.text.trim(),
         'account_holder': _holderCtrl.text.trim(),
         'account_number': _accountCtrl.text.trim(),
         'ifsc': _ifscCtrl.text.trim().toUpperCase(),
@@ -931,6 +935,12 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
                       decoration: const InputDecoration(
                           labelText: 'Bank Name',
                           prefixIcon: Icon(Icons.account_balance))),
+                  const SizedBox(height: 10),
+                  TextField(
+                      controller: _branchCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Branch',
+                          prefixIcon: Icon(Icons.location_city_outlined))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: _holderCtrl,

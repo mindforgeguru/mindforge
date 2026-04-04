@@ -175,6 +175,7 @@ class _PaymentOptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext ctx) {
     final hasBankDetails = info.bankName != null ||
+        info.branch != null ||
         info.accountHolder != null ||
         info.accountNumber != null ||
         info.ifsc != null;
@@ -236,6 +237,11 @@ class _PaymentOptionCard extends StatelessWidget {
                         icon: Icons.account_balance_outlined,
                         label: 'Bank',
                         value: info.bankName!),
+                  if (info.branch != null)
+                    _DetailRow(
+                        icon: Icons.location_city_outlined,
+                        label: 'Branch',
+                        value: info.branch!),
                   if (info.accountHolder != null)
                     _DetailRow(
                         icon: Icons.person_outline,
