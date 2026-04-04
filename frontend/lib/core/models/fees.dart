@@ -65,6 +65,7 @@ class PaymentInfoModel {
   final int slot;
   final String? label;
   final String? bankName;
+  final String? branch;
   final String? accountHolder;
   final String? accountNumber;
   final String? ifsc;
@@ -77,6 +78,7 @@ class PaymentInfoModel {
     required this.slot,
     this.label,
     this.bankName,
+    this.branch,
     this.accountHolder,
     this.accountNumber,
     this.ifsc,
@@ -91,6 +93,7 @@ class PaymentInfoModel {
         slot: json['slot'] as int? ?? 1,
         label: json['label'] as String?,
         bankName: json['bank_name'] as String?,
+        branch: json['branch'] as String?,
         accountHolder: json['account_holder'] as String?,
         accountNumber: json['account_number'] as String?,
         ifsc: json['ifsc'] as String?,

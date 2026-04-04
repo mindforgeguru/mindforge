@@ -63,6 +63,7 @@ class PaymentInfo(Base):
     slot: Mapped[int] = mapped_column(Integer, nullable=False, default=1, unique=True)
     label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     bank_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    branch: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     account_holder: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     account_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     ifsc: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)

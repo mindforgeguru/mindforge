@@ -62,6 +62,7 @@ class FeePaymentResponse(BaseModel):
 class PaymentInfoCreate(BaseModel):
     label: Optional[str] = None
     bank_name: Optional[str] = None
+    branch: Optional[str] = None
     account_holder: Optional[str] = None
     account_number: Optional[str] = None
     ifsc: Optional[str] = None
@@ -74,6 +75,7 @@ class PaymentInfoResponse(BaseModel):
     slot: int = 1
     label: Optional[str] = None
     bank_name: Optional[str] = None
+    branch: Optional[str] = None
     account_holder: Optional[str] = None
     account_number: Optional[str] = None
     ifsc: Optional[str] = None
