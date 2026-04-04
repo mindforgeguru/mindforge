@@ -280,13 +280,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 6),
-                                Text(
-                                  '(max 4)',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    color: AppColors.textMuted,
-                                  ),
-                                ),
                               ],
                             ),
                             const SizedBox(height: 6),
@@ -295,14 +288,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               runSpacing: 6,
                               children: AppConstants.subjects.map((s) {
                                 final sel = _selectedTeacherSubjects.contains(s);
-                                final maxReached =
-                                    _selectedTeacherSubjects.length >= 4 && !sel;
                                 return GestureDetector(
-                                  onTap: maxReached
-                                      ? null
-                                      : () => setState(() => sel
-                                          ? _selectedTeacherSubjects.remove(s)
-                                          : _selectedTeacherSubjects.add(s)),
+                                  onTap: () => setState(() => sel
+                                      ? _selectedTeacherSubjects.remove(s)
+                                      : _selectedTeacherSubjects.add(s)),
                                   child: AnimatedContainer(
                                     duration:
                                         const Duration(milliseconds: 150),
@@ -311,10 +300,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     decoration: BoxDecoration(
                                       color: sel
                                           ? AppColors.primary
-                                          : maxReached
-                                              ? AppColors.surface
-                                                  .withOpacity(0.5)
-                                              : AppColors.surface,
+                                          : AppColors.surface,
                                       border: Border.all(
                                         color: sel
                                             ? AppColors.primary
@@ -333,9 +319,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                             : FontWeight.normal,
                                         color: sel
                                             ? Colors.white
-                                            : maxReached
-                                                ? AppColors.textMuted
-                                                : AppColors.textSecondary,
+                                            : AppColors.textSecondary,
                                       ),
                                     ),
                                   ),
@@ -896,28 +880,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ],
                   if (_selectedRole == 'teacher') ...[
                     const SizedBox(height: 14),
-                    Text('Subjects you can teach (max 4)',
+                    Text('Subjects you can teach',
                       style: GoogleFonts.poppins(fontSize: 12,
                         color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
                     Wrap(spacing: 8, runSpacing: 6,
                       children: AppConstants.subjects.map((s) {
                         final sel = _selectedTeacherSubjects.contains(s);
-                        final maxed = _selectedTeacherSubjects.length >= 4 && !sel;
                         return GestureDetector(
-                          onTap: maxed ? null : () => setState(() => sel
+                          onTap: () => setState(() => sel
                             ? _selectedTeacherSubjects.remove(s)
                             : _selectedTeacherSubjects.add(s)),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                             decoration: BoxDecoration(
-                              color: sel ? AppColors.primary : maxed ? const Color(0xFFF0F0F0) : Colors.white,
+                              color: sel ? AppColors.primary : Colors.white,
                               border: Border.all(color: sel ? AppColors.primary : AppColors.divider),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(s, style: GoogleFonts.poppins(fontSize: 11,
-                              color: sel ? Colors.white : maxed ? AppColors.textMuted : AppColors.textSecondary,
+                              color: sel ? Colors.white : AppColors.textSecondary,
                               fontWeight: sel ? FontWeight.w700 : FontWeight.normal)),
                           ),
                         );

@@ -22,7 +22,7 @@ class UserRegisterRequest(BaseModel):
     parent_username: Optional[str] = None       # student only
     grade: Optional[int] = None                 # student only (8, 9, or 10)
     additional_subjects: Optional[List[str]] = None  # student only
-    teachable_subjects: Optional[List[str]] = None   # teacher only, max 4
+    teachable_subjects: Optional[List[str]] = None   # teacher only
 
     @field_validator("mpin")
     @classmethod
