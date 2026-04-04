@@ -156,17 +156,21 @@ async def mark_attendance(
     Bulk-mark attendance for a class period.
     Emits a WebSocket event to all students in the grade after saving.
     """
+    student_ids = [item.student_id for item in payload.records]
+
+    # Batch-fetch all existing records for this date/period in one query
+    existing_result = await db.execute(
+        select(Attendance).where(
+            Attendance.student_id.in_(student_ids),
+            Attendance.date == payload.date,
+            Attendance.period == payload.period,
+        )
+    )
+    existing_map = {att.student_id: att for att in existing_result.scalars().all()}
+
     records = []
     for item in payload.records:
-        # Upsert: update if exists for same student/date/period
-        existing = await db.execute(
-            select(Attendance).where(
-                Attendance.student_id == item.student_id,
-                Attendance.date == payload.date,
-                Attendance.period == payload.period,
-            )
-        )
-        att = existing.scalar_one_or_none()
+        att = existing_map.get(item.student_id)
         if att:
             att.status = item.status
         else:

@@ -347,6 +347,11 @@ async def edit_user(
     await db.commit()
     await db.refresh(user)
 
+    # Invalidate student profile cache if the edited user is/was a student
+    if old_role == UserRole.student or user.role == UserRole.student:
+        from app.core.cache import invalidate_student_profile
+        await invalidate_student_profile(user_id)
+
     # Fetch final student profile + parent username for response
     final_profile = None
     parent_username = None
@@ -846,6 +851,8 @@ async def update_timetable_config(
         db.add(config)
     await db.commit()
     await db.refresh(config)
+    from app.core.cache import invalidate_timetable_config
+    await invalidate_timetable_config()
 
     # Broadcast timetable config change to all connected clients
     await redis_manager.publish({
@@ -1030,6 +1037,8 @@ async def start_new_academic_year(
     db.add(new_year)
     await db.commit()
     await db.refresh(new_year)
+    from app.core.cache import invalidate_academic_year
+    await invalidate_academic_year()
 
     # Notify all connected clients
     await redis_manager.publish({

@@ -28,6 +28,11 @@ from app.models.homework import Homework, Broadcast
 from app.models.fees import FeeStructure, FeePayment, PaymentInfo
 from app.schemas.fees import FeePaymentResponse, PaymentInfoResponse
 from app.services import storage_service
+from app.core.cache import (
+    get_student_profile_cached,
+    get_timetable_config_cached,
+    get_current_academic_year_cached,
+)
 
 router = APIRouter()
 
@@ -40,10 +45,7 @@ async def get_my_profile(
     current_student: User = Depends(get_current_student),
 ):
     """Return the student's grade and linked parent username."""
-    result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
-    )
-    profile = result.scalar_one_or_none()
+    profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
@@ -119,15 +121,11 @@ async def get_my_timetable(
     from datetime import date as date_type
     slot_date = date_type.fromisoformat(date)
 
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
-    )
-    profile = profile_result.scalar_one_or_none()
+    profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
-    config_result = await db.execute(select(TimetableConfig))
-    config = config_result.scalar_one_or_none()
+    config = await get_timetable_config_cached(db)
     period_time_map: dict[int, tuple[str, str]] = {}
     if config and config.period_times:
         for pt in config.period_times:
@@ -197,10 +195,7 @@ async def get_pending_tests(
     - Have not been submitted by this student yet
     """
     # Get student's grade
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
-    )
-    profile = profile_result.scalar_one_or_none()
+    profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
@@ -235,10 +230,7 @@ async def get_offline_tests(
     current_student: User = Depends(get_current_student),
 ):
     """Get all offline tests for the student's grade (view-only)."""
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
-    )
-    profile = profile_result.scalar_one_or_none()
+    profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
@@ -257,10 +249,7 @@ async def get_completed_tests(
     current_student: User = Depends(get_current_student),
 ):
     """Get online tests the student has already submitted."""
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
-    )
-    profile = profile_result.scalar_one_or_none()
+    profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
@@ -478,10 +467,7 @@ async def upload_profile_picture(
     await storage_service.upload_file(bucket, key, file_bytes)
     public_url = storage_service.get_public_url(bucket, key)
 
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
-    )
-    profile = profile_result.scalar_one_or_none()
+    profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
@@ -596,26 +582,14 @@ async def get_my_fees(
     current_student: User = Depends(get_current_student),
 ):
     """Get the current student's own fee summary."""
-    result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
-    )
-    profile = result.scalar_one_or_none()
+    import asyncio
+
+    profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
     if not academic_year:
-        from app.models.academic_year import AcademicYear
-        from datetime import date
-        ay_result = await db.execute(
-            select(AcademicYear).where(AcademicYear.is_current == True)
-        )
-        current_ay = ay_result.scalar_one_or_none()
-        if current_ay:
-            academic_year = current_ay.year_label
-        else:
-            today = date.today()
-            year_start = today.year if today.month >= 6 else today.year - 1
-            academic_year = f"{year_start}-{str(year_start + 1)[2:]}"
+        academic_year = await get_current_academic_year_cached(db)
 
     structure_result = await db.execute(
         select(FeeStructure).where(
@@ -652,8 +626,8 @@ async def get_my_fees(
     pi_result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.slot))
     payment_options_raw = pi_result.scalars().all()
 
-    payment_options = []
-    for pi in payment_options_raw:
+    # Resolve presigned QR URLs in parallel instead of sequentially
+    async def _resolve_qr(pi):
         resp = PaymentInfoResponse.model_validate(pi)
         if pi.qr_code_url and not pi.qr_code_url.startswith("http"):
             parts = pi.qr_code_url.split("/", 1)
@@ -664,7 +638,9 @@ async def get_my_fees(
                     )
                 except Exception:
                     resp.qr_code_url = None
-        payment_options.append(resp)
+        return resp
+
+    payment_options = list(await asyncio.gather(*[_resolve_qr(pi) for pi in payment_options_raw]))
 
     return StudentFeeSummary(
         student_id=current_student.id,
