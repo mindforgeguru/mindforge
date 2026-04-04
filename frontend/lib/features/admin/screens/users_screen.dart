@@ -254,12 +254,16 @@ class _EditUserSheet extends StatefulWidget {
   State<_EditUserSheet> createState() => _EditUserSheetState();
 }
 
+const _kAllSubjects = ['economics', 'computer', 'ai'];
+
 class _EditUserSheetState extends State<_EditUserSheet> {
   late final TextEditingController _usernameCtrl;
   late final TextEditingController _parentUsernameCtrl;
   late final TextEditingController _studentUsernameCtrl;
   late String _selectedRole;
   late int? _selectedGrade;
+  late Set<String> _selectedTeachableSubjects;
+  late Set<String> _selectedAdditionalSubjects;
   final List<String> _mpin = ['', '', '', '', '', ''];
   int _mpinIndex = 0;
   bool _saving = false;
@@ -273,6 +277,8 @@ class _EditUserSheetState extends State<_EditUserSheet> {
     _studentUsernameCtrl = TextEditingController(text: widget.user.studentUsername ?? '');
     _selectedRole = widget.user.role;
     _selectedGrade = widget.user.grade;
+    _selectedTeachableSubjects = Set.from(widget.user.teachableSubjects ?? []);
+    _selectedAdditionalSubjects = Set.from(widget.user.additionalSubjects ?? []);
   }
 
   @override
@@ -320,6 +326,22 @@ class _EditUserSheetState extends State<_EditUserSheet> {
       data['grade'] = _selectedGrade;
     }
     if (_showMpinReset && newMpin.length == 6) data['new_mpin'] = newMpin;
+    // Teacher subjects
+    if (_selectedRole == 'teacher') {
+      final orig = Set.from(widget.user.teachableSubjects ?? []);
+      if (!orig.containsAll(_selectedTeachableSubjects) ||
+          !_selectedTeachableSubjects.containsAll(orig)) {
+        data['teachable_subjects'] = _selectedTeachableSubjects.toList();
+      }
+    }
+    // Student additional subjects
+    if (_selectedRole == 'student') {
+      final orig = Set.from(widget.user.additionalSubjects ?? []);
+      if (!orig.containsAll(_selectedAdditionalSubjects) ||
+          !_selectedAdditionalSubjects.containsAll(orig)) {
+        data['additional_subjects'] = _selectedAdditionalSubjects.toList();
+      }
+    }
     // Parent field for students:
     // - If a parent is already linked → renaming the parent user
     // - If no parent linked yet → linking to an existing parent account
@@ -461,6 +483,30 @@ class _EditUserSheetState extends State<_EditUserSheet> {
               }),
             ),
 
+            // Teachable subjects (teachers only)
+            if (_selectedRole == 'teacher') ...[
+              const SizedBox(height: 14),
+              const Text('Teachable Subjects',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: _kAllSubjects.map((s) {
+                  final selected = _selectedTeachableSubjects.contains(s);
+                  return FilterChip(
+                    label: Text(s[0].toUpperCase() + s.substring(1)),
+                    selected: selected,
+                    onSelected: (v) => setState(() {
+                      if (v) _selectedTeachableSubjects.add(s);
+                      else _selectedTeachableSubjects.remove(s);
+                    }),
+                    selectedColor: AppColors.secondary.withOpacity(0.2),
+                    checkmarkColor: AppColors.secondary,
+                  );
+                }).toList(),
+              ),
+            ],
+
             // Grade + Parent username (students only)
             if (_selectedRole == 'student') ...[
               const SizedBox(height: 14),
@@ -479,6 +525,26 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                 onChanged: (v) => setState(() => _selectedGrade = v),
               ),
               const SizedBox(height: 14),
+              const Text('Additional Subjects',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: _kAllSubjects.map((s) {
+                  final selected = _selectedAdditionalSubjects.contains(s);
+                  return FilterChip(
+                    label: Text(s[0].toUpperCase() + s.substring(1)),
+                    selected: selected,
+                    onSelected: (v) => setState(() {
+                      if (v) _selectedAdditionalSubjects.add(s);
+                      else _selectedAdditionalSubjects.remove(s);
+                    }),
+                    selectedColor: AppColors.primary.withOpacity(0.2),
+                    checkmarkColor: AppColors.primary,
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
               TextField(
                 controller: _parentUsernameCtrl,
                 decoration: InputDecoration(

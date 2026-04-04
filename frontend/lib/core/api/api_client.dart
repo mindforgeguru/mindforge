@@ -123,6 +123,10 @@ class ApiClient {
     });
   }
 
+  Future<void> editAdminUsername(String newUsername) async {
+    await _dio.put('/admin/profile/username', data: {'username': newUsername});
+  }
+
   // ── Teacher ───────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> uploadTeacherPhoto(

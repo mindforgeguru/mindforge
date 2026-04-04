@@ -142,6 +142,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(profilePicUrl: url);
   }
 
+  Future<void> updateUsername(String newUsername) async {
+    await _storage.write(
+        key: AppConstants.usernameStorageKey, value: newUsername);
+    state = state.copyWith(username: newUsername);
+  }
+
   Future<bool> register(String username, String mpin, String role,
       {String? parentUsername,
       int? grade,
