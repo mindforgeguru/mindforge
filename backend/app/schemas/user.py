@@ -58,8 +58,6 @@ class UserRegisterRequest(BaseModel):
     @field_validator("teachable_subjects")
     @classmethod
     def validate_teachable_subjects(cls, v: Optional[List[str]]) -> Optional[List[str]]:
-        if v is not None and len(v) > 4:
-            raise ValueError("A teacher can teach at most 4 subjects.")
         return v
 
 

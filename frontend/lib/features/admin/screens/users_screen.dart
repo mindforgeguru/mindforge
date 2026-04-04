@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/constants.dart';
 import '../providers/admin_provider.dart';
 
 class AdminUsersScreen extends ConsumerStatefulWidget {
@@ -486,22 +487,34 @@ class _EditUserSheetState extends State<_EditUserSheet> {
             // Teachable subjects (teachers only)
             if (_selectedRole == 'teacher') ...[
               const SizedBox(height: 14),
-              const Text('Teachable Subjects',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+              Row(
+                children: [
+                  const Text('Teachable Subjects',
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  Text('${_selectedTeachableSubjects.length} selected',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                ],
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
-                children: _kAllSubjects.map((s) {
+                runSpacing: 4,
+                children: AppConstants.subjects.map((s) {
                   final selected = _selectedTeachableSubjects.contains(s);
                   return FilterChip(
-                    label: Text(s[0].toUpperCase() + s.substring(1)),
+                    label: Text(s, style: const TextStyle(fontSize: 12)),
                     selected: selected,
                     onSelected: (v) => setState(() {
                       if (v) _selectedTeachableSubjects.add(s);
                       else _selectedTeachableSubjects.remove(s);
                     }),
-                    selectedColor: AppColors.secondary.withOpacity(0.2),
+                    selectedColor: AppColors.secondary.withOpacity(0.18),
                     checkmarkColor: AppColors.secondary,
+                    labelStyle: TextStyle(
+                      color: selected ? AppColors.secondary : AppColors.textPrimary,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                    ),
                   );
                 }).toList(),
               ),
