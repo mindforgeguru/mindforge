@@ -4,6 +4,7 @@ Handles file uploads and pre-signed URL generation.
 """
 
 import io
+import json
 import logging
 from typing import Optional
 
@@ -23,6 +24,11 @@ REQUIRED_BUCKETS = [
     settings.MINIO_BUCKET_PDFS,
 ]
 
+# Buckets that should allow anonymous (public) GET access
+PUBLIC_READ_BUCKETS = [
+    settings.MINIO_BUCKET_PROFILES,
+]
+
 
 def _get_client() -> Minio:
     """Lazily initialize and return the MinIO client."""
@@ -39,7 +45,7 @@ def _get_client() -> Minio:
 
 
 def _ensure_buckets(client: Minio):
-    """Create required buckets if they don't exist."""
+    """Create required buckets if they don't exist and apply public-read policy."""
     for bucket in REQUIRED_BUCKETS:
         try:
             if not client.bucket_exists(bucket):
@@ -47,6 +53,31 @@ def _ensure_buckets(client: Minio):
                 logger.info(f"Created MinIO bucket: {bucket}")
         except S3Error as e:
             logger.error(f"MinIO bucket setup error for '{bucket}': {e}")
+
+    for bucket in PUBLIC_READ_BUCKETS:
+        try:
+            policy = json.dumps({
+                "Version": "2012-10-17",
+                "Statement": [{
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{bucket}/*"],
+                }],
+            })
+            client.set_bucket_policy(bucket, policy)
+            logger.info(f"Set public-read policy on bucket: {bucket}")
+        except S3Error as e:
+            logger.error(f"MinIO policy error for '{bucket}': {e}")
+
+
+def get_public_url(bucket: str, key: str) -> str:
+    """
+    Return a public (non-expiring) URL for an object via the public MinIO base URL.
+    Use this for profile pictures and other non-sensitive public assets.
+    """
+    base = settings.MINIO_PUBLIC_BASE_URL.rstrip("/")
+    return f"{base}/{bucket}/{key}"
 
 
 async def upload_file(
