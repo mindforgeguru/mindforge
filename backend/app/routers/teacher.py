@@ -980,7 +980,7 @@ async def create_homework(
         "target_type": "grade",
         "grade": payload.grade,
         "payload": {
-            "event": "homework_assigned",
+            "event": "homework_added",
             "homework_id": hw.id,
             "title": hw.title,
             "subject": hw.subject,
