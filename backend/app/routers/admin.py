@@ -54,13 +54,13 @@ async def upload_admin_photo(
     bucket = "mindforge-profiles"
     key = f"profiles/admin/{current_admin.id}/avatar.{ext}"
     await storage_service.upload_file(bucket, key, file_bytes)
-    presigned_url = await storage_service.get_presigned_url(bucket, key, expires_seconds=604800)
+    public_url = storage_service.get_public_url(bucket, key)
 
     result = await db.execute(select(User).where(User.id == current_admin.id))
     admin_user = result.scalar_one()
-    admin_user.profile_pic_url = f"{bucket}/{key}"
+    admin_user.profile_pic_url = public_url
     await db.commit()
-    return {"profile_pic_url": presigned_url}
+    return {"profile_pic_url": public_url}
 
 
 @router.put("/profile/mpin", status_code=status.HTTP_200_OK)

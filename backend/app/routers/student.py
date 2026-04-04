@@ -476,7 +476,7 @@ async def upload_profile_picture(
     bucket = "mindforge-profiles"
     key = f"profiles/{current_student.id}/avatar.{ext}"
     await storage_service.upload_file(bucket, key, file_bytes)
-    presigned_url = await storage_service.get_presigned_url(bucket, key, expires_seconds=604800)
+    public_url = storage_service.get_public_url(bucket, key)
 
     profile_result = await db.execute(
         select(StudentProfile).where(StudentProfile.user_id == current_student.id)
@@ -485,17 +485,14 @@ async def upload_profile_picture(
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
-    # Store the key path for later URL regeneration
-    storage_key = f"{bucket}/{key}"
-    profile.profile_pic_url = storage_key
+    profile.profile_pic_url = public_url
 
-    # Also update User.profile_pic_url so /auth/me returns it
     user_result = await db.execute(select(User).where(User.id == current_student.id))
     student_user = user_result.scalar_one()
-    student_user.profile_pic_url = storage_key
+    student_user.profile_pic_url = public_url
 
     await db.commit()
-    return {"profile_pic_url": presigned_url}
+    return {"profile_pic_url": public_url}
 
 
 @router.put("/profile/mpin", status_code=status.HTTP_200_OK)

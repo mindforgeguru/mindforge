@@ -160,14 +160,12 @@ async def login(
 async def get_me(current_user: User = Depends(get_current_user)):
     """Return the currently authenticated user's profile."""
     pic = current_user.profile_pic_url
+    # Legacy: if stored value is "bucket/key" path (old format), convert to public URL
     if pic and not pic.startswith("http"):
-        # Stored value is "bucket/key" — regenerate a fresh presigned URL
         parts = pic.split("/", 1)
         if len(parts) == 2:
             try:
-                pic = await storage_service.get_presigned_url(
-                    parts[0], parts[1], expires_seconds=604800
-                )
+                pic = storage_service.get_public_url(parts[0], parts[1])
             except Exception:
                 pic = None
 
