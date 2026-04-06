@@ -88,7 +88,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final sw = MediaQuery.of(context).size.width;
-    final logoSize = (sw * 0.65).clamp(200.0, 300.0);
+    final logoSize = (sw * 0.38).clamp(120.0, 180.0);
 
     return AnimatedBuilder(
       animation: _exitCtrl,
@@ -100,24 +100,22 @@ class _SplashScreenState extends State<SplashScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ── Logo: scale + fade in ──────────────────────────────
+              // ── Hansal logo: fades in with logo ───────────────────
               AnimatedBuilder(
                 animation: _logoCtrl,
                 builder: (_, child) => Opacity(
                   opacity: _logoOpacity.value,
-                  child: Transform.scale(
-                    scale: _logoScale.value,
-                    child: child,
-                  ),
+                  child: child,
                 ),
                 child: Image.asset(
-                  'assets/images/splash_logo.png',
-                  width: logoSize,
-                  height: logoSize,
+                  'assets/images/hansal_logo.png',
+                  width: logoSize * 0.8,
+                  height: logoSize * 0.8,
+                  fit: BoxFit.contain,
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
 
               // ── Capsule: slide up + fade in ───────────────────────
               AnimatedBuilder(
@@ -172,6 +170,25 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                     ],
                   ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // ── MindForge Logo: scale + fade in ───────────────────
+              AnimatedBuilder(
+                animation: _logoCtrl,
+                builder: (_, child) => Opacity(
+                  opacity: _logoOpacity.value,
+                  child: Transform.scale(
+                    scale: _logoScale.value,
+                    child: child,
+                  ),
+                ),
+                child: Image.asset(
+                  'assets/images/splash_logo.png',
+                  width: logoSize,
+                  height: logoSize,
                 ),
               ),
             ],

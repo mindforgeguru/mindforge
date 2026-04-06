@@ -112,7 +112,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<int?>(
-                      initialValue: _filterGrade,
+                      value: _filterGrade,
                       decoration: const InputDecoration(
                           labelText: 'Grade', isDense: true),
                       items: [
@@ -131,7 +131,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      initialValue: _filterSubject,
+                      value: _filterSubject,
                       isExpanded: true,
                       decoration: const InputDecoration(
                           labelText: 'Subject', isDense: true),
@@ -158,7 +158,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                   loading: () => const LinearProgressIndicator(),
                   error: (e, _) => const SizedBox.shrink(),
                   data: (studs) => DropdownButtonFormField<int?>(
-                    initialValue: _filterStudentId,
+                    value: _filterStudentId,
                     decoration: const InputDecoration(
                         labelText: 'Student', isDense: true),
                     items: [
@@ -363,7 +363,7 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: DropdownButtonFormField<int>(
-            initialValue: _selectedGrade,
+            value: _selectedGrade,
             decoration: const InputDecoration(labelText: 'Grade', isDense: true),
             items: [8, 9, 10]
                 .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))

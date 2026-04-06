@@ -185,7 +185,7 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String?>(
-                  initialValue: _subject,
+                  value: _subject,
                   decoration: const InputDecoration(
                     labelText: 'Subject',
                     isDense: true,
@@ -736,7 +736,7 @@ class _GradesTabBody extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: DropdownButtonFormField<String?>(
-            initialValue: filterSubject,
+            value: filterSubject,
             decoration: const InputDecoration(
               labelText: 'Filter by Subject',
               isDense: true,

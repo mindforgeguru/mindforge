@@ -244,7 +244,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         if (_isRegister) ...[
                           const SizedBox(height: 10),
                           DropdownButtonFormField<String>(
-                            initialValue: _selectedRole,
+                            value: _selectedRole,
                             decoration: const InputDecoration(
                               labelText: 'Register as',
                               prefixIcon: Icon(Icons.badge_outlined),
@@ -332,7 +332,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           if (_selectedRole == 'student') ...[
                             const SizedBox(height: 10),
                             DropdownButtonFormField<int>(
-                              initialValue: _selectedGrade,
+                              value: _selectedGrade,
                               decoration: const InputDecoration(
                                 labelText: 'Grade',
                                 prefixIcon: Icon(Icons.school_outlined),

@@ -464,7 +464,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
 
             // Role
             DropdownButtonFormField<String>(
-              initialValue: _selectedRole,
+              value: _selectedRole,
               decoration: const InputDecoration(
                 labelText: 'Role',
                 prefixIcon: Icon(Icons.badge_outlined),
@@ -524,7 +524,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
             if (_selectedRole == 'student') ...[
               const SizedBox(height: 14),
               DropdownButtonFormField<int>(
-                initialValue: _selectedGrade,
+                value: _selectedGrade,
                 decoration: const InputDecoration(
                   labelText: 'Grade',
                   prefixIcon: Icon(Icons.school_outlined),
@@ -802,7 +802,7 @@ class _ActiveUsersTabState extends ConsumerState<_ActiveUsersTab> {
           child: Column(
             children: [
               DropdownButtonFormField<String>(
-                initialValue: _selectedRole,
+                value: _selectedRole,
                 decoration: const InputDecoration(
                   labelText: 'User Type',
                   prefixIcon: Icon(Icons.badge_outlined),
@@ -821,7 +821,7 @@ class _ActiveUsersTabState extends ConsumerState<_ActiveUsersTab> {
               if (_needsGrade) ...[
                 const SizedBox(height: 10),
                 DropdownButtonFormField<int?>(
-                  initialValue: _selectedGrade,
+                  value: _selectedGrade,
                   decoration: const InputDecoration(
                     labelText: 'Grade',
                     prefixIcon: Icon(Icons.school_outlined),

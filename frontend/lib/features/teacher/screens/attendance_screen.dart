@@ -707,7 +707,7 @@ class _FilterBar extends StatelessWidget {
             SizedBox(
               width: gradeW,
               child: DropdownButtonFormField<int>(
-                initialValue: selectedGrade,
+                value: selectedGrade,
                 isExpanded: true,
                 decoration: dropDecoration.copyWith(labelText: 'Grade'),
                 style: valueStyle,
@@ -757,7 +757,7 @@ class _FilterBar extends StatelessWidget {
             SizedBox(
               width: periodW,
               child: DropdownButtonFormField<int>(
-                initialValue: selectedPeriod,
+                value: selectedPeriod,
                 isExpanded: true,
                 decoration: dropDecoration.copyWith(labelText: 'Period'),
                 style: valueStyle,

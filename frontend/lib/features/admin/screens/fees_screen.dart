@@ -170,7 +170,7 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   DropdownButtonFormField<int>(
-                    initialValue: _newGrade,
+                    value: _newGrade,
                     decoration: const InputDecoration(labelText: 'Grade'),
                     items: AppConstants.grades
                         .map((g) => DropdownMenuItem(
@@ -312,7 +312,7 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   DropdownButtonFormField<int?>(
-                    initialValue: _filterGrade,
+                    value: _filterGrade,
                     decoration: const InputDecoration(
                       labelText: 'Filter by Grade',
                       prefixIcon: Icon(Icons.school_outlined),
@@ -333,7 +333,7 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<int?>(
-                    initialValue: _filterStudentId,
+                    value: _filterStudentId,
                     decoration: const InputDecoration(
                       labelText: 'Select Student',
                       prefixIcon: Icon(Icons.person_outline),

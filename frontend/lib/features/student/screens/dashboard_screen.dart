@@ -463,7 +463,7 @@ class _StudentDashboardScreenState
               showBadge: hasBroadcastBadge,
               onSeeAll: () {
                 ref.read(studentBroadcastBadgeNotifier.notifier).markSeen();
-                context.go('${RouteNames.studentDashboard}/homework');
+                context.go('${RouteNames.studentDashboard}/broadcasts');
               },
             ),
           ),

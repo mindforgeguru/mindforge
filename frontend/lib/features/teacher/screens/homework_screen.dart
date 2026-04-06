@@ -289,7 +289,7 @@ class _CreateHomeworkDialogState
               children: [
                 // Grade
                 DropdownButtonFormField<int>(
-                  initialValue: _grade,
+                  value: _grade,
                   decoration: const InputDecoration(labelText: 'Grade'),
                   items: AppConstants.grades
                       .map((g) => DropdownMenuItem(
@@ -302,7 +302,7 @@ class _CreateHomeworkDialogState
                 SizedBox(height: _s(context, 10, min: 8, max: 14)),
                 // Subject
                 DropdownButtonFormField<String>(
-                  initialValue: _subject,
+                  value: _subject,
                   decoration: const InputDecoration(labelText: 'Subject'),
                   isExpanded: true,
                   items: AppConstants.subjects

@@ -1870,7 +1870,7 @@ class _PeriodRow extends StatelessWidget {
 
           // Teacher dropdown — full width
           DropdownButtonFormField<int?>(
-            initialValue: selectedTeacherId,
+            value: selectedTeacherId,
             decoration: const InputDecoration(
               labelText: 'Teacher',
               isDense: true,
@@ -1903,7 +1903,7 @@ class _PeriodRow extends StatelessWidget {
 
           // Subject dropdown — full width
           DropdownButtonFormField<String?>(
-            initialValue: selectedSubject != null &&
+            value: selectedSubject != null &&
                     allowedSubjects.contains(selectedSubject)
                 ? selectedSubject
                 : null,
