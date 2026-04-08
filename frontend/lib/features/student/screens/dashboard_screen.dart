@@ -38,7 +38,8 @@ class StudentDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _StudentDashboardScreenState
-    extends ConsumerState<StudentDashboardScreen> {
+    extends ConsumerState<StudentDashboardScreen>
+    with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _wsSub;
 
   String get _todayString => DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -46,7 +47,17 @@ class _StudentDashboardScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _connectWs());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _wsSub?.cancel();
+      _connectWs();
+      _refreshDashboard();
+    }
   }
 
   void _connectWs() {
@@ -120,6 +131,7 @@ class _StudentDashboardScreenState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _wsSub?.cancel();
     super.dispose();
   }

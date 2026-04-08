@@ -42,13 +42,24 @@ class TeacherDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _TeacherDashboardScreenState
-    extends ConsumerState<TeacherDashboardScreen> {
+    extends ConsumerState<TeacherDashboardScreen>
+    with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _wsSub;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _connectWs());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _wsSub?.cancel();
+      _connectWs();
+      _refreshDashboard();
+    }
   }
 
   void _connectWs() {
@@ -106,6 +117,7 @@ class _TeacherDashboardScreenState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _wsSub?.cancel();
     super.dispose();
   }
