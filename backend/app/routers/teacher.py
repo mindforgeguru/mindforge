@@ -357,6 +357,11 @@ async def get_grades(
 ):
     """Retrieve grades with optional filters."""
     query = select(Grade).where(Grade.teacher_id == current_teacher.id)
+    if grade is not None:
+        # Filter by class grade via StudentProfile join
+        query = query.join(StudentProfile, Grade.student_id == StudentProfile.user_id).where(
+            StudentProfile.grade == grade
+        )
     if subject:
         query = query.where(Grade.subject == subject)
     if student_id:
