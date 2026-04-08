@@ -16,8 +16,18 @@ class WebSocketClient {
   int? _connectedUserId;
   Timer? _pingTimer;
 
-  /// Establishes a WebSocket connection for the given user.
+  /// Returns a stream of WebSocket events for the given user.
+  ///
+  /// If already connected for this user, the existing broadcast stream is
+  /// returned so multiple screens can subscribe without tearing down the
+  /// connection or replacing the controller.
   Stream<Map<String, dynamic>> connect(int userId) {
+    if (_connectedUserId == userId &&
+        _controller != null &&
+        !_controller!.isClosed) {
+      return _controller!.stream;
+    }
+
     _connectedUserId = userId;
     _controller?.close();
     _controller = StreamController<Map<String, dynamic>>.broadcast();
@@ -43,7 +53,9 @@ class WebSocketClient {
           if (data is String) {
             try {
               final event = jsonDecode(data) as Map<String, dynamic>;
-              _controller?.add(event);
+              if (_controller != null && !_controller!.isClosed) {
+                _controller!.add(event);
+              }
             } catch (_) {
               // Ignore non-JSON messages (e.g. "pong")
             }
