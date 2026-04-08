@@ -16,6 +16,11 @@ import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_bottom_nav.dart';
 
+// File-level DateFormat cache — creating these objects is expensive;
+// sharing one instance per format pattern avoids repeated allocations.
+final _fmtDMon = DateFormat('d MMM');
+final _fmtDMonY = DateFormat('d MMM yyyy');
+
 class StudentGradeScreen extends StatelessWidget {
   const StudentGradeScreen({super.key});
 
@@ -414,7 +419,7 @@ class _ProgressChart extends StatelessWidget {
                         return Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
-                            DateFormat('d MMM').format(grades[idx].createdAt),
+                            _fmtDMon.format(grades[idx].createdAt),
                             style: const TextStyle(
                                 fontSize: 9, color: AppColors.textMuted),
                           ),
@@ -497,7 +502,7 @@ class _ProgressChart extends StatelessWidget {
                         children: [
                           TextSpan(
                             text:
-                                '${g.marksObtained.toStringAsFixed(0)}/${g.maxMarks.toStringAsFixed(0)} marks\n${DateFormat('d MMM').format(g.createdAt)}',
+                                '${g.marksObtained.toStringAsFixed(0)}/${g.maxMarks.toStringAsFixed(0)} marks\n${_fmtDMon.format(g.createdAt)}',
                             style: const TextStyle(
                                 color: AppColors.textSecondary,
                                 fontSize: 10,
@@ -569,14 +574,17 @@ class _ChartLegend extends StatelessWidget {
 
 class _SummaryStats extends StatelessWidget {
   final List<GradeModel> grades;
-  const _SummaryStats({required this.grades});
+  final double avg;
+  final double best;
+  final double lowest;
+
+  _SummaryStats({required this.grades})
+      : avg = grades.fold(0.0, (s, g) => s + g.percentage) / grades.length,
+        best = grades.fold(double.negativeInfinity, (m, g) => g.percentage > m ? g.percentage : m),
+        lowest = grades.fold(double.infinity, (m, g) => g.percentage < m ? g.percentage : m);
 
   @override
   Widget build(BuildContext context) {
-    final avg =
-        grades.fold(0.0, (s, g) => s + g.percentage) / grades.length;
-    final best = grades.map((g) => g.percentage).reduce(math.max);
-    final lowest = grades.map((g) => g.percentage).reduce(math.min);
 
     final avgColor = avg >= 75
         ? AppColors.success
@@ -725,7 +733,7 @@ class _RecentList extends StatelessWidget {
                                 fontWeight: FontWeight.w600),
                             overflow: TextOverflow.ellipsis),
                         Text(
-                          DateFormat('d MMM yyyy').format(g.createdAt),
+                          _fmtDMonY.format(g.createdAt),
                           style: TextStyle(
                               fontSize: R.fs(context, 11, min: 9, max: 13),
                               color: AppColors.textMuted),
@@ -838,11 +846,15 @@ class _GradesTabBody extends StatelessWidget {
                 );
               }
 
-              final Map<String, List<double>> subjectPcts = {};
+              // Pre-compute per-subject min/max in a single O(n) pass so
+              // itemBuilder doesn't call reduce() for every visible row.
+              final Map<String, double> subjectMax = {};
+              final Map<String, double> subjectMin = {};
               for (final g in grades) {
-                subjectPcts
-                    .putIfAbsent(g.subject, () => [])
-                    .add(g.percentage);
+                final s = g.subject;
+                final p = g.percentage;
+                if (!subjectMax.containsKey(s) || p > subjectMax[s]!) subjectMax[s] = p;
+                if (!subjectMin.containsKey(s) || p < subjectMin[s]!) subjectMin[s] = p;
               }
 
               return RefreshIndicator(
@@ -853,11 +865,10 @@ class _GradesTabBody extends StatelessWidget {
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (ctx, i) {
                     final g = grades[i];
-                    final pcts = subjectPcts[g.subject]!;
                     return buildCard(
                       g,
-                      pcts.reduce((a, b) => a > b ? a : b),
-                      pcts.reduce((a, b) => a < b ? a : b),
+                      subjectMax[g.subject]!,
+                      subjectMin[g.subject]!,
                     );
                   },
                 ),

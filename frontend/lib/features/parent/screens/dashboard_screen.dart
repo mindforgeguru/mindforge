@@ -18,6 +18,11 @@ import '../../auth/providers/auth_provider.dart';
 import '../providers/parent_provider.dart';
 import '../widgets/parent_bottom_nav.dart';
 
+// File-level DateFormat cache.
+final _fmtYMD   = DateFormat('yyyy-MM-dd');
+final _fmtEDMon = DateFormat('EEE, d MMM');
+final _fmtDMon  = DateFormat('d MMM');
+
 // ─── Responsive helpers ───────────────────────────────────────────────────────
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
   final w = MediaQuery.of(ctx).size.width;
@@ -121,7 +126,7 @@ class _ParentDashboardScreenState
     super.dispose();
   }
 
-  String get _todayString => DateFormat('yyyy-MM-dd').format(DateTime.now());
+  String get _todayString => _fmtYMD.format(DateTime.now());
 
   @override
   Widget build(BuildContext context) {
@@ -134,19 +139,21 @@ class _ParentDashboardScreenState
     final sh = mq.size.height;
     final now = DateTime.now();
 
-    // ── Broadcast badge ────────────────────────────────────────────────
+    // ── Broadcast badge — select() so this boolean is only recomputed when
+    // broadcasts or lastSeen actually change, not on every dashboard rebuild.
     final lastSeenBroadcast = ref.watch(parentBroadcastBadgeNotifier);
-    final bcAsync = ref.watch(parentBroadcastsProvider);
-    final hasBroadcastBadge = bcAsync.maybeWhen(
-      data: (list) {
-        if (list.isEmpty) return false;
-        final latest = list
-            .map((b) => b.createdAt)
-            .reduce((a, b) => a.isAfter(b) ? a : b);
-        return _isNew(lastSeenBroadcast, latest);
-      },
-      orElse: () => false,
-    );
+    final hasBroadcastBadge = ref.watch(parentBroadcastsProvider.select((async) =>
+      async.maybeWhen(
+        data: (list) {
+          if (list.isEmpty) return false;
+          DateTime? latest;
+          for (final b in list) {
+            if (latest == null || b.createdAt.isAfter(latest)) latest = b.createdAt;
+          }
+          return latest != null && _isNew(lastSeenBroadcast, latest);
+        },
+        orElse: () => false,
+      )));
 
     // ── Layout geometry — all derived from screen dimensions ─────────────
     final double avatarRadius = (sw * 0.114).clamp(36.0, 50.0);
@@ -399,7 +406,7 @@ class _ParentDashboardScreenState
                       ),
                     ),
                     Text(
-                      DateFormat('EEE, d MMM').format(now),
+                      _fmtEDMon.format(now),
                       style: GoogleFonts.poppins(
                         fontSize: (w * 0.028).clamp(9.5, 12.0),
                         color: AppColors.textMuted,
@@ -691,7 +698,7 @@ class _DashHomeworkTile extends StatelessWidget {
               ),
             ),
             Text(
-              DateFormat('d MMM').format(hw.createdAt),
+              _fmtDMon.format(hw.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (w * 0.025).clamp(9.0, 11.0),
                 color: AppColors.accent,
@@ -773,7 +780,7 @@ class _DashBroadcastTile extends StatelessWidget {
             ),
             SizedBox(width: (w * 0.015).clamp(4.0, 8.0)),
             Text(
-              DateFormat('d MMM').format(broadcast.createdAt),
+              _fmtDMon.format(broadcast.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (w * 0.025).clamp(9.0, 11.0),
                 color: AppColors.accent,

@@ -19,6 +19,13 @@ import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_bottom_nav.dart';
 
+// File-level DateFormat cache — avoids repeated object allocations in build().
+final _fmtYMD     = DateFormat('yyyy-MM-dd');
+final _fmtEDMon   = DateFormat('EEE, d MMM');
+final _fmtDMon    = DateFormat('d MMM');
+final _fmtEEEE    = DateFormat('EEEE');
+final _fmtMMMd    = DateFormat('MMM d');
+
 // Responsive scale helper — base ref width 390 px
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
   final w = MediaQuery.of(ctx).size.width;
@@ -42,7 +49,7 @@ class _StudentDashboardScreenState
     with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _wsSub;
 
-  String get _todayString => DateFormat('yyyy-MM-dd').format(DateTime.now());
+  String get _todayString => _fmtYMD.format(DateTime.now());
 
   @override
   void initState() {
@@ -144,17 +151,21 @@ class _StudentDashboardScreenState
     final auth = ref.watch(authProvider);
     final timetableAsync = ref.watch(studentTimetableProvider(_todayString));
 
-    // Broadcast badge
+    // Broadcast badge — select() so this boolean is only recomputed when
+    // broadcasts or lastSeen actually change, not on every dashboard rebuild.
     final lastSeenBroadcast = ref.watch(studentBroadcastBadgeNotifier);
-    final broadcastsAsync = ref.watch(studentBroadcastsProvider);
-    final hasBroadcastBadge = broadcastsAsync.maybeWhen(
-      data: (list) {
-        if (list.isEmpty) return false;
-        final latest = list.map((b) => b.createdAt).reduce((a, b) => a.isAfter(b) ? a : b);
-        return lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast);
-      },
-      orElse: () => false,
-    );
+    final hasBroadcastBadge = ref.watch(studentBroadcastsProvider.select((async) =>
+      async.maybeWhen(
+        data: (list) {
+          if (list.isEmpty) return false;
+          DateTime? latest;
+          for (final b in list) {
+            if (latest == null || b.createdAt.isAfter(latest)) latest = b.createdAt;
+          }
+          return latest != null && (lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast));
+        },
+        orElse: () => false,
+      )));
 
     final mq = MediaQuery.of(context);
     final topPadding = mq.padding.top;
@@ -388,7 +399,7 @@ class _StudentDashboardScreenState
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          DateFormat('EEE, d MMM').format(DateTime.now()),
+                          _fmtEDMon.format(DateTime.now()),
                           style: GoogleFonts.poppins(
                               fontSize: _fs(context, 12, min: 10, max: 14),
                               color: AppColors.textMuted),
@@ -1091,7 +1102,7 @@ class _DashHomeworkTile extends StatelessWidget {
               ),
             ),
             Text(
-              DateFormat('d MMM').format(hw.createdAt),
+              _fmtDMon.format(hw.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (sw * 0.025).clamp(9.0, 11.0),
                 color: AppColors.accent,
@@ -1166,7 +1177,7 @@ class _DashBroadcastTile extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              DateFormat('d MMM').format(broadcast.createdAt),
+              _fmtDMon.format(broadcast.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (sw * 0.025).clamp(9.0, 11.0),
                 color: AppColors.accent,
@@ -1630,7 +1641,7 @@ class _StudentWebAttendanceBox extends ConsumerWidget {
           // Group records by date string
           final Map<String, List<dynamic>> byDate = {};
           for (final r in records) {
-            final key = DateFormat('yyyy-MM-dd').format(r.date);
+            final key = _fmtYMD.format(r.date);
             byDate.putIfAbsent(key, () => []).add(r);
           }
 
@@ -1754,8 +1765,8 @@ class _StudentWebAttendanceBox extends ConsumerWidget {
                           final isPresent = presentCount > recs.length ~/ 2;
                           final isPartial = presentCount > 0 && !isPresent;
                           final date = DateTime.parse(dateStr);
-                          final dayName = DateFormat('EEEE').format(date);
-                          final dayDate = DateFormat('MMM d').format(date);
+                          final dayName = _fmtEEEE.format(date);
+                          final dayDate = _fmtMMMd.format(date);
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
@@ -2066,7 +2077,7 @@ class _StudentWebBroadcastsBox extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text(DateFormat('d MMM').format(b.createdAt), style: GoogleFonts.poppins(fontSize: 10, color: AppColors.accent)),
+                      Text(_fmtDMon.format(b.createdAt), style: GoogleFonts.poppins(fontSize: 10, color: AppColors.accent)),
                     ],
                   ),
                 );

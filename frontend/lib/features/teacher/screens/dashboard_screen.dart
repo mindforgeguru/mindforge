@@ -23,6 +23,13 @@ import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
 import '../widgets/teacher_scaffold.dart';
 
+// File-level DateFormat cache.
+final _fmtYMD   = DateFormat('yyyy-MM-dd');
+final _fmtEDMon = DateFormat('EEE, d MMM');
+final _fmtDMon  = DateFormat('d MMM');
+final _fmtEEEE  = DateFormat('EEEE');
+final _fmtDMonY = DateFormat('d MMMM yyyy');
+
 // Responsive scale helper — base ref width 390 px
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
   final w = MediaQuery.of(ctx).size.width;
@@ -122,24 +129,28 @@ class _TeacherDashboardScreenState
     super.dispose();
   }
 
-  String get _todayString => DateFormat('yyyy-MM-dd').format(DateTime.now());
+  String get _todayString => _fmtYMD.format(DateTime.now());
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final timetableAsync = ref.watch(myTimetableProvider);
 
-    // Broadcast badge
+    // Broadcast badge — select() so this boolean is only recomputed when
+    // broadcasts or lastSeen actually change, not on every dashboard rebuild.
     final lastSeenBroadcast = ref.watch(teacherBroadcastBadgeNotifier);
-    final broadcastsAsync = ref.watch(teacherBroadcastsProvider);
-    final hasBroadcastBadge = broadcastsAsync.maybeWhen(
-      data: (list) {
-        if (list.isEmpty) return false;
-        final latest = list.map((b) => b.createdAt).reduce((a, b) => a.isAfter(b) ? a : b);
-        return lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast);
-      },
-      orElse: () => false,
-    );
+    final hasBroadcastBadge = ref.watch(teacherBroadcastsProvider.select((async) =>
+      async.maybeWhen(
+        data: (list) {
+          if (list.isEmpty) return false;
+          DateTime? latest;
+          for (final b in list) {
+            if (latest == null || b.createdAt.isAfter(latest)) latest = b.createdAt;
+          }
+          return latest != null && (lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast));
+        },
+        orElse: () => false,
+      )));
 
     final mq = MediaQuery.of(context);
     final topPadding = mq.padding.top;
@@ -245,9 +256,9 @@ class _TeacherDashboardScreenState
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text(DateFormat('EEEE').format(DateTime.now()),
+                                Text(_fmtEEEE.format(DateTime.now()),
                                   style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withOpacity(0.5))),
-                                Text(DateFormat('d MMMM yyyy').format(DateTime.now()),
+                                Text(_fmtDMonY.format(DateTime.now()),
                                   style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
                               ],
                             ),
@@ -356,7 +367,7 @@ class _TeacherDashboardScreenState
                             icon: Icons.calendar_today_rounded,
                             title: "Today's Timetable",
                             trailing: Text(
-                              DateFormat('EEE, d MMM').format(DateTime.now()),
+                              _fmtEDMon.format(DateTime.now()),
                               style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textMuted),
                             ),
                             onSeeAll: () => context.go('${RouteNames.teacherDashboard}/timetable'),
@@ -663,7 +674,7 @@ class _TeacherDashboardScreenState
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      DateFormat('EEE, d MMM').format(DateTime.now()),
+                      _fmtEDMon.format(DateTime.now()),
                       style: GoogleFonts.poppins(
                           fontSize: _fs(context, 12, min: 10, max: 14),
                           color: AppColors.textMuted),
@@ -900,7 +911,7 @@ class _DashHomeworkTile extends StatelessWidget {
               ),
             ),
             Text(
-              DateFormat('d MMM').format(hw.createdAt),
+              _fmtDMon.format(hw.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (sw * 0.025).clamp(9.0, 11.0),
                 color: AppColors.accent,
@@ -975,7 +986,7 @@ class _DashBroadcastTile extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              DateFormat('d MMM').format(broadcast.createdAt),
+              _fmtDMon.format(broadcast.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (sw * 0.025).clamp(9.0, 11.0),
                 color: AppColors.accent,
