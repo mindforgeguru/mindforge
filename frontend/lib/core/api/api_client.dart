@@ -7,16 +7,23 @@ import '../utils/constants.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
+const _androidOptions = AndroidOptions(encryptedSharedPreferences: true);
+
 class ApiClient {
   late final Dio _dio;
-  final _storage = const FlutterSecureStorage();
+  final _storage = const FlutterSecureStorage(aOptions: _androidOptions);
+
+  /// Called when the server returns 401 (token expired / revoked).
+  /// AuthNotifier sets this to its logout callback so the router
+  /// redirects to login without the user having to do anything.
+  void Function()? onUnauthorized;
 
   ApiClient() {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConstants.apiBaseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 120), // Long for AI generation
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 30),
         headers: {'Content-Type': 'application/json'},
       ),
     );
@@ -26,10 +33,10 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onError: (DioException error, handler) async {
+          // Only retry connection-level failures, not timeouts (retrying a
+          // timed-out request just multiplies the wait time for the user).
           final retryable = error.type == DioExceptionType.connectionError ||
-              error.type == DioExceptionType.unknown ||
-              error.type == DioExceptionType.connectionTimeout ||
-              error.type == DioExceptionType.receiveTimeout;
+              error.type == DioExceptionType.unknown;
 
           if (retryable) {
             final attempt =
@@ -63,8 +70,10 @@ class ApiClient {
         },
         onError: (DioException error, handler) async {
           if (error.response?.statusCode == 401) {
-            // Clear stored credentials and let the router redirect to login
+            // Token expired or revoked — clear credentials and notify
+            // AuthNotifier so the router immediately redirects to login.
             await _storage.deleteAll();
+            onUnauthorized?.call();
           }
           return handler.next(error);
         },
@@ -229,7 +238,11 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> generateTest(FormData formData) async {
-    final res = await _dio.post('/teacher/tests/generate', data: formData);
+    final res = await _dio.post(
+      '/teacher/tests/generate',
+      data: formData,
+      options: Options(receiveTimeout: const Duration(seconds: 120)),
+    );
     return res.data as Map<String, dynamic>;
   }
 

@@ -61,6 +61,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final FlutterSecureStorage _storage;
 
   AuthNotifier(this._api, this._storage) : super(const AuthState()) {
+    // Wire 401 responses to immediately clear state → router redirects to login.
+    _api.onUnauthorized = () => state = const AuthState();
     _restoreSession();
   }
 

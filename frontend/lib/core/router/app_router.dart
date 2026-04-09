@@ -38,6 +38,25 @@ import '../../features/admin/screens/profile_screen.dart' as admin;
 import '../../features/admin/screens/academic_year_screen.dart';
 import '../../features/admin/screens/reports_screen.dart';
 
+/// Shared page transition: fast fade+slide up (iOS-style feel on Android too).
+CustomTransitionPage<void> _slidePage(Widget child) => CustomTransitionPage<void>(
+  child: child,
+  transitionDuration: const Duration(milliseconds: 220),
+  reverseTransitionDuration: const Duration(milliseconds: 180),
+  transitionsBuilder: (_, animation, secondaryAnimation, child) {
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.04),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+        child: child,
+      ),
+    );
+  },
+);
+
 // ─── RouterNotifier ───────────────────────────────────────────────────────────
 // A ChangeNotifier that tells GoRouter to re-run redirect whenever auth changes.
 // This keeps a single GoRouter instance alive (no more router recreation).
@@ -99,41 +118,41 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Auth ──────────────────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.login,
-        builder: (_, __) => const LoginScreen(),
+        pageBuilder: (_, __) => _slidePage(const LoginScreen()),
       ),
 
       // ── Teacher ───────────────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.teacherDashboard,
-        builder: (_, __) => const teacher.TeacherDashboardScreen(),
+        pageBuilder: (_, __) => _slidePage(const teacher.TeacherDashboardScreen()),
         routes: [
           GoRoute(
             path: 'attendance',
-            builder: (_, __) => const teacher.TeacherAttendanceScreen(),
+            pageBuilder: (_, __) => _slidePage(const teacher.TeacherAttendanceScreen()),
           ),
           GoRoute(
             path: 'timetable',
-            builder: (_, __) => const teacher.TeacherTimetableScreen(),
+            pageBuilder: (_, __) => _slidePage(const teacher.TeacherTimetableScreen()),
           ),
           GoRoute(
             path: 'grades',
-            builder: (_, __) => const teacher.TeacherGradeScreen(),
+            pageBuilder: (_, __) => _slidePage(const teacher.TeacherGradeScreen()),
           ),
           GoRoute(
             path: 'tests',
-            builder: (_, __) => const teacher.TeacherTestScreen(),
+            pageBuilder: (_, __) => _slidePage(const teacher.TeacherTestScreen()),
           ),
           GoRoute(
             path: 'profile',
-            builder: (_, __) => const teacher.TeacherProfileScreen(),
+            pageBuilder: (_, __) => _slidePage(const teacher.TeacherProfileScreen()),
           ),
           GoRoute(
             path: 'homework',
-            builder: (_, __) => const teacher.TeacherHomeworkScreen(),
+            pageBuilder: (_, __) => _slidePage(const teacher.TeacherHomeworkScreen()),
           ),
           GoRoute(
             path: 'broadcasts',
-            builder: (_, __) => const teacher.TeacherBroadcastScreen(),
+            pageBuilder: (_, __) => _slidePage(const teacher.TeacherBroadcastScreen()),
           ),
         ],
       ),
@@ -141,45 +160,45 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Student ───────────────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.studentDashboard,
-        builder: (_, __) => const student.StudentDashboardScreen(),
+        pageBuilder: (_, __) => _slidePage(const student.StudentDashboardScreen()),
         routes: [
           GoRoute(
             path: 'attendance',
-            builder: (_, __) => const student.StudentAttendanceScreen(),
+            pageBuilder: (_, __) => _slidePage(const student.StudentAttendanceScreen()),
           ),
           GoRoute(
             path: 'timetable',
-            builder: (_, __) => const student.StudentTimetableScreen(),
+            pageBuilder: (_, __) => _slidePage(const student.StudentTimetableScreen()),
           ),
           GoRoute(
             path: 'grades',
-            builder: (_, __) => const student.StudentGradeScreen(),
+            pageBuilder: (_, __) => _slidePage(const student.StudentGradeScreen()),
           ),
           GoRoute(
             path: 'tests',
-            builder: (_, __) => const student.StudentTestScreen(),
+            pageBuilder: (_, __) => _slidePage(const student.StudentTestScreen()),
           ),
           GoRoute(
             path: 'tests/:testId/attempt',
-            builder: (context, state) {
+            pageBuilder: (_, state) {
               final testId = int.parse(state.pathParameters['testId']!);
-              return student.TestAttemptScreen(testId: testId);
+              return _slidePage(student.TestAttemptScreen(testId: testId));
             },
           ),
           GoRoute(
             path: 'tests/:testId/review',
-            builder: (context, state) {
+            pageBuilder: (_, state) {
               final testId = int.parse(state.pathParameters['testId']!);
-              return student.TestReviewScreen(testId: testId);
+              return _slidePage(student.TestReviewScreen(testId: testId));
             },
           ),
           GoRoute(
             path: 'profile',
-            builder: (_, __) => const student.StudentProfileScreen(),
+            pageBuilder: (_, __) => _slidePage(const student.StudentProfileScreen()),
           ),
           GoRoute(
             path: 'homework',
-            builder: (_, __) => const student.StudentHomeworkScreen(),
+            pageBuilder: (_, __) => _slidePage(const student.StudentHomeworkScreen()),
           ),
         ],
       ),
@@ -187,34 +206,34 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Parent ────────────────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.parentDashboard,
-        builder: (_, __) => const parent.ParentDashboardScreen(),
+        pageBuilder: (_, __) => _slidePage(const parent.ParentDashboardScreen()),
         routes: [
           GoRoute(
             path: 'attendance',
-            builder: (_, __) => const parent.ParentAttendanceScreen(),
+            pageBuilder: (_, __) => _slidePage(const parent.ParentAttendanceScreen()),
           ),
           GoRoute(
             path: 'timetable',
-            builder: (_, __) => const parent.ParentTimetableScreen(),
+            pageBuilder: (_, __) => _slidePage(const parent.ParentTimetableScreen()),
           ),
           GoRoute(
             path: 'grades',
-            builder: (_, __) => const parent.ParentGradeScreen(),
+            pageBuilder: (_, __) => _slidePage(const parent.ParentGradeScreen()),
           ),
           GoRoute(
             path: 'fees',
-            builder: (_, __) => const parent.ParentFeesScreen(),
+            pageBuilder: (_, __) => _slidePage(const parent.ParentFeesScreen()),
           ),
           GoRoute(
             path: 'profile',
-            builder: (_, __) => const parent.ParentProfileScreen(),
+            pageBuilder: (_, __) => _slidePage(const parent.ParentProfileScreen()),
           ),
           GoRoute(
             path: 'homework',
-            builder: (_, state) {
+            pageBuilder: (_, state) {
               final tab =
                   int.tryParse(state.uri.queryParameters['tab'] ?? '0') ?? 0;
-              return parent.ParentHomeworkScreen(initialTab: tab);
+              return _slidePage(parent.ParentHomeworkScreen(initialTab: tab));
             },
           ),
         ],
@@ -223,31 +242,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Admin ─────────────────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.adminDashboard,
-        builder: (_, __) => const admin.AdminDashboardScreen(),
+        pageBuilder: (_, __) => _slidePage(const admin.AdminDashboardScreen()),
         routes: [
           GoRoute(
             path: 'fees',
-            builder: (_, __) => const admin.AdminFeesScreen(),
+            pageBuilder: (_, __) => _slidePage(const admin.AdminFeesScreen()),
           ),
           GoRoute(
             path: 'timetable',
-            builder: (_, __) => const admin.AdminTimetableScreen(),
+            pageBuilder: (_, __) => _slidePage(const admin.AdminTimetableScreen()),
           ),
           GoRoute(
             path: 'users',
-            builder: (_, __) => const admin.AdminUsersScreen(),
+            pageBuilder: (_, __) => _slidePage(const admin.AdminUsersScreen()),
           ),
           GoRoute(
             path: 'profile',
-            builder: (_, __) => const admin.AdminProfileScreen(),
+            pageBuilder: (_, __) => _slidePage(const admin.AdminProfileScreen()),
           ),
           GoRoute(
             path: 'academic-year',
-            builder: (_, __) => const AdminAcademicYearScreen(),
+            pageBuilder: (_, __) => _slidePage(const AdminAcademicYearScreen()),
           ),
           GoRoute(
             path: 'reports',
-            builder: (_, __) => const AdminReportsScreen(),
+            pageBuilder: (_, __) => _slidePage(const AdminReportsScreen()),
           ),
         ],
       ),
