@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/logout_confirm.dart';
 import '../../../core/utils/responsive.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/admin_provider.dart';
@@ -153,8 +154,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                         IconButton(
                           icon: const Icon(Icons.logout,
                               color: Colors.white, size: 24),
-                          onPressed: () =>
-                              ref.read(authProvider.notifier).logout(),
+                          onPressed: () => confirmLogout(context, ref),
                         ),
                       ],
                     ),

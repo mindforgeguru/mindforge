@@ -15,6 +15,7 @@ import '../../../core/models/homework.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/logout_confirm.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/badge_dot.dart';
@@ -546,8 +547,7 @@ class _TeacherDashboardScreenState
                         icon: Icon(Icons.logout,
                             color: Colors.white,
                             size: _s(context, 22, min: 18, max: 26)),
-                        onPressed: () =>
-                            ref.read(authProvider.notifier).logout(),
+                        onPressed: () => confirmLogout(context, ref),
                         padding: EdgeInsets.zero,
                       ),
                     ),
