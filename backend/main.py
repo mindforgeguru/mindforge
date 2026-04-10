@@ -66,7 +66,12 @@ async def lifespan(app: FastAPI):
     )
     logger.info(f"Alembic: {result.stdout.strip()}")
     if result.returncode != 0:
-        logger.error(f"Alembic migration failed: {result.stderr.strip()}")
+        stderr = result.stderr.strip()
+        # Ignore race condition: another worker process already applied the migration
+        if "Online migration expected to match one row" in stderr:
+            logger.info("Alembic: migration already applied by another worker, continuing.")
+        else:
+            logger.error(f"Alembic migration failed: {stderr}")
     else:
         logger.info("Alembic migrations applied.")
     # Create any tables not covered by migrations (idempotent)
