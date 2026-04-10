@@ -7,6 +7,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/models/test.dart';
 import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
 import '../providers/teacher_provider.dart';
 
 class TestDetailScreen extends ConsumerStatefulWidget {
@@ -983,7 +984,7 @@ class _OnlineGradesTab extends ConsumerWidget {
       onRefresh: () async => ref.invalidate(testSubmissionsProvider(test.id)),
       child: subsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(testSubmissionsProvider(test.id))),
         data: (submissions) {
           if (submissions.isEmpty) {
             return ListView(
@@ -1158,7 +1159,7 @@ class _OfflineGradeEntryTabState
       },
       child: studentsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(studentsInGradeProvider(widget.test.grade))),
         data: (students) {
           for (final s in students) {
             _marksCtrls.putIfAbsent(s.id, () => TextEditingController());

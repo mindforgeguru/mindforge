@@ -74,28 +74,17 @@ class _ParentDashboardScreenState
       final eventType = event['event'] as String?;
       if (eventType == 'profile_updated') {
         _showProfileUpdatedDialog(event['new_username'] as String?);
-      } else if (eventType == 'timetable_updated') {
-        ref.invalidate(parentChildTimetableProvider(_todayString));
-      } else if (eventType == 'new_test' || eventType == 'test_status_changed') {
-        ref.invalidate(parentChildTestsProvider);
-      } else if (eventType == 'child_grade_added') {
-        ref.invalidate(parentChildGradesProvider(null));
-        ref.invalidate(parentChildOfflineGradesProvider(null));
-      } else if (eventType == 'broadcast_created' || eventType == 'homework_added') {
-        ref.invalidate(parentBroadcastsProvider);
-        ref.invalidate(parentHomeworkProvider);
+      } else if (eventType != null) {
+        ref.invalidate(parentDashboardSummaryProvider(_todayString));
       }
     });
   }
 
   Future<void> _refreshDashboard() async {
-    ref.invalidate(parentChildTimetableProvider(_todayString));
-    ref.invalidate(parentBroadcastsProvider);
-    ref.invalidate(parentHomeworkProvider);
-    ref.invalidate(parentChildGradesProvider(null));
-    ref.invalidate(parentChildTestsProvider);
-    ref.invalidate(parentChildFeesProvider);
-    await ref.read(parentChildTimetableProvider(_todayString).future).catchError((_) => <dynamic>[]);
+    ref.invalidate(parentDashboardSummaryProvider(_todayString));
+    await ref
+        .read(parentDashboardSummaryProvider(_todayString).future)
+        .catchError((_) => <String, dynamic>{});
   }
 
   Future<void> _showProfileUpdatedDialog(String? newUsername) async {
@@ -132,8 +121,7 @@ class _ParentDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final timetableAsync =
-        ref.watch(parentChildTimetableProvider(_todayString));
+    final summaryAsync = ref.watch(parentDashboardSummaryProvider(_todayString));
     final mq = MediaQuery.of(context);
     final topPadding = mq.padding.top;
     final sw = mq.size.width;
@@ -143,18 +131,23 @@ class _ParentDashboardScreenState
     // ── Broadcast badge — select() so this boolean is only recomputed when
     // broadcasts or lastSeen actually change, not on every dashboard rebuild.
     final lastSeenBroadcast = ref.watch(parentBroadcastBadgeNotifier);
-    final hasBroadcastBadge = ref.watch(parentBroadcastsProvider.select((async) =>
-      async.maybeWhen(
-        data: (list) {
-          if (list.isEmpty) return false;
-          DateTime? latest;
-          for (final b in list) {
-            if (latest == null || b.createdAt.isAfter(latest)) latest = b.createdAt;
-          }
-          return latest != null && _isNew(lastSeenBroadcast, latest);
-        },
-        orElse: () => false,
-      )));
+    final hasBroadcastBadge = ref.watch(
+      parentDashboardSummaryProvider(_todayString).select((async) =>
+        async.maybeWhen(
+          data: (summary) {
+            final raw = (summary['broadcasts'] as List<dynamic>? ?? []);
+            if (raw.isEmpty) return false;
+            DateTime? latest;
+            for (final b in raw) {
+              final createdAt = DateTime.parse(
+                  (b as Map<String, dynamic>)['created_at'] as String);
+              if (latest == null || createdAt.isAfter(latest)) latest = createdAt;
+            }
+            return latest != null && _isNew(lastSeenBroadcast, latest);
+          },
+          orElse: () => false,
+        )),
+    );
 
     // ── Layout geometry — all derived from screen dimensions ─────────────
     final double avatarRadius = (sw * 0.114).clamp(36.0, 50.0);
@@ -439,7 +432,7 @@ class _ParentDashboardScreenState
           ),
 
           // ── Timetable horizontal cards ─────────────────────────────────
-          timetableAsync.when(
+          summaryAsync.when(
             loading: () => SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
@@ -450,10 +443,17 @@ class _ParentDashboardScreenState
             ),
             error: (_, __) =>
                 const SliverToBoxAdapter(child: SizedBox.shrink()),
-            data: (slots) => SliverToBoxAdapter(
-              child:
-                  slots.isEmpty ? _TimetableEmpty() : _TimetableHScroll(slots: slots),
-            ),
+            data: (summary) {
+              final rawSlots = (summary['child_timetable'] as List<dynamic>? ?? []);
+              final slots = rawSlots
+                  .map((e) => TimetableSlotModel.fromJson(e as Map<String, dynamic>))
+                  .toList();
+              return SliverToBoxAdapter(
+                child: slots.isEmpty
+                    ? _TimetableEmpty()
+                    : _TimetableHScroll(slots: slots),
+              );
+            },
           ),
 
           // ── Recent Homework ───────────────────────────────────────────
@@ -466,17 +466,20 @@ class _ParentDashboardScreenState
             ),
           ),
           SliverToBoxAdapter(
-            child: Consumer(builder: (context, ref, _) {
-              final hwAsync = ref.watch(parentHomeworkProvider);
-              return hwAsync.when(
-                loading: () => Padding(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: _s(context, 16, min: 12, max: 20),
-                      vertical: 4),
-                  child: const LinearProgressIndicator(),
-                ),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (list) => list.isEmpty
+            child: summaryAsync.when(
+              loading: () => Padding(
+                padding: EdgeInsets.symmetric(
+                    horizontal: _s(context, 16, min: 12, max: 20),
+                    vertical: 4),
+                child: const LinearProgressIndicator(),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (summary) {
+                final rawHw = (summary['homework'] as List<dynamic>? ?? []);
+                final list = rawHw
+                    .map((e) => HomeworkModel.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                return list.isEmpty
                     ? Padding(
                         padding: EdgeInsets.fromLTRB(
                             _s(context, 16, min: 12, max: 20),
@@ -497,9 +500,9 @@ class _ParentDashboardScreenState
                             .take(2)
                             .map((h) => _DashHomeworkTile(hw: h))
                             .toList(),
-                      ),
-              );
-            }),
+                      );
+              },
+            ),
           ),
 
           // ── Announcements ─────────────────────────────────────────────
@@ -515,17 +518,20 @@ class _ParentDashboardScreenState
             ),
           ),
           SliverToBoxAdapter(
-            child: Consumer(builder: (context, ref, _) {
-              final bcAsync = ref.watch(parentBroadcastsProvider);
-              return bcAsync.when(
-                loading: () => Padding(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: _s(context, 16, min: 12, max: 20),
-                      vertical: 4),
-                  child: const LinearProgressIndicator(),
-                ),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (list) => list.isEmpty
+            child: summaryAsync.when(
+              loading: () => Padding(
+                padding: EdgeInsets.symmetric(
+                    horizontal: _s(context, 16, min: 12, max: 20),
+                    vertical: 4),
+                child: const LinearProgressIndicator(),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (summary) {
+                final rawBc = (summary['broadcasts'] as List<dynamic>? ?? []);
+                final list = rawBc
+                    .map((e) => BroadcastModel.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                return list.isEmpty
                     ? Padding(
                         padding: EdgeInsets.fromLTRB(
                             _s(context, 16, min: 12, max: 20),
@@ -546,9 +552,9 @@ class _ParentDashboardScreenState
                             .take(2)
                             .map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast))
                             .toList(),
-                      ),
-              );
-            }),
+                      );
+              },
+            ),
           ),
 
           SliverToBoxAdapter(

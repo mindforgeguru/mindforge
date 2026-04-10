@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/test.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -147,8 +149,9 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
 
           // ── Tests list ───────────────────────────────────────────────────
           testsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
+            loading: () => const ShimmerList(showAvatar: false),
+            error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(teacherTestsProvider(null))),
+
             data: (tests) {
               final filtered = tests
                   .where((t) => t.testType == widget.testType)

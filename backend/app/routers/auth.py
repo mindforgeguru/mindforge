@@ -2,22 +2,25 @@
 Authentication router:
 - POST /auth/register  — create a pending user (awaits admin approval)
 - POST /auth/login     — validate credentials, return JWT
+- POST /auth/refresh   — exchange refresh token for new access token
 - GET  /auth/me        — return current user info
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.security import (
-    hash_mpin, verify_mpin, create_access_token, get_current_user
+    hash_mpin, verify_mpin, create_access_token, create_refresh_token,
+    decode_access_token, get_current_user
 )
 from app.models.academic_year import AcademicYear
 from app.models.user import User, StudentProfile, TeacherProfile
 from app.schemas.user import (
     UserRegisterRequest, UserLoginRequest, TokenResponse,
-    UserResponse, StudentProfileCreate
+    RefreshRequest, RefreshResponse, UserResponse, StudentProfileCreate
 )
 from app.services import storage_service
 
@@ -166,14 +169,50 @@ async def login(
             detail="Your account has been deactivated.",
         )
 
-    token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    token_data = {"sub": str(user.id), "role": user.role}
+    access_token = create_access_token(data=token_data)
+    refresh_token = create_refresh_token(data=token_data)
     return TokenResponse(
-        access_token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         role=user.role,
         user_id=user.id,
         username=user.username,
     )
+
+
+@router.post("/refresh", response_model=RefreshResponse)
+async def refresh_access_token(
+    payload: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Exchange a valid refresh token for a new short-lived access token."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired refresh token.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        data = decode_access_token(payload.refresh_token)
+        if data.get("type") != "refresh":
+            raise credentials_exception
+        user_id_raw = data.get("sub")
+        if user_id_raw is None:
+            raise credentials_exception
+        user_id = int(user_id_raw)
+    except (JWTError, ValueError):
+        raise credentials_exception
+
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    )
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_approved or not user.is_active:
+        raise credentials_exception
+
+    new_access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    return RefreshResponse(access_token=new_access_token)
 
 
 @router.get("/me", response_model=UserResponse)

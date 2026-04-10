@@ -352,6 +352,8 @@ async def get_grades(
     grade: Optional[int] = Query(None),
     subject: Optional[str] = Query(None),
     student_id: Optional[int] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
@@ -366,7 +368,7 @@ async def get_grades(
         query = query.where(Grade.subject == subject)
     if student_id:
         query = query.where(Grade.student_id == student_id)
-    result = await db.execute(query.order_by(Grade.created_at.desc()))
+    result = await db.execute(query.order_by(Grade.created_at.desc()).offset(skip).limit(limit))
     return result.scalars().all()
 
 
@@ -1106,3 +1108,64 @@ async def list_teacher_broadcasts(
         )
         for b in broadcasts
     ]
+
+
+# ─── Dashboard Summary ─────────────────────────────────────────────────────────
+
+@router.get("/dashboard-summary")
+async def get_teacher_dashboard_summary(
+    db: AsyncSession = Depends(get_db),
+    current_teacher: User = Depends(get_current_teacher),
+):
+    """
+    Single aggregated endpoint for the teacher dashboard.
+    Returns my_timetable, broadcasts, homework, grades, and tests — in one round trip.
+    """
+    # My timetable slots
+    my_timetable = (await db.execute(
+        select(TimetableSlot)
+        .where(TimetableSlot.teacher_id == current_teacher.id)
+        .order_by(TimetableSlot.slot_date, TimetableSlot.period_number)
+    )).scalars().all()
+
+    # Broadcasts sent by this teacher
+    broadcasts_raw = (await db.execute(
+        select(Broadcast)
+        .where(Broadcast.sender_id == current_teacher.id)
+        .order_by(Broadcast.created_at.desc())
+    )).scalars().all()
+    broadcasts = [
+        BroadcastResponse(
+            id=b.id, sender_id=b.sender_id, sender_username=current_teacher.username,
+            title=b.title, message=b.message, target_type=b.target_type,
+            target_grade=b.target_grade, created_at=b.created_at,
+        )
+        for b in broadcasts_raw
+    ]
+
+    # Homework created by this teacher
+    homework = (await db.execute(
+        select(Homework)
+        .where(Homework.teacher_id == current_teacher.id)
+        .order_by(Homework.created_at.desc())
+    )).scalars().all()
+
+    # Grades recorded by this teacher
+    grades = (await db.execute(
+        select(Grade)
+        .where(Grade.teacher_id == current_teacher.id)
+        .order_by(Grade.created_at.desc())
+    )).scalars().all()
+
+    # All tests (visible to all teachers)
+    tests = (await db.execute(
+        select(Test).order_by(Test.created_at.desc())
+    )).scalars().all()
+
+    return {
+        "my_timetable": my_timetable,
+        "broadcasts": broadcasts,
+        "homework": homework,
+        "grades": grades,
+        "tests": tests,
+    }

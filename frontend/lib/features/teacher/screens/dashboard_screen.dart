@@ -79,26 +79,17 @@ class _TeacherDashboardScreenState
       final eventType = event['event'] as String?;
       if (eventType == 'profile_updated') {
         _showProfileUpdatedDialog(event['new_username'] as String?);
-      } else if (eventType == 'test_completed' || eventType == 'test_status_changed') {
-        ref.invalidate(teacherTestsProvider);
-      } else if (eventType == 'timetable_updated') {
-        ref.invalidate(myTimetableProvider);
-      } else if (eventType == 'grade_added') {
-        ref.invalidate(teacherGradesProvider((null, null)));
-      } else if (eventType == 'broadcast_created' || eventType == 'homework_added') {
-        ref.invalidate(teacherBroadcastsProvider);
-        ref.invalidate(teacherHomeworkProvider(null));
+      } else if (eventType != null) {
+        ref.invalidate(teacherDashboardSummaryProvider);
       }
     });
   }
 
   Future<void> _refreshDashboard() async {
-    ref.invalidate(myTimetableProvider);
-    ref.invalidate(teacherBroadcastsProvider);
-    ref.invalidate(teacherHomeworkProvider(null));
-    ref.invalidate(teacherGradesProvider((null, null)));
-    ref.invalidate(teacherTestsProvider(null));
-    await ref.read(myTimetableProvider.future).catchError((_) => <dynamic>[]);
+    ref.invalidate(teacherDashboardSummaryProvider);
+    await ref
+        .read(teacherDashboardSummaryProvider.future)
+        .catchError((_) => <String, dynamic>{});
   }
 
   Future<void> _showProfileUpdatedDialog(String? newUsername) async {
@@ -135,38 +126,58 @@ class _TeacherDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final timetableAsync = ref.watch(myTimetableProvider);
+    final summaryAsync = ref.watch(teacherDashboardSummaryProvider);
 
     // Broadcast badge — select() so this boolean is only recomputed when
     // broadcasts or lastSeen actually change, not on every dashboard rebuild.
     final lastSeenBroadcast = ref.watch(teacherBroadcastBadgeNotifier);
-    final hasBroadcastBadge = ref.watch(teacherBroadcastsProvider.select((async) =>
-      async.maybeWhen(
-        data: (list) {
-          if (list.isEmpty) return false;
-          DateTime? latest;
-          for (final b in list) {
-            if (latest == null || b.createdAt.isAfter(latest)) latest = b.createdAt;
-          }
-          return latest != null && (lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast));
-        },
-        orElse: () => false,
-      )));
+    final hasBroadcastBadge = ref.watch(
+      teacherDashboardSummaryProvider.select((async) =>
+        async.maybeWhen(
+          data: (summary) {
+            final raw = (summary['broadcasts'] as List<dynamic>? ?? []);
+            if (raw.isEmpty) return false;
+            DateTime? latest;
+            for (final b in raw) {
+              final createdAt = DateTime.parse(
+                  (b as Map<String, dynamic>)['created_at'] as String);
+              if (latest == null || createdAt.isAfter(latest)) latest = createdAt;
+            }
+            return latest != null &&
+                (lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast));
+          },
+          orElse: () => false,
+        )),
+    );
 
     final mq = MediaQuery.of(context);
     final topPadding = mq.padding.top;
     final screenWidth = mq.size.width;
     final screenHeight = mq.size.height;
 
-    // Filter today's slots from all upcoming slots
-    final todaySlots = timetableAsync.maybeWhen(
-      data: (slots) =>
-          slots.where((s) => s.slotDate == _todayString).toList(),
+    // Filter today's slots from the summary timetable data
+    final todaySlots = summaryAsync.maybeWhen(
+      data: (summary) {
+        final raw = (summary['my_timetable'] as List<dynamic>? ?? []);
+        return raw
+            .map((e) => TimetableSlotModel.fromJson(e as Map<String, dynamic>))
+            .where((s) => s.slotDate == _todayString)
+            .toList();
+      },
       orElse: () => <TimetableSlotModel>[],
     );
 
-    final subjects = timetableAsync.maybeWhen(
-      data: (slots) => slots.map((s) => s.subject).toSet().toList()..sort(),
+    final subjects = summaryAsync.maybeWhen(
+      data: (summary) {
+        final raw = (summary['my_timetable'] as List<dynamic>? ?? []);
+        return raw
+            .map((e) =>
+                TimetableSlotModel.fromJson(e as Map<String, dynamic>).subject)
+            .whereType<String>()
+            .toSet()
+            .toList()
+          ..sort();
+      },
       orElse: () => <String>[],
     );
 
@@ -279,8 +290,11 @@ class _TeacherDashboardScreenState
                               onTap: () => context.go('${RouteNames.teacherDashboard}/timetable'),
                             ),
                             const SizedBox(width: 10),
-                            Consumer(builder: (ctx, r, _) {
-                              final count = r.watch(teacherGradesProvider((null, null))).maybeWhen(data: (l) => l.length, orElse: () => 0);
+                            Builder(builder: (ctx) {
+                              final count = summaryAsync.maybeWhen(
+                                data: (s) => ((s['grades'] as List<dynamic>?)?.length ?? 0),
+                                orElse: () => 0,
+                              );
                               return _HeroStatCard(
                                 value: '$count',
                                 label: 'Grade Records',
@@ -290,8 +304,11 @@ class _TeacherDashboardScreenState
                               );
                             }),
                             const SizedBox(width: 10),
-                            Consumer(builder: (ctx, r, _) {
-                              final count = r.watch(teacherTestsProvider(null)).maybeWhen(data: (l) => l.length, orElse: () => 0);
+                            Builder(builder: (ctx) {
+                              final count = summaryAsync.maybeWhen(
+                                data: (s) => ((s['tests'] as List<dynamic>?)?.length ?? 0),
+                                orElse: () => 0,
+                              );
                               return _HeroStatCard(
                                 value: '$count',
                                 label: 'Tests',
@@ -301,8 +318,11 @@ class _TeacherDashboardScreenState
                               );
                             }),
                             const SizedBox(width: 10),
-                            Consumer(builder: (ctx, r, _) {
-                              final count = r.watch(teacherBroadcastsProvider).maybeWhen(data: (l) => l.length, orElse: () => 0);
+                            Builder(builder: (ctx) {
+                              final count = summaryAsync.maybeWhen(
+                                data: (s) => ((s['broadcasts'] as List<dynamic>?)?.length ?? 0),
+                                orElse: () => 0,
+                              );
                               return _HeroStatCard(
                                 value: '$count',
                                 label: 'Broadcasts',
@@ -344,19 +364,20 @@ class _TeacherDashboardScreenState
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Grade Analysis Chart
-                    Consumer(builder: (context, ref, _) {
-                      final gradesAsync = ref.watch(teacherGradesProvider((null, null)));
-                      return gradesAsync.maybeWhen(
-                        data: (grades) {
-                          if (grades.isEmpty) return const SizedBox.shrink();
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
-                            child: _GradeAnalysisChart(grades: grades),
-                          );
-                        },
-                        orElse: () => const SizedBox.shrink(),
-                      );
-                    }),
+                    summaryAsync.maybeWhen(
+                      data: (summary) {
+                        final rawGrades = (summary['grades'] as List<dynamic>? ?? []);
+                        final grades = rawGrades
+                            .map((e) => GradeModel.fromJson(e as Map<String, dynamic>))
+                            .toList();
+                        if (grades.isEmpty) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: _GradeAnalysisChart(grades: grades),
+                        );
+                      },
+                      orElse: () => const SizedBox.shrink(),
+                    ),
 
                     // Two columns
                     Row(
@@ -372,7 +393,7 @@ class _TeacherDashboardScreenState
                               style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textMuted),
                             ),
                             onSeeAll: () => context.go('${RouteNames.teacherDashboard}/timetable'),
-                            child: timetableAsync.when(
+                            child: summaryAsync.when(
                               loading: () => const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()),
                               error: (_, __) => const SizedBox.shrink(),
                               data: (_) => todaySlots.isEmpty
@@ -397,16 +418,17 @@ class _TeacherDashboardScreenState
                                 icon: Icons.assignment_outlined,
                                 title: 'Recent Homework',
                                 onSeeAll: () => context.go('${RouteNames.teacherDashboard}/homework'),
-                                child: Consumer(builder: (context, ref, _) {
-                                  final hwAsync = ref.watch(teacherHomeworkProvider(null));
-                                  return hwAsync.when(
-                                    loading: () => const LinearProgressIndicator(),
-                                    error: (_, __) => const SizedBox.shrink(),
-                                    data: (list) => list.isEmpty
+                                child: summaryAsync.when(
+                                  loading: () => const LinearProgressIndicator(),
+                                  error: (_, __) => const SizedBox.shrink(),
+                                  data: (summary) {
+                                    final rawHw = (summary['homework'] as List<dynamic>? ?? []);
+                                    final list = rawHw.map((e) => HomeworkModel.fromJson(e as Map<String, dynamic>)).toList();
+                                    return list.isEmpty
                                         ? _WebEmptyState(icon: Icons.assignment_outlined, message: 'No homework assigned yet')
-                                        : Column(children: list.take(3).map((h) => _DashHomeworkTile(hw: h)).toList()),
-                                  );
-                                }),
+                                        : Column(children: list.take(3).map((h) => _DashHomeworkTile(hw: h)).toList());
+                                  },
+                                ),
                               ),
                               const SizedBox(height: 16),
                               _WebSection(
@@ -417,16 +439,17 @@ class _TeacherDashboardScreenState
                                   ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen();
                                   context.go('${RouteNames.teacherDashboard}/broadcasts');
                                 },
-                                child: Consumer(builder: (context, ref, _) {
-                                  final bcAsync = ref.watch(teacherBroadcastsProvider);
-                                  return bcAsync.when(
-                                    loading: () => const LinearProgressIndicator(),
-                                    error: (_, __) => const SizedBox.shrink(),
-                                    data: (list) => list.isEmpty
+                                child: summaryAsync.when(
+                                  loading: () => const LinearProgressIndicator(),
+                                  error: (_, __) => const SizedBox.shrink(),
+                                  data: (summary) {
+                                    final rawBc = (summary['broadcasts'] as List<dynamic>? ?? []);
+                                    final list = rawBc.map((e) => BroadcastModel.fromJson(e as Map<String, dynamic>)).toList();
+                                    return list.isEmpty
                                         ? _WebEmptyState(icon: Icons.campaign_outlined, message: 'No announcements yet')
-                                        : Column(children: list.take(3).map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast)).toList()),
-                                  );
-                                }),
+                                        : Column(children: list.take(3).map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast)).toList());
+                                  },
+                                ),
                               ),
                             ],
                           ),
@@ -704,7 +727,7 @@ class _TeacherDashboardScreenState
           ),
 
           // ── Timetable slots — horizontal scroll ───────────────────────
-          timetableAsync.when(
+          summaryAsync.when(
             loading: () => const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -728,15 +751,18 @@ class _TeacherDashboardScreenState
             ),
           ),
           SliverToBoxAdapter(
-            child: Consumer(builder: (context, ref, _) {
-              final hwAsync = ref.watch(teacherHomeworkProvider(null));
-              return hwAsync.when(
-                loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: LinearProgressIndicator(),
-                ),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (list) => list.isEmpty
+            child: summaryAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: LinearProgressIndicator(),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (summary) {
+                final rawHw = (summary['homework'] as List<dynamic>? ?? []);
+                final list = rawHw
+                    .map((e) => HomeworkModel.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                return list.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                         child: Text('No homework yet',
@@ -746,9 +772,9 @@ class _TeacherDashboardScreenState
                       )
                     : Column(
                         children: list.take(2).map((h) => _DashHomeworkTile(hw: h)).toList(),
-                      ),
-              );
-            }),
+                      );
+              },
+            ),
           ),
 
           // ── Recent Announcements ──────────────────────────────────────
@@ -764,15 +790,18 @@ class _TeacherDashboardScreenState
             ),
           ),
           SliverToBoxAdapter(
-            child: Consumer(builder: (context, ref, _) {
-              final bcAsync = ref.watch(teacherBroadcastsProvider);
-              return bcAsync.when(
-                loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: LinearProgressIndicator(),
-                ),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (list) => list.isEmpty
+            child: summaryAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: LinearProgressIndicator(),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (summary) {
+                final rawBc = (summary['broadcasts'] as List<dynamic>? ?? []);
+                final list = rawBc
+                    .map((e) => BroadcastModel.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                return list.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                         child: Text('No announcements yet',
@@ -782,9 +811,9 @@ class _TeacherDashboardScreenState
                       )
                     : Column(
                         children: list.take(2).map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast)).toList(),
-                      ),
-              );
-            }),
+                      );
+              },
+            ),
           ),
           SliverToBoxAdapter(child: SizedBox(height: _s(context, 16, min: 12, max: 24))),
 

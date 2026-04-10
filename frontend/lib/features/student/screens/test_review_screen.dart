@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/error_view.dart';
 import '../providers/student_provider.dart';
 
 class TestReviewScreen extends ConsumerWidget {
@@ -31,7 +32,10 @@ class TestReviewScreen extends ConsumerWidget {
       ),
       body: reviewAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => ErrorView(
+          error: e,
+          onRetry: () => ref.invalidate(testReviewProvider(testId)),
+        ),
         data: (data) {
           final questions =
               (data['questions'] as List<dynamic>).cast<Map<String, dynamic>>();

@@ -67,6 +67,8 @@ async def get_my_profile(
 @router.get("/attendance", response_model=List[AttendanceResponse])
 async def get_my_attendance(
     period: Optional[int] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_student: User = Depends(get_current_student),
 ):
@@ -74,7 +76,7 @@ async def get_my_attendance(
     query = select(Attendance).where(Attendance.student_id == current_student.id)
     if period:
         query = query.where(Attendance.period == period)
-    result = await db.execute(query.order_by(Attendance.date.desc()))
+    result = await db.execute(query.order_by(Attendance.date.desc()).offset(skip).limit(limit))
     return result.scalars().all()
 
 
@@ -167,6 +169,8 @@ async def get_my_timetable(
 async def get_my_grades(
     subject: Optional[str] = Query(None),
     grade_type: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_student: User = Depends(get_current_student),
 ):
@@ -177,7 +181,7 @@ async def get_my_grades(
         query = query.where(Grade.subject == subject)
     if grade_type:
         query = query.where(Grade.grade_type == GT(grade_type))
-    result = await db.execute(query.order_by(Grade.created_at.desc()))
+    result = await db.execute(query.order_by(Grade.created_at.desc()).offset(skip).limit(limit))
     return result.scalars().all()
 
 
@@ -656,3 +660,167 @@ async def get_my_fees(
         payments=[FeePaymentResponse.model_validate(p) for p in payments],
         payment_options=payment_options,
     )
+
+
+# ─── Dashboard Summary ─────────────────────────────────────────────────────────
+
+@router.get("/dashboard-summary")
+async def get_student_dashboard_summary(
+    date: Optional[str] = Query(None, description="YYYY-MM-DD, defaults to today"),
+    db: AsyncSession = Depends(get_db),
+    current_student: User = Depends(get_current_student),
+):
+    """
+    Single aggregated endpoint for the student dashboard.
+    Returns timetable, broadcasts, homework, attendance summary,
+    pending tests, offline tests, grades, and fees — in one round trip.
+    """
+    import asyncio
+    from datetime import date as date_type, datetime, timezone
+    from sqlalchemy import or_
+    from app.models.attendance import AttendanceStatus
+
+    profile = await get_student_profile_cached(current_student.id, db)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Student profile not found.")
+
+    today = date_type.fromisoformat(date) if date else date_type.today()
+
+    # Timetable for today
+    config = await get_timetable_config_cached(db)
+    period_time_map: dict[int, tuple[str, str]] = {}
+    if config and config.period_times:
+        for pt in config.period_times:
+            period_time_map[pt["period"]] = (pt["start"], pt["end"])
+
+    TeacherAlias = aliased(User, name="teacher_alias")
+    timetable_rows = (await db.execute(
+        select(TimetableSlot, TeacherAlias.username)
+        .outerjoin(TeacherAlias, TimetableSlot.teacher_id == TeacherAlias.id)
+        .where(TimetableSlot.grade == profile.grade, TimetableSlot.slot_date == today)
+        .order_by(TimetableSlot.period_number)
+    )).all()
+    timetable = [
+        TimetableSlotWithTeacherResponse(
+            id=s.id, grade=s.grade, slot_date=str(s.slot_date),
+            period_number=s.period_number, subject=s.subject,
+            teacher_id=s.teacher_id, teacher_username=tu,
+            start_time=str(s.start_time)[:5] if s.start_time else (period_time_map.get(s.period_number, (None, None))[0]),
+            end_time=str(s.end_time)[:5] if s.end_time else (period_time_map.get(s.period_number, (None, None))[1]),
+            is_holiday=s.is_holiday, comment=s.comment,
+        )
+        for s, tu in timetable_rows
+    ]
+
+    # Broadcasts
+    bc_rows = (await db.execute(
+        select(Broadcast, User)
+        .join(User, Broadcast.sender_id == User.id)
+        .where(or_(
+            Broadcast.target_type == "all",
+            (Broadcast.target_type == "grade") & (Broadcast.target_grade == profile.grade),
+        ))
+        .order_by(Broadcast.created_at.desc())
+    )).all()
+    broadcasts = [
+        BroadcastResponse(
+            id=b.id, sender_id=b.sender_id, sender_username=u.username,
+            title=b.title, message=b.message, target_type=b.target_type,
+            target_grade=b.target_grade, created_at=b.created_at,
+        )
+        for b, u in bc_rows
+    ]
+
+    # Homework
+    homework = (await db.execute(
+        select(Homework).where(Homework.grade == profile.grade).order_by(Homework.created_at.desc())
+    )).scalars().all()
+
+    # Attendance summary
+    att_row = (await db.execute(
+        select(
+            func.count(Attendance.id).label("total"),
+            func.sum(
+                func.cast(Attendance.status == AttendanceStatus.present,
+                          type_=func.count(Attendance.id).type)
+            ).label("present"),
+        ).where(Attendance.student_id == current_student.id)
+    )).one()
+    att_total = att_row.total or 0
+    att_present = att_row.present or 0
+    attendance = AttendanceSummary(
+        student_id=current_student.id,
+        total_classes=att_total,
+        present_count=att_present,
+        absent_count=att_total - att_present,
+        attendance_percentage=round((att_present / att_total * 100) if att_total > 0 else 0.0, 2),
+    )
+
+    # Tests
+    now = datetime.now(timezone.utc)
+    submitted_ids = {
+        row[0] for row in (await db.execute(
+            select(TestSubmission.test_id).where(TestSubmission.student_id == current_student.id)
+        )).all()
+    }
+    pending_q = select(Test).where(
+        Test.grade == profile.grade, Test.is_published == True,
+        Test.test_type == "online", Test.expires_at > now,
+    )
+    if submitted_ids:
+        pending_q = pending_q.where(Test.id.notin_(submitted_ids))
+    pending_tests = (await db.execute(pending_q.order_by(Test.created_at.desc()))).scalars().all()
+    offline_tests = (await db.execute(
+        select(Test).where(
+            Test.grade == profile.grade, Test.test_type == TestType.offline, Test.is_published == True
+        ).order_by(Test.created_at.desc())
+    )).scalars().all()
+
+    # Grades
+    grades = (await db.execute(
+        select(Grade).where(Grade.student_id == current_student.id).order_by(Grade.created_at.desc())
+    )).scalars().all()
+
+    # Fees (skip presigned QR URL resolution — dashboard only needs amounts)
+    academic_year = await get_current_academic_year_cached(db)
+    structure = (await db.execute(
+        select(FeeStructure).where(
+            FeeStructure.grade == profile.grade, FeeStructure.academic_year == academic_year,
+        )
+    )).scalar_one_or_none()
+    if structure:
+        base_amount = structure.base_amount
+        economics_fee = computer_fee = ai_fee = 0.0
+        for subj in (profile.additional_subjects or []):
+            if subj == "economics":
+                economics_fee = structure.economics_fee
+            elif subj == "computer":
+                computer_fee = structure.computer_fee
+            elif subj == "ai":
+                ai_fee = structure.ai_fee
+        total_fee = base_amount + economics_fee + computer_fee + ai_fee
+    else:
+        base_amount = economics_fee = computer_fee = ai_fee = total_fee = 0.0
+    payments = (await db.execute(
+        select(FeePayment).where(FeePayment.student_id == current_student.id).order_by(FeePayment.paid_at.desc())
+    )).scalars().all()
+    total_paid = sum(p.amount for p in payments)
+    fees = StudentFeeSummary(
+        student_id=current_student.id, academic_year=academic_year, grade=profile.grade,
+        total_fee=total_fee, total_paid=total_paid, balance_due=max(0.0, total_fee - total_paid),
+        base_amount=base_amount, economics_fee=economics_fee,
+        computer_fee=computer_fee, ai_fee=ai_fee,
+        payments=[FeePaymentResponse.model_validate(p) for p in payments],
+        payment_options=[],  # Not needed on dashboard; use /fees for full detail
+    )
+
+    return {
+        "timetable": timetable,
+        "broadcasts": broadcasts,
+        "homework": homework,
+        "attendance": attendance,
+        "pending_tests": pending_tests,
+        "offline_tests": offline_tests,
+        "grades": grades,
+        "fees": fees,
+    }

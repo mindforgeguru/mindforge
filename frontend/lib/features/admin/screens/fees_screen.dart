@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/fees.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
 import '../../../core/utils/constants.dart';
 import '../providers/admin_provider.dart';
 
@@ -196,8 +197,10 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
           const SizedBox(height: 16),
           structuresAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => _RetryWidget(
-                onRetry: () => ref.invalidate(feeStructuresProvider)),
+            error: (e, _) => ErrorView(
+              error: e,
+              onRetry: () => ref.invalidate(feeStructuresProvider),
+            ),
             data: (structures) {
               if (structures.isEmpty) {
                 return const Center(child: Text('No fee structures yet.'));
@@ -265,8 +268,10 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
 
     return summariesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => _RetryWidget(
-          onRetry: () => ref.invalidate(feeSummariesProvider)),
+      error: (e, _) => ErrorView(
+        error: e,
+        onRetry: () => ref.invalidate(feeSummariesProvider),
+      ),
       data: (summaries) {
         if (summaries.isEmpty) {
           return const Center(
@@ -722,7 +727,10 @@ class _PaymentInfoTab extends ConsumerWidget {
     final infoAsync = ref.watch(paymentInfoProvider);
     return infoAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => ErrorView(
+        error: e,
+        onRetry: () => ref.invalidate(paymentInfoProvider),
+      ),
       data: (options) {
         // Build a map slot→info for quick lookup
         final bySlot = {for (final o in options) o.slot: o};
@@ -1503,24 +1511,3 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
   }
 }
 
-class _RetryWidget extends StatelessWidget {
-  final VoidCallback onRetry;
-  const _RetryWidget({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.error_outline, size: 48, color: Colors.red),
-        const SizedBox(height: 8),
-        const Text('Failed to load data'),
-        const SizedBox(height: 12),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.refresh),
-          label: const Text('Retry'),
-          onPressed: onRetry,
-        ),
-      ]),
-    );
-  }
-}

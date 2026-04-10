@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
 /// Friendly error widget for parent screens.
-/// Shows a "no child linked" message for 404s, generic message otherwise.
-Widget parentErrorWidget(Object error, {String? context}) {
+/// Shows a "no child linked" message for 404s, generic message + retry otherwise.
+Widget parentErrorWidget(Object error, {String? context, VoidCallback? onRetry}) {
   final is404 = error is DioException && error.response?.statusCode == 404;
 
   if (is404) {
@@ -45,12 +45,35 @@ Widget parentErrorWidget(Object error, {String? context}) {
   return Center(
     child: Padding(
       padding: const EdgeInsets.all(32),
-      child: Text(
-        isConnection
-            ? 'Unable to connect. Please check your internet connection.'
-            : 'Something went wrong. Please try again.',
-        style: const TextStyle(color: AppColors.textSecondary),
-        textAlign: TextAlign.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.wifi_off_rounded, size: 52, color: AppColors.textMuted),
+          const SizedBox(height: 16),
+          Text(
+            isConnection
+                ? 'No internet connection.\nPlease check your network and try again.'
+                : 'Something went wrong.\nPlease try again.',
+            style: const TextStyle(
+              fontSize: 15,
+              color: AppColors.textSecondary,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          if (onRetry != null) ...[
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Try Again'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ],
       ),
     ),
   );

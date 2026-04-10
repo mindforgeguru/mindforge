@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
 
 class AdminTimetableScreen extends ConsumerStatefulWidget {
@@ -204,18 +205,9 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
       ),
       body: configAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
-            const SizedBox(height: 8),
-            const Text('Failed to load configuration'),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              onPressed: () => ref.invalidate(timetableConfigProvider),
-            ),
-          ]),
+        error: (e, _) => ErrorView(
+          error: e,
+          onRetry: () => ref.invalidate(timetableConfigProvider),
         ),
         data: (config) {
           _initFromConfig(config);

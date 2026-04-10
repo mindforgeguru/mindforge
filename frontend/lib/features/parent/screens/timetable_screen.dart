@@ -213,7 +213,7 @@ class _ParentTimetableScreenState
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
                   const SizedBox(height: 60),
-                  parentErrorWidget(e),
+                  parentErrorWidget(e, onRetry: () => ref.invalidate(parentChildTimetableProvider(_dateString))),
                 ],
               ),
               data: (slots) => RefreshIndicator(

@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../../../core/models/test.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_bottom_nav.dart';
@@ -64,8 +66,8 @@ class _OnlineTestsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(pendingTestsProvider);
     return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      loading: () => const ShimmerList(showAvatar: false),
+      error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(pendingTestsProvider)),
       data: (tests) {
         if (tests.isEmpty) {
           return const _EmptyState(
@@ -191,8 +193,8 @@ class _OfflineTestsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(offlineTestsProvider);
     return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      loading: () => const ShimmerList(showAvatar: false),
+      error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(offlineTestsProvider)),
       data: (tests) {
         if (tests.isEmpty) {
           return const _EmptyState(
@@ -312,8 +314,8 @@ class _CompletedTestsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(completedTestsProvider);
     return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      loading: () => const ShimmerList(showAvatar: false),
+      error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(completedTestsProvider)),
       data: (tests) {
         if (tests.isEmpty) {
           return const _EmptyState(

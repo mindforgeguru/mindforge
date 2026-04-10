@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_bottom_nav.dart';
 
@@ -214,10 +215,10 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
             summariesAsync.when(
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                  child: Text('Error: $e',
-                      style: GoogleFonts.poppins(
-                          color: AppColors.error))),
+              error: (e, _) => ErrorView(
+                error: e,
+                onRetry: () => ref.invalidate(feeSummariesProvider(_selectedYear)),
+              ),
               data: (summaries) {
                 final grades = summaries
                     .cast<Map<String, dynamic>>()

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/models/attendance.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../providers/parent_provider.dart';
 import '../widgets/parent_bottom_nav.dart';
 import '../widgets/parent_error_widget.dart';
@@ -98,8 +99,8 @@ class _ParentAttendanceScreenState
       ),
       bottomNavigationBar: const ParentBottomNav(),
       body: recordsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: parentErrorWidget(e)),
+        loading: () => const ShimmerList(showAvatar: false, itemHeight: 56),
+        error: (e, _) => parentErrorWidget(e, onRetry: () => ref.invalidate(parentChildAttendanceProvider)),
         data: (records) {
           final statusMap = _buildStatusMap(records);
 

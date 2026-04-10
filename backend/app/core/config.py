@@ -42,7 +42,8 @@ class Settings(BaseSettings):
     # ── JWT ───────────────────────────────────────────────────────────────────
     JWT_SECRET: str = "change_me_super_secret_jwt_key_at_least_32_chars"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 10080  # 7 days
+    JWT_EXPIRE_MINUTES: int = 60           # 1 hour access token
+    JWT_REFRESH_EXPIRE_DAYS: int = 30      # 30 day refresh token
 
     # ── Google Gemini AI ──────────────────────────────────────────────────────
     GEMINI_API_KEY: str = ""

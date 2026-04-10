@@ -10,7 +10,7 @@ import '../../../core/models/timetable.dart';
 final studentAttendanceProvider =
     FutureProvider<List<AttendanceModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
-  final raw = await api.getStudentAttendance();
+  final raw = await api.getStudentAttendance(limit: 200);
   return raw
       .map((e) => AttendanceModel.fromJson(e as Map<String, dynamic>))
       .toList();
@@ -134,4 +134,13 @@ final studentBroadcastsProvider =
   return raw
       .map((e) => BroadcastModel.fromJson(e as Map<String, dynamic>))
       .toList();
+});
+
+// ── Dashboard Summary ──────────────────────────────────────────────────────
+
+final studentDashboardSummaryProvider =
+    FutureProvider.family<Map<String, dynamic>, String>(
+        (ref, date) async {
+  final api = ref.watch(apiClientProvider);
+  return api.getStudentDashboardSummary(date: date);
 });

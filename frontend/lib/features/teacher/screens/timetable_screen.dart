@@ -6,6 +6,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
@@ -131,7 +132,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
 
     return myTimetableAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(myTimetableProvider)),
       data: (slots) {
         // Period times from config
         final periodTimes = <int, (String, String)>{};
@@ -521,7 +522,10 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
     // ── Period editor widget (built from async data) ─────────────────────
     Widget periodEditor = timetableAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => ErrorView(
+        error: e,
+        onRetry: () => ref.invalidate(teacherTimetableProvider((_selectedGrade, _dateString))),
+      ),
       data: (slots) {
         final busyByPeriod = _computeBusyTeachers();
         final existingSlots = slots
@@ -532,7 +536,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
 
         return teachersAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
+          error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(teachersListProvider)),
           data: (teachers) {
             _populateFromSlots(slots, teachers);
 

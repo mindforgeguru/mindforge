@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 
 import '../../../core/models/homework.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../providers/parent_provider.dart';
 import '../widgets/parent_bottom_nav.dart';
 
@@ -130,20 +132,8 @@ class _HomeworkList extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: hwAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: EdgeInsets.all(_s(context, 24)),
-            child: Text(
-              'Could not load homework',
-              style: GoogleFonts.poppins(
-                color: AppColors.textMuted,
-                fontSize: _fs(context, 13, min: 11, max: 15),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
+        loading: () => const ShimmerList(showAvatar: false),
+        error: (e, _) => ErrorView(error: e, onRetry: () => onRefresh()),
         data: (list) => list.isEmpty
             ? _scrollableEmpty(context,
                 icon: Icons.assignment_outlined,
@@ -181,20 +171,8 @@ class _AnnouncementsList extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: bcAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: EdgeInsets.all(_s(context, 24)),
-            child: Text(
-              'Could not load announcements',
-              style: GoogleFonts.poppins(
-                color: AppColors.textMuted,
-                fontSize: _fs(context, 13, min: 11, max: 15),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
+        loading: () => const ShimmerList(showAvatar: false),
+        error: (e, _) => ErrorView(error: e, onRetry: () => onRefresh()),
         data: (list) => list.isEmpty
             ? _scrollableEmpty(context,
                 icon: Icons.campaign_outlined,

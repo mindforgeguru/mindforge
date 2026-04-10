@@ -148,3 +148,11 @@ final teacherBroadcastsProvider =
       .map((e) => BroadcastModel.fromJson(e as Map<String, dynamic>))
       .toList();
 });
+
+// ── Dashboard Summary ──────────────────────────────────────────────────────
+
+final teacherDashboardSummaryProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  return api.getTeacherDashboardSummary();
+});
