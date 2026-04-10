@@ -24,9 +24,42 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle handler."""
     logger.info("Starting MIND FORGE backend...")
-    # Run Alembic migrations to apply any pending schema changes
     import subprocess, sys, os
+    from sqlalchemy import text
     backend_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Pre-flight: if DB has tables but no Alembic history (e.g. was bootstrapped
+    # by create_all on a previous deployment), stamp to head so Alembic doesn't
+    # try to replay every migration on an already-populated database.
+    try:
+        async with engine.connect() as _conn:
+            alembic_tracked = await _conn.scalar(text(
+                "SELECT COUNT(*) FROM alembic_version"
+            ))
+    except Exception:
+        alembic_tracked = 0  # table doesn't exist yet
+
+    if not alembic_tracked:
+        try:
+            async with engine.connect() as _conn:
+                users_exist = await _conn.scalar(text(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = 'users')"
+                ))
+        except Exception:
+            users_exist = False
+
+        if users_exist:
+            logger.info("DB has tables but no Alembic history — stamping to head.")
+            stamp = subprocess.run(
+                [sys.executable, "-m", "alembic", "stamp", "head"],
+                capture_output=True, text=True, cwd=backend_dir,
+            )
+            logger.info(f"Alembic stamp: {stamp.stdout.strip()}")
+            if stamp.returncode != 0:
+                logger.warning(f"Alembic stamp warning: {stamp.stderr.strip()}")
+
+    # Run Alembic migrations to apply any pending schema changes
     result = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         capture_output=True, text=True, cwd=backend_dir,
