@@ -43,6 +43,24 @@ async def register_user(
             detail="Username already taken.",
         )
 
+    # Phone is required for student and teacher
+    if payload.role in ("student", "teacher") and not payload.phone:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Phone number is required for student and teacher accounts.",
+        )
+
+    # Check phone uniqueness (if provided)
+    if payload.phone:
+        phone_conflict = await db.execute(
+            select(User).where(User.phone == payload.phone, User.deleted_at.is_(None))
+        )
+        if phone_conflict.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this phone number already exists.",
+            )
+
     # Resolve current academic year (if any)
     year_result = await db.execute(
         select(AcademicYear).where(AcademicYear.is_current == True)
@@ -56,6 +74,8 @@ async def register_user(
         is_active=True,
         is_approved=False,  # Pending admin approval
         academic_year_id=current_year.id if current_year else None,
+        phone=payload.phone or None,
+        email=payload.email or None,
     )
     db.add(user)
     await db.flush()  # Get the generated user.id

@@ -19,10 +19,32 @@ class UserRegisterRequest(BaseModel):
     username: str
     mpin: str
     role: UserRole
-    parent_username: Optional[str] = None       # student only
-    grade: Optional[int] = None                 # student only (8, 9, or 10)
+    phone: Optional[str] = None                  # required for student/teacher; optional for parent
+    email: Optional[str] = None                  # optional for all
+    parent_username: Optional[str] = None        # student only
+    grade: Optional[int] = None                  # student only (8, 9, or 10)
     additional_subjects: Optional[List[str]] = None  # student only
     teachable_subjects: Optional[List[str]] = None   # teacher only
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if v and not re.fullmatch(r"[\d\s\+\-\(\)]{7,20}", v):
+                raise ValueError("Invalid phone number format.")
+            return v or None
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if v and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", v):
+                raise ValueError("Invalid email address.")
+            return v or None
+        return v
 
     @field_validator("mpin")
     @classmethod
@@ -92,6 +114,8 @@ class UserResponse(BaseModel):
     created_at: datetime
     deleted_at: Optional[datetime] = None
     profile_pic_url: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -134,6 +158,8 @@ class AdminUserEdit(BaseModel):
     role: Optional[UserRole] = None    # change role
     grade: Optional[int] = None        # students only
     new_mpin: Optional[str] = None     # reset MPIN
+    phone: Optional[str] = None        # any user
+    email: Optional[str] = None        # any user
     parent_username: Optional[str] = None   # students only — link to parent account
     student_username: Optional[str] = None  # parents only — link to student account
     teachable_subjects: Optional[List[str]] = None  # teachers only

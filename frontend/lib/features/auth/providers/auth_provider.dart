@@ -164,13 +164,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<bool> register(String username, String mpin, String role,
-      {String? parentUsername,
+      {String? phone,
+      String? email,
+      String? parentUsername,
       int? grade,
       List<String>? additionalSubjects,
       List<String>? teachableSubjects}) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await _api.register(username, mpin, role,
+          phone: phone,
+          email: email,
           parentUsername: parentUsername,
           grade: grade,
           additionalSubjects: additionalSubjects,

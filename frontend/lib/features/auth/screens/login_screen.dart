@@ -18,6 +18,8 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _usernameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _parentUsernameController = TextEditingController();
   final List<String> _pin = ['', '', '', '', '', ''];
   int _pinIndex = 0;
@@ -36,6 +38,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void dispose() {
     _usernameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
     _parentUsernameController.dispose();
     super.dispose();
   }
@@ -81,10 +85,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (_isRegister) {
       final isStudent = _selectedRole == 'student';
       final isTeacher = _selectedRole == 'teacher';
+      final isParent = _selectedRole == 'parent';
+      final phone = _phoneController.text.trim();
+      final email = _emailController.text.trim();
+
+      if (!isParent && phone.isEmpty) {
+        _showSnack('Phone number is required.');
+        return;
+      }
+
       final ok = await notifier.register(
         username,
         _enteredPin,
         _selectedRole,
+        phone: phone.isNotEmpty ? phone : null,
+        email: email.isNotEmpty ? email : null,
         parentUsername:
             isStudent ? _parentUsernameController.text.trim() : null,
         grade: isStudent ? _selectedGrade : null,
@@ -99,6 +114,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _isRegister = false;
           _clearPin();
           _usernameController.clear();
+          _phoneController.clear();
+          _emailController.clear();
           _parentUsernameController.clear();
           _selectedGrade = 8;
           _selectedSubjects.clear();
@@ -264,6 +281,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               _selectedTeacherSubjects.clear();
                               _selectedGrade = 8;
                             }),
+                          ),
+
+                          // ── Phone & Email ─────────────────────────────
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _phoneController,
+                            decoration: InputDecoration(
+                              labelText: _selectedRole == 'parent'
+                                  ? 'Phone Number (optional)'
+                                  : 'Phone Number',
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                              isDense: true,
+                              helperText: _selectedRole == 'student'
+                                  ? "You can use your parent's number."
+                                  : null,
+                            ),
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _emailController,
+                            decoration: InputDecoration(
+                              labelText: 'Email (optional)',
+                              prefixIcon: const Icon(Icons.email_outlined),
+                              isDense: true,
+                              helperText: _selectedRole == 'student'
+                                  ? "You can use your parent's email."
+                                  : null,
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
                           ),
 
                           // ── Teacher-only fields ───────────────────────

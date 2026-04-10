@@ -220,6 +220,25 @@ async def edit_user(
     if user.role == UserRole.admin:
         raise HTTPException(status_code=403, detail="Cannot modify admin account.")
 
+    # Update phone
+    if payload.phone is not None:
+        new_phone = payload.phone.strip() or None
+        if new_phone and new_phone != user.phone:
+            conflict = await db.execute(
+                select(User).where(
+                    User.phone == new_phone,
+                    User.deleted_at.is_(None),
+                    User.id != user_id,
+                )
+            )
+            if conflict.scalar_one_or_none():
+                raise HTTPException(status_code=409, detail="An account with this phone number already exists.")
+        user.phone = new_phone
+
+    # Update email
+    if payload.email is not None:
+        user.email = payload.email.strip() or None
+
     # Update username
     if payload.username and payload.username != user.username:
         conflict = await db.execute(

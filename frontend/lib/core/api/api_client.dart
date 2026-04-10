@@ -93,7 +93,9 @@ class ApiClient {
 
   Future<Map<String, dynamic>> register(
       String username, String mpin, String role,
-      {String? parentUsername,
+      {String? phone,
+      String? email,
+      String? parentUsername,
       int? grade,
       List<String>? additionalSubjects,
       List<String>? teachableSubjects}) async {
@@ -101,6 +103,8 @@ class ApiClient {
       'username': username,
       'mpin': mpin,
       'role': role,
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (email != null && email.isNotEmpty) 'email': email,
       if (parentUsername != null && parentUsername.isNotEmpty)
         'parent_username': parentUsername,
       if (grade != null) 'grade': grade,
