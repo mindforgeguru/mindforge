@@ -15,6 +15,9 @@ class WebSocketClient {
   StreamController<Map<String, dynamic>>? _controller;
   int? _connectedUserId;
   Timer? _pingTimer;
+  // Incremented on every disconnect/reconnect cycle so stale delayed callbacks
+  // can detect they belong to an old generation and skip firing.
+  int _generation = 0;
 
   /// Returns a stream of WebSocket events for the given user.
   ///
@@ -29,22 +32,32 @@ class WebSocketClient {
     }
 
     _connectedUserId = userId;
+    _generation++;
     _controller?.close();
     _controller = StreamController<Map<String, dynamic>>.broadcast();
 
-    _connect(userId);
+    _connect(userId, _generation);
     return _controller!.stream;
   }
 
-  void _connect(int userId) {
+  void _connect(int userId, int generation) {
+    // Bail out if this callback belongs to a stale reconnect cycle.
+    if (generation != _generation) return;
+
     try {
+      // Close any existing channel before opening a new one.
+      _channel?.sink.close();
+      _channel = null;
+
       final uri = Uri.parse('${AppConstants.wsBaseUrl}/$userId');
       _channel = WebSocketChannel.connect(uri);
-      // Await the ready future so connection errors are caught here
+
+      // Catch connection-level errors (e.g. DNS failure, TLS rejection).
       _channel!.ready.catchError((_) {
+        if (generation != _generation) return;
         _channel = null;
         Future.delayed(const Duration(seconds: 5), () {
-          if (_connectedUserId != null) _connect(_connectedUserId!);
+          _connect(userId, generation);
         });
       });
 
@@ -62,18 +75,15 @@ class WebSocketClient {
           }
         },
         onDone: () {
-          // Auto-reconnect after 3 seconds on disconnect
+          // Auto-reconnect after 3 seconds on disconnect.
+          // Pass the current generation so stale timers self-cancel.
           Future.delayed(const Duration(seconds: 3), () {
-            if (_connectedUserId != null) {
-              _connect(_connectedUserId!);
-            }
+            _connect(userId, generation);
           });
         },
         onError: (error) {
           Future.delayed(const Duration(seconds: 5), () {
-            if (_connectedUserId != null) {
-              _connect(_connectedUserId!);
-            }
+            _connect(userId, generation);
           });
         },
         cancelOnError: false,
@@ -87,14 +97,13 @@ class WebSocketClient {
     } catch (e) {
       // Retry connection after delay
       Future.delayed(const Duration(seconds: 5), () {
-        if (_connectedUserId != null) {
-          _connect(_connectedUserId!);
-        }
+        _connect(userId, generation);
       });
     }
   }
 
   void disconnect() {
+    _generation++; // Invalidate all pending reconnect callbacks
     _pingTimer?.cancel();
     _channel?.sink.close();
     _controller?.close();
