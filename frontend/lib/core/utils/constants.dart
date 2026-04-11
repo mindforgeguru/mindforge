@@ -6,8 +6,8 @@ class AppConstants {
   static const String tagline = 'AI Assisted Learning';
 
   /// Change this to your deployed backend URL in production.
-  static const String apiBaseUrl = 'http://192.168.29.211:8000/api';
-  static const String wsBaseUrl = 'ws://192.168.29.211:8000/ws';
+  static const String apiBaseUrl = 'https://api.mindforge.guru/api';
+  static const String wsBaseUrl = 'wss://api.mindforge.guru/ws';
 
   /// Supported grades (ICSE)
   static const List<int> grades = [8, 9, 10];
