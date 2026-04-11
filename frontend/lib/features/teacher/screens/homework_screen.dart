@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/widgets/error_view.dart';
 import '../../../core/api/api_client.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
@@ -161,18 +162,9 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
           child: hwAsync.when(
             loading: () =>
                 const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(
-              child: Padding(
-                padding: EdgeInsets.all(_s(context, 24)),
-                child: Text(
-                  'Could not load homework',
-                  style: GoogleFonts.poppins(
-                    color: AppColors.textMuted,
-                    fontSize: _fs(context, 13, min: 11, max: 15),
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
+            error: (e, _) => ErrorView(
+              error: e,
+              onRetry: () => ref.invalidate(teacherHomeworkProvider(_selectedGrade)),
             ),
             data: (list) => list.isEmpty
                 ? const _EmptyState(

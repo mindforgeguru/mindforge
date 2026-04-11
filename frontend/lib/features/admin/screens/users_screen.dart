@@ -9,6 +9,8 @@ import '../../../core/api/api_client.dart';
 import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../providers/admin_provider.dart';
 
 class AdminUsersScreen extends ConsumerStatefulWidget {
@@ -88,12 +90,16 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const [
-          _PendingUsersTab(),
-          _ActiveUsersTab(),
-        ],
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: TabBarView(
+          controller: _tabController,
+          children: const [
+            _PendingUsersTab(),
+            _ActiveUsersTab(),
+          ],
+        ),
       ),
     );
   }
@@ -110,26 +116,11 @@ class _PendingUsersTab extends ConsumerWidget {
       onRefresh: () async => ref.invalidate(pendingUsersProvider),
       color: AppColors.primary,
       child: usersAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const ShimmerList(),
         error: (e, _) => ListView(
           children: [
             const SizedBox(height: 80),
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 8),
-                  const Text('Failed to load users'),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
-                    onPressed: () => ref.invalidate(pendingUsersProvider),
-                  ),
-                ],
-              ),
-            ),
+            ErrorView(error: e, onRetry: () => ref.invalidate(pendingUsersProvider)),
           ],
         ),
         data: (users) {
@@ -157,7 +148,8 @@ class _PendingUsersTab extends ConsumerWidget {
             );
           }
           return ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(16, 16, 16,
+                16 + MediaQuery.of(context).padding.bottom + 72),
             itemCount: users.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (ctx, i) => _PendingUserTile(user: users[i]),
@@ -259,6 +251,8 @@ const _kAllSubjects = ['economics', 'computer', 'ai'];
 
 class _EditUserSheetState extends State<_EditUserSheet> {
   late final TextEditingController _usernameCtrl;
+  late final TextEditingController _phoneCtrl;
+  late final TextEditingController _emailCtrl;
   late final TextEditingController _parentUsernameCtrl;
   late final TextEditingController _studentUsernameCtrl;
   late String _selectedRole;
@@ -274,6 +268,8 @@ class _EditUserSheetState extends State<_EditUserSheet> {
   void initState() {
     super.initState();
     _usernameCtrl = TextEditingController(text: widget.user.username);
+    _phoneCtrl = TextEditingController(text: widget.user.phone ?? '');
+    _emailCtrl = TextEditingController(text: widget.user.email ?? '');
     _parentUsernameCtrl = TextEditingController(text: widget.user.parentUsername ?? '');
     _studentUsernameCtrl = TextEditingController(text: widget.user.studentUsername ?? '');
     _selectedRole = widget.user.role;
@@ -285,6 +281,8 @@ class _EditUserSheetState extends State<_EditUserSheet> {
   @override
   void dispose() {
     _usernameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
     _parentUsernameCtrl.dispose();
     _studentUsernameCtrl.dispose();
     super.dispose();
@@ -323,6 +321,12 @@ class _EditUserSheetState extends State<_EditUserSheet> {
     final data = <String, dynamic>{};
     if (newUsername != widget.user.username) data['username'] = newUsername;
     if (_selectedRole != widget.user.role) data['role'] = _selectedRole;
+
+    final newPhone = _phoneCtrl.text.trim();
+    if (newPhone != (widget.user.phone ?? '')) data['phone'] = newPhone;
+
+    final newEmail = _emailCtrl.text.trim();
+    if (newEmail != (widget.user.email ?? '')) data['email'] = newEmail;
     if (_selectedRole == 'student' && _selectedGrade != widget.user.grade) {
       data['grade'] = _selectedGrade;
     }
@@ -458,6 +462,36 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                 isDense: true,
               ),
               inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+            ),
+
+            const SizedBox(height: 14),
+
+            // Phone
+            TextField(
+              controller: _phoneCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                prefixIcon: Icon(Icons.phone_outlined),
+                isDense: true,
+                hintText: 'Leave empty to clear',
+              ),
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
+            ),
+
+            const SizedBox(height: 14),
+
+            // Email
+            TextField(
+              controller: _emailCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.email_outlined),
+                isDense: true,
+                hintText: 'Leave empty to clear',
+              ),
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
             ),
 
             const SizedBox(height: 14),
@@ -843,25 +877,10 @@ class _ActiveUsersTabState extends ConsumerState<_ActiveUsersTab> {
         // ── User list ─────────────────────────────────────────────────────
         Expanded(
           child: usersAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline,
-                      size: 48, color: Colors.red),
-                  const SizedBox(height: 8),
-                  const Text('Failed to load users'),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
-                    onPressed: () =>
-                        ref.invalidate(allUsersProvider(providerParam)),
-                  ),
-                ],
-              ),
+            loading: () => const ShimmerList(),
+            error: (e, _) => ErrorView(
+              error: e,
+              onRetry: () => ref.invalidate(allUsersProvider(providerParam)),
             ),
             data: (users) {
               if (users.isEmpty) {
@@ -884,7 +903,8 @@ class _ActiveUsersTabState extends ConsumerState<_ActiveUsersTab> {
                 );
               }
               return ListView.separated(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.fromLTRB(16, 16, 16,
+                    16 + MediaQuery.of(context).padding.bottom + 72),
                 itemCount: users.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (ctx, i) => _ActiveUserTile(
@@ -1044,6 +1064,16 @@ class _ActiveUserTileState extends ConsumerState<_ActiveUserTile> {
         changes.add(result['student_username'].toString().isEmpty
             ? 'Student unlinked'
             : 'Student → "${result['student_username']}"');
+      }
+      if (result.containsKey('phone')) {
+        changes.add(result['phone'].toString().isEmpty
+            ? 'Phone removed'
+            : 'Phone → "${result['phone']}"');
+      }
+      if (result.containsKey('email')) {
+        changes.add(result['email'].toString().isEmpty
+            ? 'Email removed'
+            : 'Email → "${result['email']}"');
       }
 
       final summary = changes.isEmpty

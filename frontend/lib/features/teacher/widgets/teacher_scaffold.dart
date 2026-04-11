@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/badge_dot.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
@@ -302,8 +303,7 @@ class _TeacherSideNav extends ConsumerWidget {
                     const SizedBox(width: 4),
                     Consumer(builder: (context, ref, _) {
                       return GestureDetector(
-                        onTap: () =>
-                            ref.read(authProvider.notifier).logout(),
+                        onTap: () => confirmLogout(context, ref),
                         child: Tooltip(
                           message: 'Logout',
                           child: Icon(Icons.logout_rounded,

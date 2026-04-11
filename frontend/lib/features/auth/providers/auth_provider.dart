@@ -73,6 +73,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final username = await _storage.read(key: AppConstants.usernameStorageKey);
     final profilePicUrl =
         await _storage.read(key: AppConstants.profilePicUrlStorageKey);
+    // refreshToken is stored in secure storage but managed by the Dio interceptor
+    // — we don't need to load it into state, just having it in storage is enough.
 
     if (token == null || role == null) return;
 
@@ -113,11 +115,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final data = await _api.login(username, mpin);
       final token = data['access_token'] as String;
+      final refreshToken = data['refresh_token'] as String?;
       final role = data['role'] as String;
       final userId = data['user_id'] as int;
       final uname = data['username'] as String;
 
       await _storage.write(key: AppConstants.tokenStorageKey, value: token);
+      if (refreshToken != null) {
+        await _storage.write(
+            key: AppConstants.refreshTokenStorageKey, value: refreshToken);
+      }
       await _storage.write(key: AppConstants.roleStorageKey, value: role);
       await _storage.write(
           key: AppConstants.userIdStorageKey, value: userId.toString());
@@ -164,13 +171,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<bool> register(String username, String mpin, String role,
-      {String? parentUsername,
+      {String? phone,
+      String? email,
+      String? parentUsername,
       int? grade,
       List<String>? additionalSubjects,
       List<String>? teachableSubjects}) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await _api.register(username, mpin, role,
+          phone: phone,
+          email: email,
           parentUsername: parentUsername,
           grade: grade,
           additionalSubjects: additionalSubjects,

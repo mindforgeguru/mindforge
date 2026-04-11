@@ -32,6 +32,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     profile_pic_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     academic_year_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("academic_years.id", ondelete="SET NULL"), nullable=True
     )

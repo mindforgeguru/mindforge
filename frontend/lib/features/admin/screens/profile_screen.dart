@@ -245,7 +245,10 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('My Profile')),
       resizeToAvoidBottomInset: false,
-      body: SingleChildScrollView(
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 48),
         child: Column(
@@ -437,6 +440,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

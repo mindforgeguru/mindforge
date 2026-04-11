@@ -6,6 +6,8 @@ import '../../../core/models/grade.dart';
 import '../../../core/models/test.dart';
 import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
@@ -83,9 +85,45 @@ class _AllGradesTab extends ConsumerStatefulWidget {
 }
 
 class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
+  static const int _pageSize = 50;
   int? _filterGrade;
   int? _filterStudentId;
   String? _filterSubject;
+  List<GradeModel> _allGrades = [];
+  bool _isLoadingMore = false;
+  bool _hasMore = false;
+
+  void _resetGrades() {
+    setState(() {
+      _allGrades = [];
+      _hasMore = false;
+    });
+  }
+
+  Future<void> _loadMore(Map<int, String> studentMap) async {
+    if (_isLoadingMore) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      final raw = await api.getTeacherGrades(
+        subject: _filterSubject,
+        studentId: _filterStudentId,
+        skip: _allGrades.length,
+      );
+      final newGrades = raw
+          .map((e) => GradeModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (mounted) {
+        setState(() {
+          _allGrades.addAll(newGrades);
+          _hasMore = newGrades.length >= _pageSize;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +136,17 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
 
     final gradesAsync =
         ref.watch(teacherGradesProvider((_filterSubject, _filterStudentId)));
+    ref.listen(teacherGradesProvider((_filterSubject, _filterStudentId)),
+        (_, next) {
+      next.whenData((grades) {
+        if (mounted) {
+          setState(() {
+            _allGrades = grades;
+            _hasMore = grades.length >= _pageSize;
+          });
+        }
+      });
+    });
 
     return Column(
       children: [
@@ -122,10 +171,13 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                             DropdownMenuItem(
                                 value: g, child: Text('Grade $g'))),
                       ],
-                      onChanged: (v) => setState(() {
-                        _filterGrade = v;
-                        _filterStudentId = null; // reset student on grade change
-                      }),
+                      onChanged: (v) {
+                        _resetGrades();
+                        setState(() {
+                          _filterGrade = v;
+                          _filterStudentId = null;
+                        });
+                      },
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -146,7 +198,10 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                                 child: Text(s,
                                     overflow: TextOverflow.ellipsis))),
                       ],
-                      onChanged: (v) => setState(() => _filterSubject = v),
+                      onChanged: (v) {
+                        _resetGrades();
+                        setState(() => _filterSubject = v);
+                      },
                     ),
                   ),
                 ],
@@ -167,8 +222,10 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                       ...studs.map((s) => DropdownMenuItem(
                           value: s.id, child: Text(s.username))),
                     ],
-                    onChanged: (v) =>
-                        setState(() => _filterStudentId = v),
+                    onChanged: (v) {
+                      _resetGrades();
+                      setState(() => _filterStudentId = v);
+                    },
                   ),
                 ),
               ],
@@ -179,15 +236,18 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
         // ── Grade list ──────────────────────────────────────────────────────
         Expanded(
           child: gradesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
-            data: (allGrades) {
-              // If a grade (class) is selected, show only students from that class
+            loading: () => const ShimmerList(),
+            error: (e, _) => ErrorView(
+              error: e,
+              onRetry: () => ref.invalidate(teacherGradesProvider((_filterSubject, _filterStudentId))),
+            ),
+            data: (_) {
+              // Apply client-side class filter on accumulated grades
               final grades = _filterGrade != null && studentMap.isNotEmpty
-                  ? allGrades
+                  ? _allGrades
                       .where((g) => studentMap.containsKey(g.studentId))
                       .toList()
-                  : allGrades;
+                  : _allGrades;
 
               if (grades.isEmpty) {
                 return const Center(
@@ -207,9 +267,20 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                 child: ListView.separated(
                   padding:
                       const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                  itemCount: grades.length,
+                  itemCount: grades.length + (_hasMore ? 1 : 0),
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (ctx, i) {
+                    if (i == grades.length) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: _isLoadingMore
+                            ? const Center(child: CircularProgressIndicator())
+                            : OutlinedButton(
+                                onPressed: () => _loadMore(studentMap),
+                                child: const Text('Load More'),
+                              ),
+                      );
+                    }
                     final g = grades[i];
                     final pcts = subjectPcts[g.subject]!;
                     return _GradeTile(
@@ -378,7 +449,10 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
         Expanded(
           child: testsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
+            error: (e, _) => ErrorView(
+              error: e,
+              onRetry: () => ref.invalidate(teacherTestsProvider(_selectedGrade)),
+            ),
             data: (tests) {
               final offlineTests =
                   tests.where((t) => t.testType == 'offline').toList();
@@ -399,7 +473,7 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
                 );
               }
               return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).padding.bottom + 16),
                 itemCount: offlineTests.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (ctx, i) =>
@@ -709,8 +783,12 @@ class _GradeEntrySheetState extends ConsumerState<_GradeEntrySheet> {
             child: studentsAsync.when(
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
-              error: (e, _) =>
-                  Center(child: Text('Error loading students: $e')),
+              error: (e, _) => Center(
+                child: Text(
+                  'Could not load students.',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              ),
               data: (students) {
                 if (students.isEmpty) {
                   return const Center(

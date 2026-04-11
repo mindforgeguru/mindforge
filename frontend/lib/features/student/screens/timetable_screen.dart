@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/error_view.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_bottom_nav.dart';
 
@@ -247,29 +248,15 @@ class _StudentTimetableScreenState
                   ],
                 ),
               ),
-              error: (e, _) => RefreshIndicator(
-                onRefresh: () =>
-                    ref.refresh(studentTimetableProvider(_dateString).future),
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: const [
-                    SizedBox(height: 60),
-                    Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.error_outline,
-                              size: 40, color: AppColors.error),
-                          SizedBox(height: 8),
-                          Text('Could not load timetable.\nPull down to retry.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: AppColors.textMuted, fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              error: (e, _) => ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  const SizedBox(height: 60),
+                  ErrorView(
+                    error: e,
+                    onRetry: () => ref.invalidate(studentTimetableProvider(_dateString)),
+                  ),
+                ],
               ),
               data: (slots) => RefreshIndicator(
                 onRefresh: () =>

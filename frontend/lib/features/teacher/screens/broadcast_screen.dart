@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/constants.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
@@ -76,19 +78,10 @@ class TeacherBroadcastScreen extends ConsumerWidget {
           // ── Broadcast list ─────────────────────────────────────────────
           Expanded(
             child: bcAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                child: Padding(
-                  padding: EdgeInsets.all(_s(context, 24)),
-                  child: Text(
-                    'Could not load broadcasts',
-                    style: GoogleFonts.poppins(
-                      color: AppColors.textMuted,
-                      fontSize: _fs(context, 13, min: 11, max: 15),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+              loading: () => const ShimmerList(showAvatar: false),
+              error: (e, _) => ErrorView(
+                error: e,
+                onRetry: () => ref.invalidate(teacherBroadcastsProvider),
               ),
               data: (list) => list.isEmpty
                   ? _EmptyState()

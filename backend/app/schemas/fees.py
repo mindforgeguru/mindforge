@@ -41,6 +41,7 @@ class FeePaymentCreate(BaseModel):
     student_id: int
     amount: float
     notes: Optional[str] = None
+    paid_at: Optional[datetime] = None  # defaults to now() if not provided
 
 
 class FeePaymentUpdate(BaseModel):

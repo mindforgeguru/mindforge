@@ -13,6 +13,7 @@ import '../../../core/models/homework.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/logout_confirm.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/widgets/badge_dot.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -76,42 +77,23 @@ class _StudentDashboardScreenState
       final eventType = event['event'] as String?;
       if (eventType == 'profile_updated') {
         _showProfileUpdatedDialog(event['new_username'] as String?);
-      } else if (eventType == 'timetable_updated') {
-        ref.invalidate(studentTimetableProvider(_todayString));
-      } else if (eventType == 'new_test' || eventType == 'test_status_changed') {
-        ref.invalidate(pendingTestsProvider);
-        ref.invalidate(offlineTestsProvider);
-      } else if (eventType == 'grade_added') {
-        ref.invalidate(studentGradesProvider(null));
-        ref.invalidate(studentOfflineGradesProvider(null));
-      } else if (eventType == 'broadcast_created' || eventType == 'homework_added') {
-        ref.invalidate(studentBroadcastsProvider);
-        ref.invalidate(studentHomeworkProvider);
-      } else if (eventType == 'attendance_updated') {
-        ref.invalidate(studentAttendanceSummaryProvider);
+      } else if (eventType != null) {
+        // Any relevant event → refresh the single summary
+        ref.invalidate(studentDashboardSummaryProvider(_todayString));
+        // New test published → also refresh the tests screen
+        if (eventType == 'new_test_available' || eventType == 'test_status_changed') {
+          ref.invalidate(pendingTestsProvider);
+          ref.invalidate(offlineTestsProvider);
+        }
       }
     });
   }
 
   Future<void> _refreshDashboard() async {
-    ref.invalidate(studentTimetableProvider(_todayString));
-    ref.invalidate(studentBroadcastsProvider);
-    ref.invalidate(studentHomeworkProvider);
-    ref.invalidate(studentAttendanceSummaryProvider);
-    ref.invalidate(pendingTestsProvider);
-    ref.invalidate(offlineTestsProvider);
-    ref.invalidate(studentFeesProvider);
-    ref.invalidate(studentGradesProvider(null));
-    await Future.wait([
-      ref.read(studentTimetableProvider(_todayString).future).catchError((_) => <dynamic>[]),
-      ref.read(studentBroadcastsProvider.future).catchError((_) => <dynamic>[]),
-      ref.read(studentHomeworkProvider.future).catchError((_) => <dynamic>[]),
-      ref.read(studentAttendanceSummaryProvider.future).catchError((_) => null),
-      ref.read(pendingTestsProvider.future).catchError((_) => <dynamic>[]),
-      ref.read(offlineTestsProvider.future).catchError((_) => <dynamic>[]),
-      ref.read(studentFeesProvider.future).catchError((_) => <dynamic>{}),
-      ref.read(studentGradesProvider(null).future).catchError((_) => <dynamic>[]),
-    ]);
+    ref.invalidate(studentDashboardSummaryProvider(_todayString));
+    await ref
+        .read(studentDashboardSummaryProvider(_todayString).future)
+        .catchError((_) => <String, dynamic>{});
   }
 
   Future<void> _showProfileUpdatedDialog(String? newUsername) async {
@@ -149,23 +131,29 @@ class _StudentDashboardScreenState
     if (isWide) return _buildWebLayout(context);
 
     final auth = ref.watch(authProvider);
-    final timetableAsync = ref.watch(studentTimetableProvider(_todayString));
+    final summaryAsync = ref.watch(studentDashboardSummaryProvider(_todayString));
 
     // Broadcast badge — select() so this boolean is only recomputed when
     // broadcasts or lastSeen actually change, not on every dashboard rebuild.
     final lastSeenBroadcast = ref.watch(studentBroadcastBadgeNotifier);
-    final hasBroadcastBadge = ref.watch(studentBroadcastsProvider.select((async) =>
-      async.maybeWhen(
-        data: (list) {
-          if (list.isEmpty) return false;
-          DateTime? latest;
-          for (final b in list) {
-            if (latest == null || b.createdAt.isAfter(latest)) latest = b.createdAt;
-          }
-          return latest != null && (lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast));
-        },
-        orElse: () => false,
-      )));
+    final hasBroadcastBadge = ref.watch(
+      studentDashboardSummaryProvider(_todayString).select((async) =>
+        async.maybeWhen(
+          data: (summary) {
+            final raw = (summary['broadcasts'] as List<dynamic>? ?? []);
+            if (raw.isEmpty) return false;
+            DateTime? latest;
+            for (final b in raw) {
+              final createdAt = DateTime.parse(
+                  (b as Map<String, dynamic>)['created_at'] as String);
+              if (latest == null || createdAt.isAfter(latest)) latest = createdAt;
+            }
+            return latest != null &&
+                (lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast));
+          },
+          orElse: () => false,
+        )),
+    );
 
     final mq = MediaQuery.of(context);
     final topPadding = mq.padding.top;
@@ -232,8 +220,7 @@ class _StudentDashboardScreenState
                             color: Colors.white,
                             size: _s(context, 22, min: 18, max: 26)),
                         padding: EdgeInsets.zero,
-                        onPressed: () =>
-                            ref.read(authProvider.notifier).logout(),
+                        onPressed: () => confirmLogout(context, ref),
                       ),
                     ),
                   ),
@@ -431,7 +418,7 @@ class _StudentDashboardScreenState
           ),
 
           // ── Timetable slots — horizontal scroll ───────────────────────
-          timetableAsync.when(
+          summaryAsync.when(
             loading: () => const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -439,11 +426,18 @@ class _StudentDashboardScreenState
               ),
             ),
             error: (e, _) => const SliverToBoxAdapter(child: SizedBox.shrink()),
-            data: (slots) => SliverToBoxAdapter(
-              child: slots.isEmpty
-                  ? _TimetableEmpty()
-                  : _TimetableHScroll(slots: slots),
-            ),
+            data: (summary) {
+              final rawSlots = (summary['timetable'] as List<dynamic>? ?? []);
+              final slots = rawSlots
+                  .map((e) =>
+                      TimetableSlotModel.fromJson(e as Map<String, dynamic>))
+                  .toList();
+              return SliverToBoxAdapter(
+                child: slots.isEmpty
+                    ? _TimetableEmpty()
+                    : _TimetableHScroll(slots: slots),
+              );
+            },
           ),
 
           // ── Recent Homework ───────────────────────────────────────────
@@ -455,15 +449,19 @@ class _StudentDashboardScreenState
             ),
           ),
           SliverToBoxAdapter(
-            child: Consumer(builder: (context, ref, _) {
-              final hwAsync = ref.watch(studentHomeworkProvider);
-              return hwAsync.when(
-                loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: LinearProgressIndicator(),
-                ),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (list) => list.isEmpty
+            child: summaryAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: LinearProgressIndicator(),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (summary) {
+                final rawHw = (summary['homework'] as List<dynamic>? ?? []);
+                final list = rawHw
+                    .map((e) =>
+                        HomeworkModel.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                return list.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                         child: Text('No homework yet',
@@ -473,9 +471,9 @@ class _StudentDashboardScreenState
                       )
                     : Column(
                         children: list.take(2).map((h) => _DashHomeworkTile(hw: h)).toList(),
-                      ),
-              );
-            }),
+                      );
+              },
+            ),
           ),
 
           // ── Recent Announcements ──────────────────────────────────────
@@ -491,15 +489,19 @@ class _StudentDashboardScreenState
             ),
           ),
           SliverToBoxAdapter(
-            child: Consumer(builder: (context, ref, _) {
-              final bcAsync = ref.watch(studentBroadcastsProvider);
-              return bcAsync.when(
-                loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: LinearProgressIndicator(),
-                ),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (list) => list.isEmpty
+            child: summaryAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: LinearProgressIndicator(),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (summary) {
+                final rawBc = (summary['broadcasts'] as List<dynamic>? ?? []);
+                final list = rawBc
+                    .map((e) =>
+                        BroadcastModel.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                return list.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                         child: Text('No announcements yet',
@@ -512,9 +514,9 @@ class _StudentDashboardScreenState
                           broadcast: b,
                           lastSeen: lastSeenBroadcast,
                         )).toList(),
-                      ),
-              );
-            }),
+                      );
+              },
+            ),
           ),
           SliverToBoxAdapter(child: SizedBox(height: _s(context, 16, min: 12, max: 24))),
 

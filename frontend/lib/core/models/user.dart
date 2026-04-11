@@ -12,6 +12,8 @@ class UserModel {
   final String? studentUsername;            // parents only
   final List<String>? teachableSubjects;    // teachers only
   final List<String>? additionalSubjects;   // students only
+  final String? phone;
+  final String? email;
 
   const UserModel({
     required this.id,
@@ -27,6 +29,8 @@ class UserModel {
     this.studentUsername,
     this.teachableSubjects,
     this.additionalSubjects,
+    this.phone,
+    this.email,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
@@ -49,6 +53,8 @@ class UserModel {
         additionalSubjects: (json['additional_subjects'] as List<dynamic>?)
             ?.map((e) => e as String)
             .toList(),
+        phone: json['phone'] as String?,
+        email: json['email'] as String?,
       );
 
   Map<String, dynamic> toJson() => {

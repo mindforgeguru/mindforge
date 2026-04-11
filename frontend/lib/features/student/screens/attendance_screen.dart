@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 
 import '../../../core/models/attendance.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_bottom_nav.dart';
 
@@ -100,12 +102,10 @@ class _StudentAttendanceScreenState
         ),
       ),
       body: recordsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Text('Error: $e',
-              style: GoogleFonts.poppins(
-                  fontSize: _fs(context, 13, min: 11, max: 15),
-                  color: AppColors.error)),
+        loading: () => const ShimmerList(showAvatar: false, itemHeight: 56),
+        error: (e, _) => ErrorView(
+          error: e,
+          onRetry: () => ref.invalidate(studentAttendanceProvider),
         ),
         data: (records) {
           final Map<String, _DayStatus> statusMap = _buildStatusMap(records);

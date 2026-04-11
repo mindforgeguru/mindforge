@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/models/fees.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/parent_provider.dart';
 import '../widgets/parent_bottom_nav.dart';
@@ -45,8 +46,8 @@ class ParentFeesScreen extends ConsumerWidget {
         ),
         bottomNavigationBar: const ParentBottomNav(),
         body: feesAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => parentErrorWidget(e),
+          loading: () => const ShimmerCards(count: 3, cardHeight: 140),
+          error: (e, _) => parentErrorWidget(e, onRetry: () => ref.invalidate(parentChildFeesProvider)),
           data: (fees) => TabBarView(
             children: [
               _SummaryTab(fees: fees),
@@ -68,7 +69,7 @@ class _SummaryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -126,7 +127,7 @@ class _PayTab extends StatelessWidget {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

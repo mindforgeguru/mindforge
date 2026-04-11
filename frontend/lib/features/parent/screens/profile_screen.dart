@@ -71,7 +71,10 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('My Profile')),
-      body: SingleChildScrollView(
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: SingleChildScrollView(
         padding: EdgeInsets.all(R.sp(context, 16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -211,6 +214,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
             const SizedBox(height: 24),
           ],
         ),
+      ),
       ),
     );
   }

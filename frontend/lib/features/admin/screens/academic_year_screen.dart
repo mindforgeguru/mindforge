@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
 
 class AdminAcademicYearScreen extends ConsumerWidget {
@@ -29,9 +30,15 @@ class AdminAcademicYearScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: yearsAsync.when(
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: yearsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => ErrorView(
+          error: e,
+          onRetry: () => ref.invalidate(academicYearsProvider),
+        ),
         data: (years) {
           final current = currentAsync.valueOrNull;
           final previous = years.where((y) => y['is_current'] == false).toList();
@@ -92,6 +99,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
             ],
           );
         },
+      ),
       ),
     );
   }

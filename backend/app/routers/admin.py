@@ -192,6 +192,8 @@ async def get_all_users(
             is_approved=user.is_approved,
             created_at=user.created_at,
             deleted_at=user.deleted_at,
+            phone=user.phone,
+            email=user.email,
             grade=profile.grade if profile else None,
             parent_user_id=profile.parent_user_id if profile else None,
             parent_username=parent_username_map.get(profile.parent_user_id) if profile and profile.parent_user_id else None,
@@ -219,6 +221,25 @@ async def edit_user(
         raise HTTPException(status_code=404, detail="User not found.")
     if user.role == UserRole.admin:
         raise HTTPException(status_code=403, detail="Cannot modify admin account.")
+
+    # Update phone
+    if payload.phone is not None:
+        new_phone = payload.phone.strip() or None
+        if new_phone and new_phone != user.phone:
+            conflict = await db.execute(
+                select(User).where(
+                    User.phone == new_phone,
+                    User.deleted_at.is_(None),
+                    User.id != user_id,
+                )
+            )
+            if conflict.scalar_one_or_none():
+                raise HTTPException(status_code=409, detail="An account with this phone number already exists.")
+        user.phone = new_phone
+
+    # Update email
+    if payload.email is not None:
+        user.email = payload.email.strip() or None
 
     # Update username
     if payload.username and payload.username != user.username:
@@ -403,6 +424,7 @@ async def edit_user(
         id=user.id, username=user.username, role=user.role,
         is_active=user.is_active, is_approved=user.is_approved,
         created_at=user.created_at, deleted_at=user.deleted_at,
+        phone=user.phone, email=user.email,
         grade=final_profile.grade if final_profile else None,
         parent_user_id=final_profile.parent_user_id if final_profile else None,
         parent_username=parent_username,
@@ -728,6 +750,7 @@ async def record_fee_payment(
         amount=payload.amount,
         notes=payload.notes,
         updated_by_admin_id=current_admin.id,
+        **({"paid_at": payload.paid_at} if payload.paid_at else {}),
     )
     db.add(payment)
     await db.commit()

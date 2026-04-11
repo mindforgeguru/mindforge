@@ -58,7 +58,7 @@ class ApiClient {
       ),
     );
 
-    // JWT interceptor — attaches token and handles 401
+    // JWT interceptor — attaches token and handles 401 with refresh logic
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
@@ -70,10 +70,44 @@ class ApiClient {
         },
         onError: (DioException error, handler) async {
           if (error.response?.statusCode == 401) {
-            // Token expired or revoked — clear credentials and notify
-            // AuthNotifier so the router immediately redirects to login.
-            await _storage.deleteAll();
-            onUnauthorized?.call();
+            // Avoid infinite refresh loop
+            if (error.requestOptions.path == '/auth/refresh') {
+              await _storage.deleteAll();
+              onUnauthorized?.call();
+              return handler.next(error);
+            }
+
+            // Try to refresh the access token
+            final refreshToken = await _storage.read(
+                key: AppConstants.refreshTokenStorageKey);
+            if (refreshToken != null) {
+              try {
+                final res = await _dio.post(
+                  '/auth/refresh',
+                  data: {'refresh_token': refreshToken},
+                  options: Options(
+                    headers: {'Authorization': null}, // no auth header for refresh
+                    extra: {'_skipRefresh': true},
+                  ),
+                );
+                final newToken = (res.data as Map<String, dynamic>)['access_token'] as String;
+                await _storage.write(
+                    key: AppConstants.tokenStorageKey, value: newToken);
+                // Retry the original request with the new token
+                final retryOptions = error.requestOptions;
+                retryOptions.headers['Authorization'] = 'Bearer $newToken';
+                final response = await _dio.fetch(retryOptions);
+                return handler.resolve(response);
+              } catch (_) {
+                // Refresh failed — log out
+                await _storage.deleteAll();
+                onUnauthorized?.call();
+              }
+            } else {
+              // No refresh token — log out immediately
+              await _storage.deleteAll();
+              onUnauthorized?.call();
+            }
           }
           return handler.next(error);
         },
@@ -93,7 +127,9 @@ class ApiClient {
 
   Future<Map<String, dynamic>> register(
       String username, String mpin, String role,
-      {String? parentUsername,
+      {String? phone,
+      String? email,
+      String? parentUsername,
       int? grade,
       List<String>? additionalSubjects,
       List<String>? teachableSubjects}) async {
@@ -101,6 +137,8 @@ class ApiClient {
       'username': username,
       'mpin': mpin,
       'role': role,
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (email != null && email.isNotEmpty) 'email': email,
       if (parentUsername != null && parentUsername.isNotEmpty)
         'parent_username': parentUsername,
       if (grade != null) 'grade': grade,
@@ -216,11 +254,13 @@ class ApiClient {
         queryParameters: {'grade': grade, 'date': date});
   }
 
-  Future<List<dynamic>> getTeacherGrades({int? grade, String? subject, int? studentId}) async {
+  Future<List<dynamic>> getTeacherGrades({int? grade, String? subject, int? studentId, int skip = 0, int limit = 50}) async {
     final res = await _dio.get('/teacher/grades', queryParameters: {
       if (grade != null) 'grade': grade,
       if (subject != null) 'subject': subject,
       if (studentId != null) 'student_id': studentId,
+      if (skip > 0) 'skip': skip,
+      if (limit != 50) 'limit': limit,
     });
     return res.data as List<dynamic>;
   }
@@ -341,8 +381,11 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<List<dynamic>> getStudentAttendance() async {
-    final res = await _dio.get('/student/attendance');
+  Future<List<dynamic>> getStudentAttendance({int skip = 0, int limit = 50}) async {
+    final res = await _dio.get('/student/attendance', queryParameters: {
+      if (skip > 0) 'skip': skip,
+      if (limit != 50) 'limit': limit,
+    });
     return res.data as List<dynamic>;
   }
 
@@ -356,10 +399,12 @@ class ApiClient {
     return res.data as List<dynamic>;
   }
 
-  Future<List<dynamic>> getStudentGrades({String? subject, String? gradeType}) async {
+  Future<List<dynamic>> getStudentGrades({String? subject, String? gradeType, int skip = 0, int limit = 50}) async {
     final res = await _dio.get('/student/grades', queryParameters: {
       if (subject != null) 'subject': subject,
       if (gradeType != null) 'grade_type': gradeType,
+      if (skip > 0) 'skip': skip,
+      if (limit != 50) 'limit': limit,
     });
     return res.data as List<dynamic>;
   }
@@ -400,8 +445,11 @@ class ApiClient {
 
   // ── Parent ────────────────────────────────────────────────────────────────
 
-  Future<List<dynamic>> getChildAttendance() async {
-    final res = await _dio.get('/parent/child/attendance');
+  Future<List<dynamic>> getChildAttendance({int skip = 0, int limit = 50}) async {
+    final res = await _dio.get('/parent/child/attendance', queryParameters: {
+      if (skip > 0) 'skip': skip,
+      if (limit != 50) 'limit': limit,
+    });
     return res.data as List<dynamic>;
   }
 
@@ -415,10 +463,12 @@ class ApiClient {
     return res.data as List<dynamic>;
   }
 
-  Future<List<dynamic>> getChildGrades({String? subject, String? gradeType}) async {
+  Future<List<dynamic>> getChildGrades({String? subject, String? gradeType, int skip = 0, int limit = 50}) async {
     final res = await _dio.get('/parent/child/grades', queryParameters: {
       if (subject != null) 'subject': subject,
       if (gradeType != null) 'grade_type': gradeType,
+      if (skip > 0) 'skip': skip,
+      if (limit != 50) 'limit': limit,
     });
     return res.data as List<dynamic>;
   }
@@ -660,5 +710,26 @@ class ApiClient {
       options: Options(responseType: ResponseType.bytes),
     );
     return res.data as List<int>;
+  }
+
+  // ── Dashboard summary endpoints ──────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getStudentDashboardSummary({String? date}) async {
+    final res = await _dio.get('/student/dashboard-summary', queryParameters: {
+      if (date != null) 'date': date,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getTeacherDashboardSummary() async {
+    final res = await _dio.get('/teacher/dashboard-summary');
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getParentDashboardSummary({String? date}) async {
+    final res = await _dio.get('/parent/dashboard-summary', queryParameters: {
+      if (date != null) 'date': date,
+    });
+    return res.data as Map<String, dynamic>;
   }
 }

@@ -7,11 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/api/websocket_client.dart';
 import '../../../core/models/grade.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/error_view.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_bottom_nav.dart';
@@ -76,17 +78,67 @@ class _OnlineGradesTab extends ConsumerStatefulWidget {
 }
 
 class _OnlineGradesTabState extends ConsumerState<_OnlineGradesTab> {
+  static const int _pageSize = 50;
   String? _filterSubject;
+  List<GradeModel> _allGrades = [];
+  bool _isLoadingMore = false;
+  bool _hasMore = false;
+
+  void _onSubjectChanged(String? v) {
+    setState(() {
+      _filterSubject = v;
+      _allGrades = [];
+      _hasMore = false;
+    });
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      final raw = await api.getStudentGrades(
+        subject: _filterSubject,
+        gradeType: 'online',
+        skip: _allGrades.length,
+      );
+      final newGrades = raw
+          .map((e) => GradeModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (mounted) {
+        setState(() {
+          _allGrades.addAll(newGrades);
+          _hasMore = newGrades.length >= _pageSize;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final gradesAsync = ref.watch(studentOnlineGradesProvider(_filterSubject));
+    ref.listen(studentOnlineGradesProvider(_filterSubject), (_, next) {
+      next.whenData((grades) {
+        if (mounted) {
+          setState(() {
+            _allGrades = grades;
+            _hasMore = grades.length >= _pageSize;
+          });
+        }
+      });
+    });
     return _GradesTabBody(
-      gradesAsync: gradesAsync,
+      gradesAsync: gradesAsync.whenData((_) => _allGrades),
       filterSubject: _filterSubject,
-      onSubjectChanged: (v) => setState(() => _filterSubject = v),
+      onSubjectChanged: _onSubjectChanged,
       onRefresh: () =>
           ref.refresh(studentOnlineGradesProvider(_filterSubject).future),
+      hasMore: _hasMore,
+      isLoadingMore: _isLoadingMore,
+      onLoadMore: _loadMore,
       buildCard: (g, high, low) => _GradeCard(
         grade: g,
         classHigh: high,
@@ -110,7 +162,11 @@ class _OfflineGradesTab extends ConsumerStatefulWidget {
 }
 
 class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
+  static const int _pageSize = 50;
   String? _filterSubject;
+  List<GradeModel> _allGrades = [];
+  bool _isLoadingMore = false;
+  bool _hasMore = false;
   StreamSubscription<Map<String, dynamic>>? _wsSub;
 
   @override
@@ -138,18 +194,63 @@ class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
     super.dispose();
   }
 
+  void _onSubjectChanged(String? v) {
+    setState(() {
+      _filterSubject = v;
+      _allGrades = [];
+      _hasMore = false;
+    });
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      final raw = await api.getStudentGrades(
+        subject: _filterSubject,
+        gradeType: 'offline',
+        skip: _allGrades.length,
+      );
+      final newGrades = raw
+          .map((e) => GradeModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (mounted) {
+        setState(() {
+          _allGrades.addAll(newGrades);
+          _hasMore = newGrades.length >= _pageSize;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final gradesAsync =
-        ref.watch(studentOfflineGradesProvider(_filterSubject));
+    final gradesAsync = ref.watch(studentOfflineGradesProvider(_filterSubject));
+    ref.listen(studentOfflineGradesProvider(_filterSubject), (_, next) {
+      next.whenData((grades) {
+        if (mounted) {
+          setState(() {
+            _allGrades = grades;
+            _hasMore = grades.length >= _pageSize;
+          });
+        }
+      });
+    });
     return _GradesTabBody(
-      gradesAsync: gradesAsync,
+      gradesAsync: gradesAsync.whenData((_) => _allGrades),
       filterSubject: _filterSubject,
-      onSubjectChanged: (v) => setState(() => _filterSubject = v),
+      onSubjectChanged: _onSubjectChanged,
       onRefresh: () =>
           ref.refresh(studentOfflineGradesProvider(_filterSubject).future),
       emptyMessage: 'No offline test grades yet.',
       emptySubMessage: 'Grades entered by your teacher will appear here.',
+      hasMore: _hasMore,
+      isLoadingMore: _isLoadingMore,
+      onLoadMore: _loadMore,
       buildCard: (g, high, low) =>
           _GradeCard(grade: g, classHigh: high, classLow: low),
     );
@@ -277,7 +378,12 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
               loading: () => SizedBox(
                   height: R.vh(context, 33),
                   child: const Center(child: CircularProgressIndicator())),
-              error: (e, _) => Center(child: Text('Error: $e')),
+              error: (e, _) => ErrorView(
+                error: e,
+                onRetry: () => _testType == 'online'
+                    ? ref.invalidate(studentOnlineGradesProvider(_subject))
+                    : ref.invalidate(studentOfflineGradesProvider(_subject)),
+              ),
               data: (grades) {
                 // Sort chronologically
                 final sorted = [...grades]
@@ -779,6 +885,9 @@ class _GradesTabBody extends StatelessWidget {
   final Widget Function(GradeModel g, double high, double low) buildCard;
   final String emptyMessage;
   final String emptySubMessage;
+  final bool hasMore;
+  final bool isLoadingMore;
+  final VoidCallback? onLoadMore;
 
   const _GradesTabBody({
     required this.gradesAsync,
@@ -788,6 +897,9 @@ class _GradesTabBody extends StatelessWidget {
     required this.buildCard,
     this.emptyMessage = 'No grade records yet.',
     this.emptySubMessage = 'Grades will appear here once available.',
+    this.hasMore = false,
+    this.isLoadingMore = false,
+    this.onLoadMore,
   });
 
   @override
@@ -817,7 +929,7 @@ class _GradesTabBody extends StatelessWidget {
           child: gradesAsync.when(
             loading: () =>
                 const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
+            error: (e, _) => ErrorView(error: e, onRetry: () => onRefresh()),
             data: (grades) {
               if (grades.isEmpty) {
                 return Center(
@@ -860,10 +972,22 @@ class _GradesTabBody extends StatelessWidget {
               return RefreshIndicator(
                 onRefresh: onRefresh,
                 child: ListView.separated(
-                  padding: EdgeInsets.fromLTRB(R.sp(context, 16, min: 12, max: 20), 8, R.sp(context, 16, min: 12, max: 20), 16),
-                  itemCount: grades.length,
+                  padding: EdgeInsets.fromLTRB(R.sp(context, 16, min: 12, max: 20), 8, R.sp(context, 16, min: 12, max: 20), MediaQuery.of(context).padding.bottom + 16),
+                  itemCount: grades.length + (hasMore ? 1 : 0),
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (ctx, i) {
+                    if (i == grades.length) {
+                      // Load More button / loading indicator
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: isLoadingMore
+                            ? const Center(child: CircularProgressIndicator())
+                            : OutlinedButton(
+                                onPressed: onLoadMore,
+                                child: const Text('Load More'),
+                              ),
+                      );
+                    }
                     final g = grades[i];
                     return buildCard(
                       g,
