@@ -30,7 +30,10 @@ class TestReviewScreen extends ConsumerWidget {
           orElse: () => const Text('Test Review'),
         ),
       ),
-      body: reviewAsync.when(
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: reviewAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorView(
           error: e,
@@ -121,6 +124,7 @@ class TestReviewScreen extends ConsumerWidget {
             },
           );
         },
+      ),
       ),
     );
   }

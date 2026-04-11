@@ -498,8 +498,8 @@ async def get_parent_dashboard_summary(
     return {
         "child_timetable": child_timetable,
         "broadcasts": broadcasts,
-        "homework": homework,
-        "child_grades": child_grades,
-        "child_tests": child_tests,
+        "homework": [HomeworkResponse.model_validate(h) for h in homework],
+        "child_grades": [GradeResponse.model_validate(g) for g in child_grades],
+        "child_tests": [TestResponse.model_validate(t) for t in child_tests],
         "child_fees": child_fees,
     }

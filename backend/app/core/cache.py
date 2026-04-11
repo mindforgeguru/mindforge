@@ -74,22 +74,30 @@ async def invalidate_student_profile(user_id: int):
 
 # ─── Timetable config ─────────────────────────────────────────────────────────
 
-async def get_timetable_config_cached(db: AsyncSession):
-    """Returns the TimetableConfig ORM object (or None) with Redis caching."""
+@dataclass
+class CachedTimetableConfig:
+    id: int
+    periods_per_day: int
+    enable_weekends: bool
+    period_times: Optional[list]
+    created_by_admin_id: Optional[int]
+
+
+async def get_timetable_config_cached(db: AsyncSession) -> Optional[CachedTimetableConfig]:
+    """Returns a CachedTimetableConfig (or None) with Redis caching."""
     from app.models.timetable import TimetableConfig
 
     key = "cache:timetable_config"
     raw = await redis_manager.get_cache(key)
     if raw:
         d = json.loads(raw)
-        # Reconstruct a lightweight object with the fields routers actually use
-        cfg = TimetableConfig.__new__(TimetableConfig)
-        cfg.id = d["id"]
-        cfg.periods_per_day = d["periods_per_day"]
-        cfg.enable_weekends = d["enable_weekends"]
-        cfg.period_times = d.get("period_times")
-        cfg.created_by_admin_id = d.get("created_by_admin_id")
-        return cfg
+        return CachedTimetableConfig(
+            id=d["id"],
+            periods_per_day=d["periods_per_day"],
+            enable_weekends=d["enable_weekends"],
+            period_times=d.get("period_times"),
+            created_by_admin_id=d.get("created_by_admin_id"),
+        )
 
     result = await db.execute(select(TimetableConfig))
     cfg = result.scalar_one_or_none()
@@ -105,7 +113,14 @@ async def get_timetable_config_cached(db: AsyncSession):
             }),
             expire_seconds=_TTL_TIMETABLE_CFG,
         )
-    return cfg
+        return CachedTimetableConfig(
+            id=cfg.id,
+            periods_per_day=cfg.periods_per_day,
+            enable_weekends=cfg.enable_weekends,
+            period_times=cfg.period_times,
+            created_by_admin_id=cfg.created_by_admin_id,
+        )
+    return None
 
 
 async def invalidate_timetable_config():

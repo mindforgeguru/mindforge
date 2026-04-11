@@ -473,7 +473,7 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
                 );
               }
               return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).padding.bottom + 16),
                 itemCount: offlineTests.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (ctx, i) =>

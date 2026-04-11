@@ -972,7 +972,7 @@ class _GradesTabBody extends StatelessWidget {
               return RefreshIndicator(
                 onRefresh: onRefresh,
                 child: ListView.separated(
-                  padding: EdgeInsets.fromLTRB(R.sp(context, 16, min: 12, max: 20), 8, R.sp(context, 16, min: 12, max: 20), 16),
+                  padding: EdgeInsets.fromLTRB(R.sp(context, 16, min: 12, max: 20), 8, R.sp(context, 16, min: 12, max: 20), MediaQuery.of(context).padding.bottom + 16),
                   itemCount: grades.length + (hasMore ? 1 : 0),
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (ctx, i) {

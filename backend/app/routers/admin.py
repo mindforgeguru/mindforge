@@ -192,6 +192,8 @@ async def get_all_users(
             is_approved=user.is_approved,
             created_at=user.created_at,
             deleted_at=user.deleted_at,
+            phone=user.phone,
+            email=user.email,
             grade=profile.grade if profile else None,
             parent_user_id=profile.parent_user_id if profile else None,
             parent_username=parent_username_map.get(profile.parent_user_id) if profile and profile.parent_user_id else None,
@@ -422,6 +424,7 @@ async def edit_user(
         id=user.id, username=user.username, role=user.role,
         is_active=user.is_active, is_approved=user.is_approved,
         created_at=user.created_at, deleted_at=user.deleted_at,
+        phone=user.phone, email=user.email,
         grade=final_profile.grade if final_profile else None,
         parent_user_id=final_profile.parent_user_id if final_profile else None,
         parent_username=parent_username,
@@ -747,6 +750,7 @@ async def record_fee_payment(
         amount=payload.amount,
         notes=payload.notes,
         updated_by_admin_id=current_admin.id,
+        **({"paid_at": payload.paid_at} if payload.paid_at else {}),
     )
     db.add(payment)
     await db.commit()

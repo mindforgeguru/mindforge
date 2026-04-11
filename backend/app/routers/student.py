@@ -817,10 +817,10 @@ async def get_student_dashboard_summary(
     return {
         "timetable": timetable,
         "broadcasts": broadcasts,
-        "homework": homework,
+        "homework": [HomeworkResponse.model_validate(h) for h in homework],
         "attendance": attendance,
-        "pending_tests": pending_tests,
-        "offline_tests": offline_tests,
-        "grades": grades,
+        "pending_tests": [TestResponse.model_validate(t) for t in pending_tests],
+        "offline_tests": [TestResponse.model_validate(t) for t in offline_tests],
+        "grades": [GradeResponse.model_validate(g) for g in grades],
         "fees": fees,
     }

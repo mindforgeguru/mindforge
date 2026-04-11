@@ -90,12 +90,16 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const [
-          _PendingUsersTab(),
-          _ActiveUsersTab(),
-        ],
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: TabBarView(
+          controller: _tabController,
+          children: const [
+            _PendingUsersTab(),
+            _ActiveUsersTab(),
+          ],
+        ),
       ),
     );
   }

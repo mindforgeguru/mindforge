@@ -105,13 +105,17 @@ class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _FeeStructuresTab(selectedYear: _selectedYear),
-          _PaymentsTab(selectedYear: _selectedYear),
-          const _PaymentInfoTab(),
-        ],
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _FeeStructuresTab(selectedYear: _selectedYear),
+            _PaymentsTab(selectedYear: _selectedYear),
+            const _PaymentInfoTab(),
+          ],
+        ),
       ),
     );
   }
@@ -463,12 +467,23 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   bool _recording = false;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void dispose() {
     _amountCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) setState(() => _selectedDate = picked);
   }
 
   Color get _statusColor {
@@ -648,6 +663,30 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: _pickDate,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.divider),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.textSecondary),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Payment Date: ${DateFormat('d MMM yyyy').format(_selectedDate)}',
+                            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          ),
+                          const Spacer(),
+                          const Icon(Icons.edit_outlined, size: 14, color: AppColors.textMuted),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   SizedBox(
                     height: 40,
@@ -693,9 +732,11 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
         'notes': _notesCtrl.text.trim().isEmpty
             ? null
             : _notesCtrl.text.trim(),
+        'paid_at': _selectedDate.toIso8601String(),
       });
       _amountCtrl.clear();
       _notesCtrl.clear();
+      setState(() => _selectedDate = DateTime.now());
       widget.onPaymentRecorded();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

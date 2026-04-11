@@ -79,21 +79,21 @@ final studentOfflineGradesProvider =
 });
 
 final pendingTestsProvider =
-    FutureProvider<List<TestModel>>((ref) async {
+    FutureProvider.autoDispose<List<TestModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getPendingTests();
   return raw.map((e) => TestModel.fromJson(e as Map<String, dynamic>)).toList();
 });
 
 final offlineTestsProvider =
-    FutureProvider<List<TestModel>>((ref) async {
+    FutureProvider.autoDispose<List<TestModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentOfflineTests();
   return raw.map((e) => TestModel.fromJson(e as Map<String, dynamic>)).toList();
 });
 
 final completedTestsProvider =
-    FutureProvider<List<TestModel>>((ref) async {
+    FutureProvider.autoDispose<List<TestModel>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentCompletedTests();
   return raw.map((e) => TestModel.fromJson(e as Map<String, dynamic>)).toList();

@@ -30,7 +30,10 @@ class AdminAcademicYearScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: yearsAsync.when(
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: yearsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorView(
           error: e,
@@ -96,6 +99,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
             ],
           );
         },
+      ),
       ),
     );
   }

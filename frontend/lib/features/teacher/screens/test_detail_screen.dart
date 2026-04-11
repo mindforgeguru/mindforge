@@ -238,27 +238,31 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _PreviewEditTab(
-            test: t,
-            questions: _questions,
-            totalMarks: _totalMarks,
-            hasEdits: hasEdits,
-            downloadingPdf: _downloadingPdf,
-            downloadingKey: _downloadingKey,
-            onDownloadPdf: () => _downloadPdf(testPaper: true),
-            onDownloadKey: () => _downloadPdf(testPaper: false),
-            onEdit: _editQuestion,
-            onDelete: _deleteQuestion,
-            onSave: hasEdits ? _saveQuestions : null,
-            saving: _savingQuestions,
-          ),
-          t.testType == 'online'
-              ? _OnlineGradesTab(test: t)
-              : _OfflineGradeEntryTab(test: t),
-        ],
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _PreviewEditTab(
+              test: t,
+              questions: _questions,
+              totalMarks: _totalMarks,
+              hasEdits: hasEdits,
+              downloadingPdf: _downloadingPdf,
+              downloadingKey: _downloadingKey,
+              onDownloadPdf: () => _downloadPdf(testPaper: true),
+              onDownloadKey: () => _downloadPdf(testPaper: false),
+              onEdit: _editQuestion,
+              onDelete: _deleteQuestion,
+              onSave: hasEdits ? _saveQuestions : null,
+              saving: _savingQuestions,
+            ),
+            t.testType == 'online'
+                ? _OnlineGradesTab(test: t)
+                : _OfflineGradeEntryTab(test: t),
+          ],
+        ),
       ),
     );
   }

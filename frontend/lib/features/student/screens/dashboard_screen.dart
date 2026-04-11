@@ -80,6 +80,11 @@ class _StudentDashboardScreenState
       } else if (eventType != null) {
         // Any relevant event → refresh the single summary
         ref.invalidate(studentDashboardSummaryProvider(_todayString));
+        // New test published → also refresh the tests screen
+        if (eventType == 'new_test_available' || eventType == 'test_status_changed') {
+          ref.invalidate(pendingTestsProvider);
+          ref.invalidate(offlineTestsProvider);
+        }
       }
     });
   }

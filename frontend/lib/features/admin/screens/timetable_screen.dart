@@ -203,7 +203,10 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
           ),
         ],
       ),
-      body: configAsync.when(
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: configAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorView(
           error: e,
@@ -394,6 +397,7 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }

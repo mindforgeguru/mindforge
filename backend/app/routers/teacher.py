@@ -1163,9 +1163,9 @@ async def get_teacher_dashboard_summary(
     )).scalars().all()
 
     return {
-        "my_timetable": my_timetable,
+        "my_timetable": [TimetableSlotResponse.model_validate(s) for s in my_timetable],
         "broadcasts": broadcasts,
-        "homework": homework,
-        "grades": grades,
-        "tests": tests,
+        "homework": [HomeworkResponse.model_validate(h) for h in homework],
+        "grades": [GradeResponse.model_validate(g) for g in grades],
+        "tests": [TestResponse.model_validate(t) for t in tests],
     }
