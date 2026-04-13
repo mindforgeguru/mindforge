@@ -771,7 +771,7 @@ class _TeacherDashboardScreenState
                         ),
                       )
                     : Column(
-                        children: list.take(2).map((h) => _DashHomeworkTile(hw: h)).toList(),
+                        children: list.take(3).map((h) => _DashHomeworkTile(hw: h)).toList(),
                       );
               },
             ),
@@ -929,7 +929,7 @@ class _DashHomeworkTile extends StatelessWidget {
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(hw.subject,
+                  Text('${hw.subject} · Grade ${hw.grade}',
                     style: GoogleFonts.poppins(
                       fontSize: (sw * 0.026).clamp(9.0, 11.0),
                       color: AppColors.textMuted,
