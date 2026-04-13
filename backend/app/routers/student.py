@@ -36,6 +36,18 @@ from app.core.cache import (
 
 router = APIRouter()
 
+# Optional subjects — students only see tests for subjects they have opted into.
+_OPTIONAL_SUBJECTS = {"ai", "economics", "computer"}
+
+
+def _apply_subject_filter(query, profile):
+    """Exclude tests whose subject is an optional subject the student hasn't opted for."""
+    student_subjects = set(profile.additional_subjects or [])
+    excluded = _OPTIONAL_SUBJECTS - student_subjects
+    if excluded:
+        query = query.where(Test.subject.notin_(excluded))
+    return query
+
 
 # ─── Profile ───────────────────────────────────────────────────────────────────
 
@@ -223,6 +235,7 @@ async def get_pending_tests(
     )
     if submitted_ids:
         query = query.where(Test.id.notin_(submitted_ids))
+    query = _apply_subject_filter(query, profile)
 
     result = await db.execute(query.order_by(Test.created_at.desc()))
     return result.scalars().all()
@@ -238,12 +251,13 @@ async def get_offline_tests(
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
-    result = await db.execute(
+    query = (
         select(Test)
         .where(Test.grade == profile.grade, Test.test_type == TestType.offline,
                Test.is_published == True)
-        .order_by(Test.created_at.desc())
     )
+    query = _apply_subject_filter(query, profile)
+    result = await db.execute(query.order_by(Test.created_at.desc()))
     return result.scalars().all()
 
 
@@ -769,12 +783,13 @@ async def get_student_dashboard_summary(
     )
     if submitted_ids:
         pending_q = pending_q.where(Test.id.notin_(submitted_ids))
+    pending_q = _apply_subject_filter(pending_q, profile)
     pending_tests = (await db.execute(pending_q.order_by(Test.created_at.desc()))).scalars().all()
-    offline_tests = (await db.execute(
-        select(Test).where(
-            Test.grade == profile.grade, Test.test_type == TestType.offline, Test.is_published == True
-        ).order_by(Test.created_at.desc())
-    )).scalars().all()
+    offline_q = select(Test).where(
+        Test.grade == profile.grade, Test.test_type == TestType.offline, Test.is_published == True
+    )
+    offline_q = _apply_subject_filter(offline_q, profile)
+    offline_tests = (await db.execute(offline_q.order_by(Test.created_at.desc()))).scalars().all()
 
     # Grades
     grades = (await db.execute(
