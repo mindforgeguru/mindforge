@@ -428,7 +428,8 @@ class _TeacherAttendanceScreenState
     });
   }
 
-  Future<void> _submit(BuildContext context, List<UserModel> students) async {
+  Future<void> _submit(BuildContext context, List<UserModel> students,
+      {required bool isUpdate}) async {
     if (students.isEmpty) return;
     setState(() => _submitting = true);
     final api = ref.read(apiClientProvider);
@@ -455,8 +456,10 @@ class _TeacherAttendanceScreenState
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Attendance submitted successfully!'),
+          SnackBar(
+            content: Text(isUpdate
+                ? 'Attendance updated successfully!'
+                : 'Attendance submitted successfully!'),
             backgroundColor: AppColors.success,
           ),
         );
@@ -565,6 +568,9 @@ class _TeacherAttendanceScreenState
                   data: (records) {
                     _initAttendance(students, records);
 
+                    final alreadySubmitted = records
+                        .any((r) => r.period == _selectedPeriod);
+
                     final presentCount = _attendance.values
                         .where((v) => v)
                         .length;
@@ -579,6 +585,10 @@ class _TeacherAttendanceScreenState
                           present: presentCount,
                           absent: absentCount,
                         ),
+
+                        // ── Already-submitted banner ───────────────
+                        if (alreadySubmitted)
+                          _SubmittedBanner(dateStr: _dateStr, period: _selectedPeriod),
 
                         // ── Student list + action buttons at bottom ─
                         Expanded(
@@ -599,9 +609,11 @@ class _TeacherAttendanceScreenState
                               if (i == students.length) {
                                 return _BottomActions(
                                   submitting: _submitting,
+                                  isUpdate: alreadySubmitted,
                                   onReset: _resetAll,
-                                  onSubmit: () =>
-                                      _submit(context, students),
+                                  onSubmit: () => _submit(
+                                      context, students,
+                                      isUpdate: alreadySubmitted),
                                 );
                               }
                               final s = students[i];
@@ -939,15 +951,61 @@ class _StudentTile extends StatelessWidget {
   }
 }
 
+// ── Already-submitted banner ───────────────────────────────────────────────
+
+class _SubmittedBanner extends StatelessWidget {
+  final String dateStr;
+  final int period;
+  const _SubmittedBanner({required this.dateStr, required this.period});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.fromLTRB(
+          R.sp(context, 16, min: 12, max: 20),
+          R.sp(context, 8, min: 6, max: 12),
+          R.sp(context, 16, min: 12, max: 20),
+          0),
+      padding: EdgeInsets.symmetric(
+          horizontal: R.sp(context, 14, min: 10, max: 18),
+          vertical: R.sp(context, 10, min: 8, max: 13)),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.accent.withOpacity(0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, color: AppColors.accent,
+              size: R.fluid(context, 18, min: 15, max: 22)),
+          SizedBox(width: R.sp(context, 8, min: 6, max: 10)),
+          Expanded(
+            child: Text(
+              'Attendance already submitted for Period $period on $dateStr. '
+              'Make changes below and tap Update to save.',
+              style: GoogleFonts.poppins(
+                  fontSize: _fs(context, 12, min: 10, max: 13),
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Bottom action bar ──────────────────────────────────────────────────────
 
 class _BottomActions extends StatelessWidget {
   final bool submitting;
+  final bool isUpdate;
   final VoidCallback onReset;
   final VoidCallback onSubmit;
 
   const _BottomActions({
     required this.submitting,
+    required this.isUpdate,
     required this.onReset,
     required this.onSubmit,
   });
@@ -955,6 +1013,12 @@ class _BottomActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vPad = R.sp(context, 14, min: 11, max: 17);
+    final btnColor = isUpdate ? AppColors.accent : AppColors.primary;
+    final btnLabel = submitting
+        ? (isUpdate ? 'Updating…' : 'Submitting…')
+        : (isUpdate ? 'Update Attendance' : 'Submit Attendance');
+    final btnIcon = isUpdate ? Icons.edit_outlined : Icons.send_outlined;
+
     return Padding(
       padding: EdgeInsets.symmetric(vertical: R.sp(context, 4, min: 2, max: 8)),
       child: Row(
@@ -983,16 +1047,16 @@ class _BottomActions extends StatelessWidget {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : Icon(Icons.send_outlined,
+                  : Icon(btnIcon,
                       size: R.fluid(context, 18, min: 16, max: 20)),
               label: Text(
-                submitting ? 'Submitting…' : 'Submit Attendance',
+                btnLabel,
                 style: GoogleFonts.poppins(
                     fontSize: _fs(context, 14, min: 12, max: 16)),
               ),
               onPressed: submitting ? null : onSubmit,
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: btnColor,
                 padding: EdgeInsets.symmetric(vertical: vPad),
               ),
             ),
