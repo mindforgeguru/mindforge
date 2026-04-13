@@ -36,16 +36,25 @@ from app.core.cache import (
 
 router = APIRouter()
 
-# Optional subjects — students only see tests for subjects they have opted into.
-_OPTIONAL_SUBJECTS = {"ai", "economics", "computer"}
+# Maps the short code stored in StudentProfile.additional_subjects
+# → the full subject name stored in Test.subject (from the teacher dropdown).
+_OPTIONAL_SUBJECT_MAP = {
+    "ai": "Artificial Intelligence",
+    "economics": "Economics",
+    "computer": "Computer Applications",
+}
 
 
 def _apply_subject_filter(query, profile):
     """Exclude tests whose subject is an optional subject the student hasn't opted for."""
-    student_subjects = set(profile.additional_subjects or [])
-    excluded = _OPTIONAL_SUBJECTS - student_subjects
-    if excluded:
-        query = query.where(Test.subject.notin_(excluded))
+    student_codes = set(profile.additional_subjects or [])
+    excluded_names = {
+        full_name
+        for code, full_name in _OPTIONAL_SUBJECT_MAP.items()
+        if code not in student_codes
+    }
+    if excluded_names:
+        query = query.where(Test.subject.notin_(excluded_names))
     return query
 
 
