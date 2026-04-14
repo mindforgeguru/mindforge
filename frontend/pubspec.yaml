@@ -37,6 +37,9 @@ dependencies:
   # Image loading
   cached_network_image: ^3.3.1
 
+  # Cryptography — used for SSL certificate fingerprint pinning
+  crypto: ^3.0.3
+
   # PDF printing / sharing
   printing: ^5.14.2
 

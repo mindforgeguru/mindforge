@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart' as dio_pkg;
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../security/ssl_pinning.dart';
 import '../utils/constants.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
@@ -113,6 +115,10 @@ class ApiClient {
         },
       ),
     );
+
+    // SSL certificate pinning — validates server cert fingerprint on every
+    // connection. Skipped in debug mode to allow local proxy inspection.
+    applySSLPinning(_dio.httpClientAdapter as IOHttpClientAdapter);
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
