@@ -153,7 +153,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
 
           // ── Tests list ───────────────────────────────────────────────────
           testsAsync.when(
-            loading: () => const ShimmerList(showAvatar: false),
+            loading: () => const ShimmerCards(count: 5, cardHeight: 72),
             error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(teacherTestsProvider((null, _limit)))),
 
             data: (tests) {
