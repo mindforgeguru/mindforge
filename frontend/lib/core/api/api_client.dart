@@ -270,9 +270,11 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<List<dynamic>> getTeacherTests({int? grade}) async {
+  Future<List<dynamic>> getTeacherTests({int? grade, int skip = 0, int limit = 20}) async {
     final res = await _dio.get('/teacher/tests', queryParameters: {
       if (grade != null) 'grade': grade,
+      'skip': skip,
+      'limit': limit,
     });
     return res.data as List<dynamic>;
   }

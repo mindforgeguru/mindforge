@@ -97,10 +97,11 @@ final teacherGradesProvider =
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
+// Key: (grade, limit) — increase limit to trigger "Load More"
 final teacherTestsProvider =
-    FutureProvider.family<List<TestModel>, int?>((ref, grade) async {
+    FutureProvider.family<List<TestModel>, (int?, int)>((ref, params) async {
   final api = ref.watch(apiClientProvider);
-  final raw = await api.getTeacherTests(grade: grade);
+  final raw = await api.getTeacherTests(grade: params.$1, limit: params.$2);
   return raw
       .map((e) => TestModel.fromJson(e as Map<String, dynamic>))
       .toList();

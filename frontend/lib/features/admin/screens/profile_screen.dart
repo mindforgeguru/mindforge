@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -264,7 +265,9 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                     backgroundColor:
                         AppColors.primaryDark.withValues(alpha: 0.15),
                     backgroundImage:
-                        photoUrl != null ? NetworkImage(photoUrl) : null,
+                        photoUrl != null
+                            ? CachedNetworkImageProvider(photoUrl)
+                            : null,
                     child: photoUrl == null
                         ? Text(
                             username[0].toUpperCase(),

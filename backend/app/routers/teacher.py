@@ -425,14 +425,16 @@ async def create_grade(
 @router.get("/tests", response_model=List[TestResponse])
 async def get_tests(
     grade: Optional[int] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """Retrieve all tests (visible to all teachers)."""
+    """Retrieve tests (visible to all teachers) with pagination."""
     query = select(Test)
     if grade:
         query = query.where(Test.grade == grade)
-    result = await db.execute(query.order_by(Test.created_at.desc()))
+    result = await db.execute(query.order_by(Test.created_at.desc()).offset(skip).limit(limit))
     return result.scalars().all()
 
 
@@ -1157,9 +1159,9 @@ async def get_teacher_dashboard_summary(
         .order_by(Grade.created_at.desc())
     )).scalars().all()
 
-    # All tests (visible to all teachers)
+    # 20 most recent tests (visible to all teachers)
     tests = (await db.execute(
-        select(Test).order_by(Test.created_at.desc())
+        select(Test).order_by(Test.created_at.desc()).limit(20)
     )).scalars().all()
 
     return {

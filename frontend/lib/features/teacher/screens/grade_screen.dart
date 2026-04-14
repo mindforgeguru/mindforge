@@ -425,7 +425,7 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
 
   @override
   Widget build(BuildContext context) {
-    final testsAsync = ref.watch(teacherTestsProvider(_selectedGrade));
+    final testsAsync = ref.watch(teacherTestsProvider((_selectedGrade, 100)));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -451,7 +451,7 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => ErrorView(
               error: e,
-              onRetry: () => ref.invalidate(teacherTestsProvider(_selectedGrade)),
+              onRetry: () => ref.invalidate(teacherTestsProvider((_selectedGrade, 100))),
             ),
             data: (tests) {
               final offlineTests =

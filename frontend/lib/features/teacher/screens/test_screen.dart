@@ -87,6 +87,7 @@ class _TestsTab extends ConsumerStatefulWidget {
 
 class _TestsTabState extends ConsumerState<_TestsTab> {
   bool _showGenerator = false;
+  int _limit = 20; // Load More tracks how many tests to fetch
 
   // Generation form state
   final _titleCtrl = TextEditingController();
@@ -114,10 +115,13 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final testsAsync = ref.watch(teacherTestsProvider(null));
+    final testsAsync = ref.watch(teacherTestsProvider((null, _limit)));
 
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(teacherTestsProvider(null)),
+      onRefresh: () async {
+        setState(() => _limit = 20);
+        ref.invalidate(teacherTestsProvider((null, _limit)));
+      },
       child: SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
@@ -150,7 +154,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
           // ── Tests list ───────────────────────────────────────────────────
           testsAsync.when(
             loading: () => const ShimmerList(showAvatar: false),
-            error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(teacherTestsProvider(null))),
+            error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(teacherTestsProvider((null, _limit)))),
 
             data: (tests) {
               final filtered = tests
@@ -162,10 +166,20 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
                   child: Center(child: Text('No tests generated yet.')),
                 );
               }
+              final hasMore = tests.length >= _limit;
               return Column(
-                children: filtered
-                    .map((t) => _TestTile(test: t))
-                    .toList(),
+                children: [
+                  ...filtered.map((t) => _TestTile(test: t)),
+                  if (hasMore)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 4),
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.expand_more),
+                        label: const Text('Load More'),
+                        onPressed: () => setState(() => _limit += 20),
+                      ),
+                    ),
+                ],
               );
             },
           ),

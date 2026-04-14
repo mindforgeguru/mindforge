@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -219,8 +220,9 @@ class _TeacherProfileScreenState
                     radius: R.fluid(context, 56, min: 44, max: 64),
                     backgroundColor:
                         AppColors.secondary.withOpacity(0.15),
-                    backgroundImage:
-                        photoUrl != null ? NetworkImage(photoUrl) : null,
+                    backgroundImage: photoUrl != null
+                        ? CachedNetworkImageProvider(photoUrl)
+                        : null,
                     child: photoUrl == null
                         ? Text(
                             username[0].toUpperCase(),
