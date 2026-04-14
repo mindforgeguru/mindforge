@@ -8,6 +8,7 @@ import '../../../core/models/attendance.dart';
 import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
@@ -540,8 +541,7 @@ class _TeacherAttendanceScreenState
           // ── Content ─────────────────────────────────────────────────
           Expanded(
             child: studentsAsync.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const ShimmerList(),
               error: (e, _) => ErrorView(
                 error: e,
                 onRetry: () => ref.invalidate(studentsInGradeProvider(_selectedGrade)),
@@ -559,8 +559,7 @@ class _TeacherAttendanceScreenState
                 }
 
                 return existingAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                  loading: () => const ShimmerList(),
                   error: (e, _) => ErrorView(
                     error: e,
                     onRetry: () => ref.invalidate(teacherAttendanceProvider((_selectedGrade, _dateStr))),

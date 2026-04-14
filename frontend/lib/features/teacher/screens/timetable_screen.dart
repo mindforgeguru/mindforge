@@ -7,6 +7,7 @@ import '../../../core/models/timetable.dart';
 import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
@@ -131,7 +132,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
     final today = DateTime.now();
 
     return myTimetableAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const ShimmerCards(count: 5, cardHeight: 72),
       error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(myTimetableProvider)),
       data: (slots) {
         // Period times from config
@@ -521,7 +522,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
 
     // ── Period editor widget (built from async data) ─────────────────────
     Widget periodEditor = timetableAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const ShimmerCards(count: 4, cardHeight: 80),
       error: (e, _) => ErrorView(
         error: e,
         onRetry: () => ref.invalidate(teacherTimetableProvider((_selectedGrade, _dateString))),
@@ -535,7 +536,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
         final isUpdate = existingSlots.isNotEmpty;
 
         return teachersAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const ShimmerList(itemCount: 4),
           error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(teachersListProvider)),
           data: (teachers) {
             _populateFromSlots(slots, teachers);
@@ -1262,10 +1263,7 @@ class _GradeSectionState extends ConsumerState<_GradeSection> {
         ),
 
         timetableAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          ),
+          loading: () => const ShimmerCards(count: 3, cardHeight: 64),
           error: (e, _) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text('Error loading Grade ${widget.grade}',

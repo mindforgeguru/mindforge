@@ -448,7 +448,7 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
         // ── Offline tests list ───────────────────────────────────────────────
         Expanded(
           child: testsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const ShimmerList(showAvatar: false),
             error: (e, _) => ErrorView(
               error: e,
               onRetry: () => ref.invalidate(teacherTestsProvider((_selectedGrade, 100))),
@@ -782,7 +782,7 @@ class _GradeEntrySheetState extends ConsumerState<_GradeEntrySheet> {
           Flexible(
             child: studentsAsync.when(
               loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+                  const ShimmerList(itemCount: 4, itemHeight: 56),
               error: (e, _) => Center(
                 child: Text(
                   'Could not load students.',

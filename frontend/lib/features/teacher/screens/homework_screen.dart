@@ -7,6 +7,7 @@ import '../../../core/models/homework.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/api/api_client.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_bottom_nav.dart';
@@ -160,8 +161,7 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
         // ── Homework list ─────────────────────────────────────────────────
         Expanded(
           child: hwAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
+            loading: () => const ShimmerList(),
             error: (e, _) => ErrorView(
               error: e,
               onRetry: () => ref.invalidate(teacherHomeworkProvider(_selectedGrade)),
