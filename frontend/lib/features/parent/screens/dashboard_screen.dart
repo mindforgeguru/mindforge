@@ -61,7 +61,8 @@ class _ParentDashboardScreenState
     if (state == AppLifecycleState.resumed && mounted) {
       _wsSub?.cancel();
       _connectWs();
-      _refreshDashboard();
+      // Only invalidate — do NOT await the network call here.
+      ref.invalidate(parentDashboardSummaryProvider(_todayString));
     }
   }
 

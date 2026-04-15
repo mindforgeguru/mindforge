@@ -30,7 +30,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
-      _refreshDashboard();
+      // Only invalidate — do NOT await the network call here.
+      ref.invalidate(pendingUsersProvider);
+      ref.invalidate(currentAcademicYearProvider);
     }
   }
 

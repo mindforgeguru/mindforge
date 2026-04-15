@@ -73,10 +73,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final username = await _storage.read(key: AppConstants.usernameStorageKey);
     final profilePicUrl =
         await _storage.read(key: AppConstants.profilePicUrlStorageKey);
-    // refreshToken is stored in secure storage but managed by the Dio interceptor
-    // — we don't need to load it into state, just having it in storage is enough.
+    final refreshToken =
+        await _storage.read(key: AppConstants.refreshTokenStorageKey);
 
     if (token == null || role == null) return;
+
+    // Prime the in-memory token cache so subsequent API requests (including
+    // dashboard fetches right after unlock) never need to hit the Keystore.
+    _api.setCachedTokens(token: token, refreshToken: refreshToken);
 
     // Restore from cache immediately so the router can navigate to the
     // dashboard without waiting for the network.
@@ -125,6 +129,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         await _storage.write(
             key: AppConstants.refreshTokenStorageKey, value: refreshToken);
       }
+      _api.setCachedTokens(token: token, refreshToken: refreshToken);
       await _storage.write(key: AppConstants.roleStorageKey, value: role);
       await _storage.write(
           key: AppConstants.userIdStorageKey, value: userId.toString());
@@ -195,6 +200,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    _api.clearCachedTokens();
     await _storage.deleteAll();
     state = const AuthState();
   }

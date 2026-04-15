@@ -28,6 +28,13 @@ class WebSocketClient {
     if (_connectedUserId == userId &&
         _controller != null &&
         !_controller!.isClosed) {
+      // Same user — reuse the broadcast stream but if the underlying channel
+      // is gone (killed while the phone was locked) kick off an immediate
+      // reconnect instead of waiting for the delayed-timer path.
+      if (_channel == null) {
+        _generation++;
+        _connect(userId, _generation);
+      }
       return _controller!.stream;
     }
 
@@ -75,6 +82,7 @@ class WebSocketClient {
           }
         },
         onDone: () {
+          _channel = null; // mark as dead so connect() can detect it on resume
           // Auto-reconnect after 3 seconds on disconnect.
           // Pass the current generation so stale timers self-cancel.
           Future.delayed(const Duration(seconds: 3), () {
@@ -82,6 +90,7 @@ class WebSocketClient {
           });
         },
         onError: (error) {
+          _channel = null; // mark as dead
           Future.delayed(const Duration(seconds: 5), () {
             _connect(userId, generation);
           });

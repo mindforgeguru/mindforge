@@ -64,7 +64,10 @@ class _StudentDashboardScreenState
     if (state == AppLifecycleState.resumed && mounted) {
       _wsSub?.cancel();
       _connectWs();
-      _refreshDashboard();
+      // Only invalidate — do NOT await the network call here.
+      // The provider rebuilds in the background; waiting for the network on
+      // resume can freeze the UI while WiFi/cellular reconnects after unlock.
+      ref.invalidate(studentDashboardSummaryProvider(_todayString));
     }
   }
 

@@ -15,10 +15,28 @@ class ApiClient {
   late final Dio _dio;
   final _storage = const FlutterSecureStorage(aOptions: _androidOptions);
 
+  // In-memory token cache — avoids hitting the Android Keystore on every
+  // request, which can be slow right after a phone unlock.
+  String? _cachedToken;
+  String? _cachedRefreshToken;
+
   /// Called when the server returns 401 (token expired / revoked).
   /// AuthNotifier sets this to its logout callback so the router
   /// redirects to login without the user having to do anything.
   void Function()? onUnauthorized;
+
+  /// Prime the in-memory cache after login or token refresh so that
+  /// the first request after a phone unlock does not block on storage.
+  void setCachedTokens({String? token, String? refreshToken}) {
+    if (token != null) _cachedToken = token;
+    if (refreshToken != null) _cachedRefreshToken = refreshToken;
+  }
+
+  /// Clear the cache on logout.
+  void clearCachedTokens() {
+    _cachedToken = null;
+    _cachedRefreshToken = null;
+  }
 
   ApiClient() {
     _dio = Dio(
@@ -64,9 +82,11 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await _storage.read(key: AppConstants.tokenStorageKey);
-          if (token != null) {
-            options.headers['Authorization'] = 'Bearer $token';
+          // Use in-memory cache to avoid slow Keystore access after unlock.
+          _cachedToken ??=
+              await _storage.read(key: AppConstants.tokenStorageKey);
+          if (_cachedToken != null) {
+            options.headers['Authorization'] = 'Bearer $_cachedToken';
           }
           return handler.next(options);
         },
@@ -74,14 +94,17 @@ class ApiClient {
           if (error.response?.statusCode == 401) {
             // Avoid infinite refresh loop
             if (error.requestOptions.path == '/auth/refresh') {
+              _cachedToken = null;
+              _cachedRefreshToken = null;
               await _storage.deleteAll();
               onUnauthorized?.call();
               return handler.next(error);
             }
 
             // Try to refresh the access token
-            final refreshToken = await _storage.read(
+            _cachedRefreshToken ??= await _storage.read(
                 key: AppConstants.refreshTokenStorageKey);
+            final refreshToken = _cachedRefreshToken;
             if (refreshToken != null) {
               try {
                 final res = await _dio.post(
@@ -93,6 +116,7 @@ class ApiClient {
                   ),
                 );
                 final newToken = (res.data as Map<String, dynamic>)['access_token'] as String;
+                _cachedToken = newToken;
                 await _storage.write(
                     key: AppConstants.tokenStorageKey, value: newToken);
                 // Retry the original request with the new token
@@ -102,11 +126,14 @@ class ApiClient {
                 return handler.resolve(response);
               } catch (_) {
                 // Refresh failed — log out
+                _cachedToken = null;
+                _cachedRefreshToken = null;
                 await _storage.deleteAll();
                 onUnauthorized?.call();
               }
             } else {
               // No refresh token — log out immediately
+              _cachedToken = null;
               await _storage.deleteAll();
               onUnauthorized?.call();
             }
