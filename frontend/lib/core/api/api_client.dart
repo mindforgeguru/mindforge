@@ -316,9 +316,77 @@ class ApiClient {
     final res = await _dio.post(
       '/teacher/tests/generate',
       data: formData,
+      options: Options(receiveTimeout: const Duration(seconds: 180)),
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
+  // ── Teacher database ──────────────────────────────────────────────────────
+
+  Future<List<dynamic>> listOldTestPapers({int? grade, String? subject}) async {
+    final res = await _dio.get('/teacher/database/old-tests', queryParameters: {
+      if (grade != null) 'grade': grade,
+      if (subject != null) 'subject': subject,
+    });
+    return res.data as List<dynamic>;
+  }
+
+  Future<List<dynamic>> uploadOldTestPapers(FormData formData) async {
+    final res = await _dio.post(
+      '/teacher/database/old-tests/upload',
+      data: formData,
+      options: Options(receiveTimeout: const Duration(seconds: 120)),
+    );
+    return res.data as List<dynamic>;
+  }
+
+  Future<void> deleteOldTestPaper(int id) async {
+    await _dio.delete('/teacher/database/old-tests/$id');
+  }
+
+  Future<List<Map<String, dynamic>>> listChapterNames(int grade, String subject) async {
+    final res = await _dio.get('/teacher/database/chapters/names',
+        queryParameters: {'grade': grade, 'subject': subject});
+    return (res.data as List<dynamic>).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<dynamic>> listChapterDocuments({int? grade, String? subject}) async {
+    final res = await _dio.get('/teacher/database/chapters', queryParameters: {
+      if (grade != null) 'grade': grade,
+      if (subject != null) 'subject': subject,
+    });
+    return res.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> uploadChapterDocument(FormData formData) async {
+    final res = await _dio.post(
+      '/teacher/database/chapters/upload',
+      data: formData,
       options: Options(receiveTimeout: const Duration(seconds: 120)),
     );
     return res.data as Map<String, dynamic>;
+  }
+
+  Future<void> deleteChapterDocument(int id) async {
+    await _dio.delete('/teacher/database/chapters/$id');
+  }
+
+  Future<List<dynamic>> listSyllabus({int? grade, String? subject}) async {
+    final res = await _dio.get('/teacher/database/syllabus', queryParameters: {
+      if (grade != null) 'grade': grade,
+      if (subject != null) 'subject': subject,
+    });
+    return res.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> uploadSyllabus(FormData formData) async {
+    final res = await _dio.post('/teacher/database/syllabus/upload', data: formData,
+        options: Options(receiveTimeout: const Duration(seconds: 120)));
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<void> deleteSyllabus(int id) async {
+    await _dio.delete('/teacher/database/syllabus/$id');
   }
 
   Future<Map<String, dynamic>> getTest(int testId) async {

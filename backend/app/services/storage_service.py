@@ -22,6 +22,7 @@ REQUIRED_BUCKETS = [
     settings.MINIO_BUCKET_TESTS,
     settings.MINIO_BUCKET_PROFILES,
     settings.MINIO_BUCKET_PDFS,
+    settings.MINIO_BUCKET_DATABASE,
 ]
 
 # Buckets that should allow anonymous (public) GET access
@@ -139,6 +140,20 @@ async def get_presigned_url(
         return url
     except S3Error as e:
         logger.error(f"MinIO presigned URL error: {e}")
+        raise
+
+
+async def download_file(bucket: str, key: str) -> bytes:
+    """Download a file from MinIO and return its raw bytes."""
+    client = _get_client()
+    try:
+        response = client.get_object(bucket_name=bucket, object_name=key)
+        data = response.read()
+        response.close()
+        response.release_conn()
+        return data
+    except S3Error as e:
+        logger.error(f"MinIO download error: {e}")
         raise
 
 

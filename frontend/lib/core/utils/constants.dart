@@ -5,9 +5,13 @@ class AppConstants {
   static const String appName = 'MIND FORGE';
   static const String tagline = 'AI Assisted Learning';
 
-  /// Change this to your deployed backend URL in production.
-  static const String apiBaseUrl = 'https://api.mindforge.guru/api';
-  static const String wsBaseUrl = 'wss://api.mindforge.guru/ws';
+  // ⚠️  LOCAL DEV MODE — change back to false before building a release APK
+  static const bool _local = false;
+
+  static const String apiBaseUrl =
+      _local ? 'http://192.168.29.211:8000/api' : 'https://api.mindforge.guru/api';
+  static const String wsBaseUrl =
+      _local ? 'ws://192.168.29.211:8000/ws' : 'wss://api.mindforge.guru/ws';
 
   /// Supported grades (ICSE)
   static const List<int> grades = [8, 9, 10];

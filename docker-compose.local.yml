@@ -1,0 +1,28 @@
+# Local development override — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+#
+# Differences from production:
+#   • No nginx (access backend directly on http://localhost:8000)
+#   • Backend runs with --reload (hot-reload on code changes)
+#   • BACKEND_PUBLIC_URL points to localhost so media URLs resolve locally
+#   • Uses .env.local instead of .env for secrets
+
+services:
+  backend:
+    env_file:
+      - .env.local
+    environment:
+      DB_URL: postgresql+asyncpg://${POSTGRES_USER:-mindforge}:${POSTGRES_PASSWORD:-mindforge_secret}@postgres:5432/${POSTGRES_DB:-mindforge}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      BACKEND_PUBLIC_URL: http://localhost:8000
+      APP_ENV: development
+      DEBUG: "true"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    # Run as root for hot-reload file watching (dev only)
+    user: root
+
+  # Disable nginx in local dev — talk to backend directly on :8000
+  nginx:
+    profiles:
+      - production
