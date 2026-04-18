@@ -524,6 +524,35 @@ class _EditableQuestionCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  static const _srcTags = {
+    1: ('[P]',  Color(0xFF1565C0)),
+    2: ('[E]',  Color(0xFF2E7D32)),
+    3: ('[~P]', Color(0xFF1976D2)),
+    4: ('[~E]', Color(0xFF388E3C)),
+    5: ('[AI]', Color(0xFF6A1B9A)),
+  };
+
+  Widget? _sourceChip(Map<String, dynamic> q) {
+    final raw = q['source_category'];
+    if (raw == null) return null;
+    final cat = (raw as num).toInt();
+    final entry = _srcTags[cat];
+    if (entry == null) return null;
+    final (label, color) = entry;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+
   Color _typeColor(String type) {
     switch (type.toLowerCase()) {
       case 'mcq':
@@ -617,6 +646,10 @@ class _EditableQuestionCard extends StatelessWidget {
                         fontWeight: FontWeight.bold),
                   ),
                 ),
+                if (_sourceChip(question) != null) ...[
+                  const SizedBox(width: 5),
+                  _sourceChip(question)!,
+                ],
                 const Spacer(),
                 Text(
                   '$marks mark${marks > 1 ? 's' : ''}',

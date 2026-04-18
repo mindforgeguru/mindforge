@@ -114,12 +114,31 @@ def _get_styles() -> dict:
     return styles
 
 
+# ─── Source category tags (teacher reference only) ────────────────────────────
+_SOURCE_TAGS = {
+    1: ('<font color="#1565C0" size="8"><b>[P]</b></font>',  "P  = Exact copy from past test paper"),
+    2: ('<font color="#2E7D32" size="8"><b>[E]</b></font>',  "E  = Exact copy from back exercise"),
+    3: ('<font color="#1565C0" size="8"><b>[~P]</b></font>', "~P = AI-generated, style of past paper"),
+    4: ('<font color="#2E7D32" size="8"><b>[~E]</b></font>', "~E = AI-generated, style of back exercise"),
+    5: ('<font color="#6A1B9A" size="8"><b>[AI]</b></font>', "AI = Fully AI-generated"),
+}
+
+def _source_tag(q: Dict[str, Any]) -> str:
+    """Return a small colored HTML tag for the question's source category, or empty string."""
+    cat = q.get("source_category")
+    if cat is None:
+        return ""
+    tag, _ = _SOURCE_TAGS.get(int(cat), ("", ""))
+    return f"  {tag}" if tag else ""
+
+
 def _group_questions_by_type(questions: List[Dict[str, Any]]) -> Dict[str, List]:
     """Group questions by their type for sectioned layout."""
     groups: Dict[str, List] = {
         "mcq": [],
         "true_false": [],
         "fill_blank": [],
+        "match_following": [],
         "vsa": [],
         "short_answer": [],
         "long_answer": [],
@@ -139,18 +158,23 @@ SECTION_LABELS = {
     "mcq": "Section A — Multiple Choice Questions",
     "true_false": "Section B — True / False",
     "fill_blank": "Section C — Fill in the Blanks",
-    "vsa": "Section D — Very Short Answer",
-    "short_answer": "Section E — Short Answer Questions",
-    "long_answer": "Section F — Long Answer Questions",
-    "diagram": "Section G — Diagram Based Questions",
-    "numerical": "Section H — Numerical Problems",
+    "match_following": "Section D — Match the Following",
+    "vsa": "Section E — One Word / Very Short Answer",
+    "short_answer": "Section F — Short Answer Questions",
+    "long_answer": "Section G — Long Answer Questions",
+    "diagram": "Section H — Diagram Based Questions",
+    "numerical": "Section I — Numerical Problems",
 }
+
+# For short/long answer sections, stores n+1 context to show choice instruction.
+# Key = q_type, value = (questions_to_attempt, total_questions)
+# This is populated dynamically per test generation in the PDF function.
 
 ANSWER_LINES = {
     "vsa": 2,
-    "short_answer": 4,
-    "long_answer": 8,
-    "diagram": 12,
+    "short_answer": 5,
+    "long_answer": 10,
+    "diagram": 14,
     "numerical": 3,
 }
 
@@ -230,6 +254,26 @@ async def generate_offline_test_pdf(
     for inst in instructions:
         story.append(Paragraph(inst, styles["instructions"]))
 
+    # ── Source legend (teacher reference — only shown when any question has a tag) ──
+    has_source_tags = any(q.get("source_category") is not None for q in questions)
+    if has_source_tags:
+        story.append(Spacer(1, 3 * mm))
+        legend_style = ParagraphStyle(
+            "legend",
+            parent=getSampleStyleSheet()["Normal"],
+            fontSize=7,
+            fontName="Helvetica",
+            textColor=colors.HexColor("#888888"),
+            leftIndent=0,
+            spaceAfter=1,
+        )
+        story.append(Paragraph(
+            '<font color="#888888" size="7"><b>Source legend (teacher reference):</b>  '
+            + "  |  ".join(desc for _, (_, desc) in _SOURCE_TAGS.items())
+            + "</font>",
+            legend_style,
+        ))
+
     story.append(HRFlowable(width="100%", thickness=1, color=BRAND_GOLD, spaceBefore=8, spaceAfter=8))
 
     # ── Questions by section ──────────────────────────────────────────────────
@@ -241,13 +285,24 @@ async def generate_offline_test_pdf(
         if not section_qs:
             continue
 
-        # Compute marks for this section
         section_marks = sum(q.get("marks", 1) for q in section_qs)
-        label_with_marks = f"{section_label}  [{section_marks} marks]"
+
+        # Short / long answer choice instruction (n+1 questions generated)
+        choice_note = ""
+        if q_type == "short_answer" and len(section_qs) > 1:
+            attempt = len(section_qs) - 1
+            choice_note = f"  (Attempt any {attempt} of {len(section_qs)})"
+        elif q_type == "long_answer" and len(section_qs) > 1:
+            attempt = len(section_qs) - 1
+            choice_note = f"  (Attempt any {attempt} of {len(section_qs)})"
+
+        label_with_marks = f"{section_label}{choice_note}  [{section_marks} marks]"
         story.append(Paragraph(label_with_marks, styles["section_header"]))
 
         for q in section_qs:
-            q_text = f"Q{q_counter}. {q.get('question', '')}  [{q.get('marks', 1)} mark{'s' if q.get('marks', 1) > 1 else ''}]"
+            marks = q.get("marks", 1)
+            marks_label = f"{marks} mark{'s' if marks > 1 else ''}"
+            q_text = f"Q{q_counter}. {q.get('question', '')}  [{marks_label}]{_source_tag(q)}"
             story.append(Paragraph(q_text, styles["question"]))
 
             if q_type == "mcq" and q.get("options"):
@@ -262,6 +317,36 @@ async def generate_offline_test_pdf(
 
             elif q_type == "fill_blank":
                 story.append(Paragraph("Answer: ___________________________________________", styles["answer_line"]))
+
+            elif q_type == "match_following":
+                col_a = q.get("column_a") or []
+                col_b = q.get("column_b") or []
+                n = max(len(col_a), len(col_b))
+                # Build two-column table
+                table_data = [
+                    [Paragraph("<b>Column A</b>", styles["option"]),
+                     Paragraph("<b>Column B</b>", styles["option"]),
+                     Paragraph("<b>Answer</b>", styles["option"])],
+                ]
+                letters = [chr(65 + i) for i in range(n)]
+                for i in range(n):
+                    a_val = f"({letters[i]})  {col_a[i]}" if i < len(col_a) else ""
+                    b_val = f"({i+1})  {col_b[i]}" if i < len(col_b) else ""
+                    table_data.append([
+                        Paragraph(a_val, styles["option"]),
+                        Paragraph(b_val, styles["option"]),
+                        Paragraph(f"{letters[i]} — ___", styles["answer_line"]),
+                    ])
+                match_table = Table(table_data, colWidths=[6.5 * cm, 6.5 * cm, 4 * cm])
+                match_table.setStyle(TableStyle([
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F0F4FF")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]))
+                story.append(match_table)
+                story.append(Spacer(1, 2 * mm))
 
             else:
                 num_lines = ANSWER_LINES.get(q_type, 2)
@@ -379,7 +464,8 @@ async def generate_answer_key_pdf(
         story.append(Paragraph(section_label, styles["section_header"]))
 
         for q in section_qs:
-            q_text = f"Q{q_counter}. {q.get('question', '')}  [{q.get('marks', 1)} mark{'s' if q.get('marks', 1) > 1 else ''}]"
+            marks = q.get("marks", 1)
+            q_text = f"Q{q_counter}. {q.get('question', '')}  [{marks} mark{'s' if marks > 1 else ''}]"
             story.append(Paragraph(q_text, styles["question"]))
 
             # Show options for MCQ
@@ -388,6 +474,34 @@ async def generate_answer_key_pdf(
                 for key in ("A", "B", "C", "D"):
                     if key in opts:
                         story.append(Paragraph(f"({key}) {opts[key]}", styles["option"]))
+
+            # Match the following — show columns and correct answer
+            if q_type == "match_following":
+                col_a = q.get("column_a") or []
+                col_b = q.get("column_b") or []
+                n = max(len(col_a), len(col_b))
+                letters = [chr(65 + i) for i in range(n)]
+                table_data = [
+                    [Paragraph("<b>Column A</b>", styles["option"]),
+                     Paragraph("<b>Column B</b>", styles["option"])],
+                ]
+                for i in range(n):
+                    a_val = f"({letters[i]})  {col_a[i]}" if i < len(col_a) else ""
+                    b_val = f"({i+1})  {col_b[i]}" if i < len(col_b) else ""
+                    table_data.append([
+                        Paragraph(a_val, styles["option"]),
+                        Paragraph(b_val, styles["option"]),
+                    ])
+                match_table = Table(table_data, colWidths=[8 * cm, 8 * cm])
+                match_table.setStyle(TableStyle([
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F0F4FF")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]))
+                story.append(match_table)
+                story.append(Spacer(1, 2 * mm))
 
             # Correct answer (highlighted)
             answer = q.get("answer", "")

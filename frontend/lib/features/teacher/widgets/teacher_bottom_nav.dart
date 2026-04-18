@@ -83,6 +83,12 @@ class TeacherBottomNav extends ConsumerWidget {
                   onTap: () =>
                       context.go('${RouteNames.teacherDashboard}/timetable'),
                 ),
+                _NavItem(
+                  icon: Icons.storage_outlined,
+                  label: 'Database',
+                  onTap: () =>
+                      context.go('${RouteNames.teacherDashboard}/database'),
+                ),
               ],
             ),
           );
@@ -162,6 +168,8 @@ class _NavItem extends StatelessWidget {
         return path.contains('/attendance');
       case 'Timetable':
         return path.contains('/timetable');
+      case 'Database':
+        return path.contains('/database');
       default:
         return false;
     }

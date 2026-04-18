@@ -252,6 +252,14 @@ class _TeacherSideNav extends ConsumerWidget {
                         .go('${RouteNames.teacherDashboard}/broadcasts');
                   },
                 ),
+                _SideNavItem(
+                  icon: Icons.storage_outlined,
+                  activeIcon: Icons.storage_rounded,
+                  label: 'Database',
+                  active: currentPath.contains('/database'),
+                  onTap: () =>
+                      context.go('${RouteNames.teacherDashboard}/database'),
+                ),
               ],
             ),
           ),

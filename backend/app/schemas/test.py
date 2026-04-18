@@ -21,13 +21,21 @@ class TestGenerationParams(BaseModel):
     mcq_count: int = 5
     fill_blank_count: int = 3
     true_false_count: int = 2
-    vsa_count: int = 2           # Very Short Answer (1 mark)
+    match_following_count: int = 0  # pairs, 1 mark each
+    vsa_count: int = 2              # Very Short Answer / One-Word (1 mark)
     # Offline-only question types
-    short_answer_count: int = 0  # 2 marks each
-    long_answer_count: int = 0   # 3 marks each
-    diagram_count: int = 0       # 5 marks each
+    short_answer_count: int = 0     # 2 marks each (n+1 generated for choice)
+    long_answer_count: int = 0      # 3 marks each (n+1 generated for choice)
+    diagram_count: int = 0          # 5 marks each
     include_numericals: bool = False
     time_limit_minutes: Optional[int] = None
+    has_database_context: bool = False  # True when DB docs were included
+    # Source distribution percentages (must sum to 100)
+    src_pct_p: int = 20    # [P]  exact from past test paper
+    src_pct_e: int = 20    # [E]  exact from back exercise
+    src_pct_np: int = 20   # [~P] AI-like past paper
+    src_pct_ne: int = 20   # [~E] AI-like exercise
+    src_pct_ai: int = 20   # [AI] fully AI-generated
 
 
 class TestCreate(BaseModel):

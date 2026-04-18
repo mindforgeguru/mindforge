@@ -4,6 +4,7 @@ Teacher router — all endpoints require teacher role.
 
 import asyncio
 import io
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -32,6 +33,7 @@ from app.models.homework import Homework, Broadcast
 from app.services import ai_service, pdf_service, storage_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ─── Teacher Profile ───────────────────────────────────────────────────────────
@@ -448,24 +450,35 @@ async def generate_test(
     mcq_count: int = Form(5),
     fill_blank_count: int = Form(3),
     true_false_count: int = Form(2),
+    match_following_count: int = Form(0),
     vsa_count: int = Form(2),
     short_answer_count: int = Form(0),
     long_answer_count: int = Form(0),
     diagram_count: int = Form(0),
     include_numericals: bool = Form(False),
     time_limit_minutes: Optional[int] = Form(None),
+    use_database: bool = Form(False),
+    src_pct_p: int = Form(20),
+    src_pct_e: int = Form(20),
+    src_pct_np: int = Form(20),
+    src_pct_ne: int = Form(20),
+    src_pct_ai: int = Form(20),
     source_files: List[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
     """
     AI-powered test generation pipeline:
-    1. Extract text from uploaded PDF or image via OCR
-    2. Call Groq LLM to generate structured questions
-    3. Save test to database
-    4. For offline tests, generate a PDF via ReportLab and store in MinIO
-    5. Broadcast new test event to the grade
+    1. Optionally pull old test papers + chapter docs from teacher's database
+    2. Read any freshly-uploaded source files
+    3. Call Gemini/Groq to generate structured questions
+    4. Save test to database
+    5. For offline tests, generate a PDF via ReportLab and store in MinIO
+    6. Broadcast new test event to the grade
     """
+    from sqlalchemy import select as _select
+    from app.models.database_models import OldTestPaper, ChapterDocument
+
     params = TestGenerationParams(
         title=title,
         grade=grade,
@@ -475,49 +488,112 @@ async def generate_test(
         mcq_count=mcq_count,
         fill_blank_count=fill_blank_count,
         true_false_count=true_false_count,
+        match_following_count=match_following_count,
         vsa_count=vsa_count,
         short_answer_count=short_answer_count,
         long_answer_count=long_answer_count,
         diagram_count=diagram_count,
         include_numericals=include_numericals,
-        time_limit_minutes=time_limit_minutes if time_limit_minutes is not None else (mcq_count + fill_blank_count + true_false_count + vsa_count),
+        time_limit_minutes=time_limit_minutes if time_limit_minutes is not None else (mcq_count + fill_blank_count + true_false_count + vsa_count + match_following_count),
+        src_pct_p=src_pct_p,
+        src_pct_e=src_pct_e,
+        src_pct_np=src_pct_np,
+        src_pct_ne=src_pct_ne,
+        src_pct_ai=src_pct_ai,
     )
 
     source_file_url = None
-    file_list = []  # (bytes, ext) tuples passed directly to Gemini
+    chapter_files: list = []    # (bytes, ext) — chapter PDFs (primary source)
+    old_paper_files: list = []  # (bytes, ext) — old test papers (secondary, chapter-filtered)
+    syllabus_chapters: list = []
 
+    # ── Pull files from teacher's knowledge base ──────────────────────────────
+    if use_database:
+        from app.models.database_models import SyllabusEntry
+
+        # 1. Chapter documents — strict match on grade+subject+chapter name
+        chapter_q = _select(ChapterDocument).where(
+            ChapterDocument.teacher_id == current_teacher.id,
+            ChapterDocument.grade == grade,
+            ChapterDocument.subject == subject,
+            ChapterDocument.chapter_name.ilike(f"%{chapter}%"),
+        ).order_by(ChapterDocument.created_at.desc()).limit(3)
+        chapter_res = await db.execute(chapter_q)
+        for chap in chapter_res.scalars().all():
+            try:
+                data = await storage_service.download_file(
+                    settings.MINIO_BUCKET_DATABASE, chap.file_key
+                )
+                ext = chap.file_key.rsplit(".", 1)[-1].lower()
+                chapter_files.append((data, ext))
+                logger.info(f"Loaded chapter doc '{chap.chapter_name}' (id={chap.id})")
+            except Exception as e:
+                logger.warning(f"Could not load chapter doc {chap.id}: {e}")
+
+        # 2. Old test papers — fetch by grade+subject only; AI will filter by chapter
+        papers_q = _select(OldTestPaper).where(
+            OldTestPaper.teacher_id == current_teacher.id,
+            OldTestPaper.grade == grade,
+            OldTestPaper.subject == subject,
+        ).order_by(OldTestPaper.created_at.desc()).limit(5)
+        papers_res = await db.execute(papers_q)
+        for paper in papers_res.scalars().all():
+            try:
+                data = await storage_service.download_file(
+                    settings.MINIO_BUCKET_DATABASE, paper.file_key
+                )
+                ext = paper.file_key.rsplit(".", 1)[-1].lower()
+                old_paper_files.append((data, ext))
+                logger.info(f"Loaded old test paper id={paper.id} for chapter-filtered use")
+            except Exception as e:
+                logger.warning(f"Could not load old test paper {paper.id}: {e}")
+
+        # 3. Syllabus — fetch chapter list for scope reference
+        syllabus_q = _select(SyllabusEntry).where(
+            SyllabusEntry.teacher_id == current_teacher.id,
+            SyllabusEntry.grade == grade,
+            SyllabusEntry.subject == subject,
+        ).limit(1)
+        syllabus_res = await db.execute(syllabus_q)
+        syl = syllabus_res.scalar_one_or_none()
+        if syl and syl.chapters:
+            syllabus_chapters = syl.chapters
+            logger.info(f"Loaded syllabus: {len(syllabus_chapters)} chapters for scope reference")
+
+        if chapter_files or old_paper_files:
+            params.has_database_context = True
+
+    # ── Freshly uploaded source files (legacy path — kept for compatibility) ──
     for i, source_file in enumerate(source_files or []):
         file_bytes = await source_file.read()
         if not file_bytes:
             continue
-        bucket = "mindforge-tests"
-
         ext = source_file.filename.rsplit(".", 1)[-1].lower() if source_file.filename else "bin"
-
-        # Try to upload source file to storage (non-fatal if unavailable)
         try:
             storage_key = f"sources/{current_teacher.id}/{datetime.now(timezone.utc).timestamp()}_{i}.{ext}"
-            file_url = await storage_service.upload_file(bucket, storage_key, file_bytes)
+            file_url = await storage_service.upload_file(
+                settings.MINIO_BUCKET_TESTS, storage_key, file_bytes
+            )
             if i == 0:
                 source_file_url = file_url
         except Exception:
-            pass  # Storage unavailable — proceed without persisting source file
+            pass
+        # Treat freshly-uploaded files as chapter content (teacher uploaded them explicitly)
+        chapter_files.append((file_bytes, ext))
 
-        # Collect for Gemini native file reading (no OCR needed)
-        file_list.append((file_bytes, ext))
+    # ── Generate questions ─────────────────────────────────────────────────────
+    questions = await ai_service.generate_test_questions(
+        chapter_files, old_paper_files, syllabus_chapters, params
+    )
 
-    # Generate questions — Gemini reads the files natively
-    questions = await ai_service.generate_test_questions(file_list, params)
-
-    # For offline tests: use teacher-configured counts × marks per type so the
-    # total never drifts even if the AI returns a slightly different question count.
-    # For online tests: derive from actual questions (AI controls counts there).
+    # ── Total marks calculation ────────────────────────────────────────────────
     if test_type == "offline":
         from app.services.ai_service import _TYPE_MARKS as _TM
         total_marks = (
             params.mcq_count * _TM["mcq"] +
             params.true_false_count * _TM["true_false"] +
             params.fill_blank_count * _TM["fill_blank"] +
+            params.match_following_count * 1 +          # 1 mark per pair
             params.vsa_count * _TM["vsa"] +
             params.short_answer_count * _TM["short_answer"] +
             params.long_answer_count * _TM["long_answer"] +

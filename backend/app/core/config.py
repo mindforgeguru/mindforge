@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     MINIO_BUCKET_TESTS: str = "mindforge-tests"
     MINIO_BUCKET_PROFILES: str = "mindforge-profiles"
     MINIO_BUCKET_PDFS: str = "mindforge-pdfs"
+    MINIO_BUCKET_DATABASE: str = "mindforge-database"  # old papers + chapters
     MINIO_USE_SSL: bool = False
     # Public base URL of the backend itself — used to build media proxy URLs
     # e.g. https://api.mindforge.guru  (no trailing slash)

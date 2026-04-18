@@ -14,6 +14,7 @@ import '../../features/teacher/screens/test_screen.dart' as teacher;
 import '../../features/teacher/screens/profile_screen.dart' as teacher;
 import '../../features/teacher/screens/homework_screen.dart' as teacher;
 import '../../features/teacher/screens/broadcast_screen.dart' as teacher;
+import '../../features/teacher/screens/database_screen.dart' as teacher;
 import '../../features/student/screens/dashboard_screen.dart' as student;
 import '../../features/student/screens/attendance_screen.dart' as student;
 import '../../features/student/screens/timetable_screen.dart' as student;
@@ -153,6 +154,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'broadcasts',
             pageBuilder: (_, __) => _slidePage(const teacher.TeacherBroadcastScreen()),
+          ),
+          GoRoute(
+            path: 'database',
+            pageBuilder: (_, __) => _slidePage(const teacher.TeacherDatabaseScreen()),
           ),
         ],
       ),
