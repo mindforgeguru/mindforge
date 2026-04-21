@@ -55,7 +55,10 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost", "http://localhost:80"]
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost", "http://localhost:80",
+        "https://mindforge.guru", "https://www.mindforge.guru",
+    ]
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod

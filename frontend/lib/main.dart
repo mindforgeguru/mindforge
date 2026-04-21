@@ -21,6 +21,7 @@ class _AppScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
+
 void main() async {
   usePathUrlStrategy(); // Clean URLs on web (no #)
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,7 +51,7 @@ class MindForgeApp extends ConsumerWidget {
       themeMode: ThemeMode.light,
       scrollBehavior: _AppScrollBehavior(),
       routerConfig: router,
-      // Clamp OS text scale so accessibility settings don't break layouts
+      // Clamp OS text scale so accessibility settings don't break layouts.
       builder: (context, child) {
         final mq = MediaQuery.of(context);
         return MediaQuery(

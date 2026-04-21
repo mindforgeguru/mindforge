@@ -57,6 +57,7 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
   Future<void> _deleteTest() async {
     final confirm = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Delete Test?'),
         content: Text(

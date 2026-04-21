@@ -109,6 +109,7 @@ class TeacherBroadcastScreen extends ConsumerWidget {
   void _showSendDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
+      useRootNavigator: false,
       builder: (_) => _SendBroadcastDialog(
         onSent: () => ref.invalidate(teacherBroadcastsProvider),
       ),

@@ -108,6 +108,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, bool isFirst) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (ctx) => AlertDialog(
         title: Text(isFirst ? 'Start Academic Year?' : 'Start New Year?'),
         content: Text(

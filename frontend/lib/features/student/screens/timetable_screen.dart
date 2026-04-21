@@ -9,7 +9,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/student_provider.dart';
-import '../widgets/student_bottom_nav.dart';
+import '../widgets/student_scaffold.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class StudentTimetableScreen extends ConsumerStatefulWidget {
   const StudentTimetableScreen({super.key});
@@ -65,44 +66,9 @@ class _StudentTimetableScreenState
         ? 'Grade ${profileAsync.valueOrNull!['grade']}'
         : null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Timetable'),
-        actions: [
-          if (gradeLabel != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    gradeLabel,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Container(
-              width: 32, height: 32,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
-              padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
-            ),
-          ),
-        ],
-      ),
-      body: Column(
+    final isWide = MediaQuery.of(context).size.width >= 900;
+
+    final timetableBody = Column(
         children: [
           // ── Monthly calendar ──────────────────────────────────────────
           Container(
@@ -306,8 +272,286 @@ class _StudentTimetableScreenState
             ),
           ),
         ],
+    );
+
+    if (isWide) {
+      return StudentScaffold(
+        body: Padding(
+          padding: const EdgeInsets.fromLTRB(48, 28, 48, 28),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left column — Timetable
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBackground,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+                  ),
+                  padding: const EdgeInsets.fromLTRB(0, 16, 0, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: _WebColHeader(title: 'Timetable', icon: Icons.calendar_today_outlined),
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(child: timetableBody),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 20),
+              // Right column — Decorative panel
+              const Expanded(child: _DecorativePanel()),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return StudentScaffold(
+      appBar: AppBar(
+        title: const Text('My Timetable'),
+        actions: [
+          if (gradeLabel != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    gradeLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+              padding: const EdgeInsets.all(3),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+            ),
+          ),
+        ],
       ),
-      bottomNavigationBar: const StudentBottomNav(),
+      body: timetableBody,
+    );
+  }
+}
+
+// ─── Decorative blue panel ────────────────────────────────────────────────────
+
+class _DecorativePanel extends StatelessWidget {
+  const _DecorativePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Base image — splash logo tiled/scaled as background texture
+          Image.asset(
+            'assets/images/splash_logo.png',
+            fit: BoxFit.cover,
+            color: const Color(0xFF1D3557).withValues(alpha: 0.15),
+            colorBlendMode: BlendMode.multiply,
+          ),
+          // Blue gradient overlay
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF1D3557),        // deep navy
+                  Color(0xFF2A6496),        // mid blue
+                  Color(0xFF1A8FD1),        // lighter blue
+                ],
+                stops: [0.0, 0.55, 1.0],
+              ),
+            ),
+          ),
+          // Decorative circles
+          Positioned(
+            top: -60,
+            right: -60,
+            child: Container(
+              width: 220,
+              height: 220,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.05),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -80,
+            left: -40,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.04),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 80,
+            left: -30,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(36),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Logo
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  padding: const EdgeInsets.all(10),
+                  child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                ),
+                const SizedBox(height: 28),
+                Text(
+                  'MIND FORGE',
+                  style: GoogleFonts.poppins(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Your schedule,\nyour success.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white.withValues(alpha: 0.8),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // Divider line
+                Container(
+                  width: 48,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A8FD1),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Tagline chips
+                const Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _InfoChip(icon: Icons.calendar_today_outlined, label: 'Timetable'),
+                    _InfoChip(icon: Icons.menu_book_outlined, label: 'Subjects'),
+                    _InfoChip(icon: Icons.people_outline, label: 'Teachers'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _InfoChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: Colors.white.withValues(alpha: 0.9)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Web column header ────────────────────────────────────────────────────────
+
+class _WebColHeader extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  const _WebColHeader({required this.title, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 16, color: AppColors.primary),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(child: Divider()),
+      ],
     );
   }
 }

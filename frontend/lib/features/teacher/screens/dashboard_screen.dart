@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -63,10 +64,13 @@ class _TeacherDashboardScreenState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // On web, AppLifecycleState.resumed fires on every window-focus event and
+    // on GoRouter navigations — both cause needless invalidations that keep the
+    // dashboard in a permanent loading state. Skip lifecycle refreshes on web.
+    if (kIsWeb) return;
     if (state == AppLifecycleState.resumed && mounted) {
       _wsSub?.cancel();
       _connectWs();
-      // Only invalidate — do NOT await the network call here.
       ref.invalidate(teacherDashboardSummaryProvider);
     }
   }
@@ -96,6 +100,7 @@ class _TeacherDashboardScreenState
   Future<void> _showProfileUpdatedDialog(String? newUsername) async {
     await showDialog<void>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text('Account Updated'),
@@ -128,6 +133,49 @@ class _TeacherDashboardScreenState
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final summaryAsync = ref.watch(teacherDashboardSummaryProvider);
+
+    // ── Error state: show retry UI instead of silently blank sections ─────
+    if (summaryAsync.hasError) {
+      return TeacherScaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.cloud_off_outlined, size: 52,
+                    color: AppColors.textMuted),
+                const SizedBox(height: 16),
+                Text(
+                  'Could not load dashboard',
+                  style: GoogleFonts.poppins(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'The server may be starting up.\nPlease wait a moment and try again.',
+                  style: GoogleFonts.poppins(
+                      fontSize: 13, color: AppColors.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: _refreshDashboard,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Try Again'),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     // Broadcast badge — select() so this boolean is only recomputed when
     // broadcasts or lastSeen actually change, not on every dashboard rebuild.
@@ -307,7 +355,7 @@ class _TeacherDashboardScreenState
                             const SizedBox(width: 10),
                             Builder(builder: (ctx) {
                               final count = summaryAsync.maybeWhen(
-                                data: (s) => ((s['tests'] as List<dynamic>?)?.length ?? 0),
+                                data: (s) => (s['test_count'] as int? ?? 0),
                                 orElse: () => 0,
                               );
                               return _HeroStatCard(

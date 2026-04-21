@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import aliased
 
 from app.core.database import get_db
@@ -130,6 +130,104 @@ async def get_my_attendance_summary(
         absent_count=absent,
         attendance_percentage=percentage,
     )
+
+
+@router.get("/attendance/class-leaderboard")
+async def get_class_attendance_leaderboard(
+    limit: int = Query(7, ge=1, le=20),
+    db: AsyncSession = Depends(get_db),
+    current_student: User = Depends(get_current_student),
+):
+    """Return top students in the same grade ranked by overall attendance %."""
+    from app.models.attendance import AttendanceStatus
+
+    # Get current student's grade
+    profile = await get_student_profile_cached(current_student.id, db)
+    if not profile:
+        return []
+
+    # Get all student user_ids in the same grade
+    classmates_result = await db.execute(
+        select(StudentProfile.user_id).where(StudentProfile.grade == profile.grade)
+    )
+    classmate_ids = [row[0] for row in classmates_result.all()]
+    if not classmate_ids:
+        return []
+
+    # Aggregate attendance per student
+    agg = await db.execute(
+        select(
+            Attendance.student_id,
+            func.count(Attendance.id).label("total"),
+            func.sum(
+                case((Attendance.status == AttendanceStatus.present, 1), else_=0)
+            ).label("present"),
+        )
+        .where(Attendance.student_id.in_(classmate_ids))
+        .group_by(Attendance.student_id)
+    )
+    rows = agg.all()
+
+    # Build percentage map
+    pct_map: dict[int, float] = {}
+    for row in rows:
+        total_r = row.total or 0
+        present_r = row.present or 0
+        pct_map[row.student_id] = round((present_r / total_r * 100) if total_r > 0 else 0.0, 1)
+
+    # Sort by percentage descending, take top N
+    sorted_ids = sorted(pct_map.keys(), key=lambda sid: pct_map[sid], reverse=True)[:limit]
+
+    # Fetch usernames + profile pic
+    users_result = await db.execute(
+        select(User.id, User.username, User.profile_pic_url)
+        .where(User.id.in_(sorted_ids))
+    )
+    user_map = {row[0]: {"username": row[1], "profile_pic_url": row[2]} for row in users_result.all()}
+
+    leaderboard = []
+    for rank, sid in enumerate(sorted_ids, start=1):
+        if sid not in user_map:
+            continue
+        leaderboard.append({
+            "rank": rank,
+            "student_id": sid,
+            "username": user_map[sid]["username"],
+            "profile_pic_url": user_map[sid]["profile_pic_url"],
+            "attendance_percentage": pct_map[sid],
+            "is_me": sid == current_student.id,
+        })
+
+    return leaderboard
+
+
+# ─── Faculty ──────────────────────────────────────────────────────────────────
+
+@router.get("/faculty")
+async def get_faculty(
+    db: AsyncSession = Depends(get_db),
+    current_student: User = Depends(get_current_student),
+):
+    """Return all approved teachers with their photo, subjects, and bio."""
+    from app.models.user import UserRole, TeacherProfile
+    result = await db.execute(
+        select(User, TeacherProfile)
+        .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
+        .where(User.role == UserRole.teacher)
+        .where(User.deleted_at == None)
+        .order_by(User.username)
+    )
+    rows = result.all()
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "profile_pic_url": user.profile_pic_url,
+            "subjects": profile.teachable_subjects if profile else [],
+            "bio": profile.bio if profile else None,
+        }
+        for user, profile in rows
+    ]
 
 
 # ─── Timetable ─────────────────────────────────────────────────────────────────

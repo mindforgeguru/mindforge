@@ -100,6 +100,8 @@ class TeacherProfile(Base):
     )
     # subjects the teacher is qualified to teach — e.g. ["Mathematics", "Physics"]
     teachable_subjects: Mapped[Optional[list]] = mapped_column(JSON, nullable=True, default=list)
+    # Short bio / description shown on the Faculty page
+    bio: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     user: Mapped["User"] = relationship(
         "User", back_populates="teacher_profile", foreign_keys=[user_id]

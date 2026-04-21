@@ -151,6 +151,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
       if (mounted) {
         await showDialog(
           context: context,
+      useRootNavigator: false,
           barrierDismissible: false,
           builder: (_) => _ResultDialog(
             score: score,
@@ -184,6 +185,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
     final unanswered = _questions.length - _answeredCount;
     await showDialog(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Submit Test?'),
         content: Text(unanswered > 0

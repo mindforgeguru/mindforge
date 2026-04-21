@@ -763,6 +763,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
     final dateLabel = DateFormat('d MMM yyyy').format(_selectedDate);
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Delete Timetable'),
         content: Text(
@@ -1185,6 +1186,7 @@ class _GradeSectionState extends ConsumerState<_GradeSection> {
     final dateLabel = DateFormat('d MMM yyyy').format(widget.selectedDate);
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Delete Timetable'),
         content: Text(

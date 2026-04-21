@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart' as dio_pkg;
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -13,12 +14,21 @@ const _androidOptions = AndroidOptions(encryptedSharedPreferences: true);
 
 class ApiClient {
   late final Dio _dio;
-  final _storage = const FlutterSecureStorage(aOptions: _androidOptions);
+  final _storage = const FlutterSecureStorage(
+    aOptions: _androidOptions,
+  );
 
   // In-memory token cache — avoids hitting the Android Keystore on every
   // request, which can be slow right after a phone unlock.
   String? _cachedToken;
   String? _cachedRefreshToken;
+
+  // Refresh mutex — at most one POST /auth/refresh in-flight at a time.
+  // Concurrent 401 responses share this future; they all wait for the single
+  // refresh to complete, then retry with the new token. Without this, 5+
+  // simultaneous dashboard requests each get 401, each trigger a refresh,
+  // the second one fails (token already rotated), and the user gets logged out.
+  Future<String?>? _refreshFuture;
 
   /// Called when the server returns 401 (token expired / revoked).
   /// AuthNotifier sets this to its logout callback so the router
@@ -92,8 +102,9 @@ class ApiClient {
         },
         onError: (DioException error, handler) async {
           if (error.response?.statusCode == 401) {
-            // Avoid infinite refresh loop
-            if (error.requestOptions.path == '/auth/refresh') {
+            // Don't retry the refresh endpoint or requests that opted out.
+            if (error.requestOptions.path.contains('/auth/refresh') ||
+                error.requestOptions.extra['_skipRefresh'] == true) {
               _cachedToken = null;
               _cachedRefreshToken = null;
               await _storage.deleteAll();
@@ -101,42 +112,25 @@ class ApiClient {
               return handler.next(error);
             }
 
-            // Try to refresh the access token
-            _cachedRefreshToken ??= await _storage.read(
-                key: AppConstants.refreshTokenStorageKey);
-            final refreshToken = _cachedRefreshToken;
-            if (refreshToken != null) {
+            // De-duplicate concurrent refreshes with a shared future (mutex).
+            // If a refresh is already in-flight, wait for it instead of
+            // starting another one — prevents the race condition where the
+            // second refresh uses an already-rotated token and fails.
+            _refreshFuture ??= _executeRefresh()
+                .whenComplete(() => _refreshFuture = null);
+            final newToken = await _refreshFuture;
+
+            if (newToken != null) {
+              final retryOptions = error.requestOptions;
+              retryOptions.headers['Authorization'] = 'Bearer $newToken';
               try {
-                final res = await _dio.post(
-                  '/auth/refresh',
-                  data: {'refresh_token': refreshToken},
-                  options: Options(
-                    headers: {'Authorization': null}, // no auth header for refresh
-                    extra: {'_skipRefresh': true},
-                  ),
-                );
-                final newToken = (res.data as Map<String, dynamic>)['access_token'] as String;
-                _cachedToken = newToken;
-                await _storage.write(
-                    key: AppConstants.tokenStorageKey, value: newToken);
-                // Retry the original request with the new token
-                final retryOptions = error.requestOptions;
-                retryOptions.headers['Authorization'] = 'Bearer $newToken';
                 final response = await _dio.fetch(retryOptions);
                 return handler.resolve(response);
-              } catch (_) {
-                // Refresh failed — log out
-                _cachedToken = null;
-                _cachedRefreshToken = null;
-                await _storage.deleteAll();
-                onUnauthorized?.call();
+              } on DioException catch (e) {
+                return handler.next(e);
               }
-            } else {
-              // No refresh token — log out immediately
-              _cachedToken = null;
-              await _storage.deleteAll();
-              onUnauthorized?.call();
             }
+            // newToken == null means _executeRefresh already called onUnauthorized
           }
           return handler.next(error);
         },
@@ -144,11 +138,66 @@ class ApiClient {
     );
 
     // SSL certificate pinning — validates server cert fingerprint on every
-    // connection. Skipped in debug mode to allow local proxy inspection.
-    applySSLPinning(_dio.httpClientAdapter as IOHttpClientAdapter);
+    // connection. Skipped on web (TLS is handled by the browser) and in
+    // debug mode to allow local proxy inspection.
+    if (!kIsWeb) {
+      applySSLPinning(_dio.httpClientAdapter as IOHttpClientAdapter);
+    }
+  }
+
+  // ── Internal refresh helper ───────────────────────────────────────────────
+
+  /// Performs a single token refresh. Returns the new access token, or null
+  /// if the refresh token is missing/expired (in which case the user is
+  /// logged out via [onUnauthorized]).
+  Future<String?> _executeRefresh() async {
+    _cachedRefreshToken ??=
+        await _storage.read(key: AppConstants.refreshTokenStorageKey);
+    final rt = _cachedRefreshToken;
+    if (rt == null) {
+      _cachedToken = null;
+      await _storage.deleteAll();
+      onUnauthorized?.call();
+      return null;
+    }
+    try {
+      final res = await _dio.post(
+        '/auth/refresh',
+        data: {'refresh_token': rt},
+        options: Options(
+          headers: {'Authorization': null},
+          extra: {'_skipRefresh': true},
+        ),
+      );
+      final newToken =
+          (res.data as Map<String, dynamic>)['access_token'] as String;
+      _cachedToken = newToken;
+      await _storage.write(key: AppConstants.tokenStorageKey, value: newToken);
+      return newToken;
+    } catch (_) {
+      _cachedToken = null;
+      _cachedRefreshToken = null;
+      await _storage.deleteAll();
+      onUnauthorized?.call();
+      return null;
+    }
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
+
+  /// Exchanges a refresh token for a new access token.
+  /// Bypasses the JWT interceptor so it doesn't trigger a recursive refresh.
+  Future<Map<String, dynamic>> refreshAccessToken(String refreshToken) async {
+    final res = await _dio.post(
+      '/auth/refresh',
+      data: {'refresh_token': refreshToken},
+      options: Options(
+        headers: {'Authorization': null},
+        extra: {'_skipRefresh': true},
+      ),
+    );
+    return res.data as Map<String, dynamic>;
+  }
 
   Future<Map<String, dynamic>> login(String username, String mpin) async {
     final res = await _dio.post('/auth/login', data: {
@@ -495,6 +544,27 @@ class ApiClient {
   Future<Map<String, dynamic>> getStudentAttendanceSummary() async {
     final res = await _dio.get('/student/attendance/summary');
     return res.data as Map<String, dynamic>;
+  }
+
+  Future<List<dynamic>> getFaculty() async {
+    final res = await _dio.get('/student/faculty');
+    return res.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getTeacherBio() async {
+    final res = await _dio.get('/teacher/profile/bio');
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateTeacherBio(String bio) async {
+    final res = await _dio.put('/teacher/profile/bio', data: {'bio': bio});
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<List<dynamic>> getClassAttendanceLeaderboard({int limit = 7}) async {
+    final res = await _dio.get('/student/attendance/class-leaderboard',
+        queryParameters: {'limit': limit});
+    return res.data as List<dynamic>;
   }
 
   Future<List<dynamic>> getStudentTimetable({required String date}) async {

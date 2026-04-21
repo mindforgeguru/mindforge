@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 Future<void> confirmLogout(BuildContext context, WidgetRef ref) async {
   final confirmed = await showDialog<bool>(
     context: context,
+      useRootNavigator: false,
     builder: (ctx) => AlertDialog(
       title: const Text('Log Out'),
       content: const Text('Are you sure you want to log out?'),

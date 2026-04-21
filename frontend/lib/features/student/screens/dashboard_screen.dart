@@ -18,7 +18,7 @@ import '../../../core/providers/badge_provider.dart';
 import '../../../core/widgets/badge_dot.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
-import '../widgets/student_bottom_nav.dart';
+import '../widgets/student_scaffold.dart';
 
 // File-level DateFormat cache — avoids repeated object allocations in build().
 final _fmtYMD     = DateFormat('yyyy-MM-dd');
@@ -102,6 +102,7 @@ class _StudentDashboardScreenState
   Future<void> _showProfileUpdatedDialog(String? newUsername) async {
     await showDialog<void>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text('Account Updated'),
@@ -177,9 +178,8 @@ class _StudentDashboardScreenState
     final double logoH = (screenWidth * 0.142).clamp(42.0, 58.0);
     final double titleFs = (screenWidth * 0.062).clamp(18.0, 25.0);
 
-    return Scaffold(
+    return StudentScaffold(
       backgroundColor: AppColors.background,
-      bottomNavigationBar: const StudentBottomNav(),
       body: RefreshIndicator(
         onRefresh: _refreshDashboard,
         child: CustomScrollView(
@@ -536,43 +536,65 @@ class _StudentDashboardScreenState
       backgroundColor: const Color(0xFFF0F4F8),
       body: Column(
         children: [
-          _StudentWebTopNav(auth: auth),
+          StudentTopNav(auth: auth),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(28, 24, 28, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Hero: greeting + fee capsules ─────────────────────
-                  _StudentWebHeroSection(auth: auth),
-                  const SizedBox(height: 24),
-                  // ── Dashboard grid ────────────────────────────────────
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(40, 24, 40, 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── Hero: greeting + fee capsules ───────────────
+                        _StudentWebHeroSection(auth: auth),
+                        const SizedBox(height: 24),
+                        // ── Dashboard grid ───────────────────────────────
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _StudentWebTestChart(),
-                            const SizedBox(height: 20),
-                            _StudentWebTimetableBox(
-                                todayString: _todayString),
+                            // ── Left: 2×2 grid of tiles ──────────────────
+                            Expanded(
+                              flex: 3,
+                              child: Column(
+                                children: [
+                                  // Row 1
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(child: _StudentWebTestChart()),
+                                      const SizedBox(width: 16),
+                                      Expanded(child: _StudentWebTimetableBox(todayString: _todayString)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // Row 2
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(child: const _StudentWebHomeworkBox()),
+                                      const SizedBox(width: 16),
+                                      Expanded(child: const _StudentWebBroadcastsBox()),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  const _WebCurrentTimeBadge(),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+                            // ── Right: attendance ─────────────────────────
+                            Expanded(
+                              flex: 2,
+                              child: const _StudentWebAttendanceBox(),
+                            ),
                           ],
                         ),
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            const _StudentWebAttendanceBox(),
-                            const SizedBox(height: 20),
-                            const _StudentWebBroadcastsBox(),
-                          ],
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1201,114 +1223,6 @@ class _DashBroadcastTile extends StatelessWidget {
 
 // ─── Top navigation bar ────────────────────────────────────────────────────────
 
-class _StudentWebTopNav extends ConsumerWidget {
-  final AuthState auth;
-  const _StudentWebTopNav({required this.auth});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currentPath = GoRouterState.of(context).uri.toString();
-
-    return Container(
-      height: 60,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2))],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Row(
-          children: [
-            // Logo
-            Container(
-              width: 32, height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.all(4),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              'MIND FORGE',
-              style: GoogleFonts.poppins(
-                fontSize: 13, fontWeight: FontWeight.w800,
-                color: AppColors.primary, letterSpacing: 1,
-              ),
-            ),
-            const SizedBox(width: 32),
-            // Nav links
-            ..._navItems(context, currentPath),
-            const Spacer(),
-            // Profile icon
-            GestureDetector(
-              onTap: () => context.go('${RouteNames.studentDashboard}/profile'),
-              child: Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.iconContainer,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    (auth.username ?? 'S').substring(0, 1).toUpperCase(),
-                    style: GoogleFonts.poppins(
-                      fontSize: 14, fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _navItems(BuildContext context, String currentPath) {
-    final items = [
-      ('Home', Icons.home_outlined, RouteNames.studentDashboard, RouteNames.studentDashboard),
-      ('Grades', Icons.grade_outlined, '${RouteNames.studentDashboard}/grades', '/grades'),
-      ('Tests', Icons.quiz_outlined, '${RouteNames.studentDashboard}/tests', '/tests'),
-      ('Attendance', Icons.how_to_reg_outlined, '${RouteNames.studentDashboard}/attendance', '/attendance'),
-      ('Timetable', Icons.calendar_month_outlined, '${RouteNames.studentDashboard}/timetable', '/timetable'),
-      ('Homework', Icons.assignment_outlined, '${RouteNames.studentDashboard}/homework', '/homework'),
-      ('Broadcasts', Icons.campaign_outlined, '${RouteNames.studentDashboard}/broadcasts', '/broadcasts'),
-    ];
-
-    return items.map((item) {
-      final label = item.$1;
-      final route = item.$3;
-      final match = item.$4;
-      final isActive = label == 'Home'
-          ? (currentPath == RouteNames.studentDashboard)
-          : currentPath.contains(match);
-
-      return Padding(
-        padding: const EdgeInsets.only(right: 4),
-        child: TextButton(
-          onPressed: () => context.go(route),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            backgroundColor: isActive ? AppColors.primary.withOpacity(0.08) : null,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          child: Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 12.5,
-              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-              color: isActive ? AppColors.primary : AppColors.textSecondary,
-            ),
-          ),
-        ),
-      );
-    }).toList();
-  }
-}
-
 // ─── Hero section: greeting + photo + fee capsules ────────────────────────────
 
 class _StudentWebHeroSection extends ConsumerWidget {
@@ -1337,90 +1251,68 @@ class _StudentWebHeroSection extends ConsumerWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: const [BoxShadow(color: Color(0x0E000000), blurRadius: 10, offset: Offset(0, 4))],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // ── Greeting row ──────────────────────────────────────────
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Avatar
-              GestureDetector(
-                onTap: () => context.go('${RouteNames.studentDashboard}/profile'),
-                child: Container(
-                  width: 52, height: 52,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.iconContainer,
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 3))],
-                  ),
-                  child: ClipOval(
-                    child: photoUrl != null
-                        ? CachedNetworkImage(imageUrl: photoUrl, fit: BoxFit.cover)
-                        : Center(
-                            child: Text(
-                              username.isNotEmpty ? username[0].toUpperCase() : 'S',
-                              style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.primary),
-                            ),
-                          ),
-                  ),
-                ),
+          // ── Avatar ────────────────────────────────────────────────
+          GestureDetector(
+            onTap: () => context.go('${RouteNames.studentDashboard}/profile'),
+            child: Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.iconContainer,
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 6, offset: const Offset(0, 2))],
               ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Welcome in, $username',
-                    style: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.textPrimary, height: 1.1),
-                  ),
-                  gradeAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                    data: (grade) => grade == null
-                        ? const SizedBox.shrink()
-                        : Text('Grade $grade · Student',
-                            style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-                  ),
-                ],
+              child: ClipOval(
+                child: photoUrl != null
+                    ? CachedNetworkImage(imageUrl: photoUrl, fit: BoxFit.cover)
+                    : Center(
+                        child: Text(
+                          username.isNotEmpty ? username[0].toUpperCase() : 'S',
+                          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.primary),
+                        ),
+                      ),
               ),
-            ],
+            ),
           ),
-
-          const SizedBox(height: 22),
-
-          // ── Fee capsule row ───────────────────────────────────────
-          Row(
+          const SizedBox(width: 14),
+          // ── Greeting ──────────────────────────────────────────────
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome in, $username',
+                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary, height: 1.1),
+                ),
+                gradeAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (grade) => grade == null
+                      ? const SizedBox.shrink()
+                      : Text('Grade $grade · Student',
+                          style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 20),
+          // ── Fee capsules ─────────────────────────────────────────
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
             children: [
-              _FeeCapsule(
-                label: 'Base Fees',
-                value: '₹${fmt.format(baseFees)}',
-                style: _CapsuleStyle.darkNavy,
-              ),
-              const SizedBox(width: 10),
-              _FeeCapsule(
-                label: 'Extra Fees',
-                value: '₹${fmt.format(extraFees)}',
-                style: _CapsuleStyle.darkNavy,
-              ),
-              const SizedBox(width: 10),
-              _FeeCapsule(
-                label: 'Paid Fees',
-                value: '₹${fmt.format(paidFees)}',
-                style: _CapsuleStyle.blue,
-              ),
-              const SizedBox(width: 10),
-              _FeeCapsule(
-                label: 'Balance Due',
-                value: '₹${fmt.format(balance)}',
-                style: balance > 0 ? _CapsuleStyle.outline : _CapsuleStyle.outline,
-              ),
+              _FeeCapsule(label: 'Base Fees',    value: '₹${fmt.format(baseFees)}', style: _CapsuleStyle.darkNavy),
+              _FeeCapsule(label: 'Extra Fees',   value: '₹${fmt.format(extraFees)}', style: _CapsuleStyle.darkNavy),
+              _FeeCapsule(label: 'Paid Fees',    value: '₹${fmt.format(paidFees)}', style: _CapsuleStyle.blue),
+              _FeeCapsule(label: 'Balance Due',  value: '₹${fmt.format(balance)}', style: _CapsuleStyle.outline),
             ],
           ),
         ],
@@ -1464,21 +1356,21 @@ class _FeeCapsule extends StatelessWidget {
       children: [
         Text(label,
             style: GoogleFonts.poppins(
-                fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
-        const SizedBox(height: 6),
+                fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 4),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(50),
             border: border,
             boxShadow: style != _CapsuleStyle.outline
-                ? [BoxShadow(color: bgColor.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]
+                ? [BoxShadow(color: bgColor.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))]
                 : null,
           ),
           child: Text(value,
               style: GoogleFonts.poppins(
-                  fontSize: 13, fontWeight: FontWeight.w700, color: textColor)),
+                  fontSize: 12, fontWeight: FontWeight.w700, color: textColor)),
         ),
       ],
     );
@@ -2019,6 +1911,156 @@ class _WebTimetableRow extends StatelessWidget {
               child: Text('NOW', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white)),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Broadcasts Box ─────────────────────────────────────────────────────────────
+
+// ─── Live current-time badge ────────────────────────────────────────────────────
+
+class _WebCurrentTimeBadge extends StatefulWidget {
+  const _WebCurrentTimeBadge();
+
+  @override
+  State<_WebCurrentTimeBadge> createState() => _WebCurrentTimeBadgeState();
+}
+
+class _WebCurrentTimeBadgeState extends State<_WebCurrentTimeBadge> {
+  late DateTime _now;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    // refresh every minute
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final timeStr  = DateFormat('h:mm a').format(_now);
+    final dateStr  = DateFormat('EEEE, d MMMM').format(_now);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary.withOpacity(0.12)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.access_time_rounded, size: 16, color: AppColors.primary.withOpacity(0.7)),
+          const SizedBox(width: 8),
+          Text(
+            'Now  ',
+            style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+          ),
+          Text(
+            timeStr,
+            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '· $dateStr',
+            style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Homework Box ────────────────────────────────────────────────────────────────
+
+class _StudentWebHomeworkBox extends ConsumerWidget {
+  const _StudentWebHomeworkBox();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hwAsync = ref.watch(studentHomeworkProvider);
+
+    return _DashCard(
+      title: 'Homework',
+      icon: Icons.assignment_outlined,
+      seeAllRoute: '${RouteNames.studentDashboard}/homework',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        child: hwAsync.when(
+          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
+          error: (_, __) => const SizedBox(height: 60, child: Center(child: Text('No data'))),
+          data: (list) {
+            if (list.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: Text('No homework yet', style: TextStyle(color: AppColors.textMuted))),
+              );
+            }
+            return Column(
+              children: list.take(4).map((hw) {
+                final isTest = hw.isOnlineTest;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isTest
+                              ? AppColors.accent.withOpacity(0.12)
+                              : AppColors.primary.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          isTest ? 'Test' : 'HW',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10, fontWeight: FontWeight.w700,
+                            color: isTest ? AppColors.accent : AppColors.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(hw.title,
+                              style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                              overflow: TextOverflow.ellipsis),
+                            Text(hw.subject,
+                              style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textMuted),
+                              overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _fmtDMon.format(hw.createdAt),
+                        style: GoogleFonts.poppins(fontSize: 10, color: AppColors.accent, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
       ),
     );
   }
