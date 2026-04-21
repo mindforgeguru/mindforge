@@ -12,7 +12,6 @@ import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
-import '../widgets/teacher_bottom_nav.dart';
 import '../widgets/teacher_scaffold.dart';
 
 // Responsive scale helper — base ref width 390 px
@@ -690,10 +689,6 @@ class _FilterBar extends StatelessWidget {
       final dateW   = inner * 0.45;
       final periodW = inner * 0.25;
 
-      final labelStyle = GoogleFonts.poppins(
-        fontSize: (sw * 0.03).clamp(10.0, 13.0),
-        color: AppColors.textSecondary,
-      );
       final valueStyle = GoogleFonts.poppins(
         fontSize: (sw * 0.033).clamp(11.0, 14.0),
         color: AppColors.primary,

@@ -10,7 +10,6 @@ import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/api/api_client.dart';
 import '../providers/teacher_provider.dart';
-import '../widgets/teacher_bottom_nav.dart';
 import '../widgets/teacher_scaffold.dart';
 
 // ─── Responsive helpers (local) ───────────────────────────────────────────────

@@ -11,7 +11,6 @@ import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
-import '../widgets/teacher_bottom_nav.dart';
 import '../widgets/teacher_scaffold.dart';
 
 class TeacherTimetableScreen extends ConsumerStatefulWidget {

@@ -84,10 +84,3 @@ final teacherGradeBadgeNotifier =
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/// Returns true if [latest] is after [lastSeen] (or lastSeen is null).
-bool _isNew(DateTime? lastSeen, DateTime? latest) {
-  if (latest == null) return false;
-  if (lastSeen == null) return true;
-  return latest.isAfter(lastSeen);
-}

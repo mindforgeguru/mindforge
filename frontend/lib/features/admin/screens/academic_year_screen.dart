@@ -294,8 +294,6 @@ class _PreviousYearCard extends ConsumerWidget {
         : null;
     final students = year['students'] as int? ?? 0;
     final teachers = year['teachers'] as int? ?? 0;
-    final parents = year['parents'] as int? ?? 0;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: mindForgeCardDecoration(),

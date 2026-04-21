@@ -396,7 +396,6 @@ class _EditUserSheetState extends State<_EditUserSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isStudent = widget.user.role == 'student';
     final bottom = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(

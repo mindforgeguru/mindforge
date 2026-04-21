@@ -9,6 +9,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/utils/responsive.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../../core/models/user.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_bottom_nav.dart';
 
@@ -45,7 +46,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
   Future<void> _refreshDashboard() async {
     ref.invalidate(pendingUsersProvider);
     ref.invalidate(currentAcademicYearProvider);
-    await ref.read(pendingUsersProvider.future).catchError((_) => <dynamic>[]);
+    await ref.read(pendingUsersProvider.future).catchError((_) => <UserModel>[]);
   }
 
   @override
