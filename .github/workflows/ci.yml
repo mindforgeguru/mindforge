@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**", "fix/**", "test/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Backend unit tests (no DB/Redis needed) ──────────────────────────────────
+  backend-unit:
+    name: Backend unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt pytest pytest-asyncio
+
+      - name: Run unit tests
+        working-directory: backend
+        run: python -m pytest tests/test_unit.py -v
+
+  # ── Flutter unit + widget tests ───────────────────────────────────────────────
+  flutter:
+    name: Flutter unit & widget tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.32.0"
+          channel: stable
+          cache: true
+
+      - name: Get packages
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: frontend
+        run: flutter analyze --no-fatal-infos
+
+      - name: Unit tests
+        working-directory: frontend
+        run: flutter test test/unit/ --reporter expanded
+
+      - name: Widget tests
+        working-directory: frontend
+        run: flutter test test/widget/ --reporter expanded
+
+  # ── API integration tests (manual / scheduled only) ──────────────────────────
+  api-integration:
+    name: API integration tests (live server)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install httpx pytest
+
+      - name: Run API tests
+        env:
+          ADMIN_MPIN: ${{ secrets.ADMIN_MPIN }}
+        run: python -m pytest tests/test_api.py -v
