@@ -6,7 +6,7 @@ Authentication router:
 - GET  /auth/me        — return current user info
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -22,9 +22,17 @@ from app.schemas.user import (
     UserRegisterRequest, UserLoginRequest, TokenResponse,
     RefreshRequest, RefreshResponse, UserResponse, StudentProfileCreate
 )
+from app.core.redis_client import redis_manager
 from app.services import storage_service
 
 router = APIRouter()
+
+
+def _get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -139,6 +147,7 @@ async def register_user(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
+    request: Request,
     payload: UserLoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -146,6 +155,15 @@ async def login(
     Authenticate user with username + 6-digit MPIN.
     Returns a JWT token on success.
     """
+    ip = _get_client_ip(request)
+    rate_key = f"rate_limit:login:{ip}"
+    if await redis_manager.rate_limit(rate_key, max_attempts=10, window_seconds=60):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please wait 60 seconds and try again.",
+            headers={"Retry-After": "60"},
+        )
+
     result = await db.execute(
         select(User).where(User.username == payload.username, User.deleted_at.is_(None))
     )

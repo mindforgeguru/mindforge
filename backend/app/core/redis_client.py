@@ -97,5 +97,15 @@ class RedisManager:
         if self._client:
             await self._client.delete(key)
 
+    async def rate_limit(self, key: str, max_attempts: int, window_seconds: int) -> bool:
+        """Increment a counter for `key`. Returns True if the limit is exceeded.
+        Fails open (returns False) when Redis is unavailable."""
+        if self._client is None:
+            return False
+        count = await self._client.incr(key)
+        if count == 1:
+            await self._client.expire(key, window_seconds)
+        return count > max_attempts
+
 
 redis_manager = RedisManager()

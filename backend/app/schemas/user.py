@@ -87,6 +87,15 @@ class UserLoginRequest(BaseModel):
     username: str
     mpin: str
 
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if len(v) > 150:
+            raise ValueError("Username too long.")
+        if "\x00" in v:
+            raise ValueError("Invalid characters in username.")
+        return v
+
     @field_validator("mpin")
     @classmethod
     def validate_mpin(cls, v: str) -> str:

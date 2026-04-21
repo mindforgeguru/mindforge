@@ -18,7 +18,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.database import get_db
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 # ─── MPIN hashing ─────────────────────────────────────────────────────────────
@@ -72,6 +72,12 @@ async def _get_current_user(
         detail="Could not validate credentials.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    # HTTPBearer(auto_error=False) returns None instead of raising 403 when
+    # the Authorization header is absent — we normalise that to 401 here.
+    if credentials is None:
+        raise credentials_exception
+
     try:
         payload = decode_access_token(credentials.credentials)
         user_id_raw = payload.get("sub")
