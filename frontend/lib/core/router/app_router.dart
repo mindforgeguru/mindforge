@@ -24,6 +24,9 @@ import '../../features/student/screens/test_attempt_screen.dart' as student;
 import '../../features/student/screens/test_review_screen.dart' as student;
 import '../../features/student/screens/profile_screen.dart' as student;
 import '../../features/student/screens/homework_screen.dart' as student;
+import '../../features/student/screens/broadcasts_screen.dart' as student;
+import '../../features/student/screens/fees_screen.dart' as student;
+import '../../features/student/screens/faculty_screen.dart' as student;
 import '../../features/parent/screens/dashboard_screen.dart' as parent;
 import '../../features/parent/screens/attendance_screen.dart' as parent;
 import '../../features/parent/screens/timetable_screen.dart' as parent;
@@ -204,6 +207,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'homework',
             pageBuilder: (_, __) => _slidePage(const student.StudentHomeworkScreen()),
+          ),
+          GoRoute(
+            path: 'broadcasts',
+            pageBuilder: (_, __) => _slidePage(const student.StudentBroadcastsScreen()),
+          ),
+          GoRoute(
+            path: 'fees',
+            pageBuilder: (_, __) => _slidePage(const student.StudentFeesScreen()),
+          ),
+          GoRoute(
+            path: 'faculty',
+            pageBuilder: (_, __) => _slidePage(const student.StudentFacultyScreen()),
           ),
         ],
       ),

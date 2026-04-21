@@ -85,10 +85,10 @@ class StudentBottomNav extends ConsumerWidget {
                       context.go('${RouteNames.studentDashboard}/attendance'),
                 ),
                 _NavItem(
-                  icon: Icons.assignment_outlined,
-                  label: 'Homework',
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Fees',
                   onTap: () =>
-                      context.go('${RouteNames.studentDashboard}/homework'),
+                      context.go('${RouteNames.studentDashboard}/fees'),
                 ),
               ],
             ),
@@ -184,8 +184,8 @@ class _NavItem extends StatelessWidget {
         return path.contains('/tests');
       case 'Attendance':
         return path.contains('/attendance');
-      case 'Homework':
-        return path.contains('/homework');
+      case 'Fees':
+        return path.contains('/fees');
       default:
         return false;
     }

@@ -16,7 +16,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
-import '../widgets/student_bottom_nav.dart';
+import '../widgets/student_scaffold.dart';
 
 // File-level DateFormat cache — creating these objects is expensive;
 // sharing one instance per format pattern avoids repeated allocations.
@@ -28,9 +28,59 @@ class StudentGradeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width >= 900;
+
+    if (isWide) {
+      return StudentScaffold(
+        body: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Column 1 — Online Tests
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: const [
+                    _SectionHeader(title: 'Online Tests', icon: Icons.computer_outlined),
+                    SizedBox(height: 12),
+                    Expanded(child: _OnlineGradesTab()),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Column 2 — Offline Tests
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: const [
+                    _SectionHeader(title: 'Offline Tests', icon: Icons.print_outlined),
+                    SizedBox(height: 12),
+                    Expanded(child: _OfflineGradesTab()),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Column 3 — Analysis
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: const [
+                    _SectionHeader(title: 'Analysis', icon: Icons.bar_chart_outlined),
+                    SizedBox(height: 12),
+                    Expanded(child: _AnalysisTab()),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return DefaultTabController(
       length: 3,
-      child: Scaffold(
+      child: StudentScaffold(
         appBar: AppBar(
           title: const Text('My Grades'),
           actions: [
@@ -62,8 +112,42 @@ class StudentGradeScreen extends StatelessWidget {
             _AnalysisTab(),
           ],
         ),
-        bottomNavigationBar: const StudentBottomNav(),
       ),
+    );
+  }
+}
+
+// ─── Web section header ───────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  const _SectionHeader({required this.title, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.primary),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(width: 16),
+        const Expanded(child: Divider()),
+      ],
     );
   }
 }
@@ -71,7 +155,8 @@ class StudentGradeScreen extends StatelessWidget {
 // ─── Online Grades Tab ────────────────────────────────────────────────────────
 
 class _OnlineGradesTab extends ConsumerStatefulWidget {
-  const _OnlineGradesTab();
+  final bool stacked;
+  const _OnlineGradesTab({this.stacked = false});
 
   @override
   ConsumerState<_OnlineGradesTab> createState() => _OnlineGradesTabState();
@@ -120,25 +205,25 @@ class _OnlineGradesTabState extends ConsumerState<_OnlineGradesTab> {
   @override
   Widget build(BuildContext context) {
     final gradesAsync = ref.watch(studentOnlineGradesProvider(_filterSubject));
-    ref.listen(studentOnlineGradesProvider(_filterSubject), (_, next) {
-      next.whenData((grades) {
-        if (mounted) {
-          setState(() {
-            _allGrades = grades;
-            _hasMore = grades.length >= _pageSize;
-          });
-        }
+
+    // Sync _allGrades on every fresh data arrival — covers both cold load
+    // and cache hits (ref.listen alone misses the cached case).
+    if (!_isLoadingMore) {
+      gradesAsync.whenData((grades) {
+        _allGrades = grades;
+        _hasMore = grades.length >= _pageSize;
       });
-    });
+    }
+
     return _GradesTabBody(
       gradesAsync: gradesAsync.whenData((_) => _allGrades),
       filterSubject: _filterSubject,
       onSubjectChanged: _onSubjectChanged,
-      onRefresh: () =>
-          ref.refresh(studentOnlineGradesProvider(_filterSubject).future),
+      onRefresh: () => ref.refresh(studentOnlineGradesProvider(_filterSubject).future),
       hasMore: _hasMore,
       isLoadingMore: _isLoadingMore,
       onLoadMore: _loadMore,
+      stacked: widget.stacked,
       buildCard: (g, high, low) => _GradeCard(
         grade: g,
         classHigh: high,
@@ -155,7 +240,8 @@ class _OnlineGradesTabState extends ConsumerState<_OnlineGradesTab> {
 // ─── Offline Grades Tab ───────────────────────────────────────────────────────
 
 class _OfflineGradesTab extends ConsumerStatefulWidget {
-  const _OfflineGradesTab();
+  final bool stacked;
+  const _OfflineGradesTab({this.stacked = false});
 
   @override
   ConsumerState<_OfflineGradesTab> createState() => _OfflineGradesTabState();
@@ -230,16 +316,16 @@ class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
   @override
   Widget build(BuildContext context) {
     final gradesAsync = ref.watch(studentOfflineGradesProvider(_filterSubject));
-    ref.listen(studentOfflineGradesProvider(_filterSubject), (_, next) {
-      next.whenData((grades) {
-        if (mounted) {
-          setState(() {
-            _allGrades = grades;
-            _hasMore = grades.length >= _pageSize;
-          });
-        }
+
+    // Sync _allGrades on every fresh data arrival — covers both cold load
+    // and cache hits (ref.listen alone misses the cached case).
+    if (!_isLoadingMore) {
+      gradesAsync.whenData((grades) {
+        _allGrades = grades;
+        _hasMore = grades.length >= _pageSize;
       });
-    });
+    }
+
     return _GradesTabBody(
       gradesAsync: gradesAsync.whenData((_) => _allGrades),
       filterSubject: _filterSubject,
@@ -251,6 +337,7 @@ class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
       hasMore: _hasMore,
       isLoadingMore: _isLoadingMore,
       onLoadMore: _loadMore,
+      stacked: widget.stacked,
       buildCard: (g, high, low) =>
           _GradeCard(grade: g, classHigh: high, classLow: low),
     );
@@ -260,7 +347,8 @@ class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
 // ─── Analysis Tab ─────────────────────────────────────────────────────────────
 
 class _AnalysisTab extends ConsumerStatefulWidget {
-  const _AnalysisTab();
+  final bool stacked;
+  const _AnalysisTab({this.stacked = false});
 
   @override
   ConsumerState<_AnalysisTab> createState() => _AnalysisTabState();
@@ -279,9 +367,7 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
             ? ref.watch(studentOnlineGradesProvider(_subject))
             : ref.watch(studentOfflineGradesProvider(_subject)));
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(R.sp(context, 16, min: 12, max: 20), R.sp(context, 16, min: 12, max: 20), R.sp(context, 16, min: 12, max: 20), R.sp(context, 24, min: 16, max: 28)),
-      child: Column(
+    final content = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Filters ─────────────────────────────────────────────────
@@ -426,7 +512,13 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
               },
             ),
         ],
-      ),
+    );
+
+    if (widget.stacked) return content;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(R.sp(context, 16, min: 12, max: 20), R.sp(context, 16, min: 12, max: 20), R.sp(context, 16, min: 12, max: 20), R.sp(context, 24, min: 16, max: 28)),
+      child: content,
     );
   }
 }
@@ -888,6 +980,7 @@ class _GradesTabBody extends StatelessWidget {
   final bool hasMore;
   final bool isLoadingMore;
   final VoidCallback? onLoadMore;
+  final bool stacked;
 
   const _GradesTabBody({
     required this.gradesAsync,
@@ -900,106 +993,125 @@ class _GradesTabBody extends StatelessWidget {
     this.hasMore = false,
     this.isLoadingMore = false,
     this.onLoadMore,
+    this.stacked = false,
   });
+
+  Widget _buildList(BuildContext context, List<GradeModel> grades) {
+    if (grades.isEmpty) {
+      final emptyContent = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.grade_outlined, size: 56, color: AppColors.textMuted),
+          const SizedBox(height: 16),
+          Text(emptyMessage, style: const TextStyle(fontSize: 15, color: AppColors.textSecondary)),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(emptySubMessage, textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
+          ),
+        ],
+      );
+      if (stacked) {
+        return Padding(padding: const EdgeInsets.symmetric(vertical: 32), child: emptyContent);
+      }
+      return Center(child: emptyContent);
+    }
+
+    // Pre-compute per-subject min/max in a single O(n) pass so
+    // itemBuilder doesn't call reduce() for every visible row.
+    final Map<String, double> subjectMax = {};
+    final Map<String, double> subjectMin = {};
+    for (final g in grades) {
+      final s = g.subject;
+      final p = g.percentage;
+      if (!subjectMax.containsKey(s) || p > subjectMax[s]!) subjectMax[s] = p;
+      if (!subjectMin.containsKey(s) || p < subjectMin[s]!) subjectMin[s] = p;
+    }
+
+    if (stacked) {
+      // Web stacked mode: shrinkWrap list, no RefreshIndicator
+      return Column(
+        children: [
+          ...List.generate(grades.length + (hasMore ? 1 : 0), (i) {
+            if (i == grades.length) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: isLoadingMore
+                    ? const Center(child: CircularProgressIndicator())
+                    : OutlinedButton(onPressed: onLoadMore, child: const Text('Load More')),
+              );
+            }
+            final g = grades[i];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: buildCard(g, subjectMax[g.subject]!, subjectMin[g.subject]!),
+            );
+          }),
+        ],
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView.separated(
+        padding: EdgeInsets.fromLTRB(R.sp(context, 16, min: 12, max: 20), 8, R.sp(context, 16, min: 12, max: 20), MediaQuery.of(context).padding.bottom + 16),
+        itemCount: grades.length + (hasMore ? 1 : 0),
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (ctx, i) {
+          if (i == grades.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: isLoadingMore
+                  ? const Center(child: CircularProgressIndicator())
+                  : OutlinedButton(onPressed: onLoadMore, child: const Text('Load More')),
+            );
+          }
+          final g = grades[i];
+          return buildCard(g, subjectMax[g.subject]!, subjectMin[g.subject]!);
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final dropdown = Padding(
+      padding: stacked
+          ? const EdgeInsets.only(bottom: 16)
+          : const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: DropdownButtonFormField<String?>(
+        value: filterSubject,
+        decoration: const InputDecoration(
+          labelText: 'Filter by Subject',
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        items: [
+          const DropdownMenuItem(value: null, child: Text('All Subjects')),
+          ...AppConstants.subjects.map((s) => DropdownMenuItem(value: s, child: Text(s))),
+        ],
+        onChanged: onSubjectChanged,
+      ),
+    );
+
+    final listContent = gradesAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => ErrorView(error: e, onRetry: () => onRefresh()),
+      data: (grades) => _buildList(context, grades),
+    );
+
+    if (stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [dropdown, listContent],
+      );
+    }
+
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: DropdownButtonFormField<String?>(
-            value: filterSubject,
-            decoration: const InputDecoration(
-              labelText: 'Filter by Subject',
-              isDense: true,
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-            items: [
-              const DropdownMenuItem(
-                  value: null, child: Text('All Subjects')),
-              ...AppConstants.subjects.map((s) =>
-                  DropdownMenuItem(value: s, child: Text(s))),
-            ],
-            onChanged: onSubjectChanged,
-          ),
-        ),
-        Expanded(
-          child: gradesAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
-            error: (e, _) => ErrorView(error: e, onRetry: () => onRefresh()),
-            data: (grades) {
-              if (grades.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.grade_outlined,
-                          size: 56, color: AppColors.textMuted),
-                      const SizedBox(height: 16),
-                      Text(emptyMessage,
-                          style: const TextStyle(
-                              fontSize: 15,
-                              color: AppColors.textSecondary)),
-                      const SizedBox(height: 6),
-                      Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 40),
-                        child: Text(emptySubMessage,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textMuted)),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              // Pre-compute per-subject min/max in a single O(n) pass so
-              // itemBuilder doesn't call reduce() for every visible row.
-              final Map<String, double> subjectMax = {};
-              final Map<String, double> subjectMin = {};
-              for (final g in grades) {
-                final s = g.subject;
-                final p = g.percentage;
-                if (!subjectMax.containsKey(s) || p > subjectMax[s]!) subjectMax[s] = p;
-                if (!subjectMin.containsKey(s) || p < subjectMin[s]!) subjectMin[s] = p;
-              }
-
-              return RefreshIndicator(
-                onRefresh: onRefresh,
-                child: ListView.separated(
-                  padding: EdgeInsets.fromLTRB(R.sp(context, 16, min: 12, max: 20), 8, R.sp(context, 16, min: 12, max: 20), MediaQuery.of(context).padding.bottom + 16),
-                  itemCount: grades.length + (hasMore ? 1 : 0),
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (ctx, i) {
-                    if (i == grades.length) {
-                      // Load More button / loading indicator
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: isLoadingMore
-                            ? const Center(child: CircularProgressIndicator())
-                            : OutlinedButton(
-                                onPressed: onLoadMore,
-                                child: const Text('Load More'),
-                              ),
-                      );
-                    }
-                    final g = grades[i];
-                    return buildCard(
-                      g,
-                      subjectMax[g.subject]!,
-                      subjectMin[g.subject]!,
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-        ),
+        dropdown,
+        Expanded(child: listContent),
       ],
     );
   }

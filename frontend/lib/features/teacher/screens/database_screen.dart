@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -93,6 +94,7 @@ class _OldTestsTabState extends ConsumerState<_OldTestsTab> {
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
       allowMultiple: true,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
 
@@ -100,15 +102,15 @@ class _OldTestsTabState extends ConsumerState<_OldTestsTab> {
     try {
       final formData = FormData();
       for (final f in result.files) {
-        if (f.path != null) {
-          formData.files.add(MapEntry(
-            'files',
-            await MultipartFile.fromFile(f.path!, filename: f.name),
-          ));
-        } else if (f.bytes != null) {
+        if (f.bytes != null) {
           formData.files.add(MapEntry(
             'files',
             MultipartFile.fromBytes(f.bytes!, filename: f.name),
+          ));
+        } else if (!kIsWeb && f.path != null) {
+          formData.files.add(MapEntry(
+            'files',
+            await MultipartFile.fromFile(f.path!, filename: f.name),
           ));
         }
       }
@@ -338,6 +340,7 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      withData: true,
     );
     if (result != null && result.files.isNotEmpty) {
       setState(() => _pickedFile = result.files.first);
@@ -362,15 +365,15 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
         MapEntry('chapter_name', _chapterCtrl.text.trim()),
       ]);
       final f = _pickedFile!;
-      if (f.path != null) {
-        formData.files.add(MapEntry(
-          'file',
-          await MultipartFile.fromFile(f.path!, filename: f.name),
-        ));
-      } else if (f.bytes != null) {
+      if (f.bytes != null) {
         formData.files.add(MapEntry(
           'file',
           MultipartFile.fromBytes(f.bytes!, filename: f.name),
+        ));
+      } else if (!kIsWeb && f.path != null) {
+        formData.files.add(MapEntry(
+          'file',
+          await MultipartFile.fromFile(f.path!, filename: f.name),
         ));
       }
       await ref.read(apiClientProvider).uploadChapterDocument(formData);
@@ -612,6 +615,7 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      withData: true,
     );
     if (result != null && result.files.isNotEmpty) {
       setState(() => _pickedFile = result.files.first);
@@ -634,15 +638,15 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
         MapEntry('subject', _selectedSubject!),
       ]);
       final f = _pickedFile!;
-      if (f.path != null) {
-        formData.files.add(MapEntry(
-          'file',
-          await MultipartFile.fromFile(f.path!, filename: f.name),
-        ));
-      } else if (f.bytes != null) {
+      if (f.bytes != null) {
         formData.files.add(MapEntry(
           'file',
           MultipartFile.fromBytes(f.bytes!, filename: f.name),
+        ));
+      } else if (!kIsWeb && f.path != null) {
+        formData.files.add(MapEntry(
+          'file',
+          await MultipartFile.fromFile(f.path!, filename: f.name),
         ));
       }
       await ref.read(apiClientProvider).uploadSyllabus(formData);

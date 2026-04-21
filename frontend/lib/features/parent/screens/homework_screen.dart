@@ -8,7 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../providers/parent_provider.dart';
-import '../widgets/parent_bottom_nav.dart';
+import '../widgets/parent_scaffold.dart';
 
 // Responsive scale helper — base ref width 390 px
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
@@ -52,7 +52,7 @@ class _ParentHomeworkScreenState
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, _) {
-      return Scaffold(
+      return ParentScaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
           title: FittedBox(
@@ -95,7 +95,6 @@ class _ParentHomeworkScreenState
             ],
           ),
         ),
-        bottomNavigationBar: const ParentBottomNav(),
         body: TabBarView(
           controller: _tabController,
           children: [

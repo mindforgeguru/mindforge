@@ -11,7 +11,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/constants.dart';
 import '../providers/parent_provider.dart';
-import '../widgets/parent_bottom_nav.dart';
+import '../widgets/parent_scaffold.dart';
 import '../widgets/parent_error_widget.dart';
 
 class ParentGradeScreen extends StatelessWidget {
@@ -21,7 +21,7 @@ class ParentGradeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 3,
-      child: Scaffold(
+      child: ParentScaffold(
         appBar: AppBar(
           title: const Text("Child's Grades"),
           actions: [
@@ -46,7 +46,6 @@ class ParentGradeScreen extends StatelessWidget {
             ],
           ),
         ),
-        bottomNavigationBar: const ParentBottomNav(),
         body: const TabBarView(
           children: [
             _OnlineGradesTab(),

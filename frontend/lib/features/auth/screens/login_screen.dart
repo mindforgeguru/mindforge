@@ -608,7 +608,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildWebScaffold(BuildContext context, AuthState auth) {
     return Scaffold(
+      backgroundColor: const Color(0xFF060F1E),
       body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Left: branding panel ─────────────────────────────────────
           Expanded(
@@ -671,50 +673,57 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Logo block
+                  // Logo block — Hansal logo + MindForge logo side by side
                   Row(
                     children: [
+                      // Hansal Sir logo
                       Container(
-                        width: 56, height: 56,
+                        width: 80, height: 80,
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(18),
                           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3),
                             blurRadius: 20, offset: const Offset(0, 6))],
                         ),
                         padding: const EdgeInsets.all(8),
+                        child: Image.asset('assets/images/hansal_logo.png', fit: BoxFit.contain),
+                      ),
+                      // Vertical divider
+                      Container(
+                        width: 1, height: 52,
+                        margin: const EdgeInsets.symmetric(horizontal: 18),
+                        color: Colors.white.withOpacity(0.2),
+                      ),
+                      // MindForge logo + name
+                      Container(
+                        width: 80, height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3),
+                            blurRadius: 20, offset: const Offset(0, 6))],
+                        ),
+                        padding: const EdgeInsets.all(10),
                         child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
                       ),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 16),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('MIND FORGE',
-                            style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w800,
+                            style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w800,
                               color: Colors.white, letterSpacing: 1.5)),
                           Text('AI Assisted Learning',
-                            style: GoogleFonts.poppins(fontSize: 11,
+                            style: GoogleFonts.poppins(fontSize: 12,
                               color: Colors.white.withOpacity(0.5))),
                         ],
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 64),
+                  const SizedBox(height: 56),
 
-                  // Label badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.accent.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.accent.withOpacity(0.35)),
-                    ),
-                    child: Text('SCHOOL MANAGEMENT PLATFORM',
-                      style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.w700,
-                        color: AppColors.accentLight, letterSpacing: 2.0)),
-                  ),
-                  const SizedBox(height: 14),
+
 
                   // Hero text
                   Text('Smart Learning\nStarts Here.',
@@ -754,31 +763,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   const SizedBox(height: 48),
 
-                  // Stats bar
+                  // Capsule — adapted from splash screen for dark background
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.06),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: Colors.white.withOpacity(0.22), width: 1),
+                      color: Colors.white.withOpacity(0.07),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Column(children: [
-                          Text('30+', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
-                          Text('Years', style: GoogleFonts.poppins(fontSize: 10, color: Colors.white.withOpacity(0.5))),
-                        ]),
-                        Container(width: 1, height: 36, color: Colors.white.withOpacity(0.12)),
-                        Column(children: [
-                          Text('500+', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
-                          Text('Students', style: GoogleFonts.poppins(fontSize: 10, color: Colors.white.withOpacity(0.5))),
-                        ]),
-                        Container(width: 1, height: 36, color: Colors.white.withOpacity(0.12)),
-                        Column(children: [
-                          Text('50+', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
-                          Text('Teachers', style: GoogleFonts.poppins(fontSize: 10, color: Colors.white.withOpacity(0.5))),
-                        ]),
+                        Icon(Icons.workspace_premium_rounded,
+                          size: 18, color: Colors.white.withOpacity(0.85)),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('25+ YEARS OF EXCELLENCE',
+                              style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700,
+                                color: Colors.white, letterSpacing: 1.4)),
+                            Text('Trusted education since 1997',
+                              style: GoogleFonts.poppins(fontSize: 10,
+                                color: Colors.white.withOpacity(0.55), letterSpacing: 0.2)),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -795,23 +805,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Container(
       color: const Color(0xFFF4F6FA),
       child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 56, vertical: 48),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 48),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.max,
               children: [
                 // Heading
                 Text(_isRegister ? 'Request Access' : 'Welcome back',
-                  style: GoogleFonts.poppins(fontSize: 30, fontWeight: FontWeight.w800,
+                  style: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w800,
                     color: const Color(0xFF0D1B2A), letterSpacing: -0.5)),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(_isRegister
                   ? 'Fill in your details and await admin approval.'
                   : 'Sign in to your MIND FORGE account.',
-                  style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textMuted)),
+                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textMuted)),
                 const SizedBox(height: 4),
                 Container(
                   width: 40, height: 3,
@@ -821,7 +832,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 28),
+                const SizedBox(height: 20),
 
                 // Username
                 TextField(
@@ -958,14 +969,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ],
                 ],
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
 
                 // MPIN label
                 Text(_isRegister ? 'Set a 6-digit MPIN' : 'Enter your 6-digit MPIN',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600,
+                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600,
                     color: AppColors.textSecondary)),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 // PIN dots
                 Row(
@@ -975,7 +986,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     final active = i == _pinIndex;
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 4),
-                      width: 44, height: 52,
+                      width: 40, height: 46,
                       decoration: BoxDecoration(
                         color: filled ? AppColors.primary.withOpacity(0.1) : Colors.white,
                         border: Border.all(
@@ -986,20 +997,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           blurRadius: 4, offset: const Offset(0, 2))],
                       ),
                       child: Center(child: filled
-                        ? Container(width: 10, height: 10,
+                        ? Container(width: 9, height: 9,
                             decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle))
                         : null),
                     );
                   }),
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _buildPad(context),
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
 
                 // Sign In button
                 SizedBox(
-                  height: 52,
+                  height: 48,
                   child: ElevatedButton(
                     onPressed: auth.isLoading ? null : _submit,
                     style: ElevatedButton.styleFrom(
@@ -1011,12 +1022,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ? const SizedBox(width: 22, height: 22,
                           child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
                       : Text(_isRegister ? 'Submit Registration' : 'Sign In',
-                          style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700,
+                          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700,
                             color: Colors.white, letterSpacing: 0.5)),
                   ),
                 ),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
 
                 // Toggle link
                 GestureDetector(
@@ -1034,7 +1045,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ? 'Already have an account? Sign In'
                       : "Don't have an account? Request Access",
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(fontSize: 13,
+                    style: GoogleFonts.poppins(fontSize: 12,
                       color: AppColors.secondary, fontWeight: FontWeight.w600),
                   ),
                 ),

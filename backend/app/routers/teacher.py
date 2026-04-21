@@ -46,6 +46,38 @@ async def get_teacher_profile(
     return current_teacher
 
 
+@router.get("/profile/bio")
+async def get_teacher_bio(
+    db: AsyncSession = Depends(get_db),
+    current_teacher: User = Depends(get_current_teacher),
+):
+    """Return the teacher's current bio."""
+    result = await db.execute(
+        select(TeacherProfile).where(TeacherProfile.user_id == current_teacher.id)
+    )
+    profile = result.scalar_one_or_none()
+    return {"bio": profile.bio if profile else None}
+
+
+@router.put("/profile/bio")
+async def update_teacher_bio(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_teacher: User = Depends(get_current_teacher),
+):
+    """Update the teacher's bio (max 500 chars)."""
+    bio = (payload.get("bio") or "").strip()[:500]
+    result = await db.execute(
+        select(TeacherProfile).where(TeacherProfile.user_id == current_teacher.id)
+    )
+    profile = result.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Teacher profile not found.")
+    profile.bio = bio or None
+    await db.commit()
+    return {"bio": profile.bio}
+
+
 @router.post("/profile/photo", status_code=status.HTTP_200_OK)
 async def upload_teacher_photo(
     file: UploadFile = File(...),
@@ -445,7 +477,7 @@ async def generate_test(
     title: str = Form(...),
     grade: int = Form(...),
     subject: str = Form(...),
-    chapter: str = Form(...),
+    chapter: str = Form(""),
     test_type: str = Form("online"),
     mcq_count: int = Form(5),
     fill_blank_count: int = Form(3),
@@ -607,8 +639,10 @@ async def generate_test(
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=3) if test_type == "online" else None
 
-    # For online tests: 1 minute per question. For offline: use the slider value exactly.
-    time_limit = len(questions) if test_type == "online" else (params.time_limit_minutes or 0)
+    # For online tests: 30 seconds per question (stored as whole minutes, rounded up).
+    # For offline: use the slider value the teacher chose.
+    import math
+    time_limit = math.ceil(len(questions) / 2) if test_type == "online" else (params.time_limit_minutes or 0)
 
     test = Test(
         title=title,
@@ -1197,7 +1231,8 @@ async def get_teacher_dashboard_summary(
 ):
     """
     Single aggregated endpoint for the teacher dashboard.
-    Returns my_timetable, broadcasts, homework, grades, and tests — in one round trip.
+    Returns my_timetable, broadcasts, homework, grades, and test_count — in one round trip.
+    Tests are returned as a count only (no questions payload) to keep the response fast.
     """
     # My timetable slots
     my_timetable = (await db.execute(
@@ -1206,11 +1241,12 @@ async def get_teacher_dashboard_summary(
         .order_by(TimetableSlot.slot_date, TimetableSlot.period_number)
     )).scalars().all()
 
-    # Broadcasts sent by this teacher
+    # Broadcasts sent by this teacher (50 most recent)
     broadcasts_raw = (await db.execute(
         select(Broadcast)
         .where(Broadcast.sender_id == current_teacher.id)
         .order_by(Broadcast.created_at.desc())
+        .limit(50)
     )).scalars().all()
     broadcasts = [
         BroadcastResponse(
@@ -1221,29 +1257,33 @@ async def get_teacher_dashboard_summary(
         for b in broadcasts_raw
     ]
 
-    # Homework created by this teacher
+    # Homework created by this teacher (30 most recent)
     homework = (await db.execute(
         select(Homework)
         .where(Homework.teacher_id == current_teacher.id)
         .order_by(Homework.created_at.desc())
+        .limit(30)
     )).scalars().all()
 
-    # Grades recorded by this teacher
+    # Grades recorded by this teacher (100 most recent, sufficient for chart)
     grades = (await db.execute(
         select(Grade)
         .where(Grade.teacher_id == current_teacher.id)
         .order_by(Grade.created_at.desc())
+        .limit(100)
     )).scalars().all()
 
-    # 20 most recent tests (visible to all teachers)
-    tests = (await db.execute(
-        select(Test).order_by(Test.created_at.desc()).limit(20)
-    )).scalars().all()
+    # Test count only — the dashboard only shows the count, not full question data.
+    # Fetching full test questions (large JSON blobs) is extremely slow and
+    # unnecessary here.
+    test_count_row = (await db.execute(
+        select(func.count()).select_from(Test)
+    )).scalar()
 
     return {
         "my_timetable": [TimetableSlotResponse.model_validate(s) for s in my_timetable],
         "broadcasts": broadcasts,
         "homework": [HomeworkResponse.model_validate(h) for h in homework],
         "grades": [GradeResponse.model_validate(g) for g in grades],
-        "tests": [TestResponse.model_validate(t) for t in tests],
+        "test_count": test_count_row or 0,
     }

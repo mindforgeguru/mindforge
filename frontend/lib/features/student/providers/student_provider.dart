@@ -23,6 +23,20 @@ final studentAttendanceSummaryProvider =
   return AttendanceSummaryModel.fromJson(raw);
 });
 
+final facultyProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  final raw = await api.getFaculty();
+  return raw.cast<Map<String, dynamic>>();
+});
+
+final classAttendanceLeaderboardProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  final raw = await api.getClassAttendanceLeaderboard(limit: 7);
+  return raw.cast<Map<String, dynamic>>();
+});
+
 final studentTimetableProvider =
     FutureProvider.family<List<TimetableSlotModel>, String>(
         (ref, date) async {

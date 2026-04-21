@@ -9,7 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
 import '../../../core/utils/responsive.dart';
-import '../widgets/student_bottom_nav.dart';
+import '../widgets/student_scaffold.dart';
 
 class StudentProfileScreen extends ConsumerStatefulWidget {
   const StudentProfileScreen({super.key});
@@ -111,7 +111,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
     final username = auth.username ?? 'Student';
     final avatarR = R.fluid(context, 36, min: 30, max: 44);
 
-    return Scaffold(
+    return StudentScaffold(
       appBar: AppBar(title: const Text('My Profile')),
       body: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
@@ -347,7 +347,6 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: const StudentBottomNav(),
     );
   }
 }

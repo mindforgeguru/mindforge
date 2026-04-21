@@ -155,5 +155,10 @@ final teacherBroadcastsProvider =
 final teacherDashboardSummaryProvider =
     FutureProvider<Map<String, dynamic>>((ref) async {
   final api = ref.watch(apiClientProvider);
-  return api.getTeacherDashboardSummary();
+  // Use a Dart-level timeout because Dio's connectTimeout / receiveTimeout
+  // are not reliably enforced on Flutter web (XMLHttpRequest backing).
+  // 45 s is generous enough for a Railway cold start (~30 s) while still
+  // surfacing a "Try Again" error rather than loading forever.
+  return api.getTeacherDashboardSummary()
+      .timeout(const Duration(seconds: 45));
 });

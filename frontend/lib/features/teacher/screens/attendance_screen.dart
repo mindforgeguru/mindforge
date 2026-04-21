@@ -35,6 +35,7 @@ Future<DateTime?> showAttendanceCalendar({
 }) async {
   return showDialog<DateTime>(
     context: context,
+      useRootNavigator: false,
     builder: (ctx) => _AttendanceCalendarDialog(
       initialDate: initialDate,
       grade: grade,

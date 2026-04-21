@@ -204,6 +204,7 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
   void _showCreateDialog(BuildContext context) {
     showDialog(
       context: context,
+      useRootNavigator: false,
       builder: (_) => _CreateHomeworkDialog(
         selectedGrade: _selectedGrade,
         onCreated: () =>

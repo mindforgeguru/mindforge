@@ -1184,6 +1184,7 @@ class _FeeStructureTileState extends ConsumerState<_FeeStructureTile> {
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Delete Fee Structure'),
         content: Text(
@@ -1399,6 +1400,7 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Delete Payment'),
         content: Text(

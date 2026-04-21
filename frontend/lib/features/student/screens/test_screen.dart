@@ -10,16 +10,72 @@ import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/student_provider.dart';
-import '../widgets/student_bottom_nav.dart';
+import '../widgets/student_scaffold.dart';
 
 class StudentTestScreen extends ConsumerWidget {
   const StudentTestScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isWide = MediaQuery.of(context).size.width >= 900;
+
+    const tabBar = TabBar(
+      labelColor: Colors.white,
+      unselectedLabelColor: Colors.white60,
+      indicatorColor: AppColors.accent,
+      tabs: [
+        Tab(text: 'Online'),
+        Tab(text: 'Offline'),
+        Tab(text: 'Completed'),
+      ],
+    );
+
+    const tabBarView = TabBarView(
+      children: [
+        _OnlineTestsTab(),
+        _OfflineTestsTab(),
+        _CompletedTestsTab(),
+      ],
+    );
+
+    if (isWide) {
+      return DefaultTabController(
+        length: 3,
+        child: StudentScaffold(
+          body: Padding(
+            padding: const EdgeInsets.fromLTRB(48, 28, 48, 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _WebColHeader(title: 'Tests', icon: Icons.quiz_outlined),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: tabBar,
+                  ),
+                  const SizedBox(height: 8),
+                  const Expanded(child: tabBarView),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return DefaultTabController(
       length: 3,
-      child: Scaffold(
+      child: StudentScaffold(
         appBar: AppBar(
           title: const Text('Tests'),
           actions: [
@@ -33,26 +89,42 @@ class StudentTestScreen extends ConsumerWidget {
               ),
             ),
           ],
-          bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            indicatorColor: AppColors.accent,
-            tabs: [
-              Tab(text: 'Online'),
-              Tab(text: 'Offline'),
-              Tab(text: 'Completed'),
-            ],
+          bottom: tabBar,
+        ),
+        body: tabBarView,
+      ),
+    );
+  }
+}
+
+class _WebColHeader extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  const _WebColHeader({required this.title, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 16, color: AppColors.primary),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        body: const TabBarView(
-          children: [
-            _OnlineTestsTab(),
-            _OfflineTestsTab(),
-            _CompletedTestsTab(),
-          ],
-        ),
-        bottomNavigationBar: const StudentBottomNav(),
-      ),
+        const SizedBox(width: 12),
+        const Expanded(child: Divider()),
+      ],
     );
   }
 }

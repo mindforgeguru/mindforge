@@ -17,7 +17,7 @@ import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/badge_dot.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/parent_provider.dart';
-import '../widgets/parent_bottom_nav.dart';
+import '../widgets/parent_scaffold.dart';
 
 // File-level DateFormat cache.
 final _fmtYMD   = DateFormat('yyyy-MM-dd');
@@ -91,6 +91,7 @@ class _ParentDashboardScreenState
   Future<void> _showProfileUpdatedDialog(String? newUsername) async {
     await showDialog<void>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text('Account Updated'),
@@ -164,9 +165,8 @@ class _ParentDashboardScreenState
     final double logoH = (sw * 0.142).clamp(42.0, 58.0);
     final double titleFs = (sw * 0.062).clamp(18.0, 25.0);
 
-    return Scaffold(
+    return ParentScaffold(
       backgroundColor: AppColors.background,
-      bottomNavigationBar: const ParentBottomNav(),
       body: RefreshIndicator(
         onRefresh: _refreshDashboard,
         child: CustomScrollView(

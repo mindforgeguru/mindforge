@@ -1,65 +1,113 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/fees.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/responsive.dart';
-import '../providers/parent_provider.dart';
-import '../widgets/parent_scaffold.dart';
-import '../widgets/parent_error_widget.dart';
+import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/shimmer_list.dart';
+import '../providers/student_provider.dart';
+import '../widgets/student_scaffold.dart';
 
-class ParentFeesScreen extends ConsumerWidget {
-  const ParentFeesScreen({super.key});
+class StudentFeesScreen extends ConsumerWidget {
+  const StudentFeesScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final feesAsync = ref.watch(parentChildFeesProvider);
+    final feesAsync = ref.watch(studentFeesProvider);
+    final isWide = MediaQuery.of(context).size.width >= 900;
 
-    return DefaultTabController(
-      length: 2,
-      child: ParentScaffold(
-        appBar: AppBar(
-          title: const Text('Fees'),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Container(
-                width: 32, height: 32,
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
-                padding: const EdgeInsets.all(3),
-                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
-              ),
-            ),
-          ],
-          bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            indicatorColor: AppColors.accent,
-            tabs: [
-              Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Summary'),
-              Tab(icon: Icon(Icons.payment_outlined), text: 'Pay'),
-            ],
-          ),
-        ),
-        body: feesAsync.when(
+    Widget buildBody() => feesAsync.when(
           loading: () => const ShimmerCards(count: 3, cardHeight: 140),
-          error: (e, _) => parentErrorWidget(e, onRetry: () => ref.invalidate(parentChildFeesProvider)),
-          data: (fees) => TabBarView(
-            children: [
-              _SummaryTab(fees: fees),
-              _PayTab(fees: fees),
-            ],
+          error: (e, _) => ErrorView(
+            error: e,
+            onRetry: () => ref.invalidate(studentFeesProvider),
           ),
+          data: (raw) {
+            final fees = StudentFeeSummaryModel.fromJson(raw);
+            return DefaultTabController(
+              length: 2,
+              child: Column(
+                children: [
+                  Container(
+                    color: AppColors.primary,
+                    child: const TabBar(
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white60,
+                      indicatorColor: AppColors.accent,
+                      tabs: [
+                        Tab(
+                            icon: Icon(Icons.receipt_long_outlined),
+                            text: 'Summary'),
+                        Tab(
+                            icon: Icon(Icons.payment_outlined), text: 'Pay'),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _SummaryTab(fees: fees),
+                        _PayTab(fees: fees),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+
+    return StudentScaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text(
+          'Fees',
+          style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.white),
         ),
+        backgroundColor: AppColors.primary,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6)),
+              padding: const EdgeInsets.all(3),
+              child:
+                  Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+            ),
+          ),
+        ],
       ),
+      body: isWide
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(48, 28, 48, 28),
+              child: Center(
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.55,
+                  child: Container(
+                    decoration: mindForgeCardDecoration(),
+                    clipBehavior: Clip.antiAlias,
+                    child: buildBody(),
+                  ),
+                ),
+              ),
+            )
+          : buildBody(),
     );
   }
 }
 
-// ── Tab 1: Fee Summary + Payment History ────────────────────────────────────
+// ── Tab 1: Fee Summary + Payment History ──────────────────────────────────────
 
 class _SummaryTab extends StatelessWidget {
   final StudentFeeSummaryModel fees;
@@ -68,7 +116,8 @@ class _SummaryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -94,7 +143,7 @@ class _SummaryTab extends StatelessWidget {
   }
 }
 
-// ── Tab 2: Payment Info + QR Code ───────────────────────────────────────────
+// ── Tab 2: Payment Info + QR Code ─────────────────────────────────────────────
 
 class _PayTab extends StatelessWidget {
   final StudentFeeSummaryModel fees;
@@ -126,14 +175,16 @@ class _PayTab extends StatelessWidget {
     }
 
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Balance due reminder
           if (fees.balanceDue > 0) ...[
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: AppColors.error.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(12),
@@ -148,7 +199,8 @@ class _PayTab extends StatelessWidget {
                     child: Text(
                       'Balance Due: ${NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(fees.balanceDue)}',
                       style: const TextStyle(
-                          color: AppColors.error, fontWeight: FontWeight.bold),
+                          color: AppColors.error,
+                          fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -156,10 +208,8 @@ class _PayTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
           ],
-
-          // One card per payment option
           for (int i = 0; i < options.length; i++) ...[
-            _PaymentOptionCard(info: options[i], context: context),
+            _PaymentOptionCard(info: options[i]),
             if (i < options.length - 1) const SizedBox(height: 16),
           ],
         ],
@@ -170,11 +220,10 @@ class _PayTab extends StatelessWidget {
 
 class _PaymentOptionCard extends StatelessWidget {
   final PaymentInfoModel info;
-  final BuildContext context;
-  const _PaymentOptionCard({required this.info, required this.context});
+  const _PaymentOptionCard({required this.info});
 
   @override
-  Widget build(BuildContext ctx) {
+  Widget build(BuildContext context) {
     final hasBankDetails = info.bankName != null ||
         info.branch != null ||
         info.accountHolder != null ||
@@ -183,12 +232,11 @@ class _PaymentOptionCard extends StatelessWidget {
     final hasUpi = info.upiId != null || info.qrCodeUrl != null;
 
     return Container(
-      decoration: mindForgeCardDecoration(
-          color: AppColors.primary.withOpacity(0.02)),
+      decoration:
+          mindForgeCardDecoration(color: AppColors.primary.withOpacity(0.02)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Option header
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Row(
@@ -214,19 +262,17 @@ class _PaymentOptionCard extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Bank details
                 if (hasBankDetails) ...[
                   Row(children: [
                     const Icon(Icons.account_balance,
                         color: AppColors.primary, size: 16),
                     const SizedBox(width: 6),
-                    Text('Bank Transfer',
+                    const Text('Bank Transfer',
                         style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
@@ -257,15 +303,13 @@ class _PaymentOptionCard extends StatelessWidget {
                     _DetailRow(
                         icon: Icons.tag, label: 'IFSC', value: info.ifsc!),
                 ],
-
-                // UPI + QR
                 if (hasUpi) ...[
                   if (hasBankDetails) const SizedBox(height: 14),
                   Row(children: [
                     const Icon(Icons.qr_code_2,
                         color: AppColors.secondary, size: 16),
                     const SizedBox(width: 6),
-                    Text('UPI Payment',
+                    const Text('UPI Payment',
                         style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
@@ -287,11 +331,13 @@ class _PaymentOptionCard extends StatelessWidget {
                     const SizedBox(height: 10),
                     Center(
                       child: Container(
-                        width: R.fluid(context, 200, min: 150, max: 240),
-                        height: R.fluid(context, 200, min: 150, max: 240),
+                        width:
+                            R.fluid(context, 200, min: 150, max: 240),
+                        height:
+                            R.fluid(context, 200, min: 150, max: 240),
                         decoration: BoxDecoration(
-                          border:
-                              Border.all(color: AppColors.divider, width: 2),
+                          border: Border.all(
+                              color: AppColors.divider, width: 2),
                           borderRadius: BorderRadius.circular(12),
                           color: Colors.white,
                         ),
@@ -332,7 +378,7 @@ class _PaymentOptionCard extends StatelessWidget {
   }
 }
 
-// ── Shared widgets ───────────────────────────────────────────────────────────
+// ── Shared widgets ─────────────────────────────────────────────────────────────
 
 class _BalanceSummaryCard extends StatelessWidget {
   final StudentFeeSummaryModel fees;
@@ -343,7 +389,6 @@ class _BalanceSummaryCard extends StatelessWidget {
     final isDue = fees.balanceDue > 0;
     final hasBreakdown = fees.totalFee > 0;
 
-    // Collect breakdown items that are non-zero
     final breakdownItems = <(String, double)>[
       if (fees.baseAmount > 0) ('Base Fee', fees.baseAmount),
       if (fees.economicsFee > 0) ('Economics', fees.economicsFee),
@@ -384,8 +429,6 @@ class _BalanceSummaryCard extends StatelessWidget {
               style: const TextStyle(
                   color: AppColors.textMuted, fontSize: 13)),
           const SizedBox(height: 16),
-
-          // Fee breakdown
           if (hasBreakdown && breakdownItems.isNotEmpty) ...[
             Text('Fee Breakdown',
                 style: Theme.of(context)
@@ -401,7 +444,6 @@ class _BalanceSummaryCard extends StatelessWidget {
                 )),
             const Divider(height: 16),
           ],
-
           _FeeRow(
               label: 'Total Fee',
               amount: fees.totalFee,
@@ -440,7 +482,8 @@ class _FeeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formatter = NumberFormat.currency(symbol: '₹', decimalDigits: 0);
+    final formatter =
+        NumberFormat.currency(symbol: '₹', decimalDigits: 0);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -454,7 +497,8 @@ class _FeeRow extends StatelessWidget {
           Text(formatter.format(amount),
               style: TextStyle(
                   color: color,
-                  fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                  fontWeight:
+                      isBold ? FontWeight.bold : FontWeight.w500,
                   fontSize: isBold ? 16 : (isSmall ? 13 : 14))),
         ],
       ),
@@ -479,8 +523,8 @@ class _DetailRow extends StatelessWidget {
           Icon(icon, size: 16, color: AppColors.textMuted),
           const SizedBox(width: 8),
           Text('$label: ',
-              style: const TextStyle(
-                  color: AppColors.textMuted, fontSize: 13)),
+              style:
+                  const TextStyle(color: AppColors.textMuted, fontSize: 13)),
           Expanded(
             child: Text(value,
                 style: const TextStyle(
@@ -499,7 +543,8 @@ class _PaymentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formatter = NumberFormat.currency(symbol: '₹', decimalDigits: 0);
+    final formatter =
+        NumberFormat.currency(symbol: '₹', decimalDigits: 0);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: mindForgeCardDecoration(),
@@ -511,7 +556,8 @@ class _PaymentTile extends StatelessWidget {
         title: Text(formatter.format(payment.amount),
             style: const TextStyle(
                 fontWeight: FontWeight.bold, fontSize: 16)),
-        subtitle: Text(DateFormat('dd MMM yyyy').format(payment.paidAt)),
+        subtitle:
+            Text(DateFormat('dd MMM yyyy').format(payment.paidAt)),
         trailing: payment.notes != null
             ? Tooltip(
                 message: payment.notes!,

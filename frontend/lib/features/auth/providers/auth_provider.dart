@@ -78,12 +78,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     if (token == null || role == null) return;
 
-    // Prime the in-memory token cache so subsequent API requests (including
-    // dashboard fetches right after unlock) never need to hit the Keystore.
+    // Restore from cache immediately — no network call here.
+    // If the access token is expired the 401 interceptor will refresh it on
+    // the first API call. The refresh mutex in ApiClient ensures concurrent
+    // 401s (e.g. 5 dashboard providers firing at once) trigger only ONE
+    // refresh; all others wait and retry with the new token.
     _api.setCachedTokens(token: token, refreshToken: refreshToken);
 
-    // Restore from cache immediately so the router can navigate to the
-    // dashboard without waiting for the network.
     state = AuthState(
       token: token,
       role: role,
@@ -91,27 +92,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       username: username,
       profilePicUrl: profilePicUrl,
     );
-
-    // Then verify the token in the background and refresh the profile pic.
-    // Only wipe credentials on a genuine 401 — network errors at startup
-    // (e.g. OS not yet connected after unlock) must not log the user out.
-    try {
-      final me = await _api.getMe();
-      final freshPicUrl = me['profile_pic_url'] as String?;
-      if (freshPicUrl != null) {
-        await _storage.write(
-            key: AppConstants.profilePicUrlStorageKey, value: freshPicUrl);
-        state = state.copyWith(profilePicUrl: freshPicUrl);
-      }
-    } catch (e) {
-      final is401 = e is DioException && e.response?.statusCode == 401;
-      if (is401) {
-        await _storage.deleteAll();
-        state = const AuthState();
-      }
-      // Any other error (no network, timeout, etc.) — stay logged in with
-      // cached data; the token will be validated on the next API call.
-    }
   }
 
   Future<void> login(String username, String mpin) async {

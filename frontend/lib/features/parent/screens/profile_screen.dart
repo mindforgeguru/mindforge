@@ -6,6 +6,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../widgets/parent_scaffold.dart';
 
 class ParentProfileScreen extends ConsumerStatefulWidget {
   const ParentProfileScreen({super.key});
@@ -69,7 +70,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
     final auth = ref.watch(authProvider);
     final username = auth.username ?? 'Parent';
 
-    return Scaffold(
+    return ParentScaffold(
       appBar: AppBar(title: const Text('My Profile')),
       body: SafeArea(
         top: false,

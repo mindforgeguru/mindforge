@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -178,7 +179,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
               final hasMore = tests.length >= _limit;
               return Column(
                 children: [
-                  ...filtered.map((t) => _TestTile(test: t)),
+                  ...filtered.map((t) => _TestTile(key: ValueKey(t.id), test: t)),
                   if (hasMore)
                     Padding(
                       padding: const EdgeInsets.only(top: 8, bottom: 4),
@@ -256,26 +257,28 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
           ]),
           const SizedBox(height: 12),
 
-          // ── Chapter picker from database ──────────────────────────────
-          if (_selectedGrade != null && _selectedSubject != null)
-            _ChapterPicker(
-              grade: _selectedGrade!,
-              subject: _selectedSubject!,
-              value: _selectedChapter,
-              onChanged: (v) => setState(() => _selectedChapter = v),
-            )
-          else
-            InputDecorator(
-              decoration: const InputDecoration(
-                labelText: 'Chapter',
-                border: OutlineInputBorder(),
+          // ── Chapter picker — only shown when using the knowledge base ──
+          if (_sourceMode == 'database') ...[
+            if (_selectedGrade != null && _selectedSubject != null)
+              _ChapterPicker(
+                grade: _selectedGrade!,
+                subject: _selectedSubject!,
+                value: _selectedChapter,
+                onChanged: (v) => setState(() => _selectedChapter = v),
+              )
+            else
+              InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Chapter',
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(
+                  'Select Grade and Subject first',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                ),
               ),
-              child: Text(
-                'Select Grade and Subject first',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-              ),
-            ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
 
           // Question type counts
           Text('Question Types',
@@ -311,25 +314,32 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
 
           const SizedBox(height: 8),
           if (widget.testType == 'online')
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.info.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.timer_outlined, size: 16, color: AppColors.info),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Time limit auto-set: 1 min per question (${_mcqCount + _fillBlankCount + _trueFalseCount + _matchFollowingCount + _vsaCount} questions = ${_mcqCount + _fillBlankCount + _trueFalseCount + _matchFollowingCount + _vsaCount} min)',
-                      style: const TextStyle(fontSize: 12, color: AppColors.info),
+            Builder(builder: (context) {
+              final qCount = _mcqCount + _fillBlankCount + _trueFalseCount +
+                  _matchFollowingCount + _vsaCount + _shortAnswerCount +
+                  _longAnswerCount + _diagramCount;
+              final mins = (qCount / 2).ceil();
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.timer_outlined, size: 16, color: AppColors.info),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Time limit: 30 sec per question'
+                        ' ($qCount questions = $mins min)',
+                        style: const TextStyle(fontSize: 12, color: AppColors.info),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            )
+                  ],
+                ),
+              );
+            })
           else
             Row(children: [
               const Text('Time limit: '),
@@ -438,6 +448,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
           onTap: () => setState(() {
             _sourceMode = 'upload';
             _useDatabase = false;
+            _selectedChapter = null;
           }),
         ),
         const SizedBox(height: 6),
@@ -474,6 +485,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
       allowMultiple: false,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     setState(() => _uploadedChapter = result.files.first);
@@ -648,11 +660,15 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
   }
 
   Future<void> _generateTest() async {
-    if (_titleCtrl.text.isEmpty || _selectedGrade == null ||
-        _selectedSubject == null || _selectedChapter == null) {
+    if (_titleCtrl.text.isEmpty || _selectedGrade == null || _selectedSubject == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please fill in title, grade, subject, and select a chapter.')),
+        const SnackBar(content: Text('Please fill in title, grade, and subject.')),
+      );
+      return;
+    }
+    if (_sourceMode == 'database' && _selectedChapter == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a chapter from the knowledge base.')),
       );
       return;
     }
@@ -671,7 +687,11 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
       MapEntry('title', _titleCtrl.text),
       MapEntry('grade', _selectedGrade!.toString()),
       MapEntry('subject', _selectedSubject!),
-      MapEntry('chapter', _selectedChapter!),
+      MapEntry('chapter', _sourceMode == 'database'
+          ? _selectedChapter!
+          : _sourceMode == 'upload'
+              ? (_uploadedChapter?.name.replaceAll(RegExp(r'\.[^.]+$'), '') ?? _titleCtrl.text)
+              : _titleCtrl.text),
       MapEntry('test_type', widget.testType),
       MapEntry('mcq_count', _mcqCount.toString()),
       MapEntry('fill_blank_count', _fillBlankCount.toString()),
@@ -691,15 +711,20 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
       MapEntry('time_limit_minutes', _timeLimitMinutes.toString()),
     ]);
 
-    // Attach uploaded chapter file if in upload mode
-    if (_sourceMode == 'upload' && _uploadedChapter != null) {
-      final f = _uploadedChapter!;
-      final mf = f.path != null
-          ? await MultipartFile.fromFile(f.path!, filename: f.name)
-          : MultipartFile.fromBytes(f.bytes!, filename: f.name);
-      formData.files.add(MapEntry('source_files', mf));
-    }
     try {
+      // Attach uploaded chapter file if in upload mode
+      if (_sourceMode == 'upload' && _uploadedChapter != null) {
+        final f = _uploadedChapter!;
+        final MultipartFile mf;
+        if (f.bytes != null) {
+          mf = MultipartFile.fromBytes(f.bytes!, filename: f.name);
+        } else if (!kIsWeb && f.path != null) {
+          mf = await MultipartFile.fromFile(f.path!, filename: f.name);
+        } else {
+          throw Exception('Could not read file bytes. Please pick the file again.');
+        }
+        formData.files.add(MapEntry('source_files', mf));
+      }
       final result = await api.generateTest(formData);
       ref.invalidate(teacherTestsProvider);
       final generatedTest = TestModel.fromJson(result);
@@ -1021,7 +1046,7 @@ class _SrcSlider extends StatelessWidget {
 
 class _TestTile extends ConsumerStatefulWidget {
   final TestModel test;
-  const _TestTile({required this.test});
+  const _TestTile({super.key, required this.test});
 
   @override
   ConsumerState<_TestTile> createState() => _TestTileState();
@@ -1035,6 +1060,7 @@ class _TestTileState extends ConsumerState<_TestTile> {
     if (widget.test.isPublished) {
       final confirm = await showDialog<bool>(
         context: context,
+      useRootNavigator: false,
         builder: (_) => AlertDialog(
           title: const Text('Unpublish Test?'),
           content: const Text(
@@ -1075,6 +1101,7 @@ class _TestTileState extends ConsumerState<_TestTile> {
   Future<void> _deleteTest() async {
     final confirm = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Delete Test?'),
         content: Text(
@@ -1099,15 +1126,17 @@ class _TestTileState extends ConsumerState<_TestTile> {
     try {
       final api = ref.read(apiClientProvider);
       await api.deleteTest(widget.test.id);
-      ref.invalidate(teacherTestsProvider);
+      // Don't setState here — the parent will remove this widget when the
+      // provider refreshes. Calling setState during parent rebuild causes
+      // a Flutter web crash (blank page).
+      if (mounted) ref.invalidate(teacherTestsProvider);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
         );
+        setState(() => _deleting = false);
       }
-    } finally {
-      if (mounted) setState(() => _deleting = false);
     }
   }
 

@@ -128,7 +128,7 @@ async def scan_document_metadata(
     Use AI to extract grade/subject/chapter/title from an uploaded document.
     Falls back to empty metadata if AI is unavailable.
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     if settings.GEMINI_API_KEY:
         try:
@@ -204,7 +204,7 @@ async def scan_syllabus(
     Use AI to extract the chapter list from a syllabus PDF for a given grade+subject.
     Returns a list of chapter name strings.
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     prompt = _build_syllabus_prompt(grade, subject)
 
     if settings.GEMINI_API_KEY:
@@ -568,7 +568,7 @@ async def _generate_with_gemini(
     syllabus_chapters: List[str],
     params: Any,
 ) -> List[Dict[str, Any]]:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     all_uploaded: List[Any] = []
     try:
         # Upload chapter files
@@ -637,7 +637,19 @@ async def _generate_with_gemini(
         response = await loop.run_in_executor(
             None, lambda: model.generate_content(content_parts)
         )
-        questions = _parse_questions(response.text, params)
+        # response.text raises ValueError if the response was blocked by safety
+        # filters. Catch that and surface a useful message.
+        try:
+            raw_text = response.text
+        except ValueError as ve:
+            finish = (
+                response.candidates[0].finish_reason
+                if response.candidates else "unknown"
+            )
+            raise ValueError(f"Gemini response blocked (finish_reason={finish}): {ve}") from ve
+        if not raw_text:
+            raise ValueError("Gemini returned an empty response.")
+        questions = _parse_questions(raw_text, params)
         logger.info(
             f"Gemini generated {len(questions)} questions "
             f"(chapter files: {len(chapter_uploaded)}, old papers: {len(old_paper_uploaded)})"
@@ -659,7 +671,7 @@ async def _generate_with_groq(
     syllabus_chapters: List[str],
     params: Any,
 ) -> List[Dict[str, Any]]:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # Extract text from chapter files
     chapter_text = ""
@@ -711,29 +723,34 @@ async def generate_test_questions(
     params: Any,
 ) -> List[Dict[str, Any]]:
     """
-    Generate test questions. Tries Gemini first, falls back to Groq, then stubs.
-
-    Args:
-        chapter_files:    (bytes, ext) tuples of the chapter PDF(s) — primary source.
-        old_paper_files:  (bytes, ext) tuples of old test papers — secondary source,
-                          AI is instructed to only use questions matching the chapter.
-        syllabus_chapters: list of all chapter names for the subject/grade (scope reference).
-        params:           TestGenerationParams.
+    Generate test questions. Tries Gemini first, falls back to Groq.
+    Raises RuntimeError with the actual error message if both fail — the
+    router surfaces this as a 500 so the teacher sees what went wrong instead
+    of silently receiving stub questions.
     """
+    errors: List[str] = []
+
     if settings.GEMINI_API_KEY:
         try:
             return await _generate_with_gemini(chapter_files, old_paper_files, syllabus_chapters, params)
         except Exception as e:
-            logger.warning(f"Gemini failed: {e}. Trying Groq...")
+            msg = f"Gemini: {e}"
+            logger.warning(f"{msg}. Trying Groq...")
+            errors.append(msg)
+    else:
+        errors.append("Gemini: GEMINI_API_KEY not configured")
 
     if settings.GROQ_API_KEY:
         try:
             return await _generate_with_groq(chapter_files, old_paper_files, syllabus_chapters, params)
         except Exception as e:
-            logger.error(f"Groq failed: {e}. Returning stub questions.")
+            msg = f"Groq: {e}"
+            logger.error(msg)
+            errors.append(msg)
+    else:
+        errors.append("Groq: GROQ_API_KEY not configured")
 
-    logger.warning("No AI provider available. Returning stub questions.")
-    return _generate_stub_questions(params)
+    raise RuntimeError("AI question generation failed. " + " | ".join(errors))
 
 
 def _generate_stub_questions(params: Any) -> List[Dict[str, Any]]:

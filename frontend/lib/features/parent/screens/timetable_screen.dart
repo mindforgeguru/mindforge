@@ -8,7 +8,7 @@ import '../../../core/models/timetable.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/parent_provider.dart';
-import '../widgets/parent_bottom_nav.dart';
+import '../widgets/parent_scaffold.dart';
 import '../widgets/parent_error_widget.dart';
 
 class ParentTimetableScreen extends ConsumerStatefulWidget {
@@ -60,7 +60,7 @@ class _ParentTimetableScreenState
         _selectedDate.month == today.month &&
         _selectedDate.day == today.day;
 
-    return Scaffold(
+    return ParentScaffold(
       appBar: AppBar(
         title: const Text("Child's Timetable"),
         actions: [
@@ -75,7 +75,6 @@ class _ParentTimetableScreenState
           ),
         ],
       ),
-      bottomNavigationBar: const ParentBottomNav(),
       body: Column(
         children: [
           // ── Monthly calendar ──────────────────────────────────────────

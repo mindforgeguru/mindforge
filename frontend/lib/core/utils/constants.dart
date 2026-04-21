@@ -9,9 +9,9 @@ class AppConstants {
   static const bool _local = false;
 
   static const String apiBaseUrl =
-      _local ? 'http://192.168.29.211:8000/api' : 'https://api.mindforge.guru/api';
+      _local ? 'http://192.168.1.3:8000/api' : 'https://api.mindforge.guru/api';
   static const String wsBaseUrl =
-      _local ? 'ws://192.168.29.211:8000/ws' : 'wss://api.mindforge.guru/ws';
+      _local ? 'ws://192.168.1.3:8000/ws' : 'wss://api.mindforge.guru/ws';
 
   /// Supported grades (ICSE)
   static const List<int> grades = [8, 9, 10];

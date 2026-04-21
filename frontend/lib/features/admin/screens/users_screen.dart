@@ -966,6 +966,7 @@ class _ActiveUserTileState extends ConsumerState<_ActiveUserTile> {
         widget.user.parentUserId != null) {
       final confirmed = await showDialog<bool>(
         context: context,
+      useRootNavigator: false,
         builder: (_) => AlertDialog(
           title: const Text('Deactivate Student'),
           content: const Text(
@@ -1111,6 +1112,7 @@ class _ActiveUserTileState extends ConsumerState<_ActiveUserTile> {
   Future<void> _confirmRevoke() async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Revoke Access'),
         content: Text(

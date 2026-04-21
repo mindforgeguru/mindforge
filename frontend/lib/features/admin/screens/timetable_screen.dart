@@ -97,6 +97,7 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
     final label = grade != null ? 'Grade $grade timetable slots' : 'ALL timetable slots';
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirm Delete'),
         content: Text('This will permanently delete $label. Continue?'),

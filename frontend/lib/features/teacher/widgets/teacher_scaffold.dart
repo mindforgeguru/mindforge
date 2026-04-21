@@ -48,24 +48,25 @@ class TeacherScaffold extends ConsumerWidget {
     }
 
     // ── Web: side nav + content ────────────────────────────────────────────
+    // NOTE: do NOT wrap `body` in an inner Navigator. A Navigator captures its
+    // initial route builder in a closure, freezing whatever `body` was passed
+    // on first push. Riverpod provider updates rebuild the outer widget tree
+    // but never update the Navigator's already-pushed route — so the dashboard
+    // would be permanently stuck on the initial loading state after a page
+    // reload. Direct nesting with a plain Scaffold lets Flutter reconcile the
+    // body widget normally on every rebuild.
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Row(
         children: [
           const _TeacherSideNav(),
           Expanded(
-            // Fresh Navigator scope so inner Scaffold has no back-route
-            // and therefore shows no back button in the AppBar.
-            child: Navigator(
-              onGenerateRoute: (_) => MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  appBar: appBar,
-                  body: body,
-                  floatingActionButton: floatingActionButton,
-                  floatingActionButtonLocation: floatingActionButtonLocation,
-                  backgroundColor: backgroundColor ?? AppColors.background,
-                ),
-              ),
+            child: Scaffold(
+              appBar: appBar,
+              body: body,
+              floatingActionButton: floatingActionButton,
+              floatingActionButtonLocation: floatingActionButtonLocation,
+              backgroundColor: backgroundColor ?? AppColors.background,
             ),
           ),
         ],
