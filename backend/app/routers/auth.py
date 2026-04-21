@@ -156,7 +156,7 @@ async def login(
     Returns a JWT token on success.
     """
     ip = _get_client_ip(request)
-    rate_key = f"rate_limit:login:{ip}"
+    rate_key = f"rate_limit:login:{ip}:{payload.username}"
     if await redis_manager.rate_limit(rate_key, max_attempts=10, window_seconds=60):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
