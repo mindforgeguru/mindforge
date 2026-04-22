@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "98913884574",
+    "project_id": "mindforge-b2324",
+    "storage_bucket": "mindforge-b2324.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:98913884574:android:37f141462ea1d0e6421e8f",
+        "android_client_info": {
+          "package_name": "com.mindforge.mindforge"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZ7yTGCVV-klJtoan9whSmGBkMMgIASMw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
