@@ -8,14 +8,16 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, func, select, update
 
 from app.core.database import get_db
+from app.core.mask_utils import mask_phone, mask_email
 from app.core.redis_client import redis_manager
 from app.core.security import get_current_teacher
+from app.core.upload_utils import validate_and_strip_exif
 from app.models.attendance import Attendance, AttendanceStatus
 from app.models.grade import Grade, GradeType
 from app.models.test import Test, TestSubmission, TestType
@@ -30,7 +32,7 @@ from app.schemas.timetable import TimetableConfigResponse, TimetableSlotCreate, 
 from app.schemas.user import AdminMpinUpdate, UserResponse, TeacherWithSubjectsResponse
 from app.schemas.homework import HomeworkCreate, HomeworkResponse, BroadcastCreate, BroadcastResponse
 from app.models.homework import Homework, Broadcast
-from app.services import ai_service, pdf_service, storage_service
+from app.services import ai_service, notification_service, pdf_service, storage_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -85,8 +87,8 @@ async def upload_teacher_photo(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Upload or replace the teacher's profile picture."""
-    file_bytes = await file.read()
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else "jpg"
+    raw = await file.read()
+    file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"
     key = f"profiles/teacher/{current_teacher.id}/avatar.{ext}"
     await storage_service.upload_file(bucket, key, file_bytes)
@@ -124,7 +126,10 @@ async def get_students_in_grade(
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """Return all active, approved students enrolled in a specific grade."""
+    """Return all active, approved students enrolled in a specific grade.
+    Phone and email are partially masked — teachers see enough to contact a
+    family but not the full PII that only admins should hold.
+    """
     result = await db.execute(
         select(User)
         .join(StudentProfile, User.id == StudentProfile.user_id)
@@ -135,7 +140,22 @@ async def get_students_in_grade(
         )
         .order_by(User.username)
     )
-    return result.scalars().all()
+    students = result.scalars().all()
+    return [
+        UserResponse(
+            id=s.id,
+            username=s.username,
+            role=s.role,
+            is_active=s.is_active,
+            is_approved=s.is_approved,
+            created_at=s.created_at,
+            deleted_at=s.deleted_at,
+            profile_pic_url=s.profile_pic_url,
+            phone=mask_phone(s.phone),
+            email=mask_email(s.email),
+        )
+        for s in students
+    ]
 
 
 # ─── Attendance ────────────────────────────────────────────────────────────────
@@ -185,11 +205,22 @@ async def mark_attendance(
     payload: AttendanceBulkCreate,
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
 ):
     """
     Bulk-mark attendance for a class period.
+    Clients should include X-Idempotency-Key (UUID) to prevent duplicate submissions
+    if a request is retried after a timeout.
     Emits a WebSocket event to all students in the grade after saving.
     """
+    if x_idempotency_key:
+        if not await redis_manager.consume_idempotency_key(
+            f"attend:{current_teacher.id}:{x_idempotency_key}"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Duplicate request: this attendance submission was already processed.",
+            )
     student_ids = [item.student_id for item in payload.records]
 
     # Batch-fetch all existing records for this date/period in one query
@@ -234,6 +265,55 @@ async def mark_attendance(
             "grade": payload.grade,
         },
     })
+
+    # ── Push notifications for absent students ────────────────────────────────
+    absent_ids = [
+        item.student_id
+        for item in payload.records
+        if item.status == AttendanceStatus.absent
+    ]
+    if absent_ids:
+        # Fetch student users + their parent links in one query
+        sp_result = await db.execute(
+            select(StudentProfile)
+            .where(StudentProfile.user_id.in_(absent_ids))
+        )
+        profiles = sp_result.scalars().all()
+
+        # Collect all user IDs we need FCM tokens for
+        all_user_ids = set(absent_ids)
+        parent_ids = {p.parent_user_id for p in profiles if p.parent_user_id}
+        all_user_ids.update(parent_ids)
+
+        token_result = await db.execute(
+            select(User.id, User.fcm_token)
+            .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
+        )
+        token_map = {row.id: row.fcm_token for row in token_result}
+
+        date_str = str(payload.date)
+        period_str = str(payload.period)
+
+        for profile in profiles:
+            # Notify the student
+            student_token = token_map.get(profile.user_id)
+            if student_token:
+                asyncio.create_task(notification_service.send_to_token(
+                    token=student_token,
+                    title="Attendance Alert",
+                    body=f"You were marked absent on {date_str} (Period {period_str}).",
+                    data={"route": "/student/attendance"},
+                ))
+            # Notify the parent
+            if profile.parent_user_id:
+                parent_token = token_map.get(profile.parent_user_id)
+                if parent_token:
+                    asyncio.create_task(notification_service.send_to_token(
+                        token=parent_token,
+                        title="Attendance Alert",
+                        body=f"Your child was marked absent on {date_str} (Period {period_str}).",
+                        data={"route": "/parent/attendance"},
+                    ))
 
     return records
 
@@ -411,8 +491,19 @@ async def create_grade(
     payload: GradeCreate,
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
 ):
-    """Record a grade entry and notify the student and their parent via WebSocket."""
+    """Record a grade entry and notify the student and their parent via WebSocket.
+    Clients should include X-Idempotency-Key (UUID) to prevent accidental double-posting.
+    """
+    if x_idempotency_key:
+        if not await redis_manager.consume_idempotency_key(
+            f"grade:{current_teacher.id}:{x_idempotency_key}"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Duplicate request: this grade entry was already submitted.",
+            )
     grade_obj = Grade(
         **payload.model_dump(),
         teacher_id=current_teacher.id,
