@@ -797,6 +797,52 @@ async def generate_test(
         },
     })
 
+    # ── Push notifications for new test ───────────────────────────────────────
+    # Fetch all students in this grade + their parent links
+    sp_result = await db.execute(
+        select(StudentProfile)
+        .join(User, User.id == StudentProfile.user_id)
+        .where(
+            StudentProfile.grade == grade,
+            User.is_active == True,
+            User.is_approved == True,
+            User.deleted_at.is_(None),
+        )
+    )
+    profiles = sp_result.scalars().all()
+
+    all_user_ids = {p.user_id for p in profiles}
+    parent_ids = {p.parent_user_id for p in profiles if p.parent_user_id}
+    all_user_ids.update(parent_ids)
+
+    token_result = await db.execute(
+        select(User.id, User.fcm_token)
+        .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
+    )
+    token_map = {row.id: row.fcm_token for row in token_result}
+
+    student_tokens = [token_map[p.user_id] for p in profiles if p.user_id in token_map]
+    parent_tokens  = [token_map[p.parent_user_id] for p in profiles if p.parent_user_id and p.parent_user_id in token_map]
+
+    notif_title = "New Test Available"
+    notif_body  = f"A new {test_type} test '{title}' has been added for Grade {grade} — {subject}."
+    route = "/student/tests" if test_type != "offline" else "/student/tests"
+
+    if student_tokens:
+        asyncio.create_task(notification_service.send_to_tokens(
+            tokens=student_tokens,
+            title=notif_title,
+            body=notif_body,
+            data={"route": route},
+        ))
+    if parent_tokens:
+        asyncio.create_task(notification_service.send_to_tokens(
+            tokens=parent_tokens,
+            title=notif_title,
+            body=f"A new {test_type} test '{title}' has been added for your child (Grade {grade} — {subject}).",
+            data={"route": "/parent/tests"},
+        ))
+
     return test
 
 
