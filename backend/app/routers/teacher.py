@@ -437,6 +437,7 @@ async def create_timetable_slot(
         )
     )
     slot = existing.scalar_one_or_none()
+    is_new_slot = slot is None
     if slot:
         for key, value in payload.model_dump().items():
             setattr(slot, key, value)
@@ -455,6 +456,40 @@ async def create_timetable_slot(
             "slot_date": str(payload.slot_date),
         },
     })
+
+    # ── Push notification — fire once when period 1 is first created ──────────
+    # Sending per-slot would spam students. Period 1 being newly saved signals
+    # the teacher has started entering the day's timetable.
+    if is_new_slot and payload.period_number == 1:
+        sp_result = await db.execute(
+            select(StudentProfile)
+            .join(User, User.id == StudentProfile.user_id)
+            .where(
+                StudentProfile.grade == payload.grade,
+                User.is_active == True,
+                User.is_approved == True,
+                User.deleted_at.is_(None),
+            )
+        )
+        profiles = sp_result.scalars().all()
+
+        all_user_ids = {p.user_id for p in profiles}
+        all_user_ids.update(p.parent_user_id for p in profiles if p.parent_user_id)
+
+        if all_user_ids:
+            token_result = await db.execute(
+                select(User.fcm_token)
+                .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
+            )
+            tokens = [row.fcm_token for row in token_result]
+            if tokens:
+                date_str = str(payload.slot_date)
+                asyncio.create_task(notification_service.send_to_tokens(
+                    tokens=tokens,
+                    title="Timetable Ready",
+                    body=f"The timetable for Grade {payload.grade} on {date_str} has been published.",
+                    data={"route": "/student/timetable"},
+                ))
 
     return slot
 
