@@ -156,5 +156,8 @@ final studentDashboardSummaryProvider =
     FutureProvider.family<Map<String, dynamic>, String>(
         (ref, date) async {
   final api = ref.watch(apiClientProvider);
-  return api.getStudentDashboardSummary(date: date);
+  // Dart-level timeout prevents infinite hangs when Dio's receiveTimeout
+  // is not reliably enforced (e.g. Railway cold starts, cellular reconnect).
+  return api.getStudentDashboardSummary(date: date)
+      .timeout(const Duration(seconds: 45));
 });

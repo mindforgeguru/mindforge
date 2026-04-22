@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,6 +31,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // On web, AppLifecycleState.resumed fires on every window-focus event and
+    // on GoRouter navigations — both cause needless invalidations. Skip on web.
+    if (kIsWeb) return;
     if (state == AppLifecycleState.resumed && mounted) {
       // Only invalidate — do NOT await the network call here.
       ref.invalidate(pendingUsersProvider);
