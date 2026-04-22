@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyBqeTY2qzb4f4yATvI2dIOW6TW3uAAQz0A</string>
+	<key>GCM_SENDER_ID</key>
+	<string>98913884574</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.mindforge.mindforge</string>
+	<key>PROJECT_ID</key>
+	<string>mindforge-b2324</string>
+	<key>STORAGE_BUCKET</key>
+	<string>mindforge-b2324.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:98913884574:ios:2b41b0a2ce745b7f421e8f</string>
+</dict>
+</plist>
