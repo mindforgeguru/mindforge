@@ -11,7 +11,8 @@ final pendingUsersProvider =
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return [];
   final api = ref.watch(apiClientProvider);
-  final raw = await api.getPendingUsers();
+  final raw = await api.getPendingUsers()
+      .timeout(const Duration(seconds: 20));
   return raw
       .map((e) => UserModel.fromJson(e as Map<String, dynamic>))
       .toList();
@@ -86,5 +87,6 @@ final currentAcademicYearProvider =
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return null;
   final api = ref.watch(apiClientProvider);
-  return api.getCurrentAcademicYear();
+  return api.getCurrentAcademicYear()
+      .timeout(const Duration(seconds: 20));
 });

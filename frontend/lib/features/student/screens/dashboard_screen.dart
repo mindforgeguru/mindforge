@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/widgets/badge_dot.dart';
+import '../../../core/widgets/shimmer_list.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_scaffold.dart';
@@ -61,6 +63,10 @@ class _StudentDashboardScreenState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // On web, AppLifecycleState.resumed fires on every window-focus event and
+    // on GoRouter navigations — both cause needless invalidations that keep the
+    // dashboard in a permanent loading state. Skip lifecycle refreshes on web.
+    if (kIsWeb) return;
     if (state == AppLifecycleState.resumed && mounted) {
       _wsSub?.cancel();
       _connectWs();
@@ -136,6 +142,49 @@ class _StudentDashboardScreenState
 
     final auth = ref.watch(authProvider);
     final summaryAsync = ref.watch(studentDashboardSummaryProvider(_todayString));
+
+    // Full-screen error state — keeps the header rendered but shows a retry
+    // button so users aren't silently stuck on a blank dashboard.
+    if (summaryAsync.hasError && !summaryAsync.hasValue) {
+      return StudentScaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.cloud_off_outlined, size: 52,
+                    color: AppColors.textMuted),
+                const SizedBox(height: 16),
+                Text(
+                  'Could not load dashboard',
+                  style: GoogleFonts.poppins(
+                      fontSize: 17, fontWeight: FontWeight.w600,
+                      color: AppColors.primary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'The server may be starting up.\nPlease wait a moment and try again.',
+                  style: GoogleFonts.poppins(
+                      fontSize: 13, color: AppColors.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: _refreshDashboard,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Try Again'),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     // Broadcast badge — select() so this boolean is only recomputed when
     // broadcasts or lastSeen actually change, not on every dashboard rebuild.
@@ -422,11 +471,9 @@ class _StudentDashboardScreenState
 
           // ── Timetable slots — horizontal scroll ───────────────────────
           summaryAsync.when(
+            skipLoadingOnReload: true,
             loading: () => const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: LinearProgressIndicator(),
-              ),
+              child: ShimmerCards(count: 1, cardHeight: 110),
             ),
             error: (e, _) => const SliverToBoxAdapter(child: SizedBox.shrink()),
             data: (summary) {
@@ -453,10 +500,8 @@ class _StudentDashboardScreenState
           ),
           SliverToBoxAdapter(
             child: summaryAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: LinearProgressIndicator(),
-              ),
+              skipLoadingOnReload: true,
+              loading: () => const ShimmerCards(count: 2, cardHeight: 68),
               error: (_, __) => const SizedBox.shrink(),
               data: (summary) {
                 final rawHw = (summary['homework'] as List<dynamic>? ?? []);
@@ -493,10 +538,8 @@ class _StudentDashboardScreenState
           ),
           SliverToBoxAdapter(
             child: summaryAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: LinearProgressIndicator(),
-              ),
+              skipLoadingOnReload: true,
+              loading: () => const ShimmerCards(count: 2, cardHeight: 68),
               error: (_, __) => const SizedBox.shrink(),
               data: (summary) {
                 final rawBc = (summary['broadcasts'] as List<dynamic>? ?? []);
