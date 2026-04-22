@@ -175,10 +175,17 @@ class ApiClient {
           extra: {'_skipRefresh': true},
         ),
       );
-      final newToken =
-          (res.data as Map<String, dynamic>)['access_token'] as String;
+      final body = res.data as Map<String, dynamic>;
+      final newToken = body['access_token'] as String;
+      final newRefresh = body['refresh_token'] as String?;
       _cachedToken = newToken;
-      try { await _storage.write(key: AppConstants.tokenStorageKey, value: newToken); } catch (_) {}
+      if (newRefresh != null) _cachedRefreshToken = newRefresh;
+      try {
+        await _storage.write(key: AppConstants.tokenStorageKey, value: newToken);
+        if (newRefresh != null) {
+          await _storage.write(key: AppConstants.refreshTokenStorageKey, value: newRefresh);
+        }
+      } catch (_) {}
       return newToken;
     } catch (_) {
       _cachedToken = null;
@@ -211,6 +218,17 @@ class ApiClient {
       'mpin': mpin,
     });
     return res.data as Map<String, dynamic>;
+  }
+
+  /// Tells the server to revoke the current access token.
+  /// Errors are swallowed — local session is always cleared regardless.
+  Future<void> logoutOnServer() async {
+    try {
+      await _dio.post(
+        '/auth/logout',
+        options: Options(extra: {'_skipRefresh': true}),
+      );
+    } catch (_) {}
   }
 
   Future<Map<String, dynamic>> register(
@@ -910,5 +928,11 @@ class ApiClient {
       if (date != null) 'date': date,
     });
     return res.data as Map<String, dynamic>;
+  }
+
+  // ── FCM token registration ───────────────────────────────────────────────────
+
+  Future<void> updateFcmToken(String token) async {
+    await _dio.put('/auth/fcm-token', data: {'fcm_token': token});
   }
 }

@@ -1,8 +1,12 @@
+import 'dart:async' show unawaited;
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/api/websocket_client.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/utils/constants.dart';
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -58,12 +62,24 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final ApiClient _api;
+  final WebSocketClient _ws;
   final FlutterSecureStorage _storage;
 
-  AuthNotifier(this._api, this._storage) : super(const AuthState()) {
+  AuthNotifier(this._api, this._ws, this._storage) : super(const AuthState()) {
     // Wire 401 responses to immediately clear state → router redirects to login.
     _api.onUnauthorized = () => state = const AuthState();
     _restoreSession();
+    // Keep the FCM token current across token rotations (e.g. new device SIM).
+    NotificationService.onTokenRefresh(_registerFcmToken);
+  }
+
+  /// Fire-and-forget: send the device's FCM token to the backend so it can
+  /// send push notifications to this user. Failures are swallowed — a missing
+  /// FCM token only means no push notifications, not a broken session.
+  Future<void> _registerFcmToken(String token) async {
+    try {
+      await _api.updateFcmToken(token);
+    } catch (_) {}
   }
 
   Future<void> _restoreSession() async {
@@ -96,6 +112,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       username: username,
       profilePicUrl: profilePicUrl,
     );
+
+    // Register FCM token now that we have a valid session.
+    final fcmToken = await NotificationService.getToken();
+    if (fcmToken != null) unawaited(_registerFcmToken(fcmToken));
   }
 
   Future<void> login(String username, String mpin) async {
@@ -148,6 +168,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         username: uname,
         profilePicUrl: profilePicUrl,
       );
+
+      // Register FCM token after successful login.
+      final fcmToken = await NotificationService.getToken();
+      if (fcmToken != null) unawaited(_registerFcmToken(fcmToken));
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _parseError(e));
     }
@@ -193,7 +217,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    // Revoke the access token server-side before clearing local state.
+    // Fire-and-forget: network failure must never block the user from logging out.
+    await _api.logoutOnServer();
     _api.clearCachedTokens();
+    _ws.disconnect();
     try {
       await _storage.deleteAll();
     } catch (_) {}
@@ -224,8 +252,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final api = ref.watch(apiClientProvider);
+  final ws = ref.read(webSocketClientProvider);
   return AuthNotifier(
     api,
+    ws,
     const FlutterSecureStorage(
       aOptions: AndroidOptions(encryptedSharedPreferences: true),
     ),
