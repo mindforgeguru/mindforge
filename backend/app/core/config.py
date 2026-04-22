@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
+    # ── Firebase Admin (push notifications) ──────────────────────────────────
+    # Paste the full service-account JSON as a single-line string in Railway.
+    # Leave empty to disable push notifications without breaking the app.
+    FIREBASE_CREDENTIALS_JSON: str = ""
+
     # ── CORS ──────────────────────────────────────────────────────────────────
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost", "http://localhost:80",
