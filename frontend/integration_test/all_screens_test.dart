@@ -36,11 +36,18 @@ void main() {
 
   // ── Shared helpers ──────────────────────────────────────────────────────────
 
-  Future<void> clearAuth() =>
-      const FlutterSecureStorage().deleteAll();
+  Future<void> clearAuth() async {
+    try {
+      await const FlutterSecureStorage().deleteAll();
+    } catch (_) {}
+  }
 
   /// Advance past the splash screen (total animation ≈ 4.2 s).
+  /// Also sets a phone-sized viewport so the PIN pad is fully on-screen.
   Future<void> passSplash(WidgetTester t) async {
+    t.view.physicalSize = const Size(390.0, 844.0);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.resetPhysicalSize);
     for (int i = 0; i < 60; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }
@@ -290,7 +297,8 @@ void main() {
     testWidgets('Homework screen', (t) async {
       app.main();
       await login(t, _student);
-      await goTo(t, 'Homework');
+      // Homework is not in the student bottom nav; reach via dashboard section
+      await goViaSeeAll(t, 'Recent Homework');
       expectScreen('Student Homework');
     });
 
