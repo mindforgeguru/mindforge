@@ -40,6 +40,8 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # FCM push-notification token — updated by the app on every login/session restore
+    fcm_token: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     # Soft delete: set to timestamp when user is revoked/deleted
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 

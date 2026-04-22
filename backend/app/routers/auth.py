@@ -6,12 +6,15 @@ Authentication router:
 - GET  /auth/me        — return current user info
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from jose import JWTError
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from jose import JWTError, jwt as _jose_jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.security import (
     hash_mpin, verify_mpin, create_access_token, create_refresh_token,
     decode_access_token, get_current_user
@@ -26,6 +29,29 @@ from app.core.redis_client import redis_manager
 from app.services import storage_service
 
 router = APIRouter()
+
+# ── Cookie helpers ────────────────────────────────────────────────────────────
+
+_COOKIE_NAME = "session"
+_COOKIE_MAX_AGE = settings.JWT_EXPIRE_MINUTES * 60
+
+
+def _set_session_cookie(response: Response, access_token: str) -> None:
+    """Set a Secure HttpOnly SameSite=Strict cookie for web browser clients."""
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=access_token,
+        max_age=_COOKIE_MAX_AGE,
+        path="/api",
+        httponly=True,
+        secure=True,
+        samesite="strict",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    """Expire the session cookie (used on logout)."""
+    response.delete_cookie(key=_COOKIE_NAME, path="/api", httponly=True, secure=True, samesite="strict")
 
 
 def _get_client_ip(request: Request) -> str:
@@ -148,6 +174,7 @@ async def register_user(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     request: Request,
+    response: Response,
     payload: UserLoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -169,7 +196,18 @@ async def login(
     )
     user = result.scalar_one_or_none()
 
+    # Check per-user lockout before touching the DB password check
+    if user and await redis_manager.is_user_locked_out(user.id):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account temporarily locked due to too many failed attempts. Try again in 15 minutes.",
+            headers={"Retry-After": "900"},
+        )
+
     if not user or not verify_mpin(payload.mpin, user.mpin_hash):
+        # Record the failure against the user (if the username exists)
+        if user:
+            await redis_manager.record_failed_login(user.id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or MPIN.",
@@ -187,9 +225,17 @@ async def login(
             detail="Your account has been deactivated.",
         )
 
+    # Successful login — clear any prior failure counter
+    await redis_manager.clear_failed_logins(user.id)
+
     token_data = {"sub": str(user.id), "role": user.role}
     access_token = create_access_token(data=token_data)
     refresh_token = create_refresh_token(data=token_data)
+
+    # Set a Secure HttpOnly cookie for web browser clients.
+    # Mobile clients use the Bearer token from the JSON body and ignore this.
+    _set_session_cookie(response, access_token)
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -202,10 +248,13 @@ async def login(
 
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh_access_token(
+    response: Response,
     payload: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Exchange a valid refresh token for a new short-lived access token."""
+    """Exchange a valid refresh token for a new access token + rotated refresh token.
+    The used refresh token's JTI is immediately blacklisted so it cannot be reused.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired refresh token.",
@@ -219,7 +268,13 @@ async def refresh_access_token(
         if user_id_raw is None:
             raise credentials_exception
         user_id = int(user_id_raw)
+        jti = data.get("jti")
+        exp = data.get("exp")
     except (JWTError, ValueError):
+        raise credentials_exception
+
+    # Reject already-used (blacklisted) tokens
+    if jti and await redis_manager.is_jti_revoked(jti):
         raise credentials_exception
 
     result = await db.execute(
@@ -229,8 +284,59 @@ async def refresh_access_token(
     if user is None or not user.is_approved or not user.is_active:
         raise credentials_exception
 
-    new_access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
-    return RefreshResponse(access_token=new_access_token)
+    # Blacklist the consumed JTI (TTL = remaining lifetime of the old token)
+    if jti and exp:
+        remaining = max(int(exp - datetime.now(timezone.utc).timestamp()), 1)
+        await redis_manager.revoke_jti(jti, remaining)
+
+    token_data = {"sub": str(user.id), "role": user.role}
+    new_access_token = create_access_token(data=token_data)
+    new_refresh_token = create_refresh_token(data=token_data)
+    _set_session_cookie(response, new_access_token)
+    return RefreshResponse(access_token=new_access_token, refresh_token=new_refresh_token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Invalidate the current access token by adding its JTI to the Redis blacklist.
+    The token remains cryptographically valid but the revocation check in
+    _get_current_user() will reject it on every subsequent request.
+    """
+    token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if token:
+        try:
+            payload = decode_access_token(token)
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                remaining = max(int(exp - datetime.now(timezone.utc).timestamp()), 1)
+                await redis_manager.revoke_access_jti(jti, remaining)
+        except Exception:
+            pass  # if the token is already invalid/expired, nothing to do
+
+    _clear_session_cookie(response)
+
+
+@router.put("/fcm-token", status_code=status.HTTP_204_NO_CONTENT)
+async def update_fcm_token(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Store or update the FCM device token for the authenticated user."""
+    token = payload.get("fcm_token")
+    if not token or not isinstance(token, str):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="fcm_token is required.",
+        )
+    current_user.fcm_token = token.strip()
+    await db.commit()
 
 
 @router.get("/me", response_model=UserResponse)
