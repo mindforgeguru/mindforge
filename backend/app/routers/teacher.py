@@ -1320,6 +1320,51 @@ async def send_broadcast(
             "payload": ws_payload,
         })
 
+    # ── Push notifications for broadcast ─────────────────────────────────────
+    notif_title = payload.title
+    notif_body  = payload.message[:200]  # cap body length for display
+
+    if payload.target_type == "grade" and payload.target_grade is not None:
+        # Notify students + parents of the target grade only
+        sp_result = await db.execute(
+            select(StudentProfile)
+            .join(User, User.id == StudentProfile.user_id)
+            .where(
+                StudentProfile.grade == payload.target_grade,
+                User.is_active == True,
+                User.is_approved == True,
+                User.deleted_at.is_(None),
+            )
+        )
+        profiles = sp_result.scalars().all()
+        all_user_ids = {p.user_id for p in profiles}
+        all_user_ids.update(p.parent_user_id for p in profiles if p.parent_user_id)
+    else:
+        # Notify all active approved users
+        all_users_result = await db.execute(
+            select(User.id)
+            .where(
+                User.is_active == True,
+                User.is_approved == True,
+                User.deleted_at.is_(None),
+            )
+        )
+        all_user_ids = {row.id for row in all_users_result}
+
+    if all_user_ids:
+        token_result = await db.execute(
+            select(User.fcm_token)
+            .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
+        )
+        tokens = [row.fcm_token for row in token_result]
+        if tokens:
+            asyncio.create_task(notification_service.send_to_tokens(
+                tokens=tokens,
+                title=notif_title,
+                body=notif_body,
+                data={"route": "/student/broadcasts"},
+            ))
+
     return BroadcastResponse(
         id=bc.id,
         sender_id=bc.sender_id,
