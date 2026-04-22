@@ -67,14 +67,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _restoreSession() async {
-    final token = await _storage.read(key: AppConstants.tokenStorageKey);
-    final role = await _storage.read(key: AppConstants.roleStorageKey);
-    final userIdStr = await _storage.read(key: AppConstants.userIdStorageKey);
-    final username = await _storage.read(key: AppConstants.usernameStorageKey);
-    final profilePicUrl =
-        await _storage.read(key: AppConstants.profilePicUrlStorageKey);
-    final refreshToken =
-        await _storage.read(key: AppConstants.refreshTokenStorageKey);
+    String? token, role, userIdStr, username, profilePicUrl, refreshToken;
+    try {
+      token        = await _storage.read(key: AppConstants.tokenStorageKey);
+      role         = await _storage.read(key: AppConstants.roleStorageKey);
+      userIdStr    = await _storage.read(key: AppConstants.userIdStorageKey);
+      username     = await _storage.read(key: AppConstants.usernameStorageKey);
+      profilePicUrl = await _storage.read(key: AppConstants.profilePicUrlStorageKey);
+      refreshToken = await _storage.read(key: AppConstants.refreshTokenStorageKey);
+    } catch (_) {
+      // Keychain unavailable (e.g. macOS debug without signing) — start fresh
+      return;
+    }
 
     if (token == null || role == null) return;
 
@@ -104,17 +108,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final userId = data['user_id'] as int;
       final uname = data['username'] as String;
 
-      await _storage.write(key: AppConstants.tokenStorageKey, value: token);
-      if (refreshToken != null) {
+      try {
+        await _storage.write(key: AppConstants.tokenStorageKey, value: token);
+        if (refreshToken != null) {
+          await _storage.write(
+              key: AppConstants.refreshTokenStorageKey, value: refreshToken);
+        }
+        await _storage.write(key: AppConstants.roleStorageKey, value: role);
         await _storage.write(
-            key: AppConstants.refreshTokenStorageKey, value: refreshToken);
+            key: AppConstants.userIdStorageKey, value: userId.toString());
+        await _storage.write(
+            key: AppConstants.usernameStorageKey, value: uname);
+      } catch (_) {
+        // Keychain unavailable (e.g. macOS debug without signing) — session is
+        // held in memory only; will not persist across app restarts.
       }
       _api.setCachedTokens(token: token, refreshToken: refreshToken);
-      await _storage.write(key: AppConstants.roleStorageKey, value: role);
-      await _storage.write(
-          key: AppConstants.userIdStorageKey, value: userId.toString());
-      await _storage.write(
-          key: AppConstants.usernameStorageKey, value: uname);
 
       // Fetch profile pic for admin and teacher
       String? profilePicUrl;
@@ -123,9 +132,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
           final me = await _api.getMe();
           profilePicUrl = me['profile_pic_url'] as String?;
           if (profilePicUrl != null) {
-            await _storage.write(
-                key: AppConstants.profilePicUrlStorageKey,
-                value: profilePicUrl);
+            try {
+              await _storage.write(
+                  key: AppConstants.profilePicUrlStorageKey,
+                  value: profilePicUrl);
+            } catch (_) {}
           }
         } catch (_) {}
       }
@@ -144,14 +155,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Called after a successful photo upload to update in-memory + storage.
   Future<void> updateProfilePicUrl(String url) async {
-    await _storage.write(
-        key: AppConstants.profilePicUrlStorageKey, value: url);
+    try {
+      await _storage.write(key: AppConstants.profilePicUrlStorageKey, value: url);
+    } catch (_) {}
     state = state.copyWith(profilePicUrl: url);
   }
 
   Future<void> updateUsername(String newUsername) async {
-    await _storage.write(
-        key: AppConstants.usernameStorageKey, value: newUsername);
+    try {
+      await _storage.write(key: AppConstants.usernameStorageKey, value: newUsername);
+    } catch (_) {}
     state = state.copyWith(username: newUsername);
   }
 
@@ -181,7 +194,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     _api.clearCachedTokens();
-    await _storage.deleteAll();
+    try {
+      await _storage.deleteAll();
+    } catch (_) {}
     state = const AuthState();
   }
 

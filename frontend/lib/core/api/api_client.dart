@@ -93,8 +93,10 @@ class ApiClient {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           // Use in-memory cache to avoid slow Keystore access after unlock.
-          _cachedToken ??=
-              await _storage.read(key: AppConstants.tokenStorageKey);
+          try {
+            _cachedToken ??=
+                await _storage.read(key: AppConstants.tokenStorageKey);
+          } catch (_) {}
           if (_cachedToken != null) {
             options.headers['Authorization'] = 'Bearer $_cachedToken';
           }
@@ -102,12 +104,14 @@ class ApiClient {
         },
         onError: (DioException error, handler) async {
           if (error.response?.statusCode == 401) {
-            // Don't retry the refresh endpoint or requests that opted out.
+            // Don't retry the refresh endpoint, the login endpoint, or
+            // requests that explicitly opted out.
             if (error.requestOptions.path.contains('/auth/refresh') ||
+                error.requestOptions.path.contains('/auth/login') ||
                 error.requestOptions.extra['_skipRefresh'] == true) {
               _cachedToken = null;
               _cachedRefreshToken = null;
-              await _storage.deleteAll();
+              try { await _storage.deleteAll(); } catch (_) {}
               onUnauthorized?.call();
               return handler.next(error);
             }
@@ -151,12 +155,14 @@ class ApiClient {
   /// if the refresh token is missing/expired (in which case the user is
   /// logged out via [onUnauthorized]).
   Future<String?> _executeRefresh() async {
-    _cachedRefreshToken ??=
-        await _storage.read(key: AppConstants.refreshTokenStorageKey);
+    try {
+      _cachedRefreshToken ??=
+          await _storage.read(key: AppConstants.refreshTokenStorageKey);
+    } catch (_) {}
     final rt = _cachedRefreshToken;
     if (rt == null) {
       _cachedToken = null;
-      await _storage.deleteAll();
+      try { await _storage.deleteAll(); } catch (_) {}
       onUnauthorized?.call();
       return null;
     }
@@ -172,12 +178,12 @@ class ApiClient {
       final newToken =
           (res.data as Map<String, dynamic>)['access_token'] as String;
       _cachedToken = newToken;
-      await _storage.write(key: AppConstants.tokenStorageKey, value: newToken);
+      try { await _storage.write(key: AppConstants.tokenStorageKey, value: newToken); } catch (_) {}
       return newToken;
     } catch (_) {
       _cachedToken = null;
       _cachedRefreshToken = null;
-      await _storage.deleteAll();
+      try { await _storage.deleteAll(); } catch (_) {}
       onUnauthorized?.call();
       return null;
     }

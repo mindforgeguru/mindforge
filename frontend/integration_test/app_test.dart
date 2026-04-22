@@ -5,18 +5,37 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:mindforge/main.dart' as app;
 
+// Admin MPIN — pass via --dart-define=ADMIN_MPIN=xxxxxx if changed from default
+// ignore: do_not_use_environment
+const _adminMpin = String.fromEnvironment('ADMIN_MPIN', defaultValue: '300573');
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  // Set a phone-sized viewport so the full login screen (including PIN pad)
+  // is on-screen. Default macOS test canvas is 800×600 which clips the pad.
+  const _phoneSize = Size(390.0, 844.0);   // iPhone 14 logical points
+
   // Clear saved auth token before every test so each one starts from scratch.
+  // Wrapped in try-catch: on macOS the keychain requires a signed app; in
+  // test mode the app falls back to "no stored token" automatically.
   setUp(() async {
-    await const FlutterSecureStorage().delete(key: 'mindforge_jwt_token');
+    try {
+      await const FlutterSecureStorage().deleteAll();
+    } catch (_) {
+      // Ignore keychain errors on macOS test runner — app starts unauthenticated
+    }
   });
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   /// Advance through the splash screen (total ~4.2s of delays + animations).
+  /// Also sets a phone-sized viewport so the PIN pad is fully on-screen
+  /// (default macOS test canvas 800×600 clips the bottom of the login screen).
   Future<void> passSplash(WidgetTester tester) async {
+    tester.view.physicalSize = _phoneSize;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     for (int i = 0; i < 60; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
@@ -93,6 +112,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('MIND FORGE'), findsOneWidget);
+    // Drain any pending frames before the test exits
+    await tester.pumpAndSettle(const Duration(seconds: 1));
   });
 
   // ── Test 4: Wrong credentials → error snackbar ────────────────────────────
@@ -122,12 +143,16 @@ void main() {
         reason: 'Expected error snackbar to appear within 6s');
     // Still on login screen
     expect(find.text('MIND FORGE'), findsOneWidget);
+    // Let snackbar animation + any pending frames drain fully
+    for (int i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
   });
 
   // ── Test 5: Admin login → dashboard (run last — leaves auth token) ─────────
   testWidgets('Admin can log in and see dashboard', (tester) async {
     app.main();
-    await doLogin(tester, username: 'admin', mpin: '123456');
+    await doLogin(tester, username: 'admin', mpin: _adminMpin);
 
     expect(find.text('Fees'), findsWidgets);
     expect(find.text('Timetable'), findsWidgets);

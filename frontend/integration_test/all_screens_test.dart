@@ -10,10 +10,26 @@ import 'package:integration_test/integration_test.dart';
 import 'package:mindforge/main.dart' as app;
 
 // ─── Credentials ─────────────────────────────────────────────────────────────
-const _admin   = ('admin',       '123456');
-const _teacher = ('chinmay_sir', '222222');
-const _student = ('dummy8',      '111111');
-const _parent  = ('dummy8_dad',  '111111');
+// Pass via --dart-define=ADMIN_MPIN=xxx / TEACHER_USER=xxx etc. if changed
+// ignore: do_not_use_environment
+const _adminMpin    = String.fromEnvironment('ADMIN_MPIN',    defaultValue: '300573');
+// ignore: do_not_use_environment
+const _teacherUser  = String.fromEnvironment('TEACHER_USER',  defaultValue: 'chinmay_sir');
+// ignore: do_not_use_environment
+const _teacherMpin  = String.fromEnvironment('TEACHER_MPIN',  defaultValue: '222222');
+// ignore: do_not_use_environment
+const _studentUser  = String.fromEnvironment('STUDENT_USER',  defaultValue: 'dummy8');
+// ignore: do_not_use_environment
+const _studentMpin  = String.fromEnvironment('STUDENT_MPIN',  defaultValue: '111111');
+// ignore: do_not_use_environment
+const _parentUser   = String.fromEnvironment('PARENT_USER',   defaultValue: 'dummy8_dad');
+// ignore: do_not_use_environment
+const _parentMpin   = String.fromEnvironment('PARENT_MPIN',   defaultValue: '111111');
+
+const _admin   = ('admin',        _adminMpin);
+const _teacher = (_teacherUser,   _teacherMpin);
+const _student = (_studentUser,   _studentMpin);
+const _parent  = (_parentUser,    _parentMpin);
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
