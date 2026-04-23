@@ -107,5 +107,76 @@ class RedisManager:
             await self._client.expire(key, window_seconds)
         return count > max_attempts
 
+    # ── Refresh-token JTI blacklist ─────────────────────────────────────────
+
+    async def revoke_jti(self, jti: str, ttl_seconds: int) -> None:
+        """Mark a refresh-token JTI as used. TTL should match the token's remaining lifetime."""
+        if self._client:
+            await self._client.set(f"revoked_jti:{jti}", "1", ex=ttl_seconds)
+
+    async def is_jti_revoked(self, jti: str) -> bool:
+        """Return True if this JTI has been blacklisted."""
+        if self._client is None:
+            return False
+        return await self._client.exists(f"revoked_jti:{jti}") == 1
+
+    # ── Access-token revocation (logout blacklist) ─────────────────────────
+
+    async def revoke_access_jti(self, jti: str, ttl_seconds: int) -> None:
+        """Blacklist an access token JTI until it naturally expires."""
+        if self._client:
+            await self._client.set(f"revoked_access:{jti}", "1", ex=ttl_seconds)
+
+    async def is_access_jti_revoked(self, jti: str) -> bool:
+        """Return True if this access token has been revoked (user logged out)."""
+        if self._client is None:
+            return False
+        return await self._client.exists(f"revoked_access:{jti}") == 1
+
+    # ── Idempotency keys (replay protection) ──────────────────────────────
+
+    async def consume_idempotency_key(self, key: str, ttl_seconds: int = 60) -> bool:
+        """
+        Atomically claim an idempotency key.
+        Returns True if the key was fresh (first time seen) — request should proceed.
+        Returns False if the key already exists — this is a duplicate/replayed request.
+        """
+        if self._client is None:
+            return True  # fail open when Redis is unavailable
+        # SET NX: only sets if not already present; returns True on success
+        result = await self._client.set(f"idem:{key}", "1", ex=ttl_seconds, nx=True)
+        return result is True  # None means key already existed
+
+    # ── Per-user MPIN brute-force lockout ──────────────────────────────────
+
+    _LOCKOUT_MAX   = 5          # failed attempts before lockout
+    _LOCKOUT_TTL   = 15 * 60   # 15 minutes in seconds
+
+    async def record_failed_login(self, user_id: int) -> bool:
+        """Increment the failed-login counter for user_id.
+        Returns True if the account should now be locked out."""
+        if self._client is None:
+            return False
+        key = f"failed_logins:{user_id}"
+        count = await self._client.incr(key)
+        if count == 1:
+            await self._client.expire(key, self._LOCKOUT_TTL)
+        if count >= self._LOCKOUT_MAX:
+            await self._client.set(f"lockout:user:{user_id}", "1", ex=self._LOCKOUT_TTL)
+            return True
+        return False
+
+    async def is_user_locked_out(self, user_id: int) -> bool:
+        """Return True if this user is currently locked out."""
+        if self._client is None:
+            return False
+        return await self._client.exists(f"lockout:user:{user_id}") == 1
+
+    async def clear_failed_logins(self, user_id: int) -> None:
+        """Clear the failed-login counter after a successful login."""
+        if self._client:
+            await self._client.delete(f"failed_logins:{user_id}")
+            await self._client.delete(f"lockout:user:{user_id}")
+
 
 redis_manager = RedisManager()

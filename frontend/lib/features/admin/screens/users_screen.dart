@@ -35,8 +35,8 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen>
       ref.invalidate(pendingUsersProvider);
     });
 
-    // Refresh pending tab every 10 seconds automatically
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    // Refresh pending tab every 60 seconds automatically
+    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) ref.invalidate(pendingUsersProvider);
     });
 

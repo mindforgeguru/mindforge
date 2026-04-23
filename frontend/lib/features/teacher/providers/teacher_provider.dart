@@ -36,9 +36,11 @@ final studentsInGradeProvider =
     FutureProvider.family<List<UserModel>, int>((ref, grade) async {
   final api = ref.watch(apiClientProvider);
   final raw = await api.getStudentsInGrade(grade);
-  return raw
+  final list = raw
       .map((e) => UserModel.fromJson(e as Map<String, dynamic>))
       .toList();
+  list.sort((a, b) => a.username.toLowerCase().compareTo(b.username.toLowerCase()));
+  return list;
 });
 
 // ── Timetable ──────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ Admin router — all endpoints require admin role.
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -14,7 +14,9 @@ from sqlalchemy import func as sqlfunc
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
 from app.core.security import get_current_admin
+from app.core.upload_utils import validate_and_strip_exif
 from app.models.academic_year import AcademicYear
+from app.models.audit_log import AuditLog
 from app.models.fees import FeePayment, FeeStructure, PaymentInfo
 from app.models.timetable import TimetableConfig, TimetableSlot
 from app.models.user import User, UserRole, StudentProfile, TeacherProfile
@@ -30,6 +32,31 @@ from app.services import pdf_service
 from fastapi.responses import Response
 
 router = APIRouter()
+
+
+# ─── Audit log helper ─────────────────────────────────────────────────────────
+
+async def _audit(
+    db: AsyncSession,
+    admin_id: int,
+    action: str,
+    target_type: str,
+    target_id: Optional[int] = None,
+    details: Optional[dict] = None,
+) -> None:
+    """Append an immutable audit-log row. Failures are swallowed so they never
+    break the primary operation — the important data is in the main tables."""
+    try:
+        db.add(AuditLog(
+            admin_id=admin_id,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            details=details,
+        ))
+        # The caller's db.commit() will flush this row together with the main change.
+    except Exception:
+        pass  # never let audit writes block the main operation
 
 
 # ─── Admin Profile ────────────────────────────────────────────────────────────
@@ -49,8 +76,8 @@ async def upload_admin_photo(
     current_admin: User = Depends(get_current_admin),
 ):
     """Upload or replace the admin's profile picture."""
-    file_bytes = await file.read()
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else "jpg"
+    raw = await file.read()
+    file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"
     key = f"profiles/admin/{current_admin.id}/avatar.{ext}"
     await storage_service.upload_file(bucket, key, file_bytes)
@@ -365,6 +392,13 @@ async def edit_user(
             if tp:
                 tp.teachable_subjects = payload.teachable_subjects
 
+    # Build a compact diff for the audit record — only include fields that changed
+    _changed = {k: v for k, v in payload.model_dump(exclude_none=True).items()
+                if k != "new_mpin"}  # never log MPINs
+    if "new_mpin" in payload.model_dump(exclude_none=True):
+        _changed["new_mpin"] = "***"
+    await _audit(db, current_admin.id, "edit_user", "user", user_id, _changed)
+
     await db.commit()
     await db.refresh(user)
 
@@ -452,6 +486,10 @@ async def set_user_active(
         raise HTTPException(status_code=403, detail="Cannot modify admin account status.")
 
     user.is_active = payload.is_active
+    await _audit(db, current_admin.id,
+                 "activate_user" if payload.is_active else "deactivate_user",
+                 "user", user.id,
+                 {"username": user.username, "is_active": payload.is_active})
 
     # Cascade: deactivating a student also deactivates their linked parent
     if user.role == UserRole.student and payload.is_active is False:
@@ -505,6 +543,8 @@ async def approve_user(
         raise HTTPException(status_code=400, detail="User is already approved.")
 
     user.is_approved = True
+    await _audit(db, current_admin.id, "approve_user", "user", user.id,
+                 {"username": user.username, "role": user.role})
     await db.commit()
     await db.refresh(user)
 
@@ -538,6 +578,8 @@ async def revoke_user(
         raise HTTPException(status_code=403, detail="Cannot revoke an admin account.")
 
     user.soft_delete()
+    await _audit(db, current_admin.id, "revoke_user", "user", user.id,
+                 {"username": user.username, "role": user.role})
     await db.commit()
 
     # Notify the user (if connected) that their account has been revoked
@@ -546,6 +588,43 @@ async def revoke_user(
         "user_id": user.id,
         "payload": {"event": "account_revoked", "message": "Your account access has been revoked."},
     })
+
+
+# ─── Audit log ────────────────────────────────────────────────────────────────
+
+@router.get("/audit-log")
+async def get_audit_log(
+    action: Optional[str] = Query(None, description="Filter by action name"),
+    target_type: Optional[str] = Query(None),
+    target_id: Optional[int] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Return admin audit log entries, newest first."""
+    from sqlalchemy import desc
+    query = select(AuditLog).order_by(desc(AuditLog.created_at))
+    if action:
+        query = query.where(AuditLog.action == action)
+    if target_type:
+        query = query.where(AuditLog.target_type == target_type)
+    if target_id is not None:
+        query = query.where(AuditLog.target_id == target_id)
+    result = await db.execute(query.offset(offset).limit(limit))
+    rows = result.scalars().all()
+    return [
+        {
+            "id": r.id,
+            "admin_id": r.admin_id,
+            "action": r.action,
+            "target_type": r.target_type,
+            "target_id": r.target_id,
+            "details": r.details,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
 
 
 # ─── Fee Summary (all students) ───────────────────────────────────────────────
@@ -699,6 +778,8 @@ async def delete_fee_structure(
     structure = result.scalar_one_or_none()
     if not structure:
         raise HTTPException(status_code=404, detail="Fee structure not found.")
+    await _audit(db, current_admin.id, "delete_fee_structure", "fee_structure", structure_id,
+                 {"grade": structure.grade, "total_amount": float(structure.total_amount)})
     await db.delete(structure)
     await db.commit()
 
@@ -718,6 +799,9 @@ async def update_fee_payment(
     payment.amount = payload.amount
     payment.notes = payload.notes
     payment.updated_by_admin_id = current_admin.id
+    await _audit(db, current_admin.id, "update_fee_payment", "fee_payment", payment_id,
+                 {"student_id": payment.student_id, "amount": float(payload.amount),
+                  "notes": payload.notes})
     await db.commit()
     await db.refresh(payment)
     return payment
@@ -734,6 +818,8 @@ async def delete_fee_payment(
     payment = result.scalar_one_or_none()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found.")
+    await _audit(db, current_admin.id, "delete_fee_payment", "fee_payment", payment_id,
+                 {"student_id": payment.student_id, "amount": float(payment.amount)})
     await db.delete(payment)
     await db.commit()
 
@@ -743,8 +829,19 @@ async def record_fee_payment(
     payload: FeePaymentCreate,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
 ):
-    """Record a fee payment for a student."""
+    """Record a fee payment for a student.
+    Include X-Idempotency-Key (UUID) to prevent accidental duplicate payments.
+    """
+    if x_idempotency_key:
+        if not await redis_manager.consume_idempotency_key(
+            f"fee:{current_admin.id}:{x_idempotency_key}"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Duplicate request: this payment was already recorded.",
+            )
     payment = FeePayment(
         student_id=payload.student_id,
         amount=payload.amount,
@@ -753,6 +850,9 @@ async def record_fee_payment(
         **({"paid_at": payload.paid_at} if payload.paid_at else {}),
     )
     db.add(payment)
+    await _audit(db, current_admin.id, "record_fee_payment", "fee_payment", None,
+                 {"student_id": payload.student_id, "amount": float(payload.amount),
+                  "notes": payload.notes})
     await db.commit()
     await db.refresh(payment)
 

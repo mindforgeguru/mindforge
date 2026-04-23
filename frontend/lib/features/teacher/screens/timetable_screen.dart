@@ -707,14 +707,31 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
     // ── Mobile layout ────────────────────────────────────────────────────
     return Column(
       children: [
-        // Grade selector pill
+        // Grade dropdown
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-          child: _SelectorPill(
-            label: 'Grade',
-            value: 'Grade $_selectedGrade',
-            showArrow: true,
-            onTap: () => _showGradePicker(context),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: DropdownButtonFormField<int>(
+            value: _selectedGrade,
+            decoration: const InputDecoration(
+              labelText: 'Grade',
+              prefixIcon: Icon(Icons.school_outlined, size: 18),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            items: AppConstants.grades
+                .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))
+                .toList(),
+            onChanged: (g) {
+              if (g == null) return;
+              setState(() {
+                _selectedGrade = g;
+                _teacherIds.clear();
+                _subjects.clear();
+                _comments.clear();
+                _populatedGrade = null;
+                _populatedDate = null;
+              });
+            },
           ),
         ),
         const SizedBox(height: 4),

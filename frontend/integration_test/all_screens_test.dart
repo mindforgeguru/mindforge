@@ -16,7 +16,7 @@ const _adminMpin    = String.fromEnvironment('ADMIN_MPIN',    defaultValue: '300
 // ignore: do_not_use_environment
 const _teacherUser  = String.fromEnvironment('TEACHER_USER',  defaultValue: 'chinmay_sir');
 // ignore: do_not_use_environment
-const _teacherMpin  = String.fromEnvironment('TEACHER_MPIN',  defaultValue: '222222');
+const _teacherMpin  = String.fromEnvironment('TEACHER_MPIN',  defaultValue: '100898');
 // ignore: do_not_use_environment
 const _studentUser  = String.fromEnvironment('STUDENT_USER',  defaultValue: 'dummy8');
 // ignore: do_not_use_environment
@@ -43,9 +43,10 @@ void main() {
   }
 
   /// Advance past the splash screen (total animation ≈ 4.2 s).
-  /// Also sets a phone-sized viewport so the PIN pad is fully on-screen.
+  /// Also sets a phone-sized viewport so the PIN pad and login button are
+  /// fully on-screen (932 = iPhone 14 Pro Max logical height).
   Future<void> passSplash(WidgetTester t) async {
-    t.view.physicalSize = const Size(390.0, 844.0);
+    t.view.physicalSize = const Size(390.0, 932.0);
     t.view.devicePixelRatio = 1.0;
     addTearDown(t.view.resetPhysicalSize);
     for (int i = 0; i < 60; i++) {
@@ -88,14 +89,23 @@ void main() {
   /// Navigate via a dashboard section header's "See all →" button.
   /// [anchorText] is the section title shown on the dashboard.
   Future<void> goViaSeeAll(WidgetTester t, String anchorText) async {
-    final scrollable = find.byType(Scrollable).first;
-    try {
-      await t.scrollUntilVisible(
-        find.text(anchorText),
-        300.0,
-        scrollable: scrollable,
-      );
-    } catch (_) {}
+    // Drag the first VERTICAL Scrollable downward until the target section
+    // header appears in the widget tree. Using iterative drags (rather than
+    // scrollUntilVisible) avoids the problem where Scrollable.first resolves
+    // to a nested horizontal timetable scroll instead of the main dashboard
+    // scroll, which would leave off-screen slivers unbuilt.
+    Finder verticalScrollable() {
+      for (final s in t.widgetList<Scrollable>(find.byType(Scrollable))) {
+        if (s.axisDirection == AxisDirection.down) return find.byWidget(s);
+      }
+      return find.byType(Scrollable).first;
+    }
+
+    for (int i = 0; i < 20; i++) {
+      if (find.text(anchorText).evaluate().isNotEmpty) break;
+      await t.drag(verticalScrollable(), const Offset(0, -500));
+      await t.pump(const Duration(milliseconds: 120));
+    }
     await t.pumpAndSettle();
 
     // The section title and its "See all →" button share the same Row
@@ -107,7 +117,7 @@ void main() {
       of: rows.first,
       matching: find.text('See all →'),
     );
-    await t.tap(seeAll);
+    await t.tap(seeAll, warnIfMissed: false);
     for (int i = 0; i < 30; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }

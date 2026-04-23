@@ -5,6 +5,7 @@ Security utilities:
 - Role-based FastAPI dependency functions
 """
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -36,20 +37,24 @@ def verify_mpin(plain_mpin: str, hashed_mpin: str) -> bool:
 # ─── JWT ──────────────────────────────────────────────────────────────────────
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create a signed JWT access token (short-lived)."""
+    """Create a signed JWT access token (short-lived).
+    Includes a unique jti so the token can be individually revoked on logout.
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta if expires_delta else timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     )
-    to_encode.update({"exp": expire, "type": "access"})
+    to_encode.update({"exp": expire, "type": "access", "jti": str(uuid.uuid4())})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
 def create_refresh_token(data: dict) -> str:
-    """Create a signed JWT refresh token (long-lived, 30 days)."""
+    """Create a signed JWT refresh token (long-lived, 30 days).
+    Each token gets a unique jti (JWT ID) so it can be blacklisted after use.
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
-    to_encode.update({"exp": expire, "type": "refresh"})
+    to_encode.update({"exp": expire, "type": "refresh", "jti": str(uuid.uuid4())})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -89,6 +94,12 @@ async def _get_current_user(
             raise credentials_exception
         if user_id is None:
             raise credentials_exception
+        # Reject tokens that have been explicitly revoked (e.g. user logged out)
+        jti = payload.get("jti")
+        if jti:
+            from app.core.redis_client import redis_manager as _redis
+            if await _redis.is_access_jti_revoked(jti):
+                raise credentials_exception
     except JWTError:
         raise credentials_exception
 

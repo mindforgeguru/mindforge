@@ -28,7 +28,10 @@ def record(category, test, status, detail=""):
     print(line)
 
 
-async def get_token(client, username="admin", mpin="123456"):
+async def get_token(client, username="admin", mpin=None):
+    if mpin is None:
+        import os
+        mpin = os.getenv("ADMIN_MPIN", "300573")
     resp = await client.post(f"{BASE_URL}/api/auth/login",
                              json={"username": username, "mpin": mpin}, timeout=15)
     if resp.status_code == 200:
@@ -84,10 +87,11 @@ async def test_security_headers(client):
 async def test_rate_limiting(client):
     print("\n[2] Rate Limiting on Login")
     responses = []
-    # Fire 15 bad login attempts rapidly
+    # Fire 15 bad login attempts rapidly for the SAME username so the
+    # per-(ip+username) bucket fills up and triggers 429 after 10 attempts
     for i in range(15):
         resp = await client.post(f"{BASE_URL}/api/auth/login",
-                                 json={"username": f"nonexistent_{i}", "mpin": "999999"},
+                                 json={"username": "ratelimit_probe", "mpin": "999999"},
                                  timeout=10)
         responses.append(resp.status_code)
 
@@ -217,7 +221,7 @@ async def test_access_control(client, token):
     # (admin token used here — should succeed)
     admin_endpoints = [
         ("GET", "/api/admin/users"),
-        ("GET", "/api/admin/pending-users"),
+        ("GET", "/api/admin/users/pending"),
     ]
 
     for method, path in admin_endpoints:

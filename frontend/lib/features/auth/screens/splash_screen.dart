@@ -88,7 +88,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final sw = MediaQuery.of(context).size.width;
-    final logoSize = (sw * 0.38).clamp(120.0, 180.0);
+    final logoSize = (sw * 0.25).clamp(80.0, 120.0);
 
     return AnimatedBuilder(
       animation: _exitCtrl,

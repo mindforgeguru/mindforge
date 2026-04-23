@@ -57,8 +57,11 @@ def stats(results: list[dict], label: str):
     print(f"    Rating: {rating}")
 
 
-async def get_token(client, username="admin", mpin="123456"):
+async def get_token(client, username="admin", mpin=None):
     """Login and return access token."""
+    if mpin is None:
+        import os
+        mpin = os.getenv("ADMIN_MPIN", "300573")
     resp = await client.post(f"{BASE_URL}/api/auth/login",
                              json={"username": username, "mpin": mpin},
                              timeout=15)
@@ -75,10 +78,16 @@ async def test_health(client, n=50):
     return await asyncio.gather(*tasks)
 
 
-async def test_login_concurrent(client, n=20):
-    """Concurrent valid logins — simulates multiple users logging in at once."""
+async def test_login_concurrent(client, n=8):
+    """Concurrent valid logins — simulates multiple users logging in at once.
+
+    Kept at 8 (below the 10-attempt rate-limit bucket) so the bucket is not
+    exhausted before the later token-fetch step.
+    """
+    import os
+    mpin = os.getenv("ADMIN_MPIN", "300573")
     tasks = [timed_request(client, "POST", f"{BASE_URL}/api/auth/login",
-                           json={"username": "admin", "mpin": "123456"})
+                           json={"username": "admin", "mpin": mpin})
              for _ in range(n)]
     return await asyncio.gather(*tasks)
 
@@ -117,10 +126,12 @@ async def test_websocket_connections(n=10):
     results = []
 
     async def connect_one(user_id):
+        import ssl, certifi
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
         start = time.perf_counter()
         try:
             ws_url = f"wss://api.mindforge.guru/ws/{user_id}"
-            async with websockets.connect(ws_url, open_timeout=10) as ws:
+            async with websockets.connect(ws_url, ssl=ssl_ctx, open_timeout=10) as ws:
                 elapsed = (time.perf_counter() - start) * 1000
                 await ws.send("ping")
                 pong = await asyncio.wait_for(ws.recv(), timeout=5)
@@ -138,6 +149,10 @@ async def test_websocket_connections(n=10):
     if times:
         print(f"    Avg connect time: {statistics.mean(times):.0f} ms")
         print(f"    Pong received: {sum(1 for r in results if r.get('pong'))}/{connected}")
+    else:
+        errors = set(r.get("error", "") for r in results if not r.get("connected"))
+        for e in errors:
+            print(f"    Error: {e}")
     return results
 
 
@@ -150,46 +165,51 @@ async def main():
     print("=" * 60)
 
     async with httpx.AsyncClient() as client:
+        # Obtain token first so login load tests don't exhaust the rate bucket
+        print("\n[0] Obtaining auth token (before load tests)...")
+        token = await get_token(client)
+        if token:
+            print("    ✅ Token obtained")
+        else:
+            print("    ⚠️  Could not get token — authenticated tests will be skipped")
+
         # 1. Health endpoint
         print("\n[1] Health endpoint (50 concurrent)")
         results = await test_health(client, n=50)
         stats(results, "GET /api/health")
 
-        # 2. Concurrent valid logins
-        print("\n[2] Concurrent valid logins (20 simultaneous)")
-        results = await test_login_concurrent(client, n=20)
+        # 2. Concurrent valid logins (≤ rate-limit bucket size)
+        print("\n[2] Concurrent valid logins (8 simultaneous)")
+        results = await test_login_concurrent(client, n=8)
         stats(results, "POST /auth/login (valid)")
+        if any(r["status"] == 429 for r in results):
+            print("    ⚠️  Some requests rate-limited (429) — rate limiter is active")
 
         # 3. Invalid logins (should be 401, not 500)
         print("\n[3] Invalid login attempts (10 concurrent)")
         results = await test_login_invalid(client, n=10)
         stats(results, "POST /auth/login (invalid)")
         statuses = set(r["status"] for r in results)
-        if statuses <= {401}:
-            print("    ✅ All returned 401 (correct)")
+        if statuses <= {401, 429}:
+            print("    ✅ All returned 401/429 (no server errors)")
         else:
-            print(f"    ⚠️  Unexpected statuses: {statuses}")
+            print(f"    ⚠️  Unexpected statuses: {statuses - {401, 429}}")
 
-        # 4. Get token for authenticated tests
-        print("\n[4] Getting auth token...")
-        token = await get_token(client)
         if token:
-            print("    ✅ Token obtained")
-
-            # 5. Concurrent dashboard-summary
-            print("\n[5] Concurrent dashboard-summary (10 teachers simultaneously)")
+            # 4. Concurrent dashboard-summary
+            print("\n[4] Concurrent dashboard-summary (10 teachers simultaneously)")
             results = await test_dashboard_concurrent(client, token, n=10)
             stats(results, "GET /teacher/dashboard-summary")
 
-            # 6. Sequential baseline
-            print("\n[6] Sequential dashboard-summary (5 requests, no concurrency)")
+            # 5. Sequential baseline
+            print("\n[5] Sequential dashboard-summary (5 requests, no concurrency)")
             results = await test_sequential_latency(client, token, n=5)
             stats(results, "GET /teacher/dashboard-summary (sequential)")
         else:
-            print("    ❌ Could not get token — skipping authenticated tests")
+            print("\n    ❌ Skipping authenticated tests (no token)")
 
-    # 7. WebSocket
-    print("\n[7] WebSocket concurrent connections (10)")
+    # 6. WebSocket
+    print("\n[6] WebSocket concurrent connections (10)")
     try:
         import websockets
         await test_websocket_connections(n=10)

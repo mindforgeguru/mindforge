@@ -7,7 +7,9 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../utils/constants.dart';
 
 final webSocketClientProvider = Provider<WebSocketClient>((ref) {
-  return WebSocketClient();
+  final client = WebSocketClient();
+  ref.onDispose(client.disconnect);
+  return client;
 });
 
 class WebSocketClient {

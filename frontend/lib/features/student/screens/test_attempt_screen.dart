@@ -29,8 +29,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
   // Cached text controllers keyed by question id string (for text-input questions)
   final Map<String, TextEditingController> _textCtrls = {};
 
-  Timer? _timer;
-  int _secondsLeft = 0;
+  int _initialSeconds = 0;
   bool _submitted = false;
 
   @override
@@ -41,7 +40,6 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
 
   @override
   void dispose() {
-    _timer?.cancel();
     for (final c in _textCtrls.values) {
       c.dispose();
     }
@@ -74,40 +72,12 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
       _test = test;
       _loading = false;
       // 1 minute per question (timeLimitMinutes already set server-side)
-      _secondsLeft = (test.timeLimitMinutes ?? test.questionCount) * 60;
-    });
-    _startTimer();
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) {
-        t.cancel();
-        return;
-      }
-      if (_secondsLeft <= 0) {
-        t.cancel();
-        _submitTest(autoSubmitted: true);
-      } else {
-        setState(() => _secondsLeft--);
-      }
+      _initialSeconds = (test.timeLimitMinutes ?? test.questionCount) * 60;
     });
   }
 
   List<Map<String, dynamic>> get _questions =>
       _test?.questions?.cast<Map<String, dynamic>>() ?? [];
-
-  String get _timeDisplay {
-    final m = _secondsLeft ~/ 60;
-    final s = _secondsLeft % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-
-  Color get _timerColor {
-    if (_secondsLeft > 60) return AppColors.success;
-    if (_secondsLeft > 30) return AppColors.warning;
-    return AppColors.error;
-  }
 
   void _goTo(int index) {
     if (index < 0 || index >= _questions.length) return;
@@ -132,7 +102,6 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
     }
 
     setState(() => _submitted = true);
-    _timer?.cancel();
 
     final api = ref.read(apiClientProvider);
     try {
@@ -240,29 +209,9 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
           ],
         ),
         actions: [
-          // Countdown timer badge
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: _timerColor.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _timerColor),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.timer, size: 14, color: _timerColor),
-                const SizedBox(width: 4),
-                Text(
-                  _timeDisplay,
-                  style: TextStyle(
-                      color: _timerColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: R.fs(context, 15, min: 13, max: 17)),
-                ),
-              ],
-            ),
+          _CountdownBadge(
+            initialSeconds: _initialSeconds,
+            onExpired: () => _submitTest(autoSubmitted: true),
           ),
         ],
       ),
@@ -453,6 +402,85 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
         ),
       );
     }).toList();
+  }
+}
+
+// ─── Countdown badge ──────────────────────────────────────────────────────────
+// Owns the 1-second Timer so its setState only repaints the badge, not the
+// entire screen (question dots, content, progress bar stay untouched).
+
+class _CountdownBadge extends StatefulWidget {
+  final int initialSeconds;
+  final VoidCallback onExpired;
+  const _CountdownBadge({required this.initialSeconds, required this.onExpired});
+
+  @override
+  State<_CountdownBadge> createState() => _CountdownBadgeState();
+}
+
+class _CountdownBadgeState extends State<_CountdownBadge> {
+  late int _secondsLeft;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _secondsLeft = widget.initialSeconds;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_secondsLeft <= 1) {
+        _timer?.cancel();
+        setState(() => _secondsLeft = 0);
+        widget.onExpired();
+      } else {
+        setState(() => _secondsLeft--);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _display {
+    final m = _secondsLeft ~/ 60;
+    final s = _secondsLeft % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  Color get _color {
+    if (_secondsLeft > 60) return AppColors.success;
+    if (_secondsLeft > 30) return AppColors.warning;
+    return AppColors.error;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: _color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _color),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.timer, size: 14, color: _color),
+          const SizedBox(width: 4),
+          Text(
+            _display,
+            style: TextStyle(
+                color: _color,
+                fontWeight: FontWeight.bold,
+                fontSize: R.fs(context, 15, min: 13, max: 17)),
+          ),
+        ],
+      ),
+    );
   }
 }
 

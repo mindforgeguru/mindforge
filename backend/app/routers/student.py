@@ -13,6 +13,7 @@ from sqlalchemy.orm import aliased
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
 from app.core.security import get_current_student
+from app.core.upload_utils import validate_and_strip_exif
 from app.models.attendance import Attendance
 from app.models.grade import Grade
 from app.models.test import Test, TestSubmission, TestType
@@ -585,8 +586,8 @@ async def upload_profile_picture(
     current_student: User = Depends(get_current_student),
 ):
     """Upload or replace the student's profile picture."""
-    file_bytes = await file.read()
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else "jpg"
+    raw = await file.read()
+    file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"
     key = f"profiles/{current_student.id}/avatar.{ext}"
     await storage_service.upload_file(bucket, key, file_bytes)
