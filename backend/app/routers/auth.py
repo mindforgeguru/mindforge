@@ -322,6 +322,25 @@ async def logout(
     _clear_session_cookie(response)
 
 
+@router.get("/fcm-debug")
+async def fcm_debug(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Temporary debug endpoint — remove after testing."""
+    from app.core.config import settings
+    from app.services import notification_service
+    creds_set = bool(settings.FIREBASE_CREDENTIALS_JSON.strip())
+    firebase_ok = notification_service._init()
+    token_stored = bool(current_user.fcm_token)
+    return {
+        "firebase_credentials_set": creds_set,
+        "firebase_initialized": firebase_ok,
+        "fcm_token_stored": token_stored,
+        "fcm_token_preview": current_user.fcm_token[:20] + "..." if current_user.fcm_token else None,
+    }
+
+
 @router.put("/fcm-token", status_code=status.HTTP_204_NO_CONTENT)
 async def update_fcm_token(
     payload: dict,
