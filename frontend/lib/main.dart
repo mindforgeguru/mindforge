@@ -35,22 +35,21 @@ void main() async {
   PaintingBinding.instance.imageCache.maximumSize = 100;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 80 * 1024 * 1024;
 
-  // Firebase init is best-effort — a failure must never block the app from
-  // starting. We also cap the total time to 8 s so a hung permission dialog
-  // on iOS simulator (or a cold Railway start) doesn't leave users on a
-  // blank screen.
-  Future(() async {
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      await NotificationService.initialize();
-    } catch (e, st) {
-      debugPrint('Firebase init error: $e\n$st');
-    }
-  }).timeout(const Duration(seconds: 8), onTimeout: () {
-    debugPrint('Firebase init timed out — push notifications unavailable.');
-  });
+  // Firebase core init is awaited so the FCM token is available by the time
+  // the user logs in. It's fast (~100 ms) and safe to await.
+  // NotificationService.initialize() is fire-and-forget because requesting
+  // notification permission can show a system dialog that hangs on iOS simulator.
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    // Kick off permission request + listener setup in the background.
+    NotificationService.initialize().catchError((e) {
+      debugPrint('NotificationService init error: $e');
+    });
+  } catch (e) {
+    debugPrint('Firebase.initializeApp error: $e');
+  }
 
   final prefs = await SharedPreferences.getInstance();
   runApp(
