@@ -14,9 +14,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        'users',
-        sa.Column('fcm_token', sa.String(512), nullable=True)
+    # Use raw SQL with IF NOT EXISTS so re-runs don't fail
+    # (column may already exist if create_all ran before this migration)
+    op.execute(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token VARCHAR(512)"
     )
 
 
