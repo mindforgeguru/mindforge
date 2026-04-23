@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/gestures.dart';
+import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
@@ -34,8 +35,22 @@ void main() async {
   PaintingBinding.instance.imageCache.maximumSize = 100;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 80 * 1024 * 1024;
 
-  await Firebase.initializeApp();
-  await NotificationService.initialize();
+  // Firebase init is best-effort — a failure must never block the app from
+  // starting. We also cap the total time to 8 s so a hung permission dialog
+  // on iOS simulator (or a cold Railway start) doesn't leave users on a
+  // blank screen.
+  Future(() async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      await NotificationService.initialize();
+    } catch (e, st) {
+      debugPrint('Firebase init error: $e\n$st');
+    }
+  }).timeout(const Duration(seconds: 8), onTimeout: () {
+    debugPrint('Firebase init timed out — push notifications unavailable.');
+  });
 
   final prefs = await SharedPreferences.getInstance();
   runApp(
