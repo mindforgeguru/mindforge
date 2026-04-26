@@ -168,6 +168,36 @@ class TestAuth:
                         json={"refresh_token": "not.a.real.token"}, timeout=TIMEOUT)
         assert r.status_code == 401
 
+    def test_logout_with_refresh_token_blacklists_refresh_jti(self, client, admin_token):
+        """
+        Logout must revoke the refresh-token JTI when sent in the body, so a
+        captured refresh token cannot mint new access tokens after logout.
+        Uses a fresh admin login so the session-scoped admin_token is not
+        invalidated. Depends on admin_token so the test skips when admin
+        credentials are unavailable, matching the rest of the suite.
+        """
+        mpin = os.getenv("ADMIN_MPIN", "123456")
+        login = _login(client, "admin", mpin)
+        assert login.status_code == 200
+        body = login.json()
+        access = body["access_token"]
+        refresh = body["refresh_token"]
+
+        out = client.post(
+            f"{BASE_URL}/api/auth/logout",
+            headers=_auth(access),
+            json={"refresh_token": refresh},
+            timeout=TIMEOUT,
+        )
+        assert out.status_code == 204, f"Logout failed: {out.text}"
+
+        # The refresh token's JTI is now blacklisted — it must not mint a new access token.
+        r = client.post(f"{BASE_URL}/api/auth/refresh",
+                        json={"refresh_token": refresh}, timeout=TIMEOUT)
+        assert r.status_code == 401, (
+            f"Refresh token was not revoked by logout (got {r.status_code}: {r.text})"
+        )
+
     def test_register_creates_pending_user(self, client):
         ts    = int(time.time()) + 200
         uname = f"reg_test_{ts}"
