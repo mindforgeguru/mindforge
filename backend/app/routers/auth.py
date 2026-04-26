@@ -7,8 +7,9 @@ Authentication router:
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from jose import JWTError, jwt as _jose_jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -300,24 +301,48 @@ async def refresh_access_token(
 async def logout(
     request: Request,
     response: Response,
+    body: Optional[dict] = Body(None),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    Invalidate the current access token by adding its JTI to the Redis blacklist.
-    The token remains cryptographically valid but the revocation check in
-    _get_current_user() will reject it on every subsequent request.
+    Invalidate the session completely:
+    - Access token JTI is blacklisted in Redis (checked on every request).
+    - Refresh token JTI is also blacklisted when the client sends it in the
+      request body as {"refresh_token": "<token>"}. This prevents a captured
+      refresh token from minting new access tokens after logout.
+    - FCM token is cleared so no further push notifications are sent.
     """
-    token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
-    if token:
+    # Revoke the access token.
+    access_token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if access_token:
         try:
-            payload = decode_access_token(token)
-            jti = payload.get("jti")
-            exp = payload.get("exp")
+            at_payload = decode_access_token(access_token)
+            jti = at_payload.get("jti")
+            exp = at_payload.get("exp")
             if jti and exp:
                 remaining = max(int(exp - datetime.now(timezone.utc).timestamp()), 1)
                 await redis_manager.revoke_access_jti(jti, remaining)
         except Exception:
-            pass  # if the token is already invalid/expired, nothing to do
+            pass  # already invalid/expired — nothing to do
+
+    # Revoke the refresh token if the client provided it.
+    if isinstance(body, dict):
+        refresh_token = body.get("refresh_token")
+        if refresh_token and isinstance(refresh_token, str):
+            try:
+                rt_payload = decode_access_token(refresh_token)
+                if rt_payload.get("type") == "refresh":
+                    rt_jti = rt_payload.get("jti")
+                    rt_exp = rt_payload.get("exp")
+                    if rt_jti and rt_exp:
+                        remaining = max(int(rt_exp - datetime.now(timezone.utc).timestamp()), 1)
+                        await redis_manager.revoke_jti(rt_jti, remaining)
+            except Exception:
+                pass  # invalid/expired refresh token — nothing to do
+
+    current_user.fcm_token = None
+    await db.commit()
 
     _clear_session_cookie(response)
 

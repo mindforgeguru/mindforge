@@ -1,6 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:dio/dio.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -70,7 +71,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _api.onUnauthorized = () => state = const AuthState();
     _restoreSession();
     // Keep the FCM token current across token rotations (e.g. new device SIM).
-    NotificationService.onTokenRefresh(_registerFcmToken);
+    // Wrapped in try-catch: Firebase may not be initialized in test environments;
+    // a missing refresh listener only means FCM tokens won't auto-renew.
+    try {
+      NotificationService.onTokenRefresh(_registerFcmToken);
+    } catch (_) {}
   }
 
   /// Fire-and-forget: send the device's FCM token to the backend so it can
@@ -217,7 +222,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    // Delete the FCM token from Firebase so the device stops receiving pushes.
+    // Do this before hitting the server so the token is dead even if the
+    // network call fails.
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (_) {}
+
     // Revoke the access token server-side before clearing local state.
+    // The server also clears the stored FCM token on this call.
     // Fire-and-forget: network failure must never block the user from logging out.
     await _api.logoutOnServer();
     _api.clearCachedTokens();
