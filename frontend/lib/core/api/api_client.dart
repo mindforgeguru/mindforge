@@ -4,6 +4,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:meta/meta.dart';
 
 import '../security/ssl_pinning.dart';
 import '../utils/constants.dart';
@@ -17,6 +18,9 @@ class ApiClient {
   final _storage = const FlutterSecureStorage(
     aOptions: _androidOptions,
   );
+
+  @visibleForTesting
+  Dio get dio => _dio;
 
   // In-memory token cache — avoids hitting the Android Keystore on every
   // request, which can be slow right after a phone unlock.
@@ -220,12 +224,22 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
-  /// Tells the server to revoke the current access token.
-  /// Errors are swallowed — local session is always cleared regardless.
+  /// Tells the server to revoke the current access + refresh tokens.
+  /// Sends the refresh token in the body so the server can blacklist its
+  /// JTI; without this, a captured refresh token could mint new access
+  /// tokens after logout. Errors are swallowed — local session is always
+  /// cleared regardless.
   Future<void> logoutOnServer() async {
+    try {
+      _cachedRefreshToken ??=
+          await _storage.read(key: AppConstants.refreshTokenStorageKey);
+    } catch (_) {}
     try {
       await _dio.post(
         '/auth/logout',
+        data: _cachedRefreshToken != null
+            ? {'refresh_token': _cachedRefreshToken}
+            : null,
         options: Options(extra: {'_skipRefresh': true}),
       );
     } catch (_) {}

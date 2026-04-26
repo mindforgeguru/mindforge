@@ -229,8 +229,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await FirebaseMessaging.instance.deleteToken();
     } catch (_) {}
 
-    // Revoke the access token server-side before clearing local state.
-    // The server also clears the stored FCM token on this call.
+    // Revoke the access + refresh tokens server-side before clearing local
+    // state. The server also clears the stored FCM token on this call.
     // Fire-and-forget: network failure must never block the user from logging out.
     await _api.logoutOnServer();
     _api.clearCachedTokens();
