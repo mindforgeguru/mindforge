@@ -6,7 +6,7 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -50,6 +50,44 @@ class Homework(Base):
 
     def __repr__(self) -> str:
         return f"<Homework id={self.id} grade={self.grade} subject={self.subject}>"
+
+
+class HomeworkCompletion(Base):
+    """
+    Per-student record of whether a piece of homework was completed.
+    One row per (homework_id, student_id). Created the first time the teacher
+    marks the student's status; subsequent saves overwrite the same row.
+    """
+    __tablename__ = "homework_completions"
+    __table_args__ = (
+        UniqueConstraint("homework_id", "student_id", name="uq_homework_student"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    homework_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("homework.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    student_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # True = completed, False = not completed. Absence of a row means the
+    # teacher hasn't recorded a status for this student yet.
+    completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    marked_by: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    marked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    homework = relationship("Homework", foreign_keys=[homework_id])
+    student = relationship("User", foreign_keys=[student_id])
+
+    def __repr__(self) -> str:
+        return (
+            f"<HomeworkCompletion hw={self.homework_id} student={self.student_id} "
+            f"completed={self.completed}>"
+        )
 
 
 class Broadcast(Base):

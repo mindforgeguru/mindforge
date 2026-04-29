@@ -10,6 +10,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/api/websocket_client.dart';
+import '../../../core/models/attendance.dart';
+import '../../../core/models/grade.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/theme/app_theme.dart';
@@ -67,14 +69,22 @@ class _StudentDashboardScreenState
     // on GoRouter navigations — both cause needless invalidations that keep the
     // dashboard in a permanent loading state. Skip lifecycle refreshes on web.
     if (kIsWeb) return;
-    if (state == AppLifecycleState.resumed && mounted) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    // Defer one frame so we don't pile WS reconnect + provider invalidate +
+    // Dio request onto the very frame Android is restoring after unlock.
+    // Doing it inline freezes the UI thread on some devices.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _wsSub?.cancel();
+      // Force a fresh socket — Doze can leave `_channel` non-null with a
+      // dead underlying socket, so reusing it silently drops events.
+      ref.read(webSocketClientProvider).forceReconnect();
       _connectWs();
       // Only invalidate — do NOT await the network call here.
       // The provider rebuilds in the background; waiting for the network on
       // resume can freeze the UI while WiFi/cellular reconnects after unlock.
       ref.invalidate(studentDashboardSummaryProvider(_todayString));
-    }
+    });
   }
 
   void _connectWs() {
@@ -490,6 +500,53 @@ class _StudentDashboardScreenState
             },
           ),
 
+          // ── Recent Test Marks (latest 10, oldest → newest) ────────────
+          SliverToBoxAdapter(
+            child: _DashSectionHeader(
+              icon: Icons.bar_chart_rounded,
+              title: 'Recent Test Marks',
+              onSeeAll: () => context.go('${RouteNames.studentDashboard}/grades'),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: summaryAsync.when(
+              skipLoadingOnReload: true,
+              loading: () => const ShimmerCards(count: 1, cardHeight: 200),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (summary) {
+                final raw = (summary['grades'] as List<dynamic>? ?? []);
+                final list = raw
+                    .map((e) =>
+                        GradeModel.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                return _RecentMarksChart(grades: list);
+              },
+            ),
+          ),
+
+          // ── Attendance breakdown (full / partial / absent days) ───────
+          SliverToBoxAdapter(
+            child: _DashSectionHeader(
+              icon: Icons.pie_chart_rounded,
+              title: 'Attendance Breakdown',
+              onSeeAll: () =>
+                  context.go('${RouteNames.studentDashboard}/attendance'),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Consumer(builder: (context, ref, _) {
+              final attAsync = ref.watch(studentAttendanceProvider);
+              return attAsync.when(
+                skipLoadingOnReload: true,
+                loading: () =>
+                    const ShimmerCards(count: 1, cardHeight: 220),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (records) =>
+                    _AttendancePieChart(records: records),
+              );
+            }),
+          ),
+
           // ── Recent Homework ───────────────────────────────────────────
           SliverToBoxAdapter(
             child: _DashSectionHeader(
@@ -867,26 +924,50 @@ class _TimetableCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Period badge
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: (sw * 0.018).clamp(6.0, 9.0),
-              vertical: (sw * 0.008).clamp(2.0, 4.0),
-            ),
-            decoration: BoxDecoration(
-              color: isNow
-                  ? Colors.white.withOpacity(0.18)
-                  : AppColors.iconContainer,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Text(
-              'P${slot.periodNumber}',
-              style: GoogleFonts.poppins(
-                fontSize: (sw * 0.025).clamp(9.0, 11.0),
-                fontWeight: FontWeight.w700,
-                color: onDark,
+          // Period badge + time range. Time lives here (not stacked below the
+          // subject) so a holiday card still shows when the period would have
+          // been, and free periods read "P3  09:30 – 10:15" cleanly.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: (sw * 0.018).clamp(6.0, 9.0),
+                  vertical: (sw * 0.008).clamp(2.0, 4.0),
+                ),
+                decoration: BoxDecoration(
+                  color: isNow
+                      ? Colors.white.withOpacity(0.18)
+                      : AppColors.iconContainer,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  'P${slot.periodNumber}',
+                  style: GoogleFonts.poppins(
+                    fontSize: (sw * 0.025).clamp(9.0, 11.0),
+                    fontWeight: FontWeight.w700,
+                    color: onDark,
+                  ),
+                ),
               ),
-            ),
+              if (slot.startTime != null) ...[
+                SizedBox(width: (sw * 0.014).clamp(4.0, 7.0)),
+                Expanded(
+                  child: Text(
+                    slot.endTime != null
+                        ? '${slot.startTime} – ${slot.endTime}'
+                        : slot.startTime!,
+                    style: GoogleFonts.poppins(
+                      fontSize: (sw * 0.018).clamp(7.0, 8.5),
+                      fontWeight: FontWeight.w600,
+                      color: onMuted,
+                    ),
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ],
           ),
           const Spacer(),
           // Subject
@@ -905,13 +986,13 @@ class _TimetableCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
-          // Teacher • time
+          // Teacher (time moved into the badge row above)
           Text(
             slot.isHoliday
                 ? (slot.comment ?? '')
                 : slot.subject?.isNotEmpty == true
-                    ? '${slot.teacherUsername ?? 'Grade ${slot.grade}'}${slot.startTime != null ? ' • ${slot.startTime}' : ''}'
-                    : slot.startTime != null ? slot.startTime! : '',
+                    ? (slot.teacherUsername ?? 'Grade ${slot.grade}')
+                    : '',
             style: GoogleFonts.poppins(
               fontSize: (sw * 0.024).clamp(8.5, 10.5),
               color: onMuted,
@@ -1464,6 +1545,302 @@ class _DashCard extends StatelessWidget {
           child,
         ],
       ),
+    );
+  }
+}
+
+// ─── Mobile dashboard: rolling 10-test marks chart ─────────────────────────────
+//
+// Reads the `grades` list straight from the dashboard summary (already loaded —
+// no extra network call) and shows a bar chart of the latest 10 results. The
+// backend returns grades newest-first; we take(10) and reverse so the bars read
+// left-to-right oldest → newest, matching how a timeline is normally read.
+// When an 11th result arrives, take(10) naturally drops the oldest of the
+// previous window — i.e. the leftmost bar shifts off as a new one appears
+// on the right.
+
+class _RecentMarksChart extends StatelessWidget {
+  final List<GradeModel> grades;
+  const _RecentMarksChart({required this.grades});
+
+  // 10 distinct hues so each of the 10 bars gets its own color.
+  static const _palette = <Color>[
+    Color(0xFF3B82F6), // blue
+    Color(0xFF10B981), // emerald
+    Color(0xFFF59E0B), // amber
+    Color(0xFFEF4444), // red
+    Color(0xFF8B5CF6), // violet
+    Color(0xFF14B8A6), // teal
+    Color(0xFFF97316), // orange
+    Color(0xFFEC4899), // pink
+    Color(0xFF22C55E), // green
+    Color(0xFF6366F1), // indigo
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    if (grades.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Text(
+          'No test marks yet',
+          style: GoogleFonts.poppins(
+              fontSize: 11, color: AppColors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    final window = grades.take(10).toList().reversed.toList();
+    final maxMark = window
+        .map((g) => g.marksObtained)
+        .fold<double>(0, (a, b) => b > a ? b : a);
+    // Round y-axis ceiling up to a nice multiple so gridlines land on whole
+    // numbers; minimum of 10 so a single low score still renders a sensible
+    // chart instead of a giant bar against a tiny axis.
+    final yCeiling = maxMark <= 0
+        ? 10.0
+        : (maxMark / 10).ceilToDouble() * 10;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEAEEF3)),
+        ),
+        padding: const EdgeInsets.fromLTRB(8, 16, 12, 12),
+        child: SizedBox(
+          height: 200,
+          child: BarChart(
+            BarChartData(
+              maxY: yCeiling,
+              minY: 0,
+              alignment: BarChartAlignment.spaceAround,
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: yCeiling / 4,
+                getDrawingHorizontalLine: (_) =>
+                    FlLine(color: const Color(0xFFE5E7EB), strokeWidth: 1),
+              ),
+              borderData: FlBorderData(show: false),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 30,
+                    interval: yCeiling / 4,
+                    getTitlesWidget: (v, _) => Text(
+                      v.toInt().toString(),
+                      style: GoogleFonts.poppins(
+                          fontSize: 9, color: AppColors.textMuted),
+                    ),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 26,
+                    getTitlesWidget: (v, _) {
+                      final i = v.toInt();
+                      if (i < 0 || i >= window.length) {
+                        return const SizedBox.shrink();
+                      }
+                      final s = window[i].subject;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          s.length > 4 ? s.substring(0, 4) : s,
+                          style: GoogleFonts.poppins(
+                              fontSize: 9, color: AppColors.textMuted),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+              ),
+              barGroups: List.generate(window.length, (i) {
+                return BarChartGroupData(
+                  x: i,
+                  barRods: [
+                    BarChartRodData(
+                      toY: window[i].marksObtained,
+                      color: _palette[i % _palette.length],
+                      width: 16,
+                      borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4)),
+                    ),
+                  ],
+                );
+              }),
+            ),
+            swapAnimationDuration: const Duration(milliseconds: 350),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Mobile dashboard: day-level attendance breakdown pie chart ────────────────
+//
+// Period-level rows are grouped by date. Each day falls into one of three
+// buckets:
+//   • full    — every period that day was marked present
+//   • partial — at least one present and at least one absent
+//   • absent  — every period was marked absent
+//
+// The schema only stores per-period present/absent (see
+// backend/app/models/attendance.py) so "partial" is derived here, not stored.
+
+class _AttendancePieChart extends StatelessWidget {
+  final List<AttendanceModel> records;
+  const _AttendancePieChart({required this.records});
+
+  static const _fullColor = Color(0xFF10B981);    // emerald — full day
+  static const _partialColor = Color(0xFFF59E0B); // amber  — partial day
+  static const _absentColor = Color(0xFFEF4444);  // red    — fully absent day
+
+  @override
+  Widget build(BuildContext context) {
+    if (records.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Text(
+          'No attendance recorded yet',
+          style: GoogleFonts.poppins(
+              fontSize: 11, color: AppColors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    // Group periods by calendar day (yyyy-MM-dd) and tally present/absent
+    // counts. Then bucket the day based on the tallies.
+    final byDay = <String, (int present, int absent)>{};
+    for (final r in records) {
+      final key = _fmtYMD.format(r.date);
+      final cur = byDay[key] ?? (0, 0);
+      byDay[key] = r.isPresent
+          ? (cur.$1 + 1, cur.$2)
+          : (cur.$1, cur.$2 + 1);
+    }
+    var fullDays = 0, partialDays = 0, absentDays = 0;
+    for (final entry in byDay.values) {
+      if (entry.$1 > 0 && entry.$2 == 0) {
+        fullDays++;
+      } else if (entry.$1 == 0 && entry.$2 > 0) {
+        absentDays++;
+      } else {
+        partialDays++;
+      }
+    }
+    final totalDays = fullDays + partialDays + absentDays;
+
+    // Build sections, skipping zero-value buckets so fl_chart doesn't draw
+    // invisible slivers that still take up legend space.
+    final sections = <PieChartSectionData>[];
+    void addSection(int count, Color color) {
+      if (count == 0) return;
+      final pct = count / totalDays * 100;
+      sections.add(PieChartSectionData(
+        value: count.toDouble(),
+        color: color,
+        radius: 58,
+        title: '${pct.toStringAsFixed(0)}%',
+        titleStyle: GoogleFonts.poppins(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ));
+    }
+    addSection(fullDays, _fullColor);
+    addSection(partialDays, _partialColor);
+    addSection(absentDays, _absentColor);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEAEEF3)),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 160,
+              child: PieChart(
+                PieChartData(
+                  startDegreeOffset: -90,
+                  sectionsSpace: 2,
+                  centerSpaceRadius: 36,
+                  sections: sections,
+                ),
+                swapAnimationDuration:
+                    const Duration(milliseconds: 350),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                _PieLegendDot(
+                    color: _fullColor,
+                    label: 'Present  ·  $fullDays'),
+                _PieLegendDot(
+                    color: _partialColor,
+                    label: 'Partial  ·  $partialDays'),
+                _PieLegendDot(
+                    color: _absentColor,
+                    label: 'Absent  ·  $absentDays'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PieLegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _PieLegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: AppColors.primary,
+          ),
+        ),
+      ],
     );
   }
 }

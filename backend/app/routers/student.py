@@ -23,9 +23,13 @@ from app.schemas.attendance import AttendanceResponse, AttendanceSummary
 from app.schemas.grade import GradeResponse, GradeStats
 from app.schemas.test import TestResponse, TestSubmissionCreate, TestSubmissionResponse
 from app.schemas.timetable import TimetableSlotWithTeacherResponse
-from app.schemas.homework import HomeworkResponse, BroadcastResponse
+from app.schemas.homework import (
+    HomeworkResponse,
+    BroadcastResponse,
+    StudentHomeworkCompletion,
+)
 from app.schemas.fees import StudentFeeSummary
-from app.models.homework import Homework, Broadcast
+from app.models.homework import Homework, HomeworkCompletion, Broadcast
 from app.models.fees import FeeStructure, FeePayment, PaymentInfo
 from app.schemas.fees import FeePaymentResponse, PaymentInfoResponse
 from app.services import storage_service
@@ -654,6 +658,32 @@ async def get_student_homework(
         .order_by(Homework.created_at.desc())
     )
     return hw_result.scalars().all()
+
+
+@router.get(
+    "/homework/completions",
+    response_model=List[StudentHomeworkCompletion],
+)
+async def get_student_homework_completions(
+    db: AsyncSession = Depends(get_db),
+    current_student: User = Depends(get_current_student),
+):
+    """Return only this student's own completion rows. Homework without a
+    row is treated as 'pending' on the client (no entry returned).
+    """
+    rows = (await db.execute(
+        select(HomeworkCompletion).where(
+            HomeworkCompletion.student_id == current_student.id
+        )
+    )).scalars().all()
+    return [
+        StudentHomeworkCompletion(
+            homework_id=r.homework_id,
+            completed=r.completed,
+            marked_at=r.marked_at,
+        )
+        for r in rows
+    ]
 
 
 # ─── Broadcasts ────────────────────────────────────────────────────────────────

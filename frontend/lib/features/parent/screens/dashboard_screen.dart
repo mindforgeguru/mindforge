@@ -64,12 +64,20 @@ class _ParentDashboardScreenState
     // on GoRouter navigations — both cause needless invalidations that keep the
     // dashboard in a permanent loading state. Skip lifecycle refreshes on web.
     if (kIsWeb) return;
-    if (state == AppLifecycleState.resumed && mounted) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    // Defer one frame so we don't pile WS reconnect + provider invalidate +
+    // Dio request onto the very frame Android is restoring after unlock.
+    // Doing it inline freezes the UI thread on some devices.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _wsSub?.cancel();
+      // Force a fresh socket — Doze can leave `_channel` non-null with a
+      // dead underlying socket, so reusing it silently drops events.
+      ref.read(webSocketClientProvider).forceReconnect();
       _connectWs();
       // Only invalidate — do NOT await the network call here.
       ref.invalidate(parentDashboardSummaryProvider(_todayString));
-    }
+    });
   }
 
   void _connectWs() {
@@ -938,26 +946,49 @@ class _TimetableCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Period badge
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: (sw * 0.018).clamp(6.0, 9.0),
-              vertical: (sw * 0.008).clamp(2.0, 4.0),
-            ),
-            decoration: BoxDecoration(
-              color: isNow
-                  ? Colors.white.withOpacity(0.18)
-                  : AppColors.iconContainer,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Text(
-              'P${slot.periodNumber}',
-              style: GoogleFonts.poppins(
-                fontSize: (sw * 0.025).clamp(9.0, 11.0),
-                fontWeight: FontWeight.w700,
-                color: onDark,
+          // Period badge + time range. Keeping the time on the badge row
+          // so a holiday card still shows when the period would have run.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: (sw * 0.018).clamp(6.0, 9.0),
+                  vertical: (sw * 0.008).clamp(2.0, 4.0),
+                ),
+                decoration: BoxDecoration(
+                  color: isNow
+                      ? Colors.white.withOpacity(0.18)
+                      : AppColors.iconContainer,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  'P${slot.periodNumber}',
+                  style: GoogleFonts.poppins(
+                    fontSize: (sw * 0.025).clamp(9.0, 11.0),
+                    fontWeight: FontWeight.w700,
+                    color: onDark,
+                  ),
+                ),
               ),
-            ),
+              if (slot.startTime != null) ...[
+                SizedBox(width: (sw * 0.014).clamp(4.0, 7.0)),
+                Expanded(
+                  child: Text(
+                    slot.endTime != null
+                        ? '${slot.startTime} – ${slot.endTime}'
+                        : slot.startTime!,
+                    style: GoogleFonts.poppins(
+                      fontSize: (sw * 0.018).clamp(7.0, 8.5),
+                      fontWeight: FontWeight.w600,
+                      color: onMuted,
+                    ),
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ],
           ),
           const Spacer(),
           // Subject
@@ -974,11 +1005,11 @@ class _TimetableCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
-          // Teacher • time
+          // Teacher (time moved into the badge row above)
           Text(
             slot.isHoliday
                 ? (slot.comment ?? '')
-                : '${slot.teacherUsername ?? 'Grade ${slot.grade}'}${slot.startTime != null ? ' • ${slot.startTime}' : ''}',
+                : (slot.teacherUsername ?? 'Grade ${slot.grade}'),
             style: GoogleFonts.poppins(
               fontSize: (sw * 0.024).clamp(8.5, 10.5),
               color: onMuted,

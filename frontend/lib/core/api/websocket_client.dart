@@ -49,6 +49,24 @@ class WebSocketClient {
     return _controller!.stream;
   }
 
+  /// Force a fresh socket for the current user. Call from lifecycle resume
+  /// handlers — Android Doze can kill the underlying socket without firing
+  /// onDone, so a stale `_channel` reference looks alive but isn't. This
+  /// closes the old channel, bumps the generation (cancels stale retry
+  /// timers), and opens a new one. The broadcast stream/controller is left
+  /// alone so existing subscribers keep receiving events.
+  void forceReconnect() {
+    final userId = _connectedUserId;
+    if (userId == null) return;
+    _generation++;
+    _pingTimer?.cancel();
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+    _connect(userId, _generation);
+  }
+
   void _connect(int userId, int generation) {
     // Bail out if this callback belongs to a stale reconnect cycle.
     if (generation != _generation) return;
@@ -100,10 +118,19 @@ class WebSocketClient {
         cancelOnError: false,
       );
 
-      // Send a ping every 30 seconds to keep connection alive
+      // Send a ping every 30 seconds to keep connection alive.
+      // Wrap in try/catch: after Android Doze kills the socket, `_channel`
+      // can stay non-null with a broken sink — adding to it then throws
+      // synchronously every 30 s, which can starve the event loop and
+      // freeze the UI. On error, drop the channel so the next resume (or
+      // onDone) reconnects cleanly.
       _pingTimer?.cancel();
       _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-        _channel?.sink.add('ping');
+        try {
+          _channel?.sink.add('ping');
+        } catch (_) {
+          _channel = null;
+        }
       });
     } catch (e) {
       // Retry connection after delay

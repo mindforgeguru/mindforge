@@ -145,8 +145,16 @@ class _HomeworkList extends ConsumerWidget {
                 itemCount: list.length,
                 separatorBuilder: (_, __) =>
                     SizedBox(height: _s(context, 8, min: 6, max: 12)),
-                itemBuilder: (ctx, i) =>
-                    _HomeworkCard(hw: list[i]),
+                itemBuilder: (ctx, i) {
+                  final hw = list[i];
+                  final completionsAsync = ref.watch(
+                      parentChildHomeworkCompletionsProvider);
+                  final completion = completionsAsync.maybeWhen(
+                    data: (m) => m[hw.id],
+                    orElse: () => null,
+                  );
+                  return _HomeworkCard(hw: hw, completion: completion);
+                },
               ),
       ),
     );
@@ -229,8 +237,10 @@ Widget _scrollableEmpty(BuildContext ctx,
 
 class _HomeworkCard extends StatelessWidget {
   final HomeworkModel hw;
+  // null = teacher hasn't recorded a status yet → render as "Pending".
+  final StudentHomeworkCompletion? completion;
 
-  const _HomeworkCard({required this.hw});
+  const _HomeworkCard({required this.hw, this.completion});
 
   @override
   Widget build(BuildContext context) {
@@ -322,18 +332,80 @@ class _HomeworkCard extends StatelessWidget {
 
             SizedBox(height: _s(context, 8, min: 6, max: 12)),
 
-            // ── Assigned date ─────────────────────────────────────────────
-            Text(
-              'Assigned ${DateFormat('dd MMM yyyy').format(hw.createdAt)}',
-              style: GoogleFonts.poppins(
-                fontSize: _fs(context, 10, min: 9, max: 12),
-                color: AppColors.textMuted,
-              ),
+            // ── Assigned date + completion status ─────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Assigned ${DateFormat('dd MMM yyyy').format(hw.createdAt)}',
+                    style: GoogleFonts.poppins(
+                      fontSize: _fs(context, 10, min: 9, max: 12),
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
+                _CompletionPill(completion: completion),
+              ],
             ),
           ],
         ),
       );
     });
+  }
+}
+
+/// Pill-style badge that mirrors the attendance present/absent indicator:
+/// green = teacher marked Complete, red = teacher marked Incomplete,
+/// grey  = teacher hasn't recorded a status yet.
+class _CompletionPill extends StatelessWidget {
+  final StudentHomeworkCompletion? completion;
+  const _CompletionPill({required this.completion});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color;
+    final IconData icon;
+    final String label;
+    if (completion == null) {
+      color = AppColors.textMuted;
+      icon = Icons.schedule;
+      label = 'Pending';
+    } else if (completion!.completed) {
+      color = AppColors.success;
+      icon = Icons.check_circle;
+      label = 'Complete';
+    } else {
+      color = AppColors.error;
+      icon = Icons.cancel_outlined;
+      label = 'Incomplete';
+    }
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: _s(context, 8, min: 6, max: 12),
+        vertical: _s(context, 3, min: 2, max: 5),
+      ),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.4), width: 0.8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon,
+              size: _s(context, 12, min: 10, max: 14), color: color),
+          SizedBox(width: _s(context, 4, min: 3, max: 6)),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: _fs(context, 10, min: 9, max: 12),
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

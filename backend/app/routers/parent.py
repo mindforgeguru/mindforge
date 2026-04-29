@@ -23,8 +23,12 @@ from app.schemas.fees import FeePaymentResponse, FeeStructureResponse, PaymentIn
 from app.schemas.grade import GradeResponse
 from app.schemas.test import TestResponse
 from app.schemas.timetable import TimetableSlotWithTeacherResponse
-from app.schemas.homework import HomeworkResponse, BroadcastResponse
-from app.models.homework import Homework, Broadcast
+from app.schemas.homework import (
+    HomeworkResponse,
+    BroadcastResponse,
+    StudentHomeworkCompletion,
+)
+from app.models.homework import Homework, HomeworkCompletion, Broadcast
 
 router = APIRouter()
 
@@ -323,6 +327,38 @@ async def get_child_homework(
         .order_by(Homework.created_at.desc())
     )
     return hw_result.scalars().all()
+
+
+@router.get(
+    "/child/homework/completions",
+    response_model=List[StudentHomeworkCompletion],
+)
+async def get_child_homework_completions(
+    db: AsyncSession = Depends(get_db),
+    current_parent: User = Depends(get_current_parent),
+):
+    """Return the linked child's homework completion rows."""
+    child = (await db.execute(
+        select(StudentProfile).where(
+            StudentProfile.parent_user_id == current_parent.id
+        )
+    )).scalar_one_or_none()
+    if not child:
+        raise HTTPException(status_code=404, detail="No linked child found")
+
+    rows = (await db.execute(
+        select(HomeworkCompletion).where(
+            HomeworkCompletion.student_id == child.user_id
+        )
+    )).scalars().all()
+    return [
+        StudentHomeworkCompletion(
+            homework_id=r.homework_id,
+            completed=r.completed,
+            marked_at=r.marked_at,
+        )
+        for r in rows
+    ]
 
 
 # ─── Broadcasts ────────────────────────────────────────────────────────────────

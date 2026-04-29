@@ -141,6 +141,19 @@ final teacherHomeworkProvider =
       .toList();
 });
 
+/// Roster + per-student completion status for a single homework, used by
+/// the teacher completion-tracking screen.
+final teacherHomeworkCompletionsProvider =
+    FutureProvider.family<List<HomeworkCompletionDetail>, int>(
+        (ref, homeworkId) async {
+  final api = ref.watch(apiClientProvider);
+  final raw = await api.listHomeworkCompletions(homeworkId);
+  return raw
+      .map((e) =>
+          HomeworkCompletionDetail.fromJson(e as Map<String, dynamic>))
+      .toList();
+});
+
 // ── Broadcasts ─────────────────────────────────────────────────────────────
 
 final teacherBroadcastsProvider =
