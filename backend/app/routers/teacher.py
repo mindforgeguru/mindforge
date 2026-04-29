@@ -1290,23 +1290,41 @@ async def _pending_hw_review_ids(
     today: date,
     db: AsyncSession,
 ) -> List[int]:
-    """Return ids of this teacher's HW for this grade whose review is still
-    incomplete: due on/before today, but not every active roster student has
-    a HomeworkCompletion row yet.
+    """Return at most one ID: the *most recent* HW this teacher created for
+    this grade whose completion roster is not yet fully recorded.
 
-    Used both as the server-side gate on POST /teacher/homework (a teacher
-    can't assign new homework for a grade until they've recorded yesterday's
-    completion) and by the dashboard workflow endpoint.
+    Holiday rule: a day is a working day iff a TimetableSlot exists, so HW
+    has no real "due date" — the next class day after creation is when it's
+    reviewed. We therefore drive review off the latest unreviewed HW the
+    teacher created, regardless of due_date. Older unreviewed HW (rare in
+    practice, only happens if the teacher skipped a review) are not gated;
+    only the most recent one blocks new HW creation.
+
+    Returns [] when the most recent HW is fully reviewed, when the teacher
+    has never created HW for this grade, or when the grade has no roster.
+
+    The `today` parameter is unused now but kept in the signature so callers
+    don't need to change.
     """
-    hw_rows = (await db.execute(
-        select(Homework).where(
+    # "Today" cuts off HW created today — that one belongs to the "Assign
+    # HW" step, not the "Review HW" step. Without this filter, the moment
+    # the teacher assigns today's HW, the review chip would flip back to
+    # blue for HW that's not yet due back.
+    today_start = datetime.combine(
+        today, datetime.min.time(), tzinfo=timezone.utc
+    )
+
+    latest = (await db.execute(
+        select(Homework)
+        .where(
             Homework.teacher_id == teacher_id,
             Homework.grade == grade,
-            Homework.due_date != None,  # noqa: E711 — legacy null-due rows skipped
-            Homework.due_date <= today,
+            Homework.created_at < today_start,
         )
-    )).scalars().all()
-    if not hw_rows:
+        .order_by(Homework.created_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if latest is None:
         return []
 
     roster_ids = {
@@ -1323,20 +1341,15 @@ async def _pending_hw_review_ids(
     if not roster_ids:
         return []
 
-    hw_ids = [h.id for h in hw_rows]
-    rows = (await db.execute(
-        select(HomeworkCompletion.homework_id, HomeworkCompletion.student_id)
-        .where(HomeworkCompletion.homework_id.in_(hw_ids))
-    )).all()
-    marked_by_hw: dict[int, set[int]] = {}
-    for hw_id, student_id in rows:
-        marked_by_hw.setdefault(hw_id, set()).add(student_id)
-
-    pending: List[int] = []
-    for hw in hw_rows:
-        if not roster_ids.issubset(marked_by_hw.get(hw.id, set())):
-            pending.append(hw.id)
-    return pending
+    marked_ids = {
+        row[0] for row in (await db.execute(
+            select(HomeworkCompletion.student_id)
+            .where(HomeworkCompletion.homework_id == latest.id)
+        )).all()
+    }
+    if roster_ids.issubset(marked_ids):
+        return []
+    return [latest.id]
 
 
 @router.post("/homework", response_model=HomeworkResponse, status_code=status.HTTP_201_CREATED)
@@ -1470,12 +1483,13 @@ async def _build_completions_response(
         )).scalars().all()
     }
 
-    # Attendance check uses the homework's due_date (the day the work was
-    # supposed to be brought back, which is also the day the teacher reviews
-    # it). A student absent that day couldn't have submitted it, so we lock
-    # them as Incomplete on the teacher screen. Falls back to assignment
-    # date for legacy rows that have no due_date.
-    attendance_date = hw.due_date or hw.created_at.date()
+    # Attendance check uses today (the day the review is happening). A
+    # student absent on the review day couldn't have brought their HW back
+    # to class, so we lock them as Incomplete on the teacher screen.
+    # The HW's due_date is informational only — actual review happens on
+    # whatever day the teacher next takes attendance, which may be days
+    # later if there have been holidays in between.
+    attendance_date = datetime.now(timezone.utc).date()
     att_rows = (await db.execute(
         select(Attendance).where(
             Attendance.grade == hw.grade,
@@ -1553,7 +1567,10 @@ async def upsert_homework_completions(
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found or not yours")
 
-    attendance_date = hw.due_date or hw.created_at.date()
+    # Same rule as the GET path: gate on today's attendance, not the HW's
+    # due_date. Holidays mean the review may legitimately happen days after
+    # the HW was originally assigned.
+    attendance_date = datetime.now(timezone.utc).date()
     att_rows = (await db.execute(
         select(Attendance).where(
             Attendance.grade == hw.grade,
@@ -1660,6 +1677,9 @@ async def get_today_workflow(
     today = datetime.now(timezone.utc).date()
     tomorrow = today + timedelta(days=1)
     lookback = today - timedelta(days=14)
+    today_start = datetime.combine(
+        today, datetime.min.time(), tzinfo=timezone.utc
+    )
 
     # Today's slots — definitive list of (grade, period) the teacher
     # is on the hook for today.
@@ -1739,29 +1759,26 @@ async def get_today_workflow(
         )
 
         # Distinguish "nothing to review" from "all reviewed". The HW review
-        # step is only "done" (green) when there *was* HW to review and it's
-        # all marked. If no HW was due today the step is N/A — the chip
-        # stays neutral instead of vacuously turning green.
+        # step is only "done" (green) when there *was* prior HW to review
+        # and it's all marked. If the teacher has never created HW for this
+        # grade before today, the step is N/A — the chip stays neutral
+        # instead of vacuously turning green.
         pending = await _pending_hw_review_ids(
             current_teacher.id, grade, today, db
         )
-        hw_due_count = (await db.execute(
+        prior_hw_count = (await db.execute(
             select(func.count()).select_from(Homework).where(
                 Homework.teacher_id == current_teacher.id,
                 Homework.grade == grade,
-                Homework.due_date != None,  # noqa: E711
-                Homework.due_date <= today,
+                Homework.created_at < today_start,
             )
         )).scalar_one()
-        review_applicable = hw_due_count > 0
+        review_applicable = prior_hw_count > 0
         review_complete = review_applicable and len(pending) == 0
 
         # "Assign new HW" is done when this teacher has created any
         # homework today for this grade, regardless of due_date — the
         # daily task is the act of assigning, not when it falls due.
-        today_start = datetime.combine(
-            today, datetime.min.time(), tzinfo=timezone.utc
-        )
         tomorrow_hw_count = (await db.execute(
             select(func.count()).select_from(Homework).where(
                 Homework.teacher_id == current_teacher.id,
