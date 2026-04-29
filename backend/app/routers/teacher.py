@@ -5,7 +5,7 @@ Teacher router — all endpoints require teacher role.
 import asyncio
 import io
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
@@ -1283,13 +1283,92 @@ async def publish_test(
 
 # ─── Homework ──────────────────────────────────────────────────────────────────
 
+
+async def _pending_hw_review_ids(
+    teacher_id: int,
+    grade: int,
+    today: date,
+    db: AsyncSession,
+) -> List[int]:
+    """Return ids of this teacher's HW for this grade whose review is still
+    incomplete: due on/before today, but not every active roster student has
+    a HomeworkCompletion row yet.
+
+    Used both as the server-side gate on POST /teacher/homework (a teacher
+    can't assign new homework for a grade until they've recorded yesterday's
+    completion) and by the dashboard workflow endpoint.
+    """
+    hw_rows = (await db.execute(
+        select(Homework).where(
+            Homework.teacher_id == teacher_id,
+            Homework.grade == grade,
+            Homework.due_date != None,  # noqa: E711 — legacy null-due rows skipped
+            Homework.due_date <= today,
+        )
+    )).scalars().all()
+    if not hw_rows:
+        return []
+
+    roster_ids = {
+        row[0] for row in (await db.execute(
+            select(User.id)
+            .join(StudentProfile, User.id == StudentProfile.user_id)
+            .where(
+                StudentProfile.grade == grade,
+                User.is_active == True,  # noqa: E712
+                User.is_approved == True,  # noqa: E712
+            )
+        )).all()
+    }
+    if not roster_ids:
+        return []
+
+    hw_ids = [h.id for h in hw_rows]
+    rows = (await db.execute(
+        select(HomeworkCompletion.homework_id, HomeworkCompletion.student_id)
+        .where(HomeworkCompletion.homework_id.in_(hw_ids))
+    )).all()
+    marked_by_hw: dict[int, set[int]] = {}
+    for hw_id, student_id in rows:
+        marked_by_hw.setdefault(hw_id, set()).add(student_id)
+
+    pending: List[int] = []
+    for hw in hw_rows:
+        if not roster_ids.issubset(marked_by_hw.get(hw.id, set())):
+            pending.append(hw.id)
+    return pending
+
+
 @router.post("/homework", response_model=HomeworkResponse, status_code=status.HTTP_201_CREATED)
 async def create_homework(
     payload: HomeworkCreate,
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """Create a homework assignment for a grade."""
+    """Create a homework assignment for a grade.
+
+    Workflow gate: refuses (409) if this teacher has any homework for the
+    same grade due on/before today whose completion review is unfinished.
+    The teacher must close out yesterday's review before assigning the next
+    day's work.
+    """
+    today = datetime.now(timezone.utc).date()
+    pending = await _pending_hw_review_ids(
+        current_teacher.id, payload.grade, today, db
+    )
+    if pending:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "homework_review_pending",
+                "message": (
+                    "Record yesterday's homework completion before assigning "
+                    "new homework for this grade."
+                ),
+                "pending_homework_ids": pending,
+            },
+        )
+
     hw = Homework(
         teacher_id=current_teacher.id,
         grade=payload.grade,
@@ -1391,10 +1470,12 @@ async def _build_completions_response(
         )).scalars().all()
     }
 
-    # Attendance check uses the homework's assigned date (created_at). A
-    # student who wasn't in class that day couldn't have done the homework,
-    # so we lock them as Incomplete on the teacher screen.
-    attendance_date = hw.created_at.date()
+    # Attendance check uses the homework's due_date (the day the work was
+    # supposed to be brought back, which is also the day the teacher reviews
+    # it). A student absent that day couldn't have submitted it, so we lock
+    # them as Incomplete on the teacher screen. Falls back to assignment
+    # date for legacy rows that have no due_date.
+    attendance_date = hw.due_date or hw.created_at.date()
     att_rows = (await db.execute(
         select(Attendance).where(
             Attendance.grade == hw.grade,
@@ -1472,7 +1553,7 @@ async def upsert_homework_completions(
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found or not yours")
 
-    attendance_date = hw.created_at.date()
+    attendance_date = hw.due_date or hw.created_at.date()
     att_rows = (await db.execute(
         select(Attendance).where(
             Attendance.grade == hw.grade,
@@ -1544,6 +1625,98 @@ async def upsert_homework_completions(
     })
 
     return await _build_completions_response(homework_id, db, current_teacher)
+
+
+# ─── Daily workflow ───────────────────────────────────────────────────────────
+
+@router.get("/today-workflow")
+async def get_today_workflow(
+    db: AsyncSession = Depends(get_db),
+    current_teacher: User = Depends(get_current_teacher),
+):
+    """Per-grade daily workflow snapshot for the teacher dashboard.
+
+    For each grade this teacher has slots for today, returns:
+      - is_holiday: every slot is flagged is_holiday OR (degenerate) the
+        grade has no slots at all today
+      - attendance_taken: any Attendance row exists for grade × today
+      - pending_review_homework_ids: this teacher's HW for the grade due
+        on/before today whose completion roster is not yet fully recorded
+      - can_assign_new_homework: attendance is in AND no pending reviews
+      - next_step: the one-word UI cue for the dashboard card
+
+    If the teacher has no slots anywhere today, `is_holiday_for_teacher`
+    is True and the grades list is empty.
+    """
+    today = datetime.now(timezone.utc).date()
+
+    my_slots = (await db.execute(
+        select(TimetableSlot).where(
+            TimetableSlot.teacher_id == current_teacher.id,
+            TimetableSlot.slot_date == today,
+        )
+    )).scalars().all()
+
+    by_grade: dict[int, list] = {}
+    for s in my_slots:
+        by_grade.setdefault(s.grade, []).append(s)
+
+    grade_results = []
+    for grade in sorted(by_grade.keys()):
+        slots = by_grade[grade]
+        non_holiday_slots = [s for s in slots if not s.is_holiday]
+        is_holiday = len(non_holiday_slots) == 0
+
+        if is_holiday:
+            grade_results.append({
+                "grade": grade,
+                "is_holiday": True,
+                "has_timetable": True,
+                "slots_count": len(slots),
+                "attendance_taken": False,
+                "pending_review_homework_ids": [],
+                "can_assign_new_homework": False,
+                "next_step": "holiday",
+            })
+            continue
+
+        att_count = (await db.execute(
+            select(func.count()).select_from(Attendance).where(
+                Attendance.grade == grade,
+                Attendance.date == today,
+            )
+        )).scalar_one()
+        attendance_taken = att_count > 0
+
+        pending = (
+            await _pending_hw_review_ids(current_teacher.id, grade, today, db)
+            if attendance_taken
+            else []
+        )
+
+        if not attendance_taken:
+            next_step = "take_attendance"
+        elif pending:
+            next_step = "review_homework"
+        else:
+            next_step = "assign_homework"
+
+        grade_results.append({
+            "grade": grade,
+            "is_holiday": False,
+            "has_timetable": True,
+            "slots_count": len(slots),
+            "attendance_taken": attendance_taken,
+            "pending_review_homework_ids": pending,
+            "can_assign_new_homework": attendance_taken and not pending,
+            "next_step": next_step,
+        })
+
+    return {
+        "date": today.isoformat(),
+        "is_holiday_for_teacher": len(grade_results) == 0,
+        "grades": grade_results,
+    }
 
 
 # ─── Broadcast ────────────────────────────────────────────────────────────────

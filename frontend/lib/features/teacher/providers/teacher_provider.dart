@@ -175,3 +175,10 @@ final teacherDashboardSummaryProvider =
   return api.getTeacherDashboardSummary()
       .timeout(const Duration(seconds: 45));
 });
+
+// Per-grade daily workflow snapshot used by the dashboard's workflow card.
+final teacherTodayWorkflowProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  return api.getTeacherTodayWorkflow();
+});

@@ -983,6 +983,15 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
+  /// Per-grade workflow snapshot used by the teacher dashboard card.
+  /// Shape: { date, is_holiday_for_teacher, grades: [{grade, is_holiday,
+  /// attendance_taken, pending_review_homework_ids, can_assign_new_homework,
+  /// next_step}] }
+  Future<Map<String, dynamic>> getTeacherTodayWorkflow() async {
+    final res = await _dio.get('/teacher/today-workflow');
+    return res.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> getParentDashboardSummary({String? date}) async {
     final res = await _dio.get('/parent/dashboard-summary', queryParameters: {
       if (date != null) 'date': date,

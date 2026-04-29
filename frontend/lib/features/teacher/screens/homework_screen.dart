@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -455,6 +456,30 @@ class _CreateHomeworkDialogState
       });
       widget.onCreated();
       if (mounted) Navigator.pop(context);
+    } on DioException catch (e) {
+      // 409 = workflow gate: there is HW for this grade due today/earlier
+      // whose review hasn't been finished. Surface a clear message instead
+      // of dumping the raw error.
+      if (mounted) {
+        final detail = e.response?.data is Map
+            ? (e.response!.data as Map)['detail']
+            : null;
+        final code = detail is Map ? detail['code'] : null;
+        if (e.response?.statusCode == 409 && code == 'homework_review_pending') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: AppColors.warning,
+              content: Text(
+                "Mark yesterday's homework completion before assigning new homework.",
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed: $e')),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -94,12 +94,18 @@ class _TeacherDashboardScreenState
         _showProfileUpdatedDialog(event['new_username'] as String?);
       } else if (eventType != null) {
         ref.invalidate(teacherDashboardSummaryProvider);
+        if (eventType == 'attendance_updated' ||
+            eventType == 'homework_added' ||
+            eventType == 'homework_completion_updated') {
+          ref.invalidate(teacherTodayWorkflowProvider);
+        }
       }
     });
   }
 
   Future<void> _refreshDashboard() async {
     ref.invalidate(teacherDashboardSummaryProvider);
+    ref.invalidate(teacherTodayWorkflowProvider);
     await ref
         .read(teacherDashboardSummaryProvider.future)
         .catchError((_) => <String, dynamic>{});
@@ -719,6 +725,20 @@ class _TeacherDashboardScreenState
                   ),
                 ],
               ),
+            ),
+          ),
+
+          // ── Today's workflow card ─────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final workflowAsync = ref.watch(teacherTodayWorkflowProvider);
+                return workflowAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (data) => _TodayWorkflowCard(data: data),
+                );
+              },
             ),
           ),
 
@@ -2007,4 +2027,253 @@ class _GradeAnalysisChartState extends State<_GradeAnalysisChart> {
       ),
     );
   }
+}
+
+// ─── Today's workflow card ────────────────────────────────────────────────────
+//
+// Surfaces the daily teacher workflow for each grade they teach today:
+//   timetable → attendance → review yesterday's HW → assign tomorrow's HW.
+// Backed by GET /teacher/today-workflow.
+
+class _TodayWorkflowCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _TodayWorkflowCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final isHoliday = data['is_holiday_for_teacher'] == true;
+    final grades = (data['grades'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.divider),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.checklist_rounded,
+                    size: 18, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Text("Today's workflow",
+                    style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (isHoliday)
+              _holidayBanner(context)
+            else if (grades.isEmpty)
+              _holidayBanner(context)
+            else
+              ...grades.map((g) => _GradeWorkflowRow(grade: g)).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _holidayBanner(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.beach_access_rounded,
+                size: 18, color: AppColors.success),
+            const SizedBox(width: 8),
+            Text('Today is a holiday — no classes scheduled.',
+                style: GoogleFonts.poppins(
+                    fontSize: 12, color: AppColors.textSecondary)),
+          ],
+        ),
+      );
+}
+
+class _GradeWorkflowRow extends StatelessWidget {
+  final Map<String, dynamic> grade;
+  const _GradeWorkflowRow({required this.grade});
+
+  @override
+  Widget build(BuildContext context) {
+    final g = grade['grade'] as int;
+    final isHoliday = grade['is_holiday'] == true;
+    final attendanceTaken = grade['attendance_taken'] == true;
+    final pending =
+        (grade['pending_review_homework_ids'] as List?)?.length ?? 0;
+    final canAssignNew = grade['can_assign_new_homework'] == true;
+    final nextStep = grade['next_step'] as String? ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('Grade $g',
+                    style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isHoliday ? 'Holiday' : _statusLabel(nextStep),
+                  style: GoogleFonts.poppins(
+                      fontSize: 11, color: AppColors.textSecondary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          if (!isHoliday) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _StepChip(
+                  label: 'Attendance',
+                  done: attendanceTaken,
+                  active: nextStep == 'take_attendance',
+                  onTap: () => context.go(
+                      '${RouteNames.teacherDashboard}/attendance'),
+                ),
+                _StepArrow(),
+                _StepChip(
+                  label: pending > 0 ? 'Review HW ($pending)' : 'Review HW',
+                  done: attendanceTaken && pending == 0,
+                  active: nextStep == 'review_homework',
+                  enabled: attendanceTaken,
+                  onTap: attendanceTaken
+                      ? () => context.go(
+                          '${RouteNames.teacherDashboard}/homework')
+                      : null,
+                ),
+                _StepArrow(),
+                _StepChip(
+                  label: 'Assign HW',
+                  done: false,
+                  active: nextStep == 'assign_homework',
+                  enabled: canAssignNew,
+                  onTap: canAssignNew
+                      ? () => context.go(
+                          '${RouteNames.teacherDashboard}/homework')
+                      : null,
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _statusLabel(String step) {
+    switch (step) {
+      case 'take_attendance':
+        return 'Take attendance';
+      case 'review_homework':
+        return "Review yesterday's homework";
+      case 'assign_homework':
+        return "Assign tomorrow's homework";
+      case 'holiday':
+        return 'Holiday';
+      default:
+        return '';
+    }
+  }
+}
+
+class _StepChip extends StatelessWidget {
+  final String label;
+  final bool done;
+  final bool active;
+  final bool enabled;
+  final VoidCallback? onTap;
+  const _StepChip({
+    required this.label,
+    required this.done,
+    required this.active,
+    this.enabled = true,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final base = done
+        ? AppColors.success
+        : active
+            ? AppColors.primary
+            : AppColors.textMuted;
+    return Expanded(
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.45,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: base.withOpacity(0.08),
+              border: Border.all(
+                  color: active ? base : base.withOpacity(0.4),
+                  width: active ? 1.4 : 1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  done
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 13,
+                  color: base,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                        fontSize: 10.5,
+                        fontWeight:
+                            active ? FontWeight.w600 : FontWeight.w500,
+                        color: base),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StepArrow extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) =>
+      const Icon(Icons.chevron_right_rounded,
+          size: 14, color: AppColors.textMuted);
 }
