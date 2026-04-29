@@ -46,11 +46,28 @@ class HomeworkCompletionBulkUpdate(BaseModel):
 
 
 class HomeworkCompletionDetail(BaseModel):
-    """Teacher-facing row: the student's identity plus their status."""
+    """Teacher-facing row: the student's identity plus their status.
+
+    `was_absent` is True if the student has any absent attendance row on
+    the homework's date. The teacher screen renders these rows as locked
+    (incomplete, no toggle) — a student who didn't attend cannot have
+    completed that day's homework.
+    """
     student_id: int
     username: str
     completed: bool
     marked_at: Optional[datetime] = None
+    was_absent: bool = False
+
+
+class HomeworkCompletionsResponse(BaseModel):
+    """Wraps the per-student rows with metadata the teacher screen needs:
+    which date attendance was checked against, and whether attendance has
+    been recorded at all (to gate the Submit button).
+    """
+    attendance_date: str  # YYYY-MM-DD
+    attendance_recorded: bool
+    students: List[HomeworkCompletionDetail]
 
 
 class StudentHomeworkCompletion(BaseModel):

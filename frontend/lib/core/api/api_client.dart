@@ -860,18 +860,18 @@ class ApiClient {
 
   // ── Homework completions (Teacher) ────────────────────────────────────────
 
-  Future<List<dynamic>> listHomeworkCompletions(int homeworkId) async {
+  Future<Map<String, dynamic>> listHomeworkCompletions(int homeworkId) async {
     final res = await _dio.get('/teacher/homework/$homeworkId/completions');
-    return res.data as List<dynamic>;
+    return res.data as Map<String, dynamic>;
   }
 
-  Future<List<dynamic>> upsertHomeworkCompletions(
+  Future<Map<String, dynamic>> upsertHomeworkCompletions(
       int homeworkId, List<Map<String, dynamic>> records) async {
     final res = await _dio.put(
       '/teacher/homework/$homeworkId/completions',
       data: {'records': records},
     );
-    return res.data as List<dynamic>;
+    return res.data as Map<String, dynamic>;
   }
 
   // ── Homework (Student) ────────────────────────────────────────────────────

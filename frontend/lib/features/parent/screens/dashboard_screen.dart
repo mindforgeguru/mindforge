@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/api/websocket_client.dart';
+import '../../../core/models/grade.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/providers/badge_provider.dart';
@@ -507,6 +509,67 @@ class _ParentDashboardScreenState
                     : _TimetableHScroll(slots: slots),
               );
             },
+          ),
+
+          // ── Recent Test Marks (latest 10, oldest → newest) ────────────
+          SliverToBoxAdapter(
+            child: _DashSectionHeader(
+              icon: Icons.bar_chart_rounded,
+              title: 'Recent Test Marks',
+              onSeeAll: () =>
+                  context.go('${RouteNames.parentDashboard}/grades'),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: summaryAsync.when(
+              skipLoadingOnReload: true,
+              loading: () =>
+                  const ShimmerCards(count: 1, cardHeight: 200),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (summary) {
+                final raw = (summary['child_grades'] as List<dynamic>? ?? []);
+                final list = raw
+                    .map((e) =>
+                        GradeModel.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                return _RecentMarksChart(grades: list);
+              },
+            ),
+          ),
+
+          // ── Homework completion (ring pie) ────────────────────────────
+          SliverToBoxAdapter(
+            child: _DashSectionHeader(
+              icon: Icons.donut_large_rounded,
+              title: 'Homework Status',
+              onSeeAll: () =>
+                  context.go('${RouteNames.parentDashboard}/homework'),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Consumer(builder: (context, ref, _) {
+              final completionsAsync = ref.watch(
+                  parentChildHomeworkCompletionsProvider);
+              return summaryAsync.when(
+                skipLoadingOnReload: true,
+                loading: () =>
+                    const ShimmerCards(count: 1, cardHeight: 220),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (summary) {
+                  final hwIds = (summary['homework'] as List<dynamic>? ?? [])
+                      .map((e) =>
+                          (e as Map<String, dynamic>)['id'] as int)
+                      .toSet();
+                  final map = completionsAsync.maybeWhen(
+                    data: (m) => m,
+                    orElse: () =>
+                        <int, StudentHomeworkCompletion>{},
+                  );
+                  return _HomeworkCompletionPie(
+                      homeworkIds: hwIds, completions: map);
+                },
+              );
+            }),
           ),
 
           // ── Recent Homework ───────────────────────────────────────────
@@ -1121,4 +1184,266 @@ bool _isNew(DateTime? lastSeen, DateTime? latest) {
   if (latest == null) return false;
   if (lastSeen == null) return true;
   return latest.isAfter(lastSeen);
+}
+
+// ─── Mobile dashboard: rolling 10-test marks chart (% on Y) ────────────────────
+
+class _RecentMarksChart extends StatelessWidget {
+  final List<GradeModel> grades;
+  const _RecentMarksChart({required this.grades});
+
+  static const _palette = <Color>[
+    Color(0xFF3B82F6), Color(0xFF10B981), Color(0xFFF59E0B),
+    Color(0xFFEF4444), Color(0xFF8B5CF6), Color(0xFF14B8A6),
+    Color(0xFFF97316), Color(0xFFEC4899), Color(0xFF22C55E),
+    Color(0xFF6366F1),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    if (grades.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Text(
+          'No test marks yet',
+          style: GoogleFonts.poppins(
+              fontSize: 11, color: AppColors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    final window = grades.take(10).toList().reversed.toList();
+    const yCeiling = 100.0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEAEEF3)),
+        ),
+        padding: const EdgeInsets.fromLTRB(8, 16, 12, 12),
+        child: SizedBox(
+          height: 200,
+          child: BarChart(
+            BarChartData(
+              maxY: yCeiling,
+              minY: 0,
+              alignment: BarChartAlignment.spaceAround,
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: yCeiling / 4,
+                getDrawingHorizontalLine: (_) =>
+                    FlLine(color: const Color(0xFFE5E7EB), strokeWidth: 1),
+              ),
+              borderData: FlBorderData(show: false),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 32,
+                    interval: yCeiling / 4,
+                    getTitlesWidget: (v, _) => Text('${v.toInt()}%',
+                        style: GoogleFonts.poppins(
+                            fontSize: 9, color: AppColors.textMuted)),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 26,
+                    getTitlesWidget: (v, _) {
+                      final i = v.toInt();
+                      if (i < 0 || i >= window.length) {
+                        return const SizedBox.shrink();
+                      }
+                      final s = window[i].subject;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          s.length > 4 ? s.substring(0, 4) : s,
+                          style: GoogleFonts.poppins(
+                              fontSize: 9, color: AppColors.textMuted),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+              ),
+              barGroups: List.generate(window.length, (i) {
+                return BarChartGroupData(
+                  x: i,
+                  barRods: [
+                    BarChartRodData(
+                      toY: window[i].percentage.clamp(0.0, 100.0),
+                      color: _palette[i % _palette.length],
+                      width: 16,
+                      borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4)),
+                    ),
+                  ],
+                );
+              }),
+            ),
+            swapAnimationDuration:
+                const Duration(milliseconds: 350),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Mobile dashboard: homework completion ring pie ────────────────────────────
+//
+// Uses the dashboard's `homework` list (visible/active homeworks for the
+// child) plus the completion map. Buckets:
+//   • complete   — teacher marked the row as completed
+//   • incomplete — teacher marked the row as not completed
+//   • pending    — teacher hasn't recorded a status yet
+//
+// Color palette is intentionally distinct from the attendance pie so the
+// two charts don't bleed into each other visually.
+
+class _HomeworkCompletionPie extends StatelessWidget {
+  final Set<int> homeworkIds;
+  final Map<int, StudentHomeworkCompletion> completions;
+  const _HomeworkCompletionPie({
+    required this.homeworkIds,
+    required this.completions,
+  });
+
+  static const _completeColor = Color(0xFF6366F1);   // indigo
+  static const _incompleteColor = Color(0xFFEC4899); // pink
+  static const _pendingColor = Color(0xFF94A3B8);    // slate-400
+
+  @override
+  Widget build(BuildContext context) {
+    if (homeworkIds.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Text(
+          'No homework assigned yet',
+          style: GoogleFonts.poppins(
+              fontSize: 11, color: AppColors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    var complete = 0, incomplete = 0, pending = 0;
+    for (final hwId in homeworkIds) {
+      final c = completions[hwId];
+      if (c == null) {
+        pending++;
+      } else if (c.completed) {
+        complete++;
+      } else {
+        incomplete++;
+      }
+    }
+    final total = complete + incomplete + pending;
+
+    final sections = <PieChartSectionData>[];
+    void addSection(int count, Color color) {
+      if (count == 0) return;
+      final pct = count / total * 100;
+      sections.add(PieChartSectionData(
+        value: count.toDouble(),
+        color: color,
+        radius: 42,
+        title: '${pct.toStringAsFixed(0)}%',
+        titleStyle: GoogleFonts.poppins(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ));
+    }
+    addSection(complete, _completeColor);
+    addSection(incomplete, _incompleteColor);
+    addSection(pending, _pendingColor);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEAEEF3)),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 160,
+              child: PieChart(
+                PieChartData(
+                  startDegreeOffset: -90,
+                  sectionsSpace: 2,
+                  // Larger center hole = ring/donut style.
+                  centerSpaceRadius: 50,
+                  sections: sections,
+                ),
+                swapAnimationDuration:
+                    const Duration(milliseconds: 350),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                _PieLegendDot(
+                    color: _completeColor,
+                    label: 'Complete  ·  $complete'),
+                _PieLegendDot(
+                    color: _incompleteColor,
+                    label: 'Incomplete  ·  $incomplete'),
+                _PieLegendDot(
+                    color: _pendingColor,
+                    label: 'Pending  ·  $pending'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PieLegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _PieLegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+              color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: AppColors.primary,
+          ),
+        ),
+      ],
+    );
+  }
 }

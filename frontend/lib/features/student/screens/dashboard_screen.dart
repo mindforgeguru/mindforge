@@ -547,6 +547,41 @@ class _StudentDashboardScreenState
             }),
           ),
 
+          // ── Homework completion (ring pie) ────────────────────────────
+          SliverToBoxAdapter(
+            child: _DashSectionHeader(
+              icon: Icons.donut_large_rounded,
+              title: 'Homework Status',
+              onSeeAll: () => context.go(
+                  '${RouteNames.studentDashboard}/homework'),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Consumer(builder: (context, ref, _) {
+              final completionsAsync = ref.watch(
+                  studentHomeworkCompletionsProvider);
+              return summaryAsync.when(
+                skipLoadingOnReload: true,
+                loading: () =>
+                    const ShimmerCards(count: 1, cardHeight: 220),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (summary) {
+                  final hwIds = (summary['homework'] as List<dynamic>? ?? [])
+                      .map((e) =>
+                          (e as Map<String, dynamic>)['id'] as int)
+                      .toSet();
+                  final map = completionsAsync.maybeWhen(
+                    data: (m) => m,
+                    orElse: () =>
+                        <int, StudentHomeworkCompletion>{},
+                  );
+                  return _HomeworkCompletionPie(
+                      homeworkIds: hwIds, completions: map);
+                },
+              );
+            }),
+          ),
+
           // ── Recent Homework ───────────────────────────────────────────
           SliverToBoxAdapter(
             child: _DashSectionHeader(
@@ -1592,15 +1627,11 @@ class _RecentMarksChart extends StatelessWidget {
     }
 
     final window = grades.take(10).toList().reversed.toList();
-    final maxMark = window
-        .map((g) => g.marksObtained)
-        .fold<double>(0, (a, b) => b > a ? b : a);
-    // Round y-axis ceiling up to a nice multiple so gridlines land on whole
-    // numbers; minimum of 10 so a single low score still renders a sensible
-    // chart instead of a giant bar against a tiny axis.
-    final yCeiling = maxMark <= 0
-        ? 10.0
-        : (maxMark / 10).ceilToDouble() * 10;
+    // Y-axis is percentage, fixed 0–100 so bars are comparable across tests
+    // even when raw maxMarks differ (a 10/10 quiz vs a 70/100 exam render at
+    // the same height of 100% rather than the small bar dominating the big
+    // bar at raw value).
+    const yCeiling = 100.0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -1630,10 +1661,10 @@ class _RecentMarksChart extends StatelessWidget {
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 30,
+                    reservedSize: 32,
                     interval: yCeiling / 4,
                     getTitlesWidget: (v, _) => Text(
-                      v.toInt().toString(),
+                      '${v.toInt()}%',
                       style: GoogleFonts.poppins(
                           fontSize: 9, color: AppColors.textMuted),
                     ),
@@ -1670,7 +1701,7 @@ class _RecentMarksChart extends StatelessWidget {
                   x: i,
                   barRods: [
                     BarChartRodData(
-                      toY: window[i].marksObtained,
+                      toY: window[i].percentage.clamp(0.0, 100.0),
                       color: _palette[i % _palette.length],
                       width: 16,
                       borderRadius: const BorderRadius.vertical(
@@ -1841,6 +1872,120 @@ class _PieLegendDot extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─── Mobile dashboard: homework completion ring pie ────────────────────────────
+//
+// Buckets active homework into Complete / Incomplete / Pending using the
+// completion provider. Distinct color palette from the attendance pie so
+// the two charts don't look like the same chart twice.
+
+class _HomeworkCompletionPie extends StatelessWidget {
+  final Set<int> homeworkIds;
+  final Map<int, StudentHomeworkCompletion> completions;
+  const _HomeworkCompletionPie({
+    required this.homeworkIds,
+    required this.completions,
+  });
+
+  static const _completeColor = Color(0xFF6366F1);   // indigo
+  static const _incompleteColor = Color(0xFFEC4899); // pink
+  static const _pendingColor = Color(0xFF94A3B8);    // slate-400
+
+  @override
+  Widget build(BuildContext context) {
+    if (homeworkIds.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Text(
+          'No homework assigned yet',
+          style: GoogleFonts.poppins(
+              fontSize: 11, color: AppColors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    var complete = 0, incomplete = 0, pending = 0;
+    for (final hwId in homeworkIds) {
+      final c = completions[hwId];
+      if (c == null) {
+        pending++;
+      } else if (c.completed) {
+        complete++;
+      } else {
+        incomplete++;
+      }
+    }
+    final total = complete + incomplete + pending;
+
+    final sections = <PieChartSectionData>[];
+    void addSection(int count, Color color) {
+      if (count == 0) return;
+      final pct = count / total * 100;
+      sections.add(PieChartSectionData(
+        value: count.toDouble(),
+        color: color,
+        radius: 42,
+        title: '${pct.toStringAsFixed(0)}%',
+        titleStyle: GoogleFonts.poppins(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ));
+    }
+    addSection(complete, _completeColor);
+    addSection(incomplete, _incompleteColor);
+    addSection(pending, _pendingColor);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEAEEF3)),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 160,
+              child: PieChart(
+                PieChartData(
+                  startDegreeOffset: -90,
+                  sectionsSpace: 2,
+                  // Larger center hole = ring/donut style.
+                  centerSpaceRadius: 50,
+                  sections: sections,
+                ),
+                swapAnimationDuration:
+                    const Duration(milliseconds: 350),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                _PieLegendDot(
+                    color: _completeColor,
+                    label: 'Complete  ·  $complete'),
+                _PieLegendDot(
+                    color: _incompleteColor,
+                    label: 'Incomplete  ·  $incomplete'),
+                _PieLegendDot(
+                    color: _pendingColor,
+                    label: 'Pending  ·  $pending'),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

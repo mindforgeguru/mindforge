@@ -42,18 +42,22 @@ class HomeworkModel {
 }
 
 /// Teacher-facing row in the homework-completion screen: a student plus
-/// whether they've completed this homework.
+/// whether they've completed this homework. `wasAbsent` means the student
+/// has at least one absent attendance row on the homework's assigned date —
+/// the teacher screen renders these as locked Incomplete.
 class HomeworkCompletionDetail {
   final int studentId;
   final String username;
   final bool completed;
   final DateTime? markedAt;
+  final bool wasAbsent;
 
   const HomeworkCompletionDetail({
     required this.studentId,
     required this.username,
     required this.completed,
     this.markedAt,
+    this.wasAbsent = false,
   });
 
   factory HomeworkCompletionDetail.fromJson(Map<String, dynamic> json) =>
@@ -64,6 +68,32 @@ class HomeworkCompletionDetail {
         markedAt: json['marked_at'] != null
             ? DateTime.parse(json['marked_at'] as String)
             : null,
+        wasAbsent: json['was_absent'] as bool? ?? false,
+      );
+}
+
+/// Wrapped server response: per-student rows + attendance metadata so
+/// the teacher screen can render the "mark attendance first" warning
+/// without a second round trip.
+class HomeworkCompletionsResponse {
+  final String attendanceDate; // YYYY-MM-DD
+  final bool attendanceRecorded;
+  final List<HomeworkCompletionDetail> students;
+
+  const HomeworkCompletionsResponse({
+    required this.attendanceDate,
+    required this.attendanceRecorded,
+    required this.students,
+  });
+
+  factory HomeworkCompletionsResponse.fromJson(Map<String, dynamic> json) =>
+      HomeworkCompletionsResponse(
+        attendanceDate: json['attendance_date'] as String,
+        attendanceRecorded: json['attendance_recorded'] as bool,
+        students: (json['students'] as List<dynamic>)
+            .map((e) =>
+                HomeworkCompletionDetail.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
 

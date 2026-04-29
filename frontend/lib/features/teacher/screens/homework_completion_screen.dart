@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart' show DioException;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -53,10 +54,11 @@ class _TeacherHomeworkCompletionScreenState
       ..addEntries(records.map((r) => MapEntry(r.studentId, r.completed)));
   }
 
-  void _resetAll() {
+  void _resetAll(List<HomeworkCompletionDetail> records) {
     setState(() {
-      for (final id in _state.keys) {
-        _state[id] = false;
+      for (final r in records) {
+        // Absent rows stay locked Incomplete — Reset doesn't unlock them.
+        _state[r.studentId] = r.wasAbsent ? false : false;
       }
     });
   }
@@ -82,6 +84,21 @@ class _TeacherHomeworkCompletionScreenState
                 ? 'Homework status updated successfully!'
                 : 'Homework status submitted successfully!'),
             backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      // 400 = backend rejected because attendance hasn't been recorded.
+      // Show the server's detail message — it names the date the teacher
+      // needs to mark.
+      final detail = e.response?.data is Map<String, dynamic>
+          ? (e.response!.data as Map<String, dynamic>)['detail']?.toString()
+          : null;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(detail ?? 'Error: $e'),
+            backgroundColor: AppColors.error,
           ),
         );
       }
@@ -128,7 +145,8 @@ class _TeacherHomeworkCompletionScreenState
           onRetry: () => ref.invalidate(
               teacherHomeworkCompletionsProvider(widget.homeworkId)),
         ),
-        data: (records) {
+        data: (response) {
+          final records = response.students;
           if (records.isEmpty) {
             return Center(
               child: Padding(
@@ -145,14 +163,21 @@ class _TeacherHomeworkCompletionScreenState
           }
 
           _seedFromRecords(records);
+          // Force-sync the local toggle state with absent rows on every
+          // build — backend always returns completed=false for absent
+          // students and we want the UI to mirror that even if the
+          // teacher previously toggled them on before attendance was
+          // entered.
+          for (final r in records) {
+            if (r.wasAbsent) _state[r.studentId] = false;
+          }
 
           final completeCount =
               _state.values.where((v) => v).length;
           final incompleteCount = records.length - completeCount;
-          // Anyone with a marked_at means a row already exists, so the
-          // teacher is updating rather than submitting fresh.
           final alreadySubmitted =
               records.any((r) => r.markedAt != null);
+          final attendanceMissing = !response.attendanceRecorded;
 
           return Column(
             children: [
@@ -161,7 +186,10 @@ class _TeacherHomeworkCompletionScreenState
                 complete: completeCount,
                 incomplete: incompleteCount,
               ),
-              if (alreadySubmitted)
+              if (attendanceMissing)
+                _AttendanceMissingBanner(
+                    attendanceDate: response.attendanceDate),
+              if (alreadySubmitted && !attendanceMissing)
                 _SubmittedBanner(),
               Expanded(
                 child: RefreshIndicator(
@@ -179,7 +207,12 @@ class _TeacherHomeworkCompletionScreenState
                         return _BottomActions(
                           submitting: _submitting,
                           isUpdate: alreadySubmitted,
-                          onReset: _resetAll,
+                          // Block Submit until attendance has been entered;
+                          // the backend will reject the call anyway, but
+                          // disabling the button prevents the round trip
+                          // and shows the user where the friction is.
+                          disabled: attendanceMissing,
+                          onReset: () => _resetAll(records),
                           onSubmit: () =>
                               _submit(isUpdate: alreadySubmitted),
                         );
@@ -189,8 +222,11 @@ class _TeacherHomeworkCompletionScreenState
                       return _StudentTile(
                         username: r.username,
                         completed: completed,
-                        onChanged: (v) => setState(
-                            () => _state[r.studentId] = v),
+                        wasAbsent: r.wasAbsent,
+                        onChanged: r.wasAbsent
+                            ? null
+                            : (v) => setState(
+                                () => _state[r.studentId] = v),
                       );
                     },
                   ),
@@ -347,63 +383,129 @@ class _SubmittedBanner extends StatelessWidget {
 class _StudentTile extends StatelessWidget {
   final String username;
   final bool completed;
-  final void Function(bool) onChanged;
+  final bool wasAbsent;
+  // null = locked (absent). Switch is disabled and shown unchanged.
+  final void Function(bool)? onChanged;
 
   const _StudentTile({
     required this.username,
     required this.completed,
+    required this.wasAbsent,
     required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final avatarRadius = R.fluid(context, 18, min: 15, max: 22);
+    final isLocked = wasAbsent;
+    // Visual treatment for locked rows: same red as Incomplete but with a
+    // distinct "Absent" label so the teacher knows why the toggle is off
+    // and uneditable.
+    final labelText = isLocked
+        ? 'Absent'
+        : (completed ? 'Complete' : 'Incomplete');
+    final labelColor = isLocked
+        ? AppColors.error
+        : (completed ? AppColors.success : AppColors.error);
+    return Opacity(
+      opacity: isLocked ? 0.7 : 1.0,
+      child: Container(
+        decoration: mindForgeCardDecoration(),
+        padding: EdgeInsets.symmetric(
+            horizontal: R.sp(context, 16, min: 12, max: 20),
+            vertical: R.sp(context, 10, min: 8, max: 14)),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: avatarRadius,
+              backgroundColor: completed && !isLocked
+                  ? AppColors.success.withOpacity(0.15)
+                  : AppColors.error.withOpacity(0.15),
+              child: Icon(
+                isLocked
+                    ? Icons.block
+                    : (completed
+                        ? Icons.check_circle_outline
+                        : Icons.radio_button_unchecked),
+                size: R.fluid(context, 20, min: 16, max: 24),
+                color: completed && !isLocked
+                    ? AppColors.success
+                    : AppColors.error,
+              ),
+            ),
+            SizedBox(width: R.sp(context, 12, min: 8, max: 16)),
+            Expanded(
+              child: Text(
+                username,
+                style: GoogleFonts.poppins(
+                  fontSize: _fs(context, 14, min: 12, max: 16),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              labelText,
+              style: GoogleFonts.poppins(
+                fontSize: _fs(context, 12, min: 10, max: 13),
+                fontWeight: FontWeight.w600,
+                color: labelColor,
+              ),
+            ),
+            SizedBox(width: R.sp(context, 4, min: 2, max: 8)),
+            Switch.adaptive(
+              value: completed && !isLocked,
+              activeColor: AppColors.success,
+              inactiveTrackColor: AppColors.error.withOpacity(0.3),
+              // null disables the switch — Flutter renders it greyed out.
+              onChanged: onChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Banner shown when attendance has not been recorded for the homework's
+// assigned date. Blocks Submit and tells the teacher exactly which date
+// to mark before they can record completion status.
+class _AttendanceMissingBanner extends StatelessWidget {
+  final String attendanceDate;
+  const _AttendanceMissingBanner({required this.attendanceDate});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      decoration: mindForgeCardDecoration(),
+      margin: EdgeInsets.fromLTRB(
+          R.sp(context, 16, min: 12, max: 20),
+          R.sp(context, 8, min: 6, max: 12),
+          R.sp(context, 16, min: 12, max: 20),
+          0),
       padding: EdgeInsets.symmetric(
-          horizontal: R.sp(context, 16, min: 12, max: 20),
-          vertical: R.sp(context, 10, min: 8, max: 14)),
+          horizontal: R.sp(context, 14, min: 10, max: 18),
+          vertical: R.sp(context, 10, min: 8, max: 13)),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.warning.withOpacity(0.6)),
+      ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: avatarRadius,
-            backgroundColor: completed
-                ? AppColors.success.withOpacity(0.15)
-                : AppColors.error.withOpacity(0.15),
-            child: Icon(
-              completed
-                  ? Icons.check_circle_outline
-                  : Icons.radio_button_unchecked,
-              size: R.fluid(context, 20, min: 16, max: 24),
-              color: completed ? AppColors.success : AppColors.error,
-            ),
-          ),
-          SizedBox(width: R.sp(context, 12, min: 8, max: 16)),
+          Icon(Icons.warning_amber_rounded,
+              color: AppColors.warning,
+              size: R.fluid(context, 20, min: 17, max: 24)),
+          SizedBox(width: R.sp(context, 8, min: 6, max: 10)),
           Expanded(
             child: Text(
-              username,
+              'Mark attendance for $attendanceDate first. '
+              'Homework status can only be recorded once attendance is taken.',
               style: GoogleFonts.poppins(
-                fontSize: _fs(context, 14, min: 12, max: 16),
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary,
-              ),
-              overflow: TextOverflow.ellipsis,
+                  fontSize: _fs(context, 12, min: 10, max: 13),
+                  color: AppColors.warning,
+                  fontWeight: FontWeight.w600),
             ),
-          ),
-          Text(
-            completed ? 'Complete' : 'Incomplete',
-            style: GoogleFonts.poppins(
-              fontSize: _fs(context, 12, min: 10, max: 13),
-              fontWeight: FontWeight.w600,
-              color: completed ? AppColors.success : AppColors.error,
-            ),
-          ),
-          SizedBox(width: R.sp(context, 4, min: 2, max: 8)),
-          Switch.adaptive(
-            value: completed,
-            activeColor: AppColors.success,
-            inactiveTrackColor: AppColors.error.withOpacity(0.3),
-            onChanged: onChanged,
           ),
         ],
       ),
@@ -414,12 +516,14 @@ class _StudentTile extends StatelessWidget {
 class _BottomActions extends StatelessWidget {
   final bool submitting;
   final bool isUpdate;
+  final bool disabled;
   final VoidCallback onReset;
   final VoidCallback onSubmit;
 
   const _BottomActions({
     required this.submitting,
     required this.isUpdate,
+    required this.disabled,
     required this.onReset,
     required this.onSubmit,
   });
@@ -431,6 +535,7 @@ class _BottomActions extends StatelessWidget {
         ? (isUpdate ? 'Updating…' : 'Submitting…')
         : (isUpdate ? 'Update Status' : 'Submit Status');
     final btnIcon = isUpdate ? Icons.edit_outlined : Icons.send_outlined;
+    final blocked = submitting || disabled;
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -444,7 +549,7 @@ class _BottomActions extends StatelessWidget {
               label: Text('Reset',
                   style: GoogleFonts.poppins(
                       fontSize: _fs(context, 14, min: 12, max: 16))),
-              onPressed: submitting ? null : onReset,
+              onPressed: blocked ? null : onReset,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.textMuted,
                 side: const BorderSide(color: AppColors.divider),
@@ -462,7 +567,7 @@ class _BottomActions extends StatelessWidget {
                   style: GoogleFonts.poppins(
                       fontSize: _fs(context, 14, min: 12, max: 16),
                       fontWeight: FontWeight.w600)),
-              onPressed: submitting ? null : onSubmit,
+              onPressed: blocked ? null : onSubmit,
               style: FilledButton.styleFrom(
                 backgroundColor: btnColor,
                 padding: const EdgeInsets.symmetric(vertical: 14),

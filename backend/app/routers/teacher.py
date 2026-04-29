@@ -35,6 +35,7 @@ from app.schemas.homework import (
     HomeworkResponse,
     HomeworkCompletionBulkUpdate,
     HomeworkCompletionDetail,
+    HomeworkCompletionsResponse,
     BroadcastCreate,
     BroadcastResponse,
 )
@@ -1324,22 +1325,18 @@ async def delete_homework(
 
 # ─── Homework completion tracking ─────────────────────────────────────────────
 
-@router.get(
-    "/homework/{homework_id}/completions",
-    response_model=List[HomeworkCompletionDetail],
-)
-async def list_homework_completions(
+async def _build_completions_response(
     homework_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_teacher: User = Depends(get_current_teacher),
-):
-    """Return one row per active student in the homework's grade. Students
-    without a saved completion record default to `completed=False` so the
-    teacher screen can render the full roster on first open.
+    db: AsyncSession,
+    teacher: User,
+) -> HomeworkCompletionsResponse:
+    """Internal helper used by both GET and PUT. Builds the wrapped response
+    with attendance metadata so the teacher screen can render warnings and
+    lock absent rows from a single fetch.
     """
     hw = (await db.execute(
         select(Homework).where(
-            Homework.id == homework_id, Homework.teacher_id == current_teacher.id
+            Homework.id == homework_id, Homework.teacher_id == teacher.id
         )
     )).scalar_one_or_none()
     if not hw:
@@ -1364,20 +1361,63 @@ async def list_homework_completions(
             )
         )).scalars().all()
     }
-    return [
+
+    # Attendance check uses the homework's assigned date (created_at). A
+    # student who wasn't in class that day couldn't have done the homework,
+    # so we lock them as Incomplete on the teacher screen.
+    attendance_date = hw.created_at.date()
+    att_rows = (await db.execute(
+        select(Attendance).where(
+            Attendance.grade == hw.grade,
+            Attendance.date == attendance_date,
+        )
+    )).scalars().all()
+
+    attendance_recorded = len(att_rows) > 0
+    absent_student_ids = {
+        a.student_id for a in att_rows
+        if a.status == AttendanceStatus.absent
+    }
+
+    students_out = [
         HomeworkCompletionDetail(
             student_id=s.id,
             username=s.username,
-            completed=existing[s.id].completed if s.id in existing else False,
+            completed=(
+                False if s.id in absent_student_ids
+                else (existing[s.id].completed if s.id in existing else False)
+            ),
             marked_at=existing[s.id].marked_at if s.id in existing else None,
+            was_absent=s.id in absent_student_ids,
         )
         for s in students
     ]
+    return HomeworkCompletionsResponse(
+        attendance_date=attendance_date.isoformat(),
+        attendance_recorded=attendance_recorded,
+        students=students_out,
+    )
+
+
+@router.get(
+    "/homework/{homework_id}/completions",
+    response_model=HomeworkCompletionsResponse,
+)
+async def list_homework_completions(
+    homework_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_teacher: User = Depends(get_current_teacher),
+):
+    """Roster + each student's completion status, plus attendance metadata
+    for the homework's assigned date so the teacher screen can render
+    warnings and lock absent rows.
+    """
+    return await _build_completions_response(homework_id, db, current_teacher)
 
 
 @router.put(
     "/homework/{homework_id}/completions",
-    response_model=List[HomeworkCompletionDetail],
+    response_model=HomeworkCompletionsResponse,
 )
 async def upsert_homework_completions(
     homework_id: int,
@@ -1385,8 +1425,15 @@ async def upsert_homework_completions(
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """Bulk insert/update completion rows for one homework. Sends a WS event
-    so each student's app refreshes its homework status without a manual pull.
+    """Bulk insert/update completion rows for one homework.
+
+    Two safety rules enforced server-side (so a stale client can't bypass
+    them):
+      1. Attendance for the homework's assigned date must be recorded
+         first — otherwise return 400. The teacher screen surfaces this as
+         a warning banner.
+      2. Students marked absent on that date are forced to completed=False
+         regardless of payload. They couldn't have done the homework.
     """
     hw = (await db.execute(
         select(Homework).where(
@@ -1395,6 +1442,26 @@ async def upsert_homework_completions(
     )).scalar_one_or_none()
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found or not yours")
+
+    attendance_date = hw.created_at.date()
+    att_rows = (await db.execute(
+        select(Attendance).where(
+            Attendance.grade == hw.grade,
+            Attendance.date == attendance_date,
+        )
+    )).scalars().all()
+    if not att_rows:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Mark attendance for {attendance_date.isoformat()} "
+                "before updating homework status."
+            ),
+        )
+    absent_student_ids = {
+        a.student_id for a in att_rows
+        if a.status == AttendanceStatus.absent
+    }
 
     # Reject student_ids that don't actually belong to this homework's grade —
     # cheap defence against a crafted payload trying to write rows for someone
@@ -1423,19 +1490,21 @@ async def upsert_homework_completions(
     for rec in payload.records:
         if rec.student_id not in valid_student_ids:
             continue
+        # Force absent students to incomplete regardless of what the client
+        # tried to send. See rule 2 above.
+        completed = False if rec.student_id in absent_student_ids else rec.completed
         if rec.student_id in existing:
-            existing[rec.student_id].completed = rec.completed
+            existing[rec.student_id].completed = completed
             existing[rec.student_id].marked_by = current_teacher.id
         else:
             db.add(HomeworkCompletion(
                 homework_id=homework_id,
                 student_id=rec.student_id,
-                completed=rec.completed,
+                completed=completed,
                 marked_by=current_teacher.id,
             ))
     await db.commit()
 
-    # Notify the affected grade so each student/parent app refreshes.
     await redis_manager.publish({
         "target_type": "grade",
         "grade": hw.grade,
@@ -1445,7 +1514,7 @@ async def upsert_homework_completions(
         },
     })
 
-    return await list_homework_completions(homework_id, db, current_teacher)
+    return await _build_completions_response(homework_id, db, current_teacher)
 
 
 # ─── Broadcast ────────────────────────────────────────────────────────────────
