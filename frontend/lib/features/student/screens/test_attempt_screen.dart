@@ -1,11 +1,11 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_client.dart';
-import '../../../core/models/test.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/student_provider.dart';
@@ -18,9 +18,15 @@ class TestAttemptScreen extends ConsumerStatefulWidget {
   ConsumerState<TestAttemptScreen> createState() => _TestAttemptScreenState();
 }
 
-class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
-  TestModel? _test;
+class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
+    with WidgetsBindingObserver {
+  // Attempt data fetched from /start
+  String _title = '';
+  double _totalMarks = 0;
+  List<Map<String, dynamic>> _questions = const [];
   bool _loading = true;
+  bool _loadFailed = false;
+
   int _currentIndex = 0;
 
   // question id string → selected/typed answer
@@ -32,52 +38,187 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
   int _initialSeconds = 0;
   bool _submitted = false;
 
+  // Autosave: every 20s, last sent snapshot to skip no-op saves
+  Timer? _autosaveTimer;
+  String _lastSavedSnapshot = '';
+
   @override
   void initState() {
     super.initState();
-    _loadTest();
+    WidgetsBinding.instance.addObserver(this);
+    _startAttempt();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autosaveTimer?.cancel();
     for (final c in _textCtrls.values) {
       c.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _loadTest() async {
-    final api = ref.read(apiClientProvider);
-    final pending = await api.getPendingTests();
-    final testData = pending.firstWhere(
-      (t) => t['id'] == widget.testId,
-      orElse: () => <String, dynamic>{},
-    );
-    if ((testData as Map).isEmpty) {
-      if (mounted) setState(() => _loading = false);
-      return;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Closing/backgrounding the app must NOT pause the test — the server
+    // already holds the deadline. On the way out, push whatever's been typed
+    // so it's safe if the deadline elapses while we're away. On the way back
+    // in, refetch the attempt: the server may have finalized it for us.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _flushAnswers();
+      _autosaveNow(silent: true);
+    } else if (state == AppLifecycleState.resumed && !_submitted) {
+      _refreshAttemptOnResume();
     }
-    final test = TestModel.fromJson(testData as Map<String, dynamic>);
+  }
 
-    // Build text controllers for non-selection questions
-    for (final q in test.questions ?? []) {
+  Future<void> _startAttempt() async {
+    final api = ref.read(apiClientProvider);
+    try {
+      final data = await api.startTestAttempt(widget.testId);
+      _applyAttemptResponse(data);
+      // If server returned a finalized attempt (i.e. deadline already passed),
+      // jump straight to the result dialog.
+      if (data['is_finalized'] == true) {
+        if (!mounted) return;
+        await _showResultDialog(
+          score: (data['score'] as num?)?.toDouble() ?? 0,
+          autoSubmitted: data['auto_submitted'] == true,
+        );
+        if (mounted) context.pop();
+        return;
+      }
+      _autosaveTimer = Timer.periodic(
+        const Duration(seconds: 20),
+        (_) => _autosaveNow(silent: true),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadFailed = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Could not start test: $e'),
+            backgroundColor: AppColors.error),
+      );
+    }
+  }
+
+  void _applyAttemptResponse(Map<String, dynamic> data) {
+    final qs = (data['questions'] as List<dynamic>? ?? const [])
+        .map((q) => Map<String, dynamic>.from(q as Map))
+        .toList();
+    final saved = (data['saved_answers'] as Map<String, dynamic>? ?? const {});
+
+    // (Re)build text controllers, prefilled with anything the server has saved.
+    for (final c in _textCtrls.values) {
+      c.dispose();
+    }
+    _textCtrls.clear();
+    for (final q in qs) {
       final qId = q['id'].toString();
       final qType = (q['type'] as String? ?? '').toLowerCase();
       if (qType != 'mcq' && qType != 'true_false') {
-        _textCtrls[qId] = TextEditingController();
+        _textCtrls[qId] = TextEditingController(
+          text: saved[qId]?.toString() ?? '',
+        );
       }
     }
 
+    _answers
+      ..clear()
+      ..addEntries(saved.entries.map((e) => MapEntry(e.key, e.value.toString())));
+    _lastSavedSnapshot = _answers.toString();
+
     setState(() {
-      _test = test;
+      _title = data['title'] as String? ?? '';
+      _totalMarks = (data['total_marks'] as num?)?.toDouble() ?? 0;
+      _questions = qs;
       _loading = false;
-      // 1 minute per question (timeLimitMinutes already set server-side)
-      _initialSeconds = (test.timeLimitMinutes ?? test.questionCount) * 60;
+      _initialSeconds = (data['remaining_seconds'] as num?)?.toInt() ?? 0;
     });
   }
 
-  List<Map<String, dynamic>> get _questions =>
-      _test?.questions?.cast<Map<String, dynamic>>() ?? [];
+  void _flushAnswers() {
+    for (final entry in _textCtrls.entries) {
+      final v = entry.value.text;
+      if (v.isNotEmpty) {
+        _answers[entry.key] = v;
+      } else {
+        _answers.remove(entry.key);
+      }
+    }
+  }
+
+  Future<void> _autosaveNow({bool silent = false}) async {
+    if (_submitted) return;
+    _flushAnswers();
+    final snapshot = _answers.toString();
+    if (snapshot == _lastSavedSnapshot) return;
+    final api = ref.read(apiClientProvider);
+    try {
+      await api.saveTestAnswers(
+        widget.testId,
+        Map<String, dynamic>.from(_answers),
+      );
+      _lastSavedSnapshot = snapshot;
+    } on DioException catch (e) {
+      // 410 = server finalized the attempt because the deadline passed.
+      if (e.response?.statusCode == 410) {
+        await _handleServerFinalization();
+        return;
+      }
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Autosave failed — will retry.')),
+        );
+      }
+    } catch (_) {
+      // Swallow other errors: autosave is best-effort, the timer will retry.
+    }
+  }
+
+  Future<void> _refreshAttemptOnResume() async {
+    final api = ref.read(apiClientProvider);
+    try {
+      final data = await api.startTestAttempt(widget.testId);
+      if (data['is_finalized'] == true) {
+        if (!mounted) return;
+        _submitted = true;
+        await _showResultDialog(
+          score: (data['score'] as num?)?.toDouble() ?? 0,
+          autoSubmitted: data['auto_submitted'] == true,
+        );
+        if (mounted) context.pop();
+        return;
+      }
+      // Resync remaining time so the on-screen timer reflects real time spent
+      // backgrounded.
+      if (!mounted) return;
+      setState(() {
+        _initialSeconds = (data['remaining_seconds'] as num?)?.toInt() ?? 0;
+      });
+    } catch (_) {
+      // Stale UI is fine; the next autosave will eventually surface a 410.
+    }
+  }
+
+  Future<void> _handleServerFinalization() async {
+    if (_submitted) return;
+    _submitted = true;
+    _autosaveTimer?.cancel();
+    ref.invalidate(pendingTestsProvider);
+    ref.invalidate(completedTestsProvider);
+    ref.invalidate(studentGradesProvider);
+    if (!mounted) return;
+    await _showResultDialog(score: 0, autoSubmitted: true, fromTimeout: true);
+    if (mounted) context.pop();
+  }
 
   void _goTo(int index) {
     if (index < 0 || index >= _questions.length) return;
@@ -91,17 +232,32 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
   int get _answeredCount =>
       _questions.where((q) => _answers.containsKey(q['id'].toString())).length;
 
+  Future<void> _showResultDialog({
+    required double score,
+    required bool autoSubmitted,
+    bool fromTimeout = false,
+  }) async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      useRootNavigator: false,
+      barrierDismissible: false,
+      builder: (_) => _ResultDialog(
+        score: score,
+        total: _totalMarks,
+        autoSubmitted: autoSubmitted,
+        fromTimeout: fromTimeout,
+        totalQuestions: _questions.length,
+        answered: _answeredCount,
+      ),
+    );
+  }
+
   Future<void> _submitTest({bool autoSubmitted = false}) async {
     if (_submitted) return;
-
-    // Flush text controller values into _answers before submitting
-    for (final entry in _textCtrls.entries) {
-      if (entry.value.text.isNotEmpty) {
-        _answers[entry.key] = entry.value.text;
-      }
-    }
-
+    _flushAnswers();
     setState(() => _submitted = true);
+    _autosaveTimer?.cancel();
 
     final api = ref.read(apiClientProvider);
     try {
@@ -115,22 +271,29 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
       ref.invalidate(studentGradesProvider);
 
       final score = (result['score'] as num?)?.toDouble() ?? 0;
-      final total = _test?.totalMarks ?? 0;
-
-      if (mounted) {
-        await showDialog(
-          context: context,
-      useRootNavigator: false,
-          barrierDismissible: false,
-          builder: (_) => _ResultDialog(
-            score: score,
-            total: total,
-            autoSubmitted: autoSubmitted,
-            totalQuestions: _questions.length,
-            answered: _answeredCount,
-          ),
-        );
+      final wasAuto = (result['auto_submitted'] as bool?) ?? autoSubmitted;
+      await _showResultDialog(score: score, autoSubmitted: wasAuto);
+      if (mounted) context.pop();
+    } on DioException catch (e) {
+      // 409 = already submitted (server finalized while we were away).
+      // 410 = window expired. Either way, the attempt is done.
+      final code = e.response?.statusCode;
+      if (code == 409 || code == 410) {
+        ref.invalidate(pendingTestsProvider);
+        ref.invalidate(completedTestsProvider);
+        ref.invalidate(studentGradesProvider);
+        await _showResultDialog(
+            score: 0, autoSubmitted: true, fromTimeout: code == 410);
         if (mounted) context.pop();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Submission failed: $e'),
+              backgroundColor: AppColors.error),
+        );
+        setState(() => _submitted = false);
       }
     } catch (e) {
       if (mounted) {
@@ -145,12 +308,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
   }
 
   Future<void> _showSubmitConfirmation() async {
-    // Flush current text answers
-    for (final entry in _textCtrls.entries) {
-      if (entry.value.text.isNotEmpty) {
-        _answers[entry.key] = entry.value.text;
-      }
-    }
+    _flushAnswers();
     final unanswered = _questions.length - _answeredCount;
     await showDialog(
       context: context,
@@ -182,7 +340,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (_test == null || _questions.isEmpty) {
+    if (_loadFailed || _questions.isEmpty) {
       return const Scaffold(
           body: Center(child: Text('Test not found or has no questions.')));
     }
@@ -192,29 +350,34 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
     final qType = (q['type'] as String? ?? '').toLowerCase();
     final isLast = _currentIndex == _questions.length - 1;
 
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_test!.title,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14)),
-            Text(
-              '$_answeredCount/${_questions.length} answered',
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.textSecondary),
+    // Block back-button: once started, the student must finish or run out
+    // the clock. Either path goes through _submitTest, which pops on success.
+    return PopScope(
+      canPop: _submitted,
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_title,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14)),
+              Text(
+                '$_answeredCount/${_questions.length} answered',
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+          actions: [
+            _CountdownBadge(
+              key: ValueKey(_initialSeconds),
+              initialSeconds: _initialSeconds,
+              onExpired: () => _submitTest(autoSubmitted: true),
             ),
           ],
         ),
-        actions: [
-          _CountdownBadge(
-            initialSeconds: _initialSeconds,
-            onExpired: () => _submitTest(autoSubmitted: true),
-          ),
-        ],
-      ),
       body: Column(
         children: [
           // ── Overall progress bar ─────────────────────────────────────────
@@ -353,6 +516,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -412,7 +576,11 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen> {
 class _CountdownBadge extends StatefulWidget {
   final int initialSeconds;
   final VoidCallback onExpired;
-  const _CountdownBadge({required this.initialSeconds, required this.onExpired});
+  const _CountdownBadge({
+    super.key,
+    required this.initialSeconds,
+    required this.onExpired,
+  });
 
   @override
   State<_CountdownBadge> createState() => _CountdownBadgeState();
@@ -687,6 +855,9 @@ class _ResultDialog extends StatelessWidget {
   final double score;
   final double total;
   final bool autoSubmitted;
+  // True when finalization happened because the deadline passed while the
+  // student was away from the screen (vs. timer running out in-app).
+  final bool fromTimeout;
   final int totalQuestions;
   final int answered;
 
@@ -694,6 +865,7 @@ class _ResultDialog extends StatelessWidget {
     required this.score,
     required this.total,
     required this.autoSubmitted,
+    this.fromTimeout = false,
     required this.totalQuestions,
     required this.answered,
   });
@@ -728,10 +900,12 @@ class _ResultDialog extends StatelessWidget {
                 color: AppColors.warning.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Text(
-                'Your test was auto-submitted when the timer ran out.',
+              child: Text(
+                fromTimeout
+                    ? 'The test was auto-submitted because the timer expired while the app was closed.'
+                    : 'Your test was auto-submitted when the timer ran out.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.warning, fontSize: 13),
+                style: const TextStyle(color: AppColors.warning, fontSize: 13),
               ),
             ),
           const SizedBox(height: 16),

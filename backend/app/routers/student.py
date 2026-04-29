@@ -2,7 +2,7 @@
 Student router — all endpoints require student role.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -21,7 +21,13 @@ from app.models.timetable import TimetableConfig, TimetableSlot
 from app.models.user import StudentProfile, User
 from app.schemas.attendance import AttendanceResponse, AttendanceSummary
 from app.schemas.grade import GradeResponse, GradeStats
-from app.schemas.test import TestResponse, TestSubmissionCreate, TestSubmissionResponse
+from app.schemas.test import (
+    TestAnswersSave,
+    TestAttemptResponse,
+    TestResponse,
+    TestSubmissionCreate,
+    TestSubmissionResponse,
+)
 from app.schemas.timetable import TimetableSlotWithTeacherResponse
 from app.schemas.homework import (
     HomeworkResponse,
@@ -311,6 +317,200 @@ async def get_my_grades(
 
 # ─── Tests ─────────────────────────────────────────────────────────────────────
 
+
+def _grade_submission(test: Test, answers: dict) -> float:
+    """Auto-grade the answers against the test's question key.
+
+    Pure function — does not touch the DB. Used both at /submit time and when
+    an in-progress attempt is finalized lazily after its deadline passes.
+    """
+    score = 0.0
+    questions = test.questions or []
+    for question in questions:
+        q_id = str(question.get("id"))
+        correct_answer = str(question.get("answer", "")).strip().lower()
+        student_answer = str((answers or {}).get(q_id, "")).strip().lower()
+        q_type = question.get("type", "").lower()
+        marks = question.get("marks", 1)
+
+        if q_type in ("mcq", "true_false", "fill_blank"):
+            if student_answer and student_answer == correct_answer:
+                score += marks
+        elif q_type in ("vsa", "numerical"):
+            if student_answer and correct_answer:
+                stop_words = {"the", "a", "an", "is", "are", "was", "were",
+                              "of", "in", "on", "at", "to", "for", "it", "its"}
+                correct_words = set(correct_answer.split()) - stop_words
+                student_words = set(student_answer.split()) - stop_words
+                if correct_words:
+                    overlap = len(correct_words & student_words) / len(correct_words)
+                    if overlap >= 0.5:
+                        score += marks
+    return score
+
+
+async def _finalize_submission(
+    submission: TestSubmission,
+    test: Test,
+    db: AsyncSession,
+    *,
+    auto_submitted: bool,
+    finalized_at: Optional[datetime] = None,
+) -> None:
+    """Score, persist, and broadcast the finalization of a TestSubmission.
+
+    Idempotent: if the submission is already finalized this is a no-op. Used
+    by /submit (manual finalization) and by the lazy expiry sweep.
+    """
+    if submission.is_finalized:
+        return
+
+    from app.models.grade import Grade, GradeType
+
+    score = _grade_submission(test, submission.answers or {})
+    submission.score = score
+    submission.auto_submitted = auto_submitted
+    submission.is_finalized = True
+    submission.submitted_at = finalized_at or datetime.now(timezone.utc)
+
+    db.add(
+        Grade(
+            student_id=submission.student_id,
+            teacher_id=test.teacher_id,
+            subject=test.subject,
+            chapter=f"Test: {test.title}",
+            test_id=test.id,
+            marks_obtained=score,
+            max_marks=test.total_marks,
+            grade_type=GradeType.online,
+        )
+    )
+    await db.commit()
+    await db.refresh(submission)
+
+    # Mark the test fully graded once every student in the grade has finalized.
+    student_count_result = await db.execute(
+        select(func.count()).select_from(StudentProfile).where(StudentProfile.grade == test.grade)
+    )
+    student_count = student_count_result.scalar_one()
+    finalized_count_result = await db.execute(
+        select(func.count())
+        .select_from(TestSubmission)
+        .where(
+            TestSubmission.test_id == test.id,
+            TestSubmission.is_finalized == True,  # noqa: E712
+        )
+    )
+    finalized_count = finalized_count_result.scalar_one()
+    if student_count > 0 and finalized_count >= student_count:
+        test.is_graded = True
+        await db.commit()
+        await redis_manager.publish({
+            "target_type": "broadcast",
+            "payload": {"event": "test_completed", "test_id": test.id},
+        })
+
+    await redis_manager.publish({
+        "target_type": "user",
+        "user_id": test.teacher_id,
+        "payload": {
+            "event": "test_submitted",
+            "test_id": test.id,
+            "student_id": submission.student_id,
+            "score": score,
+            "total_marks": test.total_marks,
+        },
+    })
+    await redis_manager.publish({
+        "target_type": "user",
+        "user_id": submission.student_id,
+        "payload": {
+            "event": "grade_added",
+            "subject": test.subject,
+            "marks_obtained": score,
+            "max_marks": test.total_marks,
+        },
+    })
+
+    profile_result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == submission.student_id)
+    )
+    student_profile = profile_result.scalar_one_or_none()
+    if student_profile and student_profile.parent_user_id:
+        await redis_manager.publish({
+            "target_type": "user",
+            "user_id": student_profile.parent_user_id,
+            "payload": {
+                "event": "child_grade_added",
+                "subject": test.subject,
+                "marks_obtained": score,
+                "max_marks": test.total_marks,
+            },
+        })
+
+
+async def _sweep_expired_attempts_for_student(
+    student_id: int, db: AsyncSession
+) -> None:
+    """Finalize any unfinalized attempts for this student whose deadline passed.
+
+    Cheap lazy sweep run from any student-facing endpoint that should reflect
+    a "you walked away from the app" auto-submission. Computes the score from
+    whatever answers were saved (zero if none), marks auto_submitted=True,
+    and stamps submitted_at with the actual deadline.
+    """
+    now = datetime.now(timezone.utc)
+    rows = await db.execute(
+        select(TestSubmission).where(
+            TestSubmission.student_id == student_id,
+            TestSubmission.is_finalized == False,  # noqa: E712
+            TestSubmission.attempt_expires_at != None,  # noqa: E711
+            TestSubmission.attempt_expires_at <= now,
+        )
+    )
+    expired = list(rows.scalars().all())
+    if not expired:
+        return
+
+    test_ids = {s.test_id for s in expired}
+    test_rows = await db.execute(select(Test).where(Test.id.in_(test_ids)))
+    tests_by_id = {t.id: t for t in test_rows.scalars().all()}
+    for sub in expired:
+        test = tests_by_id.get(sub.test_id)
+        if test is None:
+            continue
+        await _finalize_submission(
+            sub,
+            test,
+            db,
+            auto_submitted=True,
+            finalized_at=sub.attempt_expires_at,
+        )
+
+
+def _attempt_response(
+    submission: TestSubmission, test: Test, *, now: datetime
+) -> TestAttemptResponse:
+    deadline = submission.attempt_expires_at or test.expires_at or now
+    remaining = max(0, int((deadline - now).total_seconds()))
+    return TestAttemptResponse(
+        submission_id=submission.id,
+        test_id=test.id,
+        title=test.title,
+        subject=test.subject,
+        total_marks=test.total_marks,
+        time_limit_minutes=test.time_limit_minutes,
+        questions=test.questions or [],
+        saved_answers=submission.answers or {},
+        started_at=submission.started_at or now,
+        attempt_expires_at=deadline,
+        remaining_seconds=remaining,
+        is_finalized=submission.is_finalized,
+        score=submission.score,
+        auto_submitted=submission.auto_submitted,
+    )
+
+
 @router.get("/tests/pending", response_model=List[TestResponse])
 async def get_pending_tests(
     db: AsyncSession = Depends(get_db),
@@ -320,22 +520,26 @@ async def get_pending_tests(
     Get all online tests available to the student that:
     - Are published
     - Have not expired
-    - Have not been submitted by this student yet
+    - Have not been finalized by this student yet (in-progress attempts still
+      appear so the student can resume them)
     """
-    # Get student's grade
     profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
+    # Auto-grade anything whose deadline passed while the app was closed.
+    await _sweep_expired_attempts_for_student(current_student.id, db)
+
     now = datetime.now(timezone.utc)
 
-    # Get IDs of already submitted tests
-    submitted_result = await db.execute(
-        select(TestSubmission.test_id).where(TestSubmission.student_id == current_student.id)
+    finalized_result = await db.execute(
+        select(TestSubmission.test_id).where(
+            TestSubmission.student_id == current_student.id,
+            TestSubmission.is_finalized == True,  # noqa: E712
+        )
     )
-    submitted_ids = {row[0] for row in submitted_result.all()}
+    finalized_ids = {row[0] for row in finalized_result.all()}
 
-    # Fetch pending tests
     query = (
         select(Test)
         .where(
@@ -345,8 +549,8 @@ async def get_pending_tests(
             Test.expires_at > now,
         )
     )
-    if submitted_ids:
-        query = query.where(Test.id.notin_(submitted_ids))
+    if finalized_ids:
+        query = query.where(Test.id.notin_(finalized_ids))
     query = _apply_subject_filter(query, profile)
 
     result = await db.execute(query.order_by(Test.created_at.desc()))
@@ -378,24 +582,159 @@ async def get_completed_tests(
     db: AsyncSession = Depends(get_db),
     current_student: User = Depends(get_current_student),
 ):
-    """Get online tests the student has already submitted."""
+    """Get online tests the student has already finalized."""
     profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
-    submitted_result = await db.execute(
-        select(TestSubmission.test_id).where(TestSubmission.student_id == current_student.id)
+    await _sweep_expired_attempts_for_student(current_student.id, db)
+
+    finalized_result = await db.execute(
+        select(TestSubmission.test_id).where(
+            TestSubmission.student_id == current_student.id,
+            TestSubmission.is_finalized == True,  # noqa: E712
+        )
     )
-    submitted_ids = [row[0] for row in submitted_result.all()]
-    if not submitted_ids:
+    finalized_ids = [row[0] for row in finalized_result.all()]
+    if not finalized_ids:
         return []
 
     result = await db.execute(
         select(Test)
-        .where(Test.id.in_(submitted_ids), Test.test_type == TestType.online)
+        .where(Test.id.in_(finalized_ids), Test.test_type == TestType.online)
         .order_by(Test.created_at.desc())
     )
     return result.scalars().all()
+
+
+@router.post("/tests/{test_id}/start", response_model=TestAttemptResponse)
+async def start_test_attempt(
+    test_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_student: User = Depends(get_current_student),
+):
+    """
+    Start (or resume) the student's attempt at an online test.
+
+    A student may only ever have one attempt per test. The first call creates
+    a TestSubmission row and stamps an attempt_expires_at (start_time +
+    time_limit, capped by the test's expires_at). Subsequent calls return
+    the same row with whatever answers have been autosaved and the time left.
+
+    If the deadline has already passed, the attempt is finalized in place
+    (graded with whatever was saved) and the response carries is_finalized=True
+    so the client can show the result dialog.
+    """
+    test_result = await db.execute(select(Test).where(Test.id == test_id))
+    test = test_result.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found.")
+    if test.test_type != TestType.online:
+        raise HTTPException(status_code=400, detail="Only online tests can be attempted.")
+    if not test.is_published:
+        raise HTTPException(status_code=400, detail="Test is not published.")
+
+    now = datetime.now(timezone.utc)
+    if test.expires_at and test.expires_at < now:
+        raise HTTPException(status_code=410, detail="Test submission window has expired.")
+
+    sub_result = await db.execute(
+        select(TestSubmission).where(
+            TestSubmission.test_id == test_id,
+            TestSubmission.student_id == current_student.id,
+        )
+    )
+    submission = sub_result.scalar_one_or_none()
+
+    if submission is None:
+        # First attempt — lock the student in.
+        time_limit = test.time_limit_minutes
+        if time_limit and time_limit > 0:
+            attempt_deadline = now + timedelta(minutes=time_limit)
+            if test.expires_at and attempt_deadline > test.expires_at:
+                attempt_deadline = test.expires_at
+        else:
+            attempt_deadline = test.expires_at or (now + timedelta(days=3))
+
+        submission = TestSubmission(
+            test_id=test_id,
+            student_id=current_student.id,
+            answers={},
+            score=None,
+            started_at=now,
+            attempt_expires_at=attempt_deadline,
+            is_finalized=False,
+            auto_submitted=False,
+        )
+        db.add(submission)
+        await db.commit()
+        await db.refresh(submission)
+        return _attempt_response(submission, test, now=now)
+
+    # Existing attempt — finalize it lazily if the deadline already passed.
+    if (
+        not submission.is_finalized
+        and submission.attempt_expires_at
+        and submission.attempt_expires_at <= now
+    ):
+        await _finalize_submission(
+            submission,
+            test,
+            db,
+            auto_submitted=True,
+            finalized_at=submission.attempt_expires_at,
+        )
+
+    return _attempt_response(submission, test, now=now)
+
+
+@router.post("/tests/{test_id}/save", status_code=status.HTTP_200_OK)
+async def save_test_answers(
+    test_id: int,
+    payload: TestAnswersSave,
+    db: AsyncSession = Depends(get_db),
+    current_student: User = Depends(get_current_student),
+):
+    """
+    Autosave answers for an in-progress attempt.
+
+    Treated as a checkpoint — the latest call replaces the saved answer map.
+    If the attempt's deadline has passed this finalizes the submission and
+    returns 410 so the client can show the result dialog.
+    """
+    sub_result = await db.execute(
+        select(TestSubmission).where(
+            TestSubmission.test_id == test_id,
+            TestSubmission.student_id == current_student.id,
+        )
+    )
+    submission = sub_result.scalar_one_or_none()
+    if submission is None:
+        raise HTTPException(status_code=404, detail="No in-progress attempt found.")
+    if submission.is_finalized:
+        raise HTTPException(status_code=409, detail="Test already submitted.")
+
+    now = datetime.now(timezone.utc)
+    if submission.attempt_expires_at and submission.attempt_expires_at <= now:
+        test_result = await db.execute(select(Test).where(Test.id == test_id))
+        test = test_result.scalar_one_or_none()
+        if test is not None:
+            await _finalize_submission(
+                submission,
+                test,
+                db,
+                auto_submitted=True,
+                finalized_at=submission.attempt_expires_at,
+            )
+        raise HTTPException(status_code=410, detail="Time is up — attempt finalized.")
+
+    submission.answers = payload.answers
+    await db.commit()
+    return {"saved": True, "remaining_seconds": max(
+        0,
+        int((submission.attempt_expires_at - now).total_seconds())
+        if submission.attempt_expires_at else 0,
+    )}
 
 
 @router.post("/tests/{test_id}/submit", response_model=TestSubmissionResponse, status_code=status.HTTP_201_CREATED)
@@ -406,11 +745,13 @@ async def submit_test(
     current_student: User = Depends(get_current_student),
 ):
     """
-    Submit answers for an online test.
-    Auto-grades MCQ, true/false, fill-in-blank questions.
-    Saves a Grade record for the student.
+    Finalize the student's attempt at an online test.
+
+    Auto-grades against the question key. If a /start row already exists for
+    this student it is finalized in place; otherwise (legacy clients that
+    skipped /start) a new finalized submission is created. Submitting after
+    the attempt's deadline is treated as auto-submitted.
     """
-    # Validate test
     test_result = await db.execute(select(Test).where(Test.id == test_id))
     test = test_result.scalar_one_or_none()
     if not test:
@@ -420,129 +761,51 @@ async def submit_test(
     if test.expires_at and test.expires_at < now:
         raise HTTPException(status_code=410, detail="Test submission window has expired.")
 
-    # Check for duplicate submission
-    existing_sub = await db.execute(
+    sub_result = await db.execute(
         select(TestSubmission).where(
             TestSubmission.test_id == test_id,
             TestSubmission.student_id == current_student.id,
         )
     )
-    if existing_sub.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="You have already submitted this test.")
+    submission = sub_result.scalar_one_or_none()
 
-    # Auto-grade: exact match for MCQ/T-F/fill-blank; keyword match for VSA/numerical
-    score = 0.0
-    questions = test.questions or []
-    for question in questions:
-        q_id = str(question.get("id"))
-        correct_answer = str(question.get("answer", "")).strip().lower()
-        student_answer = str(payload.answers.get(q_id, "")).strip().lower()
-        q_type = question.get("type", "").lower()
-        marks = question.get("marks", 1)
-
-        if q_type in ("mcq", "true_false", "fill_blank"):
-            if student_answer == correct_answer:
-                score += marks
-        elif q_type in ("vsa", "numerical"):
-            # Keyword overlap: award full marks if ≥50% of answer keywords appear
-            if student_answer and correct_answer:
-                stop_words = {"the", "a", "an", "is", "are", "was", "were",
-                              "of", "in", "on", "at", "to", "for", "it", "its"}
-                correct_words = set(correct_answer.split()) - stop_words
-                student_words = set(student_answer.split()) - stop_words
-                if correct_words:
-                    overlap = len(correct_words & student_words) / len(correct_words)
-                    if overlap >= 0.5:
-                        score += marks
-
-    # Save submission
-    submission = TestSubmission(
-        test_id=test_id,
-        student_id=current_student.id,
-        answers=payload.answers,
-        score=score,
-        auto_submitted=payload.auto_submitted,
-    )
-    db.add(submission)
-
-    # Record as a Grade entry
-    from app.models.grade import Grade, GradeType
-    grade_record = Grade(
-        student_id=current_student.id,
-        teacher_id=test.teacher_id,
-        subject=test.subject,
-        chapter=f"Test: {test.title}",
-        test_id=test.id,
-        marks_obtained=score,
-        max_marks=test.total_marks,
-        grade_type=GradeType.online,
-    )
-    db.add(grade_record)
-
-    await db.commit()
-    await db.refresh(submission)
-
-    # Check if all students in this grade have now submitted — if so, mark test completed
-    student_count_result = await db.execute(
-        select(func.count()).select_from(StudentProfile).where(StudentProfile.grade == test.grade)
-    )
-    student_count = student_count_result.scalar_one()
-    submission_count_result = await db.execute(
-        select(func.count()).select_from(TestSubmission).where(TestSubmission.test_id == test_id)
-    )
-    submission_count = submission_count_result.scalar_one()
-    if student_count > 0 and submission_count >= student_count:
-        test.is_graded = True
+    if submission is None:
+        # Legacy / no-start path: create a one-shot finalized row.
+        submission = TestSubmission(
+            test_id=test_id,
+            student_id=current_student.id,
+            answers=payload.answers,
+            score=None,
+            started_at=now,
+            attempt_expires_at=now,
+            is_finalized=False,
+            auto_submitted=payload.auto_submitted,
+        )
+        db.add(submission)
         await db.commit()
-        await redis_manager.publish({
-            "target_type": "broadcast",
-            "payload": {
-                "event": "test_completed",
-                "test_id": test_id,
-            },
-        })
+        await db.refresh(submission)
+    elif submission.is_finalized:
+        raise HTTPException(status_code=409, detail="You have already submitted this test.")
+    else:
+        submission.answers = payload.answers
 
-    # Notify teacher of submission
-    await redis_manager.publish({
-        "target_type": "user",
-        "user_id": test.teacher_id,
-        "payload": {
-            "event": "test_submitted",
-            "test_id": test_id,
-            "student_id": current_student.id,
-            "score": score,
-            "total_marks": test.total_marks,
-        },
-    })
-
-    # Notify student of their own grade
-    await redis_manager.publish({
-        "target_type": "user",
-        "user_id": current_student.id,
-        "payload": {
-            "event": "grade_added",
-            "subject": test.subject,
-            "marks_obtained": score,
-            "max_marks": test.total_marks,
-        },
-    })
-
-    # Notify linked parent
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
+    deadline_passed = bool(
+        submission.attempt_expires_at and submission.attempt_expires_at <= now
     )
-    profile = profile_result.scalar_one_or_none()
-    if profile and profile.parent_user_id:
-        await redis_manager.publish({
-            "target_type": "user",
-            "user_id": profile.parent_user_id,
-            "payload": {
-                "event": "child_grade_added",
-                "subject": test.subject,
-                "marks_obtained": score,
-                "max_marks": test.total_marks,
-            },
-        })
+    auto_submitted = payload.auto_submitted or deadline_passed
+
+    finalized_at = (
+        submission.attempt_expires_at
+        if deadline_passed and submission.attempt_expires_at
+        else now
+    )
+    await _finalize_submission(
+        submission,
+        test,
+        db,
+        auto_submitted=auto_submitted,
+        finalized_at=finalized_at,
+    )
 
     return submission
 
@@ -571,6 +834,9 @@ async def get_test_review(
     submission = sub_result.scalar_one_or_none()
     if not submission:
         raise HTTPException(status_code=404, detail="No submission found for this test.")
+    # Don't leak the answer key while the attempt is still in progress.
+    if not submission.is_finalized:
+        raise HTTPException(status_code=409, detail="Attempt is still in progress.")
 
     return {
         "test_id": test.id,
@@ -909,10 +1175,14 @@ async def get_student_dashboard_summary(
     )
 
     # Tests
+    await _sweep_expired_attempts_for_student(current_student.id, db)
     now = datetime.now(timezone.utc)
     submitted_ids = {
         row[0] for row in (await db.execute(
-            select(TestSubmission.test_id).where(TestSubmission.student_id == current_student.id)
+            select(TestSubmission.test_id).where(
+                TestSubmission.student_id == current_student.id,
+                TestSubmission.is_finalized == True,  # noqa: E712
+            )
         )).all()
     }
     pending_q = select(Test).where(

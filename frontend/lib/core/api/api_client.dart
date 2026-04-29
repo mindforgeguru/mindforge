@@ -654,6 +654,26 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
+  /// Start (or resume) the student's single attempt at an online test.
+  /// Returns questions, any autosaved answers, and remaining_seconds.
+  /// If the deadline has already passed the response carries
+  /// is_finalized=true so the caller can show the result dialog.
+  Future<Map<String, dynamic>> startTestAttempt(int testId) async {
+    final res = await _dio.post('/student/tests/$testId/start');
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Autosave the in-progress attempt's answers. Returns remaining_seconds.
+  /// Throws DioException with status 410 once the deadline has passed
+  /// (server finalizes the attempt at that point).
+  Future<Map<String, dynamic>> saveTestAnswers(
+      int testId, Map<String, dynamic> answers) async {
+    final res = await _dio.post('/student/tests/$testId/save', data: {
+      'answers': answers,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
   // ── Parent ────────────────────────────────────────────────────────────────
 
   Future<List<dynamic>> getChildAttendance({int skip = 0, int limit = 50}) async {

@@ -90,6 +90,11 @@ class TestSubmissionCreate(BaseModel):
     auto_submitted: bool = False
 
 
+class TestAnswersSave(BaseModel):
+    """Autosave during an in-progress attempt."""
+    answers: Dict[str, Any]
+
+
 class TestSubmissionResponse(BaseModel):
     id: int
     test_id: int
@@ -100,3 +105,21 @@ class TestSubmissionResponse(BaseModel):
     auto_submitted: bool
 
     model_config = {"from_attributes": True}
+
+
+class TestAttemptResponse(BaseModel):
+    """Returned by /tests/{id}/start. Drives the in-progress attempt UI."""
+    submission_id: int
+    test_id: int
+    title: str
+    subject: str
+    total_marks: float
+    time_limit_minutes: Optional[int] = None
+    questions: List[Dict[str, Any]]
+    saved_answers: Dict[str, Any]
+    started_at: datetime
+    attempt_expires_at: datetime
+    remaining_seconds: int
+    is_finalized: bool
+    score: Optional[float] = None
+    auto_submitted: bool

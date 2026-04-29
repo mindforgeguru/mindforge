@@ -1084,17 +1084,46 @@ async def get_test_submissions(
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """List all student submissions for an online test (visible to all teachers)."""
+    """List all finalized student submissions for an online test.
+
+    Lazily finalizes any in-progress attempts whose deadline has passed so
+    students who walked away from the app are graded with whatever they had
+    saved (or zero) before this list is rendered.
+    """
     result = await db.execute(
         select(Test).where(Test.id == test_id)
     )
-    if not result.scalar_one_or_none():
+    test = result.scalar_one_or_none()
+    if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+
+    # Lazy expiry sweep for this test.
+    from app.routers.student import _finalize_submission
+    now = datetime.now(timezone.utc)
+    expired_rows = await db.execute(
+        select(TestSubmission).where(
+            TestSubmission.test_id == test_id,
+            TestSubmission.is_finalized == False,  # noqa: E712
+            TestSubmission.attempt_expires_at != None,  # noqa: E711
+            TestSubmission.attempt_expires_at <= now,
+        )
+    )
+    for sub in expired_rows.scalars().all():
+        await _finalize_submission(
+            sub,
+            test,
+            db,
+            auto_submitted=True,
+            finalized_at=sub.attempt_expires_at,
+        )
 
     rows = await db.execute(
         select(TestSubmission, User)
         .join(User, User.id == TestSubmission.student_id)
-        .where(TestSubmission.test_id == test_id)
+        .where(
+            TestSubmission.test_id == test_id,
+            TestSubmission.is_finalized == True,  # noqa: E712
+        )
         .order_by(User.username)
     )
     return [

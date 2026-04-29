@@ -58,7 +58,17 @@ class Test(Base):
 
 
 class TestSubmission(Base):
-    """Records a student's attempt at an online test."""
+    """Records a student's attempt at an online test.
+
+    Lifecycle:
+    - /start creates the row with is_finalized=False and an attempt_expires_at
+      stamp. Once that row exists the student can no longer "restart fresh"
+      — they can only resume with their saved answers, and once attempt_expires_at
+      passes the row is finalized lazily by the next student endpoint that
+      touches it (graded with whatever answers were saved, including none).
+    - /submit (or lazy expiry) sets is_finalized=True and stamps submitted_at
+      with the actual finalization time.
+    """
     __tablename__ = "test_submissions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -71,6 +81,15 @@ class TestSubmission(Base):
     # JSON: {question_id: answer_given, ...}
     answers: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=True
+    )
+    # The deadline this attempt must finish by (start_time + time_limit, or the
+    # test.expires_at fallback if no per-test time limit).
+    attempt_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_finalized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
