@@ -80,6 +80,7 @@ class _TeacherDashboardScreenState
       ref.read(webSocketClientProvider).forceReconnect();
       _connectWs();
       ref.invalidate(teacherDashboardSummaryProvider);
+      ref.invalidate(teacherTodayWorkflowProvider);
     });
   }
 
@@ -2117,6 +2118,7 @@ class _GradeWorkflowRow extends StatelessWidget {
         grade['attendance_progress'] as String? ?? '';
     final pending =
         (grade['pending_review_homework_ids'] as List?)?.length ?? 0;
+    final reviewApplicable = grade['review_applicable'] == true;
     final reviewComplete = grade['review_complete'] == true;
     final canAssignNew = grade['can_assign_new_homework'] == true;
     final tomorrowHwAssigned = grade['tomorrow_hw_assigned'] == true;
@@ -2181,11 +2183,19 @@ class _GradeWorkflowRow extends StatelessWidget {
                 ),
                 _StepArrow(),
                 _StepChip(
-                  label: pending > 0 ? 'Review HW ($pending)' : 'Review HW',
-                  done: reviewComplete && attendanceTaken,
+                  label: !reviewApplicable
+                      ? 'Review HW —'
+                      : pending > 0
+                          ? 'Review HW ($pending)'
+                          : 'Review HW',
+                  // Don't auto-green this step when there's nothing to
+                  // review. The chip only goes green after the teacher
+                  // actually marks completion for HW that was due today.
+                  done: reviewApplicable && reviewComplete && attendanceTaken,
                   active: nextStep == 'review_homework',
-                  enabled: attendanceTaken,
-                  onTap: attendanceTaken
+                  enabled: attendanceTaken && reviewApplicable,
+                  na: !reviewApplicable,
+                  onTap: attendanceTaken && reviewApplicable
                       ? () => context.go(
                           '${RouteNames.teacherDashboard}/homework')
                       : null,
@@ -2234,12 +2244,17 @@ class _StepChip extends StatelessWidget {
   final bool done;
   final bool active;
   final bool enabled;
+  // True when the step is not applicable today (e.g. "Review HW" but no
+  // HW was due) — chip renders grey so the teacher doesn't read it as
+  // "done" or "still pending".
+  final bool na;
   final VoidCallback? onTap;
   const _StepChip({
     required this.label,
     required this.done,
     required this.active,
     this.enabled = true,
+    this.na = false,
     this.onTap,
   });
 
@@ -2247,8 +2262,11 @@ class _StepChip extends StatelessWidget {
   Widget build(BuildContext context) {
     // Binary palette per spec: green = done, blue = pending. The active
     // (next-up) pending chip gets a heavier border so the teacher can see
-    // where to go next, but the colour family stays blue.
-    final base = done ? AppColors.success : AppColors.primary;
+    // where to go next, but the colour family stays blue. N/A steps get
+    // a muted grey so they don't look like progress in either direction.
+    final base = na
+        ? AppColors.textMuted
+        : (done ? AppColors.success : AppColors.primary);
     return Expanded(
       child: GestureDetector(
         onTap: enabled ? onTap : null,

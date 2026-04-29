@@ -1710,7 +1710,8 @@ async def get_today_workflow(
                 "attendance_taken": False,
                 "attendance_progress": "0/0",
                 "pending_review_homework_ids": [],
-                "review_complete": True,
+                "review_applicable": False,
+                "review_complete": False,
                 "tomorrow_hw_assigned": False,
                 "can_assign_new_homework": False,
                 "next_step": "holiday",
@@ -1737,14 +1738,27 @@ async def get_today_workflow(
             and set(expected_periods).issubset(set(recorded_periods))
         )
 
+        # Distinguish "nothing to review" from "all reviewed". The HW review
+        # step is only "done" (green) when there *was* HW to review and it's
+        # all marked. If no HW was due today the step is N/A — the chip
+        # stays neutral instead of vacuously turning green.
         pending = await _pending_hw_review_ids(
             current_teacher.id, grade, today, db
         )
-        review_complete = len(pending) == 0
+        hw_due_count = (await db.execute(
+            select(func.count()).select_from(Homework).where(
+                Homework.teacher_id == current_teacher.id,
+                Homework.grade == grade,
+                Homework.due_date != None,  # noqa: E711
+                Homework.due_date <= today,
+            )
+        )).scalar_one()
+        review_applicable = hw_due_count > 0
+        review_complete = review_applicable and len(pending) == 0
 
-        # Tomorrow's HW is "done" when the teacher has assigned at least
-        # one HW *today* for this grade with due_date strictly after today
-        # (i.e. for tomorrow or later).
+        # "Assign new HW" is done when this teacher has created any
+        # homework today for this grade, regardless of due_date — the
+        # daily task is the act of assigning, not when it falls due.
         today_start = datetime.combine(
             today, datetime.min.time(), tzinfo=timezone.utc
         )
@@ -1753,17 +1767,21 @@ async def get_today_workflow(
                 Homework.teacher_id == current_teacher.id,
                 Homework.grade == grade,
                 Homework.created_at >= today_start,
-                Homework.due_date != None,  # noqa: E711
-                Homework.due_date >= tomorrow,
             )
         )).scalar_one()
         tomorrow_hw_assigned = tomorrow_hw_count > 0
+
+        # Review step is skipped (not green) when there's no HW to review.
+        # Treat it as "satisfied for routing" so the next_step still flows
+        # forward to assign_homework, but mark review_applicable=False so
+        # the client renders the chip as N/A instead of green.
+        review_step_satisfied = (not review_applicable) or review_complete
 
         if not timetable_created:
             next_step = "create_timetable"
         elif not attendance_taken:
             next_step = "take_attendance"
-        elif not review_complete:
+        elif review_applicable and not review_complete:
             next_step = "review_homework"
         elif not tomorrow_hw_assigned:
             next_step = "assign_homework"
@@ -1779,9 +1797,10 @@ async def get_today_workflow(
             "attendance_taken": attendance_taken,
             "attendance_progress": f"{len(recorded_periods)}/{len(expected_periods)}",
             "pending_review_homework_ids": pending,
+            "review_applicable": review_applicable,
             "review_complete": review_complete,
             "tomorrow_hw_assigned": tomorrow_hw_assigned,
-            "can_assign_new_homework": attendance_taken and review_complete,
+            "can_assign_new_homework": attendance_taken and review_step_satisfied,
             "next_step": next_step,
         })
 
