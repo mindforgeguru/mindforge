@@ -1636,79 +1636,152 @@ async def get_today_workflow(
 ):
     """Per-grade daily workflow snapshot for the teacher dashboard.
 
-    For each grade this teacher has slots for today, returns:
-      - is_holiday: every slot is flagged is_holiday OR (degenerate) the
-        grade has no slots at all today
-      - attendance_taken: any Attendance row exists for grade × today
-      - pending_review_homework_ids: this teacher's HW for the grade due
-        on/before today whose completion roster is not yet fully recorded
-      - can_assign_new_homework: attendance is in AND no pending reviews
-      - next_step: the one-word UI cue for the dashboard card
+    Four steps per grade, each with a done/pending state:
+      1. timetable_created — any TimetableSlot exists for this teacher ×
+         grade × today (creating the slot is the "done" event)
+      2. attendance_taken  — Attendance rows recorded for *every* period
+         this teacher has slots in today (partial coverage shows progress
+         in `attendance_progress` but is_done=False)
+      3. review_complete   — no pending homework reviews for this teacher
+         × grade (HW due on/before today with incomplete completion roster)
+      4. tomorrow_hw_assigned — at least one HW created today by this
+         teacher for this grade with due_date > today
 
-    If the teacher has no slots anywhere today, `is_holiday_for_teacher`
-    is True and the grades list is empty.
+    Grades shown = union of grades the teacher has had slots in over the
+    past 14 days plus any grade with slots today. This way a teacher who
+    hasn't created today's timetable yet still sees their regular grades
+    with the timetable step pending.
+
+    `is_holiday`: only True when the teacher has *created* today's
+    timetable for the grade and every slot is flagged as a holiday — a
+    grade with no slots today is "timetable not created yet", not a
+    holiday.
     """
     today = datetime.now(timezone.utc).date()
+    tomorrow = today + timedelta(days=1)
+    lookback = today - timedelta(days=14)
 
-    my_slots = (await db.execute(
+    # Today's slots — definitive list of (grade, period) the teacher
+    # is on the hook for today.
+    my_slots_today = (await db.execute(
         select(TimetableSlot).where(
             TimetableSlot.teacher_id == current_teacher.id,
             TimetableSlot.slot_date == today,
         )
     )).scalars().all()
+    today_by_grade: dict[int, list] = {}
+    for s in my_slots_today:
+        today_by_grade.setdefault(s.grade, []).append(s)
 
-    by_grade: dict[int, list] = {}
-    for s in my_slots:
-        by_grade.setdefault(s.grade, []).append(s)
+    # Recently-taught grades — so the card can prompt the teacher to
+    # create today's timetable for grades they normally teach.
+    recent_grade_rows = (await db.execute(
+        select(TimetableSlot.grade)
+        .where(
+            TimetableSlot.teacher_id == current_teacher.id,
+            TimetableSlot.slot_date >= lookback,
+            TimetableSlot.slot_date <= today,
+        )
+        .distinct()
+    )).all()
+    recent_grades = {row[0] for row in recent_grade_rows}
+
+    grades_to_show = sorted(set(today_by_grade.keys()) | recent_grades)
 
     grade_results = []
-    for grade in sorted(by_grade.keys()):
-        slots = by_grade[grade]
-        non_holiday_slots = [s for s in slots if not s.is_holiday]
-        is_holiday = len(non_holiday_slots) == 0
+    for grade in grades_to_show:
+        slots = today_by_grade.get(grade, [])
+        timetable_created = len(slots) > 0
+
+        # Holiday only counts after the teacher actually filled in today's
+        # timetable (and marked every slot as holiday).
+        is_holiday = (
+            timetable_created
+            and all(s.is_holiday for s in slots)
+        )
 
         if is_holiday:
             grade_results.append({
                 "grade": grade,
                 "is_holiday": True,
-                "has_timetable": True,
-                "slots_count": len(slots),
+                "timetable_created": True,
+                "expected_periods": [],
+                "recorded_periods": [],
                 "attendance_taken": False,
+                "attendance_progress": "0/0",
                 "pending_review_homework_ids": [],
+                "review_complete": True,
+                "tomorrow_hw_assigned": False,
                 "can_assign_new_homework": False,
                 "next_step": "holiday",
             })
             continue
 
-        att_count = (await db.execute(
-            select(func.count()).select_from(Attendance).where(
-                Attendance.grade == grade,
-                Attendance.date == today,
-            )
-        )).scalar_one()
-        attendance_taken = att_count > 0
-
-        pending = (
-            await _pending_hw_review_ids(current_teacher.id, grade, today, db)
-            if attendance_taken
-            else []
+        # Attendance: gated on the teacher's *own* periods for this grade
+        # today — different teachers cover different periods.
+        expected_periods = sorted({
+            s.period_number for s in slots if not s.is_holiday
+        })
+        recorded_periods = []
+        if expected_periods:
+            att_rows = (await db.execute(
+                select(Attendance.period).where(
+                    Attendance.grade == grade,
+                    Attendance.date == today,
+                    Attendance.period.in_(expected_periods),
+                ).distinct()
+            )).all()
+            recorded_periods = sorted({row[0] for row in att_rows})
+        attendance_taken = (
+            len(expected_periods) > 0
+            and set(expected_periods).issubset(set(recorded_periods))
         )
 
-        if not attendance_taken:
+        pending = await _pending_hw_review_ids(
+            current_teacher.id, grade, today, db
+        )
+        review_complete = len(pending) == 0
+
+        # Tomorrow's HW is "done" when the teacher has assigned at least
+        # one HW *today* for this grade with due_date strictly after today
+        # (i.e. for tomorrow or later).
+        today_start = datetime.combine(
+            today, datetime.min.time(), tzinfo=timezone.utc
+        )
+        tomorrow_hw_count = (await db.execute(
+            select(func.count()).select_from(Homework).where(
+                Homework.teacher_id == current_teacher.id,
+                Homework.grade == grade,
+                Homework.created_at >= today_start,
+                Homework.due_date != None,  # noqa: E711
+                Homework.due_date >= tomorrow,
+            )
+        )).scalar_one()
+        tomorrow_hw_assigned = tomorrow_hw_count > 0
+
+        if not timetable_created:
+            next_step = "create_timetable"
+        elif not attendance_taken:
             next_step = "take_attendance"
-        elif pending:
+        elif not review_complete:
             next_step = "review_homework"
-        else:
+        elif not tomorrow_hw_assigned:
             next_step = "assign_homework"
+        else:
+            next_step = "done"
 
         grade_results.append({
             "grade": grade,
             "is_holiday": False,
-            "has_timetable": True,
-            "slots_count": len(slots),
+            "timetable_created": timetable_created,
+            "expected_periods": expected_periods,
+            "recorded_periods": recorded_periods,
             "attendance_taken": attendance_taken,
+            "attendance_progress": f"{len(recorded_periods)}/{len(expected_periods)}",
             "pending_review_homework_ids": pending,
-            "can_assign_new_homework": attendance_taken and not pending,
+            "review_complete": review_complete,
+            "tomorrow_hw_assigned": tomorrow_hw_assigned,
+            "can_assign_new_homework": attendance_taken and review_complete,
             "next_step": next_step,
         })
 

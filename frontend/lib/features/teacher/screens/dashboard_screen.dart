@@ -96,7 +96,8 @@ class _TeacherDashboardScreenState
         ref.invalidate(teacherDashboardSummaryProvider);
         if (eventType == 'attendance_updated' ||
             eventType == 'homework_added' ||
-            eventType == 'homework_completion_updated') {
+            eventType == 'homework_completion_updated' ||
+            eventType == 'timetable_updated') {
           ref.invalidate(teacherTodayWorkflowProvider);
         }
       }
@@ -2110,10 +2111,15 @@ class _GradeWorkflowRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final g = grade['grade'] as int;
     final isHoliday = grade['is_holiday'] == true;
+    final timetableCreated = grade['timetable_created'] == true;
     final attendanceTaken = grade['attendance_taken'] == true;
+    final attendanceProgress =
+        grade['attendance_progress'] as String? ?? '';
     final pending =
         (grade['pending_review_homework_ids'] as List?)?.length ?? 0;
+    final reviewComplete = grade['review_complete'] == true;
     final canAssignNew = grade['can_assign_new_homework'] == true;
+    final tomorrowHwAssigned = grade['tomorrow_hw_assigned'] == true;
     final nextStep = grade['next_step'] as String? ?? '';
 
     return Padding(
@@ -2152,16 +2158,31 @@ class _GradeWorkflowRow extends StatelessWidget {
             Row(
               children: [
                 _StepChip(
-                  label: 'Attendance',
+                  label: 'Timetable',
+                  done: timetableCreated,
+                  active: nextStep == 'create_timetable',
+                  onTap: () => context.go(
+                      '${RouteNames.teacherDashboard}/timetable'),
+                ),
+                _StepArrow(),
+                _StepChip(
+                  label: attendanceProgress.isNotEmpty &&
+                          !attendanceTaken &&
+                          timetableCreated
+                      ? 'Attendance $attendanceProgress'
+                      : 'Attendance',
                   done: attendanceTaken,
                   active: nextStep == 'take_attendance',
-                  onTap: () => context.go(
-                      '${RouteNames.teacherDashboard}/attendance'),
+                  enabled: timetableCreated,
+                  onTap: timetableCreated
+                      ? () => context.go(
+                          '${RouteNames.teacherDashboard}/attendance')
+                      : null,
                 ),
                 _StepArrow(),
                 _StepChip(
                   label: pending > 0 ? 'Review HW ($pending)' : 'Review HW',
-                  done: attendanceTaken && pending == 0,
+                  done: reviewComplete && attendanceTaken,
                   active: nextStep == 'review_homework',
                   enabled: attendanceTaken,
                   onTap: attendanceTaken
@@ -2172,7 +2193,7 @@ class _GradeWorkflowRow extends StatelessWidget {
                 _StepArrow(),
                 _StepChip(
                   label: 'Assign HW',
-                  done: false,
+                  done: tomorrowHwAssigned,
                   active: nextStep == 'assign_homework',
                   enabled: canAssignNew,
                   onTap: canAssignNew
@@ -2190,12 +2211,16 @@ class _GradeWorkflowRow extends StatelessWidget {
 
   String _statusLabel(String step) {
     switch (step) {
+      case 'create_timetable':
+        return "Create today's timetable";
       case 'take_attendance':
         return 'Take attendance';
       case 'review_homework':
         return "Review yesterday's homework";
       case 'assign_homework':
         return "Assign tomorrow's homework";
+      case 'done':
+        return 'All tasks done — great job!';
       case 'holiday':
         return 'Holiday';
       default:
@@ -2220,11 +2245,10 @@ class _StepChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = done
-        ? AppColors.success
-        : active
-            ? AppColors.primary
-            : AppColors.textMuted;
+    // Binary palette per spec: green = done, blue = pending. The active
+    // (next-up) pending chip gets a heavier border so the teacher can see
+    // where to go next, but the colour family stays blue.
+    final base = done ? AppColors.success : AppColors.primary;
     return Expanded(
       child: GestureDetector(
         onTap: enabled ? onTap : null,
@@ -2234,10 +2258,10 @@ class _StepChip extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             margin: const EdgeInsets.symmetric(horizontal: 2),
             decoration: BoxDecoration(
-              color: base.withOpacity(0.08),
+              color: base.withOpacity(0.10),
               border: Border.all(
-                  color: active ? base : base.withOpacity(0.4),
-                  width: active ? 1.4 : 1),
+                  color: active ? base : base.withOpacity(0.45),
+                  width: active ? 1.6 : 1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
