@@ -34,11 +34,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
     // On web, AppLifecycleState.resumed fires on every window-focus event and
     // on GoRouter navigations — both cause needless invalidations. Skip on web.
     if (kIsWeb) return;
-    if (state == AppLifecycleState.resumed && mounted) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    // Defer one frame so the provider invalidate + Dio request don't pile
+    // onto the very frame Android is restoring after unlock — doing it
+    // inline can freeze the UI thread on some devices.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       // Only invalidate — do NOT await the network call here.
       ref.invalidate(pendingUsersProvider);
       ref.invalidate(currentAcademicYearProvider);
-    }
+    });
   }
 
   @override

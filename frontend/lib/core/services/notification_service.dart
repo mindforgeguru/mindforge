@@ -93,12 +93,13 @@ class NotificationService {
           notification.hashCode,
           notification.title,
           notification.body,
-          NotificationDetails(
+          const NotificationDetails(
             android: AndroidNotificationDetails(
               _channelId,
               _channelName,
               importance: Importance.high,
               priority: Priority.high,
+              autoCancel: true,
             ),
           ),
           payload: route,
@@ -108,6 +109,11 @@ class NotificationService {
 
     // App was in background and user tapped the notification.
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      // Clear the tray: some Android skins (e.g. Samsung One UI) don't honour
+      // the FCM-default auto-dismiss reliably, so we wipe leftover entries
+      // ourselves once we know the user has acted on a notification.
+      _localNotifications.cancelAll();
+
       final route = message.data['route'] as String?;
       if (route != null && route.isNotEmpty) {
         _routeController.add(route);
@@ -117,6 +123,9 @@ class NotificationService {
     // App was terminated and notification tap launched it.
     final initial = await _messaging.getInitialMessage();
     if (initial != null) {
+      // Same rationale as above — clear stale entries once the user has tapped.
+      await _localNotifications.cancelAll();
+
       final route = initial.data['route'] as String?;
       if (route != null && route.isNotEmpty) {
         _launchRoute = route;

@@ -858,6 +858,22 @@ class ApiClient {
     await _dio.delete('/teacher/homework/$homeworkId');
   }
 
+  // ── Homework completions (Teacher) ────────────────────────────────────────
+
+  Future<List<dynamic>> listHomeworkCompletions(int homeworkId) async {
+    final res = await _dio.get('/teacher/homework/$homeworkId/completions');
+    return res.data as List<dynamic>;
+  }
+
+  Future<List<dynamic>> upsertHomeworkCompletions(
+      int homeworkId, List<Map<String, dynamic>> records) async {
+    final res = await _dio.put(
+      '/teacher/homework/$homeworkId/completions',
+      data: {'records': records},
+    );
+    return res.data as List<dynamic>;
+  }
+
   // ── Homework (Student) ────────────────────────────────────────────────────
 
   Future<List<dynamic>> getStudentHomework() async {
@@ -865,10 +881,20 @@ class ApiClient {
     return res.data as List<dynamic>;
   }
 
+  Future<List<dynamic>> getStudentHomeworkCompletions() async {
+    final res = await _dio.get('/student/homework/completions');
+    return res.data as List<dynamic>;
+  }
+
   // ── Homework (Parent) ─────────────────────────────────────────────────────
 
   Future<List<dynamic>> getChildHomework() async {
     final res = await _dio.get('/parent/child/homework');
+    return res.data as List<dynamic>;
+  }
+
+  Future<List<dynamic>> getChildHomeworkCompletions() async {
+    final res = await _dio.get('/parent/child/homework/completions');
     return res.data as List<dynamic>;
   }
 

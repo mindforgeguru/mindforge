@@ -616,7 +616,15 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
                   }
                 }
               }),
-              onSubjectChanged: (p, s) => setState(() => _subjects[p] = s),
+              onSubjectChanged: (p, s) => setState(() {
+                _subjects[p] = s;
+                // Default the optional comment to "THEORY" once the slot has
+                // a subject; the user can still clear or override it.
+                if (s != null &&
+                    (_comments[p] == null || _comments[p]!.isEmpty)) {
+                  _comments[p] = 'THEORY';
+                }
+              }),
               onCommentChanged: (p, c) =>
                   setState(() => _comments[p] = c.isEmpty ? null : c),
             );
@@ -1828,7 +1836,7 @@ class _PeriodList extends StatelessWidget {
 
 // ─── Single period row ────────────────────────────────────────────────────────
 
-class _PeriodRow extends StatelessWidget {
+class _PeriodRow extends StatefulWidget {
   final int period;
   final (String, String)? timeRange;
   final List<UserModel> teachers;
@@ -1856,7 +1864,49 @@ class _PeriodRow extends StatelessWidget {
   });
 
   @override
+  State<_PeriodRow> createState() => _PeriodRowState();
+}
+
+class _PeriodRowState extends State<_PeriodRow> {
+  late final TextEditingController _commentCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _commentCtrl = TextEditingController(text: widget.comment ?? '');
+  }
+
+  @override
+  void didUpdateWidget(_PeriodRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sync the controller when the parent updates the comment from outside
+    // (e.g. the auto-"THEORY" default fires after a subject is picked, or an
+    // existing slot is loaded). Skip when the value matches what the user
+    // just typed, so we don't fight their cursor.
+    final external = widget.comment ?? '';
+    if (external != _commentCtrl.text) {
+      _commentCtrl.text = external;
+    }
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final period = widget.period;
+    final timeRange = widget.timeRange;
+    final teachers = widget.teachers;
+    final busyTeacherGrades = widget.busyTeacherGrades;
+    final selectedTeacherId = widget.selectedTeacherId;
+    final selectedSubject = widget.selectedSubject;
+    final allowedSubjects = widget.allowedSubjects;
+    final onTeacherChanged = widget.onTeacherChanged;
+    final onSubjectChanged = widget.onSubjectChanged;
+    final onCommentChanged = widget.onCommentChanged;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -1946,9 +1996,10 @@ class _PeriodRow extends StatelessWidget {
           ),
           const SizedBox(height: 10),
 
-          // Comment text field
+          // Comment text field — controller-backed so that the parent's
+          // auto-"THEORY" default visibly updates the field.
           TextFormField(
-            initialValue: comment ?? '',
+            controller: _commentCtrl,
             decoration: const InputDecoration(
               labelText: 'Comment (optional)',
               hintText: 'e.g. Bring textbook, Test today…',

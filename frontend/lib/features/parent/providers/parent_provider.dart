@@ -89,6 +89,20 @@ final parentHomeworkProvider =
       .toList();
 });
 
+/// Map of homework_id → completed for the linked child. Mirror of
+/// studentHomeworkCompletionsProvider so the parent UI can render the
+/// same Complete / Incomplete / Pending badge.
+final parentChildHomeworkCompletionsProvider =
+    FutureProvider<Map<int, StudentHomeworkCompletion>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  final raw = await api.getChildHomeworkCompletions();
+  return {
+    for (final e in raw)
+      (e['homework_id'] as int):
+          StudentHomeworkCompletion.fromJson(e as Map<String, dynamic>),
+  };
+});
+
 // ── Broadcasts ─────────────────────────────────────────────────────────────
 
 final parentBroadcastsProvider =

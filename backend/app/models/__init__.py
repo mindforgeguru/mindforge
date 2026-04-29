@@ -5,5 +5,5 @@ from app.models.timetable import TimetableConfig, TimetableSlot
 from app.models.grade import Grade
 from app.models.test import Test, TestSubmission
 from app.models.fees import FeeStructure, FeePayment, PaymentInfo
-from app.models.homework import Homework, Broadcast
+from app.models.homework import Homework, HomeworkCompletion, Broadcast
 from app.models.database_models import OldTestPaper, ChapterDocument, SyllabusEntry

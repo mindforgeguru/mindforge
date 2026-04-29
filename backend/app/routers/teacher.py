@@ -30,8 +30,15 @@ from app.schemas.grade import GradeCreate, GradeResponse, GradeStats
 from app.schemas.test import TestGenerationParams, TestResponse, OfflineGradesBulk
 from app.schemas.timetable import TimetableConfigResponse, TimetableSlotCreate, TimetableSlotResponse, TimetableSlotUpdate
 from app.schemas.user import AdminMpinUpdate, UserResponse, TeacherWithSubjectsResponse
-from app.schemas.homework import HomeworkCreate, HomeworkResponse, BroadcastCreate, BroadcastResponse
-from app.models.homework import Homework, Broadcast
+from app.schemas.homework import (
+    HomeworkCreate,
+    HomeworkResponse,
+    HomeworkCompletionBulkUpdate,
+    HomeworkCompletionDetail,
+    BroadcastCreate,
+    BroadcastResponse,
+)
+from app.models.homework import Homework, HomeworkCompletion, Broadcast
 from app.services import ai_service, notification_service, pdf_service, storage_service
 
 router = APIRouter()
@@ -1313,6 +1320,132 @@ async def delete_homework(
         raise HTTPException(status_code=404, detail="Homework not found or not yours")
     await db.delete(hw)
     await db.commit()
+
+
+# ─── Homework completion tracking ─────────────────────────────────────────────
+
+@router.get(
+    "/homework/{homework_id}/completions",
+    response_model=List[HomeworkCompletionDetail],
+)
+async def list_homework_completions(
+    homework_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_teacher: User = Depends(get_current_teacher),
+):
+    """Return one row per active student in the homework's grade. Students
+    without a saved completion record default to `completed=False` so the
+    teacher screen can render the full roster on first open.
+    """
+    hw = (await db.execute(
+        select(Homework).where(
+            Homework.id == homework_id, Homework.teacher_id == current_teacher.id
+        )
+    )).scalar_one_or_none()
+    if not hw:
+        raise HTTPException(status_code=404, detail="Homework not found or not yours")
+
+    students = (await db.execute(
+        select(User)
+        .join(StudentProfile, User.id == StudentProfile.user_id)
+        .where(
+            StudentProfile.grade == hw.grade,
+            User.is_active == True,
+            User.is_approved == True,
+        )
+        .order_by(User.username)
+    )).scalars().all()
+
+    existing = {
+        c.student_id: c
+        for c in (await db.execute(
+            select(HomeworkCompletion).where(
+                HomeworkCompletion.homework_id == homework_id
+            )
+        )).scalars().all()
+    }
+    return [
+        HomeworkCompletionDetail(
+            student_id=s.id,
+            username=s.username,
+            completed=existing[s.id].completed if s.id in existing else False,
+            marked_at=existing[s.id].marked_at if s.id in existing else None,
+        )
+        for s in students
+    ]
+
+
+@router.put(
+    "/homework/{homework_id}/completions",
+    response_model=List[HomeworkCompletionDetail],
+)
+async def upsert_homework_completions(
+    homework_id: int,
+    payload: HomeworkCompletionBulkUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_teacher: User = Depends(get_current_teacher),
+):
+    """Bulk insert/update completion rows for one homework. Sends a WS event
+    so each student's app refreshes its homework status without a manual pull.
+    """
+    hw = (await db.execute(
+        select(Homework).where(
+            Homework.id == homework_id, Homework.teacher_id == current_teacher.id
+        )
+    )).scalar_one_or_none()
+    if not hw:
+        raise HTTPException(status_code=404, detail="Homework not found or not yours")
+
+    # Reject student_ids that don't actually belong to this homework's grade —
+    # cheap defence against a crafted payload trying to write rows for someone
+    # else's class.
+    valid_student_ids = {
+        row[0] for row in (await db.execute(
+            select(User.id)
+            .join(StudentProfile, User.id == StudentProfile.user_id)
+            .where(
+                StudentProfile.grade == hw.grade,
+                User.is_active == True,
+                User.is_approved == True,
+            )
+        )).all()
+    }
+
+    existing = {
+        c.student_id: c
+        for c in (await db.execute(
+            select(HomeworkCompletion).where(
+                HomeworkCompletion.homework_id == homework_id
+            )
+        )).scalars().all()
+    }
+
+    for rec in payload.records:
+        if rec.student_id not in valid_student_ids:
+            continue
+        if rec.student_id in existing:
+            existing[rec.student_id].completed = rec.completed
+            existing[rec.student_id].marked_by = current_teacher.id
+        else:
+            db.add(HomeworkCompletion(
+                homework_id=homework_id,
+                student_id=rec.student_id,
+                completed=rec.completed,
+                marked_by=current_teacher.id,
+            ))
+    await db.commit()
+
+    # Notify the affected grade so each student/parent app refreshes.
+    await redis_manager.publish({
+        "target_type": "grade",
+        "grade": hw.grade,
+        "payload": {
+            "event": "homework_completion_updated",
+            "homework_id": homework_id,
+        },
+    })
+
+    return await list_homework_completions(homework_id, db, current_teacher)
 
 
 # ─── Broadcast ────────────────────────────────────────────────────────────────

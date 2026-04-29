@@ -131,6 +131,19 @@ final studentHomeworkProvider =
       .toList();
 });
 
+/// Map of homework_id → completed for the current student. Homework not
+/// present in the map means the teacher hasn't recorded a status yet.
+final studentHomeworkCompletionsProvider =
+    FutureProvider<Map<int, StudentHomeworkCompletion>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  final raw = await api.getStudentHomeworkCompletions();
+  return {
+    for (final e in raw)
+      (e['homework_id'] as int):
+          StudentHomeworkCompletion.fromJson(e as Map<String, dynamic>),
+  };
+});
+
 // ── Fees ───────────────────────────────────────────────────────────────────
 
 final studentFeesProvider =

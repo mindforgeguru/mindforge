@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -485,58 +486,72 @@ class _HomeworkCard extends StatelessWidget {
     final pad = _s(context, 14, min: 10, max: 20);
 
     return LayoutBuilder(builder: (context, constraints) {
-      return Container(
-        width: constraints.maxWidth,
-        padding: EdgeInsets.all(pad),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: const [
-            BoxShadow(
-                color: Color(0x0C1D3557),
-                blurRadius: 10,
-                offset: Offset(0, 3)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Badge row ─────────────────────────────────────────────────
-            Row(
-              children: [
-                // Type badge
-                _Badge(
-                  label: isOnline ? 'Online Test' : 'Written',
-                  color:
-                      isOnline ? AppColors.accent : AppColors.primary,
-                ),
-                SizedBox(width: _s(context, 6, min: 4, max: 10)),
-                // Subject — flexible, won't overflow
-                Flexible(
-                  child: _Badge(
-                    label: hw.subject,
-                    color: AppColors.textSecondary,
-                    bg: AppColors.iconContainer,
-                    maxLines: 1,
-                  ),
-                ),
-                const Spacer(),
-                // Delete — guaranteed 48x48 tap area
-                SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.delete_outline,
-                      color: AppColors.error,
-                      size: _s(context, 20, min: 18, max: 24),
-                    ),
-                    onPressed: onDelete,
-                    tooltip: 'Delete',
-                  ),
-                ),
+      return Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        child: InkWell(
+          onTap: () => context.go(
+            '${RouteNames.teacherDashboard}/homework/${hw.id}/completions',
+          ),
+          child: Ink(
+            width: constraints.maxWidth,
+            padding: EdgeInsets.all(pad),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(
+                    color: Color(0x0C1D3557),
+                    blurRadius: 10,
+                    offset: Offset(0, 3)),
               ],
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Badge row ─────────────────────────────────────────────
+                Row(
+                  children: [
+                    // Type badge
+                    _Badge(
+                      label: isOnline ? 'Online Test' : 'Written',
+                      color:
+                          isOnline ? AppColors.accent : AppColors.primary,
+                    ),
+                    SizedBox(width: _s(context, 6, min: 4, max: 10)),
+                    // Subject — flexible, won't overflow
+                    Flexible(
+                      child: _Badge(
+                        label: hw.subject,
+                        color: AppColors.textSecondary,
+                        bg: AppColors.iconContainer,
+                        maxLines: 1,
+                      ),
+                    ),
+                    const Spacer(),
+                    // "Track" hint — visual cue that the card is tappable
+                    Icon(Icons.checklist_rounded,
+                        size: _s(context, 18, min: 16, max: 22),
+                        color: AppColors.accent),
+                    SizedBox(width: _s(context, 4, min: 2, max: 8)),
+                    // Delete — guaranteed 48x48 tap area
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: AppColors.error,
+                          size: _s(context, 20, min: 18, max: 24),
+                        ),
+                        onPressed: onDelete,
+                        tooltip: 'Delete',
+                      ),
+                    ),
+                  ],
+                ),
 
             SizedBox(height: _s(context, 6, min: 4, max: 10)),
 
@@ -591,6 +606,8 @@ class _HomeworkCard extends StatelessWidget {
               ],
             ),
           ],
+        ),
+          ),
         ),
       );
     });

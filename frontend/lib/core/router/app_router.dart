@@ -13,6 +13,7 @@ import '../../features/teacher/screens/grade_screen.dart' as teacher;
 import '../../features/teacher/screens/test_screen.dart' as teacher;
 import '../../features/teacher/screens/profile_screen.dart' as teacher;
 import '../../features/teacher/screens/homework_screen.dart' as teacher;
+import '../../features/teacher/screens/homework_completion_screen.dart' as teacher;
 import '../../features/teacher/screens/broadcast_screen.dart' as teacher;
 import '../../features/teacher/screens/database_screen.dart' as teacher;
 import '../../features/student/screens/dashboard_screen.dart' as student;
@@ -153,6 +154,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'homework',
             pageBuilder: (_, __) => _slidePage(const teacher.TeacherHomeworkScreen()),
+            routes: [
+              GoRoute(
+                path: ':hwId/completions',
+                pageBuilder: (_, state) {
+                  final hwId = int.parse(state.pathParameters['hwId']!);
+                  return _slidePage(
+                    teacher.TeacherHomeworkCompletionScreen(homeworkId: hwId),
+                  );
+                },
+              ),
+            ],
           ),
           GoRoute(
             path: 'broadcasts',

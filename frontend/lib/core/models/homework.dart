@@ -41,6 +41,56 @@ class HomeworkModel {
       );
 }
 
+/// Teacher-facing row in the homework-completion screen: a student plus
+/// whether they've completed this homework.
+class HomeworkCompletionDetail {
+  final int studentId;
+  final String username;
+  final bool completed;
+  final DateTime? markedAt;
+
+  const HomeworkCompletionDetail({
+    required this.studentId,
+    required this.username,
+    required this.completed,
+    this.markedAt,
+  });
+
+  factory HomeworkCompletionDetail.fromJson(Map<String, dynamic> json) =>
+      HomeworkCompletionDetail(
+        studentId: json['student_id'] as int,
+        username: json['username'] as String,
+        completed: json['completed'] as bool,
+        markedAt: json['marked_at'] != null
+            ? DateTime.parse(json['marked_at'] as String)
+            : null,
+      );
+}
+
+/// Student/parent-facing row: a homework_id and whether it was completed.
+/// Absence of an entry for a given homework_id means the teacher has not
+/// recorded a status yet — render as "pending" on the client.
+class StudentHomeworkCompletion {
+  final int homeworkId;
+  final bool completed;
+  final DateTime? markedAt;
+
+  const StudentHomeworkCompletion({
+    required this.homeworkId,
+    required this.completed,
+    this.markedAt,
+  });
+
+  factory StudentHomeworkCompletion.fromJson(Map<String, dynamic> json) =>
+      StudentHomeworkCompletion(
+        homeworkId: json['homework_id'] as int,
+        completed: json['completed'] as bool,
+        markedAt: json['marked_at'] != null
+            ? DateTime.parse(json['marked_at'] as String)
+            : null,
+      );
+}
+
 class BroadcastModel {
   final int id;
   final int senderId;
