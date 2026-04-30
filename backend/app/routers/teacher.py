@@ -1285,31 +1285,26 @@ async def publish_test(
 
 
 async def _pending_hw_review_ids(
-    teacher_id: int,
     grade: int,
     today: date,
     db: AsyncSession,
 ) -> List[int]:
-    """Return at most one ID: the *most recent* HW this teacher created for
-    this grade whose completion roster is not yet fully recorded.
+    """Return at most one ID: the *most recent* HW for this grade (any
+    teacher) whose completion roster is not yet fully recorded.
+
+    Workflow tasks are grade-wide — any teacher can review any HW — so
+    review status is computed across all teachers in the grade.
 
     Holiday rule: a day is a working day iff a TimetableSlot exists, so HW
     has no real "due date" — the next class day after creation is when it's
-    reviewed. We therefore drive review off the latest unreviewed HW the
-    teacher created, regardless of due_date. Older unreviewed HW (rare in
-    practice, only happens if the teacher skipped a review) are not gated;
-    only the most recent one blocks new HW creation.
+    reviewed. We therefore drive review off the latest unreviewed HW for
+    the grade, regardless of due_date. Older unreviewed HW (rare in
+    practice, only happens if review was skipped) are not gated; only the
+    most recent one blocks new HW creation.
 
-    Returns [] when the most recent HW is fully reviewed, when the teacher
-    has never created HW for this grade, or when the grade has no roster.
-
-    The `today` parameter is unused now but kept in the signature so callers
-    don't need to change.
+    Returns [] when the most recent HW is fully reviewed, when no HW has
+    ever been created for this grade, or when the grade has no roster.
     """
-    # "Today" cuts off HW created today — that one belongs to the "Assign
-    # HW" step, not the "Review HW" step. Without this filter, the moment
-    # the teacher assigns today's HW, the review chip would flip back to
-    # blue for HW that's not yet due back.
     today_start = datetime.combine(
         today, datetime.min.time(), tzinfo=timezone.utc
     )
@@ -1317,7 +1312,6 @@ async def _pending_hw_review_ids(
     latest = (await db.execute(
         select(Homework)
         .where(
-            Homework.teacher_id == teacher_id,
             Homework.grade == grade,
             Homework.created_at < today_start,
         )
@@ -1366,9 +1360,7 @@ async def create_homework(
     day's work.
     """
     today = datetime.now(timezone.utc).date()
-    pending = await _pending_hw_review_ids(
-        current_teacher.id, payload.grade, today, db
-    )
+    pending = await _pending_hw_review_ids(payload.grade, today, db)
     if pending:
         raise HTTPException(
             status_code=409,
@@ -1653,26 +1645,29 @@ async def get_today_workflow(
 ):
     """Per-grade daily workflow snapshot for the teacher dashboard.
 
+    Workflow tasks are *grade-wide*: any teacher can complete a step on
+    behalf of the whole grade, so all teachers see the same status. The
+    current teacher does not need to be assigned to a slot for the chips
+    to turn green.
+
     Four steps per grade, each with a done/pending state:
-      1. timetable_created — any TimetableSlot exists for this teacher ×
-         grade × today (creating the slot is the "done" event)
-      2. attendance_taken  — Attendance rows recorded for *every* period
-         this teacher has slots in today (partial coverage shows progress
-         in `attendance_progress` but is_done=False)
-      3. review_complete   — no pending homework reviews for this teacher
-         × grade (HW due on/before today with incomplete completion roster)
-      4. tomorrow_hw_assigned — at least one HW created today by this
-         teacher for this grade with due_date > today
+      1. timetable_created — any TimetableSlot exists for this grade ×
+         today (creating the slot is the "done" event)
+      2. attendance_taken  — Attendance rows recorded for *every* non-
+         holiday period in this grade today (partial coverage shows
+         progress in `attendance_progress` but is_done=False)
+      3. review_complete   — no pending homework reviews for this grade
+         (HW with incomplete completion roster)
+      4. tomorrow_hw_assigned — at least one HW created today for this
+         grade
 
-    Grades shown = union of grades the teacher has had slots in over the
-    past 14 days plus any grade with slots today. This way a teacher who
-    hasn't created today's timetable yet still sees their regular grades
-    with the timetable step pending.
+    Grades shown = grades that have any TimetableSlot in the past 14
+    days (any teacher). This way every teacher sees the same set of
+    grades and can act on each step.
 
-    `is_holiday`: only True when the teacher has *created* today's
-    timetable for the grade and every slot is flagged as a holiday — a
-    grade with no slots today is "timetable not created yet", not a
-    holiday.
+    `is_holiday`: only True when today's timetable for the grade has
+    been created and every slot is flagged as a holiday — a grade with
+    no slots today is "timetable not created yet", not a holiday.
     """
     today = datetime.now(timezone.utc).date()
     tomorrow = today + timedelta(days=1)
@@ -1681,24 +1676,23 @@ async def get_today_workflow(
         today, datetime.min.time(), tzinfo=timezone.utc
     )
 
-    # Today's slots — definitive list of (grade, period) the teacher
-    # is on the hook for today.
-    my_slots_today = (await db.execute(
+    # Today's slots across all teachers — workflow is grade-wide, so
+    # any teacher's slot for the grade satisfies "timetable created".
+    slots_today = (await db.execute(
         select(TimetableSlot).where(
-            TimetableSlot.teacher_id == current_teacher.id,
             TimetableSlot.slot_date == today,
         )
     )).scalars().all()
     today_by_grade: dict[int, list] = {}
-    for s in my_slots_today:
+    for s in slots_today:
         today_by_grade.setdefault(s.grade, []).append(s)
 
-    # Recently-taught grades — so the card can prompt the teacher to
-    # create today's timetable for grades they normally teach.
+    # Recently-scheduled grades (any teacher) — so every teacher sees
+    # the same set of active grades and can prompt the timetable step
+    # before today's slots are created.
     recent_grade_rows = (await db.execute(
         select(TimetableSlot.grade)
         .where(
-            TimetableSlot.teacher_id == current_teacher.id,
             TimetableSlot.slot_date >= lookback,
             TimetableSlot.slot_date <= today,
         )
@@ -1738,8 +1732,9 @@ async def get_today_workflow(
             })
             continue
 
-        # Attendance: gated on the teacher's *own* periods for this grade
-        # today — different teachers cover different periods.
+        # Attendance: gated on every non-holiday period for the grade
+        # today, regardless of which teacher is assigned. Any teacher
+        # can record attendance for any period.
         expected_periods = sorted({
             s.period_number for s in slots if not s.is_holiday
         })
@@ -1760,15 +1755,12 @@ async def get_today_workflow(
 
         # Distinguish "nothing to review" from "all reviewed". The HW review
         # step is only "done" (green) when there *was* prior HW to review
-        # and it's all marked. If the teacher has never created HW for this
+        # and it's all marked. If no HW has ever been created for this
         # grade before today, the step is N/A — the chip stays neutral
-        # instead of vacuously turning green.
-        pending = await _pending_hw_review_ids(
-            current_teacher.id, grade, today, db
-        )
+        # instead of vacuously turning green. Computed grade-wide.
+        pending = await _pending_hw_review_ids(grade, today, db)
         prior_hw_count = (await db.execute(
             select(func.count()).select_from(Homework).where(
-                Homework.teacher_id == current_teacher.id,
                 Homework.grade == grade,
                 Homework.created_at < today_start,
             )
@@ -1776,12 +1768,11 @@ async def get_today_workflow(
         review_applicable = prior_hw_count > 0
         review_complete = review_applicable and len(pending) == 0
 
-        # "Assign new HW" is done when this teacher has created any
-        # homework today for this grade, regardless of due_date — the
-        # daily task is the act of assigning, not when it falls due.
+        # "Assign new HW" is done when any teacher has created homework
+        # today for this grade, regardless of due_date — the daily task
+        # is the act of assigning, not when it falls due.
         tomorrow_hw_count = (await db.execute(
             select(func.count()).select_from(Homework).where(
-                Homework.teacher_id == current_teacher.id,
                 Homework.grade == grade,
                 Homework.created_at >= today_start,
             )
