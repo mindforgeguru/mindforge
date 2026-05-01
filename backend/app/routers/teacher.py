@@ -198,14 +198,25 @@ async def get_attendance(
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """Retrieve attendance records for a grade, optionally filtered by date."""
+    """Retrieve attendance records for a grade, optionally filtered by date.
+
+    Dedupes by (student_id, date, period) — past races can leave more
+    than one row per slot. The latest row (highest id) wins; older
+    duplicates are dropped from the response so the UI reflects a
+    single canonical status per student per period.
+    """
     query = select(Attendance).where(Attendance.grade == grade)
     if date:
         from datetime import date as dt_date
         parsed_date = dt_date.fromisoformat(date)
         query = query.where(Attendance.date == parsed_date)
-    result = await db.execute(query.order_by(Attendance.date.desc(), Attendance.period))
-    return result.scalars().all()
+    result = await db.execute(query.order_by(Attendance.date.desc(), Attendance.period, Attendance.id))
+    rows = result.scalars().all()
+    # Keep the most recent row per (student, date, period) slot.
+    canonical: dict[tuple[int, date, int], Attendance] = {}
+    for r in rows:
+        canonical[(r.student_id, r.date, r.period)] = r
+    return list(canonical.values())
 
 
 @router.post("/attendance", response_model=List[AttendanceResponse], status_code=status.HTTP_201_CREATED)
@@ -231,21 +242,31 @@ async def mark_attendance(
             )
     student_ids = [item.student_id for item in payload.records]
 
-    # Batch-fetch all existing records for this date/period in one query
+    # Batch-fetch all existing records for this date/period in one query.
+    # There may be duplicates per (student, date, period) from past races
+    # — we update the oldest one and delete the rest so the slot is
+    # canonical going forward.
     existing_result = await db.execute(
         select(Attendance).where(
             Attendance.student_id.in_(student_ids),
             Attendance.date == payload.date,
             Attendance.period == payload.period,
-        )
+        ).order_by(Attendance.id)
     )
-    existing_map = {att.student_id: att for att in existing_result.scalars().all()}
+    existing_by_student: dict[int, list[Attendance]] = {}
+    for att in existing_result.scalars().all():
+        existing_by_student.setdefault(att.student_id, []).append(att)
 
     records = []
     for item in payload.records:
-        att = existing_map.get(item.student_id)
-        if att:
-            att.status = item.status
+        duplicates = existing_by_student.get(item.student_id, [])
+        if duplicates:
+            primary = duplicates[0]
+            primary.status = item.status
+            primary.teacher_id = current_teacher.id
+            for dup in duplicates[1:]:
+                await db.delete(dup)
+            records.append(primary)
         else:
             att = Attendance(
                 student_id=item.student_id,
@@ -256,7 +277,7 @@ async def mark_attendance(
                 status=item.status,
             )
             db.add(att)
-        records.append(att)
+            records.append(att)
 
     await db.commit()
     for r in records:

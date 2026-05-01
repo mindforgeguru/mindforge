@@ -104,12 +104,22 @@ async def get_my_attendance(
     db: AsyncSession = Depends(get_db),
     current_student: User = Depends(get_current_student),
 ):
-    """Get the current student's own attendance records."""
+    """Get the current student's own attendance records.
+
+    Dedupes by (date, period) — past races can leave duplicate rows
+    for the same slot. The latest row (highest id) wins so charts
+    don't double-count a single class as both present and absent.
+    """
     query = select(Attendance).where(Attendance.student_id == current_student.id)
     if period:
         query = query.where(Attendance.period == period)
-    result = await db.execute(query.order_by(Attendance.date.desc()).offset(skip).limit(limit))
-    return result.scalars().all()
+    result = await db.execute(query.order_by(Attendance.date.desc(), Attendance.period, Attendance.id))
+    rows = result.scalars().all()
+    canonical: dict[tuple, Attendance] = {}
+    for r in rows:
+        canonical[(r.date, r.period)] = r
+    deduped = list(canonical.values())
+    return deduped[skip : skip + limit]
 
 
 @router.get("/attendance/summary", response_model=AttendanceSummary)

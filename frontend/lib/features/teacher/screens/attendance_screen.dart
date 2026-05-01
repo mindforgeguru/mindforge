@@ -494,6 +494,19 @@ class _TeacherAttendanceScreenState
     final existingAsync = ref.watch(
         teacherAttendanceProvider((_selectedGrade, _dateStr)));
 
+    // When the records list changes (after a save / invalidate / refetch),
+    // drop the cached _loadedKey so _initAttendance re-applies the fresh
+    // server state to _attendance. Without this the local map can drift
+    // from the server when an Update is submitted.
+    ref.listen<AsyncValue<List<AttendanceModel>>>(
+      teacherAttendanceProvider((_selectedGrade, _dateStr)),
+      (prev, next) {
+        if (next.hasValue && prev?.value != next.value) {
+          _loadedKey = null;
+        }
+      },
+    );
+
     return TeacherScaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(

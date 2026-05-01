@@ -1752,10 +1752,22 @@ class _AttendancePieChart extends StatelessWidget {
       );
     }
 
+    // Defense in depth: dedupe by (date, period) before counting. Past
+    // races could leave duplicate rows for the same slot; counting both
+    // would double-count a single class as both present and absent and
+    // incorrectly bucket the day as "partial".
+    final perSlot = <String, AttendanceModel>{};
+    for (final r in records) {
+      final slotKey = '${_fmtYMD.format(r.date)}_${r.period}';
+      final existing = perSlot[slotKey];
+      if (existing == null || r.id > existing.id) {
+        perSlot[slotKey] = r;
+      }
+    }
     // Group periods by calendar day (yyyy-MM-dd) and tally present/absent
     // counts. Then bucket the day based on the tallies.
     final byDay = <String, (int present, int absent)>{};
-    for (final r in records) {
+    for (final r in perSlot.values) {
       final key = _fmtYMD.format(r.date);
       final cur = byDay[key] ?? (0, 0);
       byDay[key] = r.isPresent
