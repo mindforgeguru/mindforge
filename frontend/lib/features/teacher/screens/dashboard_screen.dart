@@ -2033,13 +2033,31 @@ class _GradeAnalysisChartState extends State<_GradeAnalysisChart> {
 
 // ─── Today's workflow card ────────────────────────────────────────────────────
 //
-// Surfaces the daily teacher workflow for each grade they teach today:
-//   timetable → attendance → review yesterday's HW → assign tomorrow's HW.
-// Backed by GET /teacher/today-workflow.
+// Surfaces the daily teacher workflow as a "road" per grade with four
+// milestones: Timetable → Attendance → HW Review → Homework. A car icon
+// marks the boundary between completed (solid colored line) and pending
+// (dashed grey line) sections. Each milestone is tappable and navigates
+// to the relevant screen. Backed by GET /teacher/today-workflow.
 
 class _TodayWorkflowCard extends StatelessWidget {
   final Map<String, dynamic> data;
   const _TodayWorkflowCard({required this.data});
+
+  static const _doneColor = Color(0xFF22C55E);    // green
+  static const _pendingColor = Color(0xFFF59E0B); // amber
+
+  static Color gradeColor(int grade) {
+    switch (grade) {
+      case 8:
+        return const Color(0xFF3B82F6); // blue
+      case 9:
+        return const Color(0xFF8B5CF6); // purple
+      case 10:
+        return const Color(0xFFF97316); // orange
+      default:
+        return AppColors.primary;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2049,10 +2067,10 @@ class _TodayWorkflowCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         decoration: BoxDecoration(
           color: AppColors.cardBackground,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.divider),
           boxShadow: [
             BoxShadow(
@@ -2066,23 +2084,50 @@ class _TodayWorkflowCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.checklist_rounded,
-                    size: 18, color: AppColors.primary),
+                const Text('🗺️', style: TextStyle(fontSize: 18)),
                 const SizedBox(width: 8),
-                Text("Today's workflow",
+                Text("Today's Workflow",
                     style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.primary)),
               ],
             ),
-            const SizedBox(height: 8),
-            if (isHoliday)
-              _holidayBanner(context)
-            else if (grades.isEmpty)
+            const SizedBox(height: 10),
+            if (grades.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final g in grades)
+                    _GradePill(
+                      grade: g['grade'] as int,
+                      color: gradeColor(g['grade'] as int),
+                    ),
+                ],
+              ),
+            const SizedBox(height: 4),
+            if (isHoliday || grades.isEmpty)
               _holidayBanner(context)
             else
-              ...grades.map((g) => _GradeWorkflowRow(grade: g)).toList(),
+              ...grades.map((g) => _GradeRoadRow(
+                    grade: g,
+                    color: gradeColor(g['grade'] as int),
+                    doneColor: _doneColor,
+                    pendingColor: _pendingColor,
+                  )),
+            if (!isHoliday && grades.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              const Divider(height: 1, color: AppColors.divider),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _LegendDot(color: _doneColor, label: 'Done'),
+                  const SizedBox(width: 16),
+                  _LegendDot(color: _pendingColor, label: 'Pending'),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -2104,9 +2149,94 @@ class _TodayWorkflowCard extends StatelessWidget {
       );
 }
 
-class _GradeWorkflowRow extends StatelessWidget {
+class _GradePill extends StatelessWidget {
+  final int grade;
+  final Color color;
+  const _GradePill({required this.grade, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 4,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text('Gr. $grade',
+              style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary)),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label,
+            style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary)),
+      ],
+    );
+  }
+}
+
+class _RoadStep {
+  final String label;
+  final bool done;
+  final bool na;
+  final bool enabled;
+  final VoidCallback? onTap;
+  const _RoadStep({
+    required this.label,
+    required this.done,
+    required this.na,
+    required this.enabled,
+    required this.onTap,
+  });
+}
+
+class _GradeRoadRow extends StatelessWidget {
   final Map<String, dynamic> grade;
-  const _GradeWorkflowRow({required this.grade});
+  final Color color;
+  final Color doneColor;
+  final Color pendingColor;
+  const _GradeRoadRow({
+    required this.grade,
+    required this.color,
+    required this.doneColor,
+    required this.pendingColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2114,208 +2244,310 @@ class _GradeWorkflowRow extends StatelessWidget {
     final isHoliday = grade['is_holiday'] == true;
     final timetableCreated = grade['timetable_created'] == true;
     final attendanceTaken = grade['attendance_taken'] == true;
-    final attendanceProgress =
-        grade['attendance_progress'] as String? ?? '';
-    final pending =
-        (grade['pending_review_homework_ids'] as List?)?.length ?? 0;
     final reviewApplicable = grade['review_applicable'] == true;
     final reviewComplete = grade['review_complete'] == true;
     final canAssignNew = grade['can_assign_new_homework'] == true;
     final tomorrowHwAssigned = grade['tomorrow_hw_assigned'] == true;
-    final nextStep = grade['next_step'] as String? ?? '';
+
+    final reviewDone =
+        reviewApplicable && reviewComplete && attendanceTaken;
+
+    final steps = <_RoadStep>[
+      _RoadStep(
+        label: 'Timetable',
+        done: timetableCreated,
+        na: false,
+        enabled: true,
+        onTap: () =>
+            context.go('${RouteNames.teacherDashboard}/timetable'),
+      ),
+      _RoadStep(
+        label: 'Attendance',
+        done: attendanceTaken,
+        na: false,
+        enabled: timetableCreated,
+        onTap: timetableCreated
+            ? () => context.go(
+                '${RouteNames.teacherDashboard}/attendance')
+            : null,
+      ),
+      _RoadStep(
+        label: 'HW Review',
+        done: reviewDone,
+        na: !reviewApplicable,
+        enabled: attendanceTaken && reviewApplicable,
+        onTap: attendanceTaken && reviewApplicable
+            ? () => context.go(
+                '${RouteNames.teacherDashboard}/homework')
+            : null,
+      ),
+      _RoadStep(
+        label: 'Homework',
+        done: tomorrowHwAssigned,
+        na: false,
+        enabled: canAssignNew,
+        onTap: canAssignNew
+            ? () => context.go(
+                '${RouteNames.teacherDashboard}/homework')
+            : null,
+      ),
+    ];
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text('Grade $g',
-                    style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary)),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  isHoliday ? 'Holiday' : _statusLabel(nextStep),
-                  style: GoogleFonts.poppins(
-                      fontSize: 11, color: AppColors.textSecondary),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          if (!isHoliday) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                _StepChip(
-                  label: 'Timetable',
-                  done: timetableCreated,
-                  active: nextStep == 'create_timetable',
-                  onTap: () => context.go(
-                      '${RouteNames.teacherDashboard}/timetable'),
-                ),
-                _StepArrow(),
-                _StepChip(
-                  label: attendanceProgress.isNotEmpty &&
-                          !attendanceTaken &&
-                          timetableCreated
-                      ? 'Attendance $attendanceProgress'
-                      : 'Attendance',
-                  done: attendanceTaken,
-                  active: nextStep == 'take_attendance',
-                  enabled: timetableCreated,
-                  onTap: timetableCreated
-                      ? () => context.go(
-                          '${RouteNames.teacherDashboard}/attendance')
-                      : null,
-                ),
-                _StepArrow(),
-                _StepChip(
-                  label: !reviewApplicable
-                      ? 'Review HW —'
-                      : pending > 0
-                          ? 'Review HW ($pending)'
-                          : 'Review HW',
-                  // Don't auto-green this step when there's nothing to
-                  // review. The chip only goes green after the teacher
-                  // actually marks completion for HW that was due today.
-                  done: reviewApplicable && reviewComplete && attendanceTaken,
-                  active: nextStep == 'review_homework',
-                  enabled: attendanceTaken && reviewApplicable,
-                  na: !reviewApplicable,
-                  onTap: attendanceTaken && reviewApplicable
-                      ? () => context.go(
-                          '${RouteNames.teacherDashboard}/homework')
-                      : null,
-                ),
-                _StepArrow(),
-                _StepChip(
-                  label: 'Assign HW',
-                  done: tomorrowHwAssigned,
-                  active: nextStep == 'assign_homework',
-                  enabled: canAssignNew,
-                  onTap: canAssignNew
-                      ? () => context.go(
-                          '${RouteNames.teacherDashboard}/homework')
-                      : null,
-                ),
-              ],
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(8),
             ),
-          ],
+            child: Text('Gr.$g',
+                style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SizedBox(
+              height: 78,
+              child: _WorkflowRoad(
+                steps: steps,
+                color: color,
+                doneColor: doneColor,
+                pendingColor: pendingColor,
+                isHoliday: isHoliday,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
-
-  String _statusLabel(String step) {
-    switch (step) {
-      case 'create_timetable':
-        return "Create today's timetable";
-      case 'take_attendance':
-        return 'Take attendance';
-      case 'review_homework':
-        return "Review yesterday's homework";
-      case 'assign_homework':
-        return "Assign tomorrow's homework";
-      case 'done':
-        return 'All tasks done — great job!';
-      case 'holiday':
-        return 'Holiday';
-      default:
-        return '';
-    }
-  }
 }
 
-class _StepChip extends StatelessWidget {
-  final String label;
-  final bool done;
-  final bool active;
-  final bool enabled;
-  // True when the step is not applicable today (e.g. "Review HW" but no
-  // HW was due) — chip renders grey so the teacher doesn't read it as
-  // "done" or "still pending".
-  final bool na;
-  final VoidCallback? onTap;
-  const _StepChip({
-    required this.label,
-    required this.done,
-    required this.active,
-    this.enabled = true,
-    this.na = false,
-    this.onTap,
+class _WorkflowRoad extends StatelessWidget {
+  final List<_RoadStep> steps;
+  final Color color;
+  final Color doneColor;
+  final Color pendingColor;
+  final bool isHoliday;
+  const _WorkflowRoad({
+    required this.steps,
+    required this.color,
+    required this.doneColor,
+    required this.pendingColor,
+    required this.isHoliday,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Binary palette per spec: green = done, blue = pending. The active
-    // (next-up) pending chip gets a heavier border so the teacher can see
-    // where to go next, but the colour family stays blue. N/A steps get
-    // a muted grey so they don't look like progress in either direction.
-    final base = na
-        ? AppColors.textMuted
-        : (done ? AppColors.success : AppColors.primary);
-    return Expanded(
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: Opacity(
-          opacity: enabled ? 1 : 0.45,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: base.withOpacity(0.10),
-              border: Border.all(
-                  color: active ? base : base.withOpacity(0.45),
-                  width: active ? 1.6 : 1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  done
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 13,
-                  color: base,
-                ),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
-                        fontSize: 10.5,
-                        fontWeight:
-                            active ? FontWeight.w600 : FontWeight.w500,
-                        color: base),
-                  ),
-                ),
-              ],
+    final n = steps.length;
+    // First non-done, non-na step. If everything is done/na, currentIdx == n
+    // and the car parks past the final milestone.
+    var currentIdx = n;
+    for (var i = 0; i < n; i++) {
+      if (!steps[i].done && !steps[i].na) {
+        currentIdx = i;
+        break;
+      }
+    }
+
+    return LayoutBuilder(builder: (context, constraints) {
+      const radius = 11.0;
+      const labelHeight = 18.0;
+      // Reserve room on the right edge so the car at the end isn't clipped.
+      const leftPad = radius + 2;
+      const rightPad = radius + 6;
+      final width = constraints.maxWidth;
+      final innerWidth = (width - leftPad - rightPad).clamp(1.0, double.infinity);
+      double xAt(int i) => leftPad + innerWidth * i / (n - 1);
+
+      final centerY = constraints.maxHeight / 2;
+
+      // Solid colored line ends at the last completed milestone.
+      double doneEndX;
+      if (currentIdx == 0) {
+        doneEndX = leftPad; // nothing done yet — no solid line
+      } else if (currentIdx >= n) {
+        doneEndX = xAt(n - 1);
+      } else {
+        doneEndX = xAt(currentIdx - 1);
+      }
+
+      // Car position: at the current pending step, or past the last
+      // milestone when everything is done.
+      double carX;
+      if (currentIdx >= n) {
+        carX = xAt(n - 1) + 14;
+      } else {
+        carX = xAt(currentIdx);
+      }
+
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _RoadPainter(
+                color: color,
+                pendingColor: AppColors.divider,
+                startX: leftPad,
+                doneEndX: doneEndX,
+                allEndX: xAt(n - 1),
+                centerY: centerY,
+              ),
             ),
           ),
+          for (var i = 0; i < n; i++) ...[
+            // Milestone circle (tappable)
+            Positioned(
+              left: xAt(i) - radius,
+              top: centerY - radius,
+              child: GestureDetector(
+                onTap: steps[i].onTap,
+                behavior: HitTestBehavior.opaque,
+                child: _Milestone(
+                  step: steps[i],
+                  doneColor: doneColor,
+                  pendingColor: pendingColor,
+                  radius: radius,
+                ),
+              ),
+            ),
+            // Label (above for even index, below for odd) — also tappable.
+            Positioned(
+              left: xAt(i) - 44,
+              width: 88,
+              top: i.isEven
+                  ? centerY - radius - labelHeight - 2
+                  : centerY + radius + 2,
+              child: GestureDetector(
+                onTap: steps[i].onTap,
+                child: Text(
+                  steps[i].label,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: steps[i].enabled
+                        ? AppColors.primary
+                        : AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ),
+          ],
+          // Car emoji parked at the boundary
+          Positioned(
+            left: carX - 14,
+            top: centerY - 18,
+            child: const Text('🚗', style: TextStyle(fontSize: 22)),
+          ),
+        ],
+      );
+    });
+  }
+}
+
+class _Milestone extends StatelessWidget {
+  final _RoadStep step;
+  final Color doneColor;
+  final Color pendingColor;
+  final double radius;
+  const _Milestone({
+    required this.step,
+    required this.doneColor,
+    required this.pendingColor,
+    required this.radius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = step.na
+        ? AppColors.textMuted
+        : (step.done ? doneColor : pendingColor);
+    return Opacity(
+      opacity: step.enabled || step.done ? 1 : 0.6,
+      child: Container(
+        width: radius * 2,
+        height: radius * 2,
+        decoration: BoxDecoration(
+          color: fill,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: fill.withOpacity(0.35),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
         ),
+        child: step.done
+            ? const Icon(Icons.check_rounded,
+                size: 14, color: Colors.white)
+            : null,
       ),
     );
   }
 }
 
-class _StepArrow extends StatelessWidget {
+class _RoadPainter extends CustomPainter {
+  final Color color;
+  final Color pendingColor;
+  final double startX;
+  final double doneEndX;
+  final double allEndX;
+  final double centerY;
+  _RoadPainter({
+    required this.color,
+    required this.pendingColor,
+    required this.startX,
+    required this.doneEndX,
+    required this.allEndX,
+    required this.centerY,
+  });
+
   @override
-  Widget build(BuildContext context) =>
-      const Icon(Icons.chevron_right_rounded,
-          size: 14, color: AppColors.textMuted);
+  void paint(Canvas canvas, Size size) {
+    final solidPaint = Paint()
+      ..color = color
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final dashPaint = Paint()
+      ..color = pendingColor
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    if (doneEndX > startX) {
+      canvas.drawLine(
+          Offset(startX, centerY), Offset(doneEndX, centerY), solidPaint);
+    }
+    // Dashed remainder
+    const dashLen = 6.0;
+    const gapLen = 4.0;
+    var x = doneEndX;
+    while (x < allEndX) {
+      final next = (x + dashLen).clamp(x, allEndX);
+      canvas.drawLine(
+          Offset(x, centerY), Offset(next, centerY), dashPaint);
+      x += dashLen + gapLen;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RoadPainter old) =>
+      old.doneEndX != doneEndX ||
+      old.allEndX != allEndX ||
+      old.startX != startX ||
+      old.centerY != centerY ||
+      old.color != color ||
+      old.pendingColor != pendingColor;
 }
