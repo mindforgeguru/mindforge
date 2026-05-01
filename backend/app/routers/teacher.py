@@ -1543,13 +1543,11 @@ async def upsert_homework_completions(
 ):
     """Bulk insert/update completion rows for one homework.
 
-    Two safety rules enforced server-side (so a stale client can't bypass
-    them):
-      1. Attendance for the homework's assigned date must be recorded
-         first — otherwise return 400. The teacher screen surfaces this as
-         a warning banner.
-      2. Students marked absent on that date are forced to completed=False
-         regardless of payload. They couldn't have done the homework.
+    Workflow tasks are grade-wide and independent — any teacher can mark
+    HW status without needing attendance to have been taken first. The
+    only safety rule kept here is: students marked absent today are
+    forced to completed=False regardless of payload (they couldn't have
+    handed in HW they weren't there to bring back).
     """
     hw = (await db.execute(
         select(Homework).where(
@@ -1559,9 +1557,6 @@ async def upsert_homework_completions(
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found or not yours")
 
-    # Same rule as the GET path: gate on today's attendance, not the HW's
-    # due_date. Holidays mean the review may legitimately happen days after
-    # the HW was originally assigned.
     attendance_date = datetime.now(timezone.utc).date()
     att_rows = (await db.execute(
         select(Attendance).where(
@@ -1569,14 +1564,6 @@ async def upsert_homework_completions(
             Attendance.date == attendance_date,
         )
     )).scalars().all()
-    if not att_rows:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Mark attendance for {attendance_date.isoformat()} "
-                "before updating homework status."
-            ),
-        )
     absent_student_ids = {
         a.student_id for a in att_rows
         if a.status == AttendanceStatus.absent

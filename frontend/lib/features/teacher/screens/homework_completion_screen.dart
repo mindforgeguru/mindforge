@@ -177,7 +177,6 @@ class _TeacherHomeworkCompletionScreenState
           final incompleteCount = records.length - completeCount;
           final alreadySubmitted =
               records.any((r) => r.markedAt != null);
-          final attendanceMissing = !response.attendanceRecorded;
 
           return Column(
             children: [
@@ -186,10 +185,7 @@ class _TeacherHomeworkCompletionScreenState
                 complete: completeCount,
                 incomplete: incompleteCount,
               ),
-              if (attendanceMissing)
-                _AttendanceMissingBanner(
-                    attendanceDate: response.attendanceDate),
-              if (alreadySubmitted && !attendanceMissing)
+              if (alreadySubmitted)
                 _SubmittedBanner(),
               Expanded(
                 child: RefreshIndicator(
@@ -207,11 +203,7 @@ class _TeacherHomeworkCompletionScreenState
                         return _BottomActions(
                           submitting: _submitting,
                           isUpdate: alreadySubmitted,
-                          // Block Submit until attendance has been entered;
-                          // the backend will reject the call anyway, but
-                          // disabling the button prevents the round trip
-                          // and shows the user where the friction is.
-                          disabled: attendanceMissing,
+                          disabled: false,
                           onReset: () => _resetAll(records),
                           onSubmit: () =>
                               _submit(isUpdate: alreadySubmitted),
