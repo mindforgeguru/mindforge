@@ -2404,12 +2404,15 @@ class _WorkflowRoad extends StatelessWidget {
                 child: GestureDetector(
                   onTap: steps[i].onTap,
                   behavior: HitTestBehavior.opaque,
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: carRadius * 2,
                     height: carRadius * 2,
                     child: Center(
-                      child: Text('🚗',
-                          style: TextStyle(fontSize: 24)),
+                      child: Icon(
+                        Icons.directions_car_rounded,
+                        size: 26,
+                        color: color,
+                      ),
                     ),
                   ),
                 ),
