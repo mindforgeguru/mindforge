@@ -2252,6 +2252,9 @@ class _GradeRoadRow extends StatelessWidget {
     final reviewDone =
         reviewApplicable && reviewComplete && attendanceTaken;
 
+    // Every milestone is tappable regardless of workflow gating — the
+    // gating only controls visual emphasis (active/dimmed). The
+    // destination screens enforce their own preconditions.
     final steps = <_RoadStep>[
       _RoadStep(
         label: 'Timetable',
@@ -2266,30 +2269,24 @@ class _GradeRoadRow extends StatelessWidget {
         done: attendanceTaken,
         na: false,
         enabled: timetableCreated,
-        onTap: timetableCreated
-            ? () => context.go(
-                '${RouteNames.teacherDashboard}/attendance')
-            : null,
+        onTap: () =>
+            context.go('${RouteNames.teacherDashboard}/attendance'),
       ),
       _RoadStep(
         label: 'HW Review',
         done: reviewDone,
         na: !reviewApplicable,
         enabled: attendanceTaken && reviewApplicable,
-        onTap: attendanceTaken && reviewApplicable
-            ? () => context.go(
-                '${RouteNames.teacherDashboard}/homework')
-            : null,
+        onTap: () =>
+            context.go('${RouteNames.teacherDashboard}/homework'),
       ),
       _RoadStep(
         label: 'Homework',
         done: tomorrowHwAssigned,
         na: false,
         enabled: canAssignNew,
-        onTap: canAssignNew
-            ? () => context.go(
-                '${RouteNames.teacherDashboard}/homework')
-            : null,
+        onTap: () =>
+            context.go('${RouteNames.teacherDashboard}/homework'),
       ),
     ];
 
