@@ -2356,10 +2356,13 @@ class _WorkflowRoad extends StatelessWidget {
 
     return LayoutBuilder(builder: (context, constraints) {
       const radius = 11.0;
+      const carRadius = 16.0;
       const labelHeight = 18.0;
-      // Reserve room on the right edge so the car at the end isn't clipped.
-      const leftPad = radius + 2;
-      const rightPad = radius + 6;
+      const labelWidth = 80.0;
+      // Padding on each side so the milestone circles and their labels
+      // don't crash into the row's left/right edges.
+      const leftPad = 32.0;
+      const rightPad = 32.0;
       final width = constraints.maxWidth;
       final innerWidth = (width - leftPad - rightPad).clamp(1.0, double.infinity);
       double xAt(int i) => leftPad + innerWidth * i / (n - 1);
@@ -2374,15 +2377,6 @@ class _WorkflowRoad extends StatelessWidget {
         doneEndX = xAt(n - 1);
       } else {
         doneEndX = xAt(currentIdx - 1);
-      }
-
-      // Car position: at the current pending step, or past the last
-      // milestone when everything is done.
-      double carX;
-      if (currentIdx >= n) {
-        carX = xAt(n - 1) + 14;
-      } else {
-        carX = xAt(currentIdx);
       }
 
       return Stack(
@@ -2401,25 +2395,44 @@ class _WorkflowRoad extends StatelessWidget {
             ),
           ),
           for (var i = 0; i < n; i++) ...[
-            // Milestone circle (tappable)
-            Positioned(
-              left: xAt(i) - radius,
-              top: centerY - radius,
-              child: GestureDetector(
-                onTap: steps[i].onTap,
-                behavior: HitTestBehavior.opaque,
-                child: _Milestone(
-                  step: steps[i],
-                  doneColor: doneColor,
-                  pendingColor: pendingColor,
-                  radius: radius,
+            // Current step is rendered as a tappable car instead of a
+            // pending dot; other steps render the standard milestone.
+            if (i == currentIdx)
+              Positioned(
+                left: xAt(i) - carRadius,
+                top: centerY - carRadius,
+                child: GestureDetector(
+                  onTap: steps[i].onTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: const SizedBox(
+                    width: carRadius * 2,
+                    height: carRadius * 2,
+                    child: Center(
+                      child: Text('🚗',
+                          style: TextStyle(fontSize: 24)),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Positioned(
+                left: xAt(i) - radius,
+                top: centerY - radius,
+                child: GestureDetector(
+                  onTap: steps[i].onTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: _Milestone(
+                    step: steps[i],
+                    doneColor: doneColor,
+                    pendingColor: pendingColor,
+                    radius: radius,
+                  ),
                 ),
               ),
-            ),
             // Label (above for even index, below for odd) — also tappable.
             Positioned(
-              left: xAt(i) - 44,
-              width: 88,
+              left: xAt(i) - labelWidth / 2,
+              width: labelWidth,
               top: i.isEven
                   ? centerY - radius - labelHeight - 2
                   : centerY + radius + 2,
@@ -2439,12 +2452,6 @@ class _WorkflowRoad extends StatelessWidget {
               ),
             ),
           ],
-          // Car emoji parked at the boundary
-          Positioned(
-            left: carX - 14,
-            top: centerY - 18,
-            child: const Text('🚗', style: TextStyle(fontSize: 22)),
-          ),
         ],
       );
     });
