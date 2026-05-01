@@ -77,6 +77,7 @@ class _TeacherHomeworkCompletionScreenState
       await api.upsertHomeworkCompletions(widget.homeworkId, records);
       ref.invalidate(
           teacherHomeworkCompletionsProvider(widget.homeworkId));
+      ref.invalidate(teacherTodayWorkflowProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -177,6 +178,7 @@ class _TeacherHomeworkCompletionScreenState
           final incompleteCount = records.length - completeCount;
           final alreadySubmitted =
               records.any((r) => r.markedAt != null);
+          final attendanceMissing = !response.attendanceRecorded;
 
           return Column(
             children: [
@@ -185,7 +187,10 @@ class _TeacherHomeworkCompletionScreenState
                 complete: completeCount,
                 incomplete: incompleteCount,
               ),
-              if (alreadySubmitted)
+              if (attendanceMissing)
+                _AttendanceMissingBanner(
+                    attendanceDate: response.attendanceDate),
+              if (alreadySubmitted && !attendanceMissing)
                 _SubmittedBanner(),
               Expanded(
                 child: RefreshIndicator(
@@ -203,7 +208,11 @@ class _TeacherHomeworkCompletionScreenState
                         return _BottomActions(
                           submitting: _submitting,
                           isUpdate: alreadySubmitted,
-                          disabled: false,
+                          // Block Submit until attendance has been entered;
+                          // the backend will reject the call anyway, but
+                          // disabling the button prevents the round trip
+                          // and shows the user where the friction is.
+                          disabled: attendanceMissing,
                           onReset: () => _resetAll(records),
                           onSubmit: () =>
                               _submit(isUpdate: alreadySubmitted),

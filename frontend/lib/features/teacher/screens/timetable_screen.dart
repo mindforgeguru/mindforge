@@ -988,6 +988,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
       }
       ref.invalidate(teacherTimetableProvider((_selectedGrade, _dateString)));
       ref.invalidate(myTimetableProvider);
+      ref.invalidate(teacherTodayWorkflowProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

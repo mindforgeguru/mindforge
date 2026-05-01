@@ -452,8 +452,14 @@ class _TeacherAttendanceScreenState
         'records': records,
       });
 
-      // Invalidate so the provider re-fetches fresh data next time
+      // Invalidate so the provider re-fetches fresh data next time.
+      // Also invalidate the HW completions family + workflow card so
+      // dependent screens reflect that today's attendance is now
+      // recorded — otherwise the HW review screen keeps showing the
+      // "attendance missing" warning from a stale cache.
       ref.invalidate(teacherAttendanceProvider((_selectedGrade, _dateStr)));
+      ref.invalidate(teacherHomeworkCompletionsProvider);
+      ref.invalidate(teacherTodayWorkflowProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

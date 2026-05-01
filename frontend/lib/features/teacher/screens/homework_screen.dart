@@ -454,6 +454,7 @@ class _CreateHomeworkDialogState
         'homework_type': _type,
         'due_date': _dueDate?.toIso8601String().substring(0, 10),
       });
+      ref.invalidate(teacherTodayWorkflowProvider);
       widget.onCreated();
       if (mounted) Navigator.pop(context);
     } on DioException catch (e) {
