@@ -366,18 +366,22 @@ async def _finalize_submission(
     *,
     auto_submitted: bool,
     finalized_at: Optional[datetime] = None,
+    forfeit: bool = False,
 ) -> None:
     """Score, persist, and broadcast the finalization of a TestSubmission.
 
     Idempotent: if the submission is already finalized this is a no-op. Used
     by /submit (manual finalization) and by the lazy expiry sweep.
+
+    `forfeit=True` forces score=0 regardless of saved answers — used when the
+    student abandons the attempt (back button, app close, /start called twice).
     """
     if submission.is_finalized:
         return
 
     from app.models.grade import Grade, GradeType
 
-    score = _grade_submission(test, submission.answers or {})
+    score = 0.0 if forfeit else _grade_submission(test, submission.answers or {})
     submission.score = score
     submission.auto_submitted = auto_submitted
     submission.is_finalized = True
@@ -624,16 +628,16 @@ async def start_test_attempt(
     current_student: User = Depends(get_current_student),
 ):
     """
-    Start (or resume) the student's attempt at an online test.
+    Start the student's *one and only* attempt at an online test.
 
-    A student may only ever have one attempt per test. The first call creates
-    a TestSubmission row and stamps an attempt_expires_at (start_time +
-    time_limit, capped by the test's expires_at). Subsequent calls return
-    the same row with whatever answers have been autosaved and the time left.
-
-    If the deadline has already passed, the attempt is finalized in place
-    (graded with whatever was saved) and the response carries is_finalized=True
-    so the client can show the result dialog.
+    Strict single-attempt policy:
+      - First call: creates a TestSubmission and stamps attempt_expires_at.
+      - Second call when an in-progress row exists: forfeits (score=0,
+        auto_submitted=True). The student left the test screen and came
+        back; under the policy that any exit ends the attempt, we do not
+        allow resume.
+      - Submission already finalized: returns the finalized response so
+        the client can show the result.
     """
     test_result = await db.execute(select(Test).where(Test.id == test_id))
     test = test_result.scalar_one_or_none()
@@ -681,20 +685,61 @@ async def start_test_attempt(
         await db.refresh(submission)
         return _attempt_response(submission, test, now=now)
 
-    # Existing attempt — finalize it lazily if the deadline already passed.
-    if (
-        not submission.is_finalized
-        and submission.attempt_expires_at
-        and submission.attempt_expires_at <= now
-    ):
+    # Submission exists. Per the strict single-attempt policy, the only
+    # legitimate second call is to read a finalized result. Anything else
+    # means the student left the test screen and came back — that's a
+    # forfeit (score=0).
+    if not submission.is_finalized:
         await _finalize_submission(
             submission,
             test,
             db,
             auto_submitted=True,
-            finalized_at=submission.attempt_expires_at,
+            finalized_at=now,
+            forfeit=True,
         )
 
+    return _attempt_response(submission, test, now=now)
+
+
+@router.post("/tests/{test_id}/forfeit", response_model=TestAttemptResponse)
+async def forfeit_test_attempt(
+    test_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_student: User = Depends(get_current_student),
+):
+    """
+    Forfeit an in-progress attempt — score becomes 0 and the row is finalized.
+
+    Called by the client when the student presses Back, backgrounds the app,
+    or otherwise abandons the test mid-attempt. Idempotent: if the attempt
+    is already finalized, returns the finalized response unchanged.
+    """
+    test_result = await db.execute(select(Test).where(Test.id == test_id))
+    test = test_result.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found.")
+
+    now = datetime.now(timezone.utc)
+    sub_result = await db.execute(
+        select(TestSubmission).where(
+            TestSubmission.test_id == test_id,
+            TestSubmission.student_id == current_student.id,
+        )
+    )
+    submission = sub_result.scalar_one_or_none()
+    if submission is None:
+        raise HTTPException(status_code=404, detail="No attempt to forfeit.")
+
+    if not submission.is_finalized:
+        await _finalize_submission(
+            submission,
+            test,
+            db,
+            auto_submitted=True,
+            finalized_at=now,
+            forfeit=True,
+        )
     return _attempt_response(submission, test, now=now)
 
 

@@ -59,20 +59,64 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     super.dispose();
   }
 
+  // Set when the lifecycle handler forfeits a backgrounded attempt — the
+  // result dialog must wait until the app is foregrounded again.
+  bool _pendingResultDialog = false;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Closing/backgrounding the app must NOT pause the test — the server
-    // already holds the deadline. On the way out, push whatever's been typed
-    // so it's safe if the deadline elapses while we're away. On the way back
-    // in, refetch the attempt: the server may have finalized it for us.
+    // Strict single-attempt policy: backgrounding the app forfeits the
+    // attempt (score=0). 'inactive' is skipped because it fires on
+    // transient overlays (notification panel, control center) — those
+    // shouldn't lose the test. 'paused' and 'hidden' are real exits.
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
-      _flushAnswers();
-      _autosaveNow(silent: true);
-    } else if (state == AppLifecycleState.resumed && !_submitted) {
-      _refreshAttemptOnResume();
+      if (!_submitted) {
+        _submitted = true;
+        _pendingResultDialog = true;
+        _autosaveTimer?.cancel();
+        // Fire-and-forget — the screen is going into the background, so
+        // there's nothing to await against. /start also forfeits on the
+        // server next time the student opens the test, so the row ends
+        // up finalized even if this request is lost.
+        final api = ref.read(apiClientProvider);
+        api.forfeitTest(widget.testId).catchError((_) => <String, dynamic>{});
+        ref.invalidate(pendingTestsProvider);
+        ref.invalidate(completedTestsProvider);
+        ref.invalidate(studentGradesProvider);
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (_pendingResultDialog) {
+        _pendingResultDialog = false;
+        _surfaceForfeitResult();
+      } else if (!_submitted) {
+        _refreshAttemptOnResume();
+      }
     }
+  }
+
+  /// Forfeit synchronously and pop. Used for the back button — we're in
+  /// the foreground so we can show the dialog right away.
+  Future<void> _forfeitAndExit() async {
+    if (_submitted) return;
+    _submitted = true;
+    _autosaveTimer?.cancel();
+    final api = ref.read(apiClientProvider);
+    try {
+      await api.forfeitTest(widget.testId);
+    } catch (_) {
+      // Best effort. /start will forfeit on the server side anyway.
+    }
+    ref.invalidate(pendingTestsProvider);
+    ref.invalidate(completedTestsProvider);
+    ref.invalidate(studentGradesProvider);
+    await _surfaceForfeitResult();
+  }
+
+  Future<void> _surfaceForfeitResult() async {
+    if (!mounted) return;
+    await _showResultDialog(score: 0, autoSubmitted: true);
+    if (mounted) context.pop();
   }
 
   Future<void> _startAttempt() async {
@@ -350,10 +394,15 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     final qType = (q['type'] as String? ?? '').toLowerCase();
     final isLast = _currentIndex == _questions.length - 1;
 
-    // Block back-button: once started, the student must finish or run out
-    // the clock. Either path goes through _submitTest, which pops on success.
+    // Back button: under the strict single-attempt policy, exiting the
+    // screen forfeits the attempt (score=0). Once submitted/forfeited
+    // canPop=true so the pop goes through normally.
     return PopScope(
       canPop: _submitted,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop || _submitted) return;
+        await _forfeitAndExit();
+      },
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
