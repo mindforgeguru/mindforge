@@ -2244,13 +2244,20 @@ class _GradeRoadRow extends StatelessWidget {
     final isHoliday = grade['is_holiday'] == true;
     final timetableCreated = grade['timetable_created'] == true;
     final attendanceTaken = grade['attendance_taken'] == true;
+    // Backend signals N/A for the attendance step when there are no
+    // non-holiday periods today (full holiday or no class today). In
+    // that case the car should skip attendance, and HW review / HW
+    // assignment must not require it. Default to true so older API
+    // payloads keep their old behavior.
+    final attendanceApplicable = grade['attendance_applicable'] != false;
+    final attendanceSatisfied = attendanceTaken || !attendanceApplicable;
     final reviewApplicable = grade['review_applicable'] == true;
     final reviewComplete = grade['review_complete'] == true;
     final canAssignNew = grade['can_assign_new_homework'] == true;
     final tomorrowHwAssigned = grade['tomorrow_hw_assigned'] == true;
 
     final reviewDone =
-        reviewApplicable && reviewComplete && attendanceTaken;
+        reviewApplicable && reviewComplete && attendanceSatisfied;
 
     // Every milestone is tappable regardless of workflow gating — the
     // gating only controls visual emphasis (active/dimmed). The
@@ -2267,8 +2274,8 @@ class _GradeRoadRow extends StatelessWidget {
       _RoadStep(
         label: 'Attendance',
         done: attendanceTaken,
-        na: false,
-        enabled: timetableCreated,
+        na: !attendanceApplicable,
+        enabled: timetableCreated && attendanceApplicable,
         onTap: () =>
             context.go('${RouteNames.teacherDashboard}/attendance'),
       ),
@@ -2276,7 +2283,7 @@ class _GradeRoadRow extends StatelessWidget {
         label: 'HW Review',
         done: reviewDone,
         na: !reviewApplicable,
-        enabled: attendanceTaken && reviewApplicable,
+        enabled: attendanceSatisfied && reviewApplicable,
         onTap: () =>
             context.go('${RouteNames.teacherDashboard}/homework'),
       ),

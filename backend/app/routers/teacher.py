@@ -1668,12 +1668,14 @@ async def get_today_workflow(
     current teacher does not need to be assigned to a slot for the chips
     to turn green.
 
-    Four steps per grade, each with a done/pending state:
+    Four steps per grade, each with a done/pending/N-A state:
       1. timetable_created — any TimetableSlot exists for this grade ×
          today (creating the slot is the "done" event)
       2. attendance_taken  — Attendance rows recorded for *every* non-
-         holiday period in this grade today (partial coverage shows
-         progress in `attendance_progress` but is_done=False)
+         holiday period in this grade today. When today is a holiday or
+         the grade has no class today, this step is N/A
+         (`attendance_applicable=False`) and does not block downstream
+         steps — any teacher can still advance HW review / assignment.
       3. review_complete   — no pending homework reviews for this grade
          (HW with incomplete completion roster)
       4. tomorrow_hw_assigned — at least one HW created today for this
@@ -1732,30 +1734,17 @@ async def get_today_workflow(
             and all(s.is_holiday for s in slots)
         )
 
-        if is_holiday:
-            grade_results.append({
-                "grade": grade,
-                "is_holiday": True,
-                "timetable_created": True,
-                "expected_periods": [],
-                "recorded_periods": [],
-                "attendance_taken": False,
-                "attendance_progress": "0/0",
-                "pending_review_homework_ids": [],
-                "review_applicable": False,
-                "review_complete": False,
-                "tomorrow_hw_assigned": False,
-                "can_assign_new_homework": False,
-                "next_step": "holiday",
-            })
-            continue
-
         # Attendance: gated on every non-holiday period for the grade
         # today, regardless of which teacher is assigned. Any teacher
-        # can record attendance for any period.
+        # can record attendance for any period. When the grade has no
+        # non-holiday periods today (full holiday or no slots), attendance
+        # is N/A — `attendance_applicable=False` — and downstream steps
+        # (HW review, HW assignment) are no longer blocked by it.
         expected_periods = sorted({
             s.period_number for s in slots if not s.is_holiday
         })
+        attendance_applicable = len(expected_periods) > 0
+
         recorded_periods = []
         if expected_periods:
             att_rows = (await db.execute(
@@ -1767,15 +1756,14 @@ async def get_today_workflow(
             )).all()
             recorded_periods = sorted({row[0] for row in att_rows})
         attendance_taken = (
-            len(expected_periods) > 0
+            attendance_applicable
             and set(expected_periods).issubset(set(recorded_periods))
         )
 
-        # Distinguish "nothing to review" from "all reviewed". The HW review
-        # step is only "done" (green) when there *was* prior HW to review
-        # and it's all marked. If no HW has ever been created for this
-        # grade before today, the step is N/A — the chip stays neutral
-        # instead of vacuously turning green. Computed grade-wide.
+        # HW review and assignment are grade-wide tasks that any teacher
+        # can complete on any day — including holidays and days the
+        # teacher has no class. Compute them unconditionally so the car
+        # can advance even when attendance is N/A.
         pending = await _pending_hw_review_ids(grade, today, db)
         prior_hw_count = (await db.execute(
             select(func.count()).select_from(Homework).where(
@@ -1797,36 +1785,41 @@ async def get_today_workflow(
         )).scalar_one()
         tomorrow_hw_assigned = tomorrow_hw_count > 0
 
-        # Review step is skipped (not green) when there's no HW to review.
-        # Treat it as "satisfied for routing" so the next_step still flows
-        # forward to assign_homework, but mark review_applicable=False so
-        # the client renders the chip as N/A instead of green.
+        # A step is "satisfied for routing" if it's done OR not applicable.
+        # This lets the car advance past N/A steps (e.g. attendance on a
+        # holiday) without marking them green.
+        attendance_step_satisfied = attendance_taken or not attendance_applicable
         review_step_satisfied = (not review_applicable) or review_complete
 
         if not timetable_created:
             next_step = "create_timetable"
-        elif not attendance_taken:
+        elif attendance_applicable and not attendance_taken:
             next_step = "take_attendance"
         elif review_applicable and not review_complete:
             next_step = "review_homework"
         elif not tomorrow_hw_assigned:
             next_step = "assign_homework"
+        elif is_holiday:
+            next_step = "holiday"
         else:
             next_step = "done"
 
+        progress_total = max(len(expected_periods), 0)
+
         grade_results.append({
             "grade": grade,
-            "is_holiday": False,
+            "is_holiday": is_holiday,
             "timetable_created": timetable_created,
             "expected_periods": expected_periods,
             "recorded_periods": recorded_periods,
             "attendance_taken": attendance_taken,
-            "attendance_progress": f"{len(recorded_periods)}/{len(expected_periods)}",
+            "attendance_applicable": attendance_applicable,
+            "attendance_progress": f"{len(recorded_periods)}/{progress_total}",
             "pending_review_homework_ids": pending,
             "review_applicable": review_applicable,
             "review_complete": review_complete,
             "tomorrow_hw_assigned": tomorrow_hw_assigned,
-            "can_assign_new_homework": attendance_taken and review_step_satisfied,
+            "can_assign_new_homework": attendance_step_satisfied and review_step_satisfied,
             "next_step": next_step,
         })
 
