@@ -6,7 +6,7 @@ class AppConstants {
   static const String tagline = 'AI Assisted Learning';
 
   // ⚠️  LOCAL DEV MODE — change back to false before building a release APK
-  static const bool _local = true;
+  static const bool _local = false;
 
   static const String apiBaseUrl =
       _local ? 'http://192.168.29.211:8000/api' : 'https://api.mindforge.guru/api';
