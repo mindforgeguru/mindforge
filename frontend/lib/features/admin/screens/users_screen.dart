@@ -424,7 +424,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
 
             Row(
               children: [
-                const Icon(Icons.edit_outlined, color: AppColors.primary),
+                      Icon(Icons.edit_outlined, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Text(
                   'Edit  ${widget.user.username}',
@@ -442,7 +442,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                   ),
                   child: Text(
                     widget.user.role.toUpperCase(),
-                    style: const TextStyle(
+                    style:       TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary),
@@ -717,7 +717,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                           ? Container(
                               width: 10,
                               height: 10,
-                              decoration: const BoxDecoration(
+                              decoration:       BoxDecoration(
                                 color: AppColors.primary,
                                 shape: BoxShape.circle,
                               ),
@@ -1231,7 +1231,7 @@ class _ActiveUserTileState extends ConsumerState<_ActiveUserTile> {
 
           // ── Actions ─────────────────────────────────────────────────
           if (isAdmin)
-            const Padding(
+                  Padding(
               padding: EdgeInsets.symmetric(horizontal: 8),
               child: Icon(Icons.shield, color: AppColors.primaryDark, size: 22),
             )

@@ -37,8 +37,9 @@ from app.schemas.homework import (
 from app.schemas.fees import StudentFeeSummary
 from app.models.homework import Homework, HomeworkCompletion, Broadcast
 from app.models.fees import FeeStructure, FeePayment, PaymentInfo
+from app.models.xp import XPReason
 from app.schemas.fees import FeePaymentResponse, PaymentInfoResponse
-from app.services import storage_service
+from app.services import storage_service, xp_service
 from app.core.cache import (
     get_student_profile_cached,
     get_timetable_config_cached,
@@ -401,6 +402,24 @@ async def _finalize_submission(
     )
     await db.commit()
     await db.refresh(submission)
+
+    # Award test XP based on percentage. Idempotent on test_id so a regrade
+    # won't double-award. Forfeited (score=0) attempts skip XP entirely.
+    if not forfeit and test.total_marks > 0:
+        pct = (score / test.total_marks) * 100
+        amount, reason = xp_service.xp_for_test_score(pct)
+        if amount > 0:
+            await xp_service.award_xp(
+                db,
+                student_id=submission.student_id,
+                reason=reason,
+                amount=amount,
+                reference_id=f"test:{test.id}",
+                description=(
+                    f"{test.subject} test '{test.title}' — {pct:.0f}% "
+                    f"({score}/{test.total_marks})"
+                ),
+            )
 
     # Mark the test fully graded once every student in the grade has finalized.
     student_count_result = await db.execute(

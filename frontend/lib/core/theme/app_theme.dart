@@ -1,45 +1,71 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// MIND FORGE v2 color palette — deep navy, white, coral orange.
+import 'brand_palette.dart';
+
+/// MIND FORGE color palette.
+///
+/// **Reactive theming** — the brand-tinted tokens (`primary`, `secondary`,
+/// `accent`, and their light/dark variants + `iconContainer`) are runtime
+/// getters that read from a swappable [BrandPalette]. Status colors,
+/// surfaces, dividers, and text tones stay `const` so readability is
+/// stable across themes.
+///
+/// To switch palettes call [applyPalette]; the [paletteVersion] notifier
+/// fires so a [ValueListenableBuilder] near the [MaterialApp] root can
+/// rebuild the tree with the new colors.
 class AppColors {
   AppColors._();
 
-  // Primary — deep navy #1D3557
-  static const Color primary = Color(0xFF1D3557);
-  static const Color primaryLight = Color(0xFF2E4F7A);
-  static const Color primaryDark = Color(0xFF0F1F35);
+  // ── Reactive backing store ─────────────────────────────────────────────────
+  static BrandPalette _palette = BrandPalettes.mindForge;
+  static BrandPalette get currentPalette => _palette;
 
-  // Secondary — slate blue (complements navy)
-  static const Color secondary = Color(0xFF457B9D);
-  static const Color secondaryLight = Color(0xFF6FA3C0);
-  static const Color secondaryDark = Color(0xFF2C5F7A);
+  /// Bumped every time the palette swaps. Listeners (specifically a
+  /// [ValueListenableBuilder] wrapping [MaterialApp]) rebuild the tree
+  /// when this changes so every screen reads the new color values.
+  static final ValueNotifier<int> paletteVersion = ValueNotifier<int>(0);
 
-  // Accent — coral orange #D4653B
-  static const Color accent = Color(0xFFD4653B);
-  static const Color accentLight = Color(0xFFE8895F);
-  static const Color accentDark = Color(0xFFAA4A27);
+  static void applyPalette(BrandPalette palette) {
+    if (palette.id == _palette.id) return;
+    _palette = palette;
+    paletteVersion.value++;
+  }
 
-  // Neutral / surfaces
+  // ── Brand-tinted (vary per palette) ────────────────────────────────────────
+  static Color get primary => _palette.primary;
+  static Color get primaryLight => _palette.primaryLight;
+  static Color get primaryDark => _palette.primaryDark;
+
+  static Color get secondary => _palette.secondary;
+  static Color get secondaryLight => _palette.secondaryLight;
+  static Color get secondaryDark => _palette.secondaryDark;
+
+  static Color get accent => _palette.accent;
+  static Color get accentLight => _palette.accentLight;
+  static Color get accentDark => _palette.accentDark;
+
+  static Color get iconContainer => _palette.iconContainer;
+
+  // ── Fixed neutrals & surfaces (const — don't vary by theme) ────────────────
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color background = Color(0xFFEDF2F8);   // light blue-gray
+  static const Color background = Color(0xFFEDF2F8);
   static const Color cardBackground = Color(0xFFFFFFFF);
-  static const Color iconContainer = Color(0xFFDCE8F5); // light blue for icon bg
   static const Color divider = Color(0xFFC5D3E0);
 
-  // Status
+  // Status — kept stable so success/warning/error semantics never shift.
   static const Color success = Color(0xFF2E7D52);
   static const Color warning = Color(0xFFB07A20);
   static const Color error = Color(0xFFB03030);
   static const Color info = Color(0xFF457B9D);
 
-  // Text
-  static const Color textPrimary = Color(0xFF1D3557);   // deep navy
-  static const Color textSecondary = Color(0xFF457B9D); // slate blue
-  static const Color textMuted = Color(0xFF8A9BAD);     // blue-gray
-  static const Color textOnDark = Color(0xFFFFFFFF);    // white on dark
+  // Text — stable readability against white card backgrounds.
+  static const Color textPrimary = Color(0xFF1D3557);
+  static const Color textSecondary = Color(0xFF457B9D);
+  static const Color textMuted = Color(0xFF8A9BAD);
+  static const Color textOnDark = Color(0xFFFFFFFF);
 
-  // Dark theme surfaces
+  // Dark theme surfaces (rarely used today; kept for completeness).
   static const Color darkBackground = Color(0xFF0F1F35);
   static const Color darkSurface = Color(0xFF1A2E4A);
   static const Color darkCard = Color(0xFF1F3855);
@@ -68,7 +94,7 @@ class AppTheme {
   static ThemeData get lightTheme {
     final textTheme = _buildTextTheme();
 
-    const colorScheme = ColorScheme(
+    final colorScheme = ColorScheme(
       brightness: Brightness.light,
       primary: AppColors.primary,
       onPrimary: AppColors.textOnDark,
@@ -84,14 +110,14 @@ class AppTheme {
       onTertiaryContainer: AppColors.textPrimary,
       error: AppColors.error,
       onError: AppColors.textOnDark,
-      errorContainer: Color(0xFFFFCDD2),
+      errorContainer: const Color(0xFFFFCDD2),
       onErrorContainer: AppColors.error,
       surface: AppColors.surface,
       onSurface: AppColors.textPrimary,
       surfaceContainerHighest: AppColors.background,
       onSurfaceVariant: AppColors.textSecondary,
       outline: AppColors.divider,
-      shadow: Color(0x1A1D3557),
+      shadow: const Color(0x1A1D3557),
     );
 
     return ThemeData(
@@ -133,7 +159,7 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.primary, width: 1.5),
+          side: BorderSide(color: AppColors.primary, width: 1.5),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           textStyle: GoogleFonts.poppins(fontSize: 13),
@@ -152,7 +178,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: BorderSide(color: AppColors.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -161,10 +187,10 @@ class AppTheme {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         labelStyle: GoogleFonts.poppins(color: AppColors.textSecondary, fontSize: 12),
       ),
-      chipTheme: const ChipThemeData(
+      chipTheme: ChipThemeData(
         backgroundColor: AppColors.iconContainer,
         selectedColor: AppColors.primary,
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(8))),
       ),
       dividerTheme: const DividerThemeData(
@@ -186,7 +212,7 @@ class AppTheme {
     return lightTheme.copyWith(
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.darkBackground,
-      colorScheme: const ColorScheme(
+      colorScheme: ColorScheme(
         brightness: Brightness.dark,
         primary: AppColors.primaryLight,
         onPrimary: AppColors.textOnDark,
@@ -200,16 +226,16 @@ class AppTheme {
         onTertiary: AppColors.textOnDark,
         tertiaryContainer: AppColors.accentDark,
         onTertiaryContainer: AppColors.textOnDark,
-        error: Color(0xFFEF9A9A),
+        error: const Color(0xFFEF9A9A),
         onError: AppColors.darkBackground,
         errorContainer: AppColors.error,
-        onErrorContainer: Color(0xFFFFCDD2),
+        onErrorContainer: const Color(0xFFFFCDD2),
         surface: AppColors.darkSurface,
         onSurface: AppColors.textOnDark,
         surfaceContainerHighest: AppColors.darkCard,
         onSurfaceVariant: AppColors.textMuted,
-        outline: Color(0xFF2A4060),
-        shadow: Color(0x40000000),
+        outline: const Color(0xFF2A4060),
+        shadow: const Color(0x40000000),
       ),
     );
   }

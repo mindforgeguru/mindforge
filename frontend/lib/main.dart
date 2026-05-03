@@ -11,6 +11,7 @@ import 'core/services/notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/constants.dart';
 import 'core/providers/badge_provider.dart';
+import 'features/student/providers/xp_provider.dart';
 
 /// Makes every scroll view respond to trackpad and mouse wheel gestures,
 /// not just touch. Applied once at the app root.
@@ -94,6 +95,13 @@ class _MindForgeAppState extends ConsumerState<MindForgeApp> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
+
+    // Sync the runtime palette into AppColors. When the student picks a
+    // different theme this rebuild fires, AppColors getters return the new
+    // values, AppTheme.lightTheme recomputes from those getters, and every
+    // descendant rebuilds with the swapped colors.
+    final palette = ref.watch(currentPaletteProvider);
+    AppColors.applyPalette(palette);
 
     return MaterialApp.router(
       title: AppConstants.appName,

@@ -711,7 +711,7 @@ class _TeacherDashboardScreenState
                                 ),
                                 Container(
                                   padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
+                                  decoration:       BoxDecoration(
                                     color: AppColors.accent,
                                     shape: BoxShape.circle,
                                   ),
@@ -1902,7 +1902,7 @@ class _GradeAnalysisChartState extends State<_GradeAnalysisChart> {
           // Header
           Row(
             children: [
-              const Icon(Icons.bar_chart_rounded, size: 18, color: AppColors.primary),
+                    Icon(Icons.bar_chart_rounded, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
               Text('Grade Analysis — Average % by Subject',
                   style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),

@@ -111,7 +111,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                       color: AppColors.accent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Text(
+                    child:       Text(
                       'PARENT',
                       style: TextStyle(
                         fontSize: 11,
@@ -136,7 +136,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                          Row(
                       children: [
                         Icon(Icons.lock_outline,
                             size: 18, color: AppColors.accent),

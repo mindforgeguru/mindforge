@@ -841,7 +841,7 @@ class _GradeEntrySheetState extends ConsumerState<_GradeEntrySheet> {
                           radius: 18,
                           child: Text(
                             s.username.substring(0, 1).toUpperCase(),
-                            style: const TextStyle(
+                            style:       TextStyle(
                                 color: AppColors.primary,
                                 fontWeight: FontWeight.bold),
                           ),

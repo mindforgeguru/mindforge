@@ -536,7 +536,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ? Container(
                                         width: R.fluid(context, 10, min: 8, max: 12),
                                         height: R.fluid(context, 10, min: 8, max: 12),
-                                        decoration: const BoxDecoration(
+                                        decoration:       BoxDecoration(
                                           color: AppColors.primary,
                                           shape: BoxShape.circle,
                                         ),
@@ -847,7 +847,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
                       borderSide: const BorderSide(color: AppColors.divider)),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 2)),
+                      borderSide:       BorderSide(color: AppColors.primary, width: 2)),
                   ),
                   inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
                 ),
@@ -864,7 +864,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
                         borderSide: const BorderSide(color: AppColors.divider)),
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.primary, width: 2)),
+                        borderSide:       BorderSide(color: AppColors.primary, width: 2)),
                     ),
                     items: ['student','teacher','parent']
                       .map((r) => DropdownMenuItem(value: r,
@@ -889,7 +889,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
                           borderSide: const BorderSide(color: AppColors.divider)),
                         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.primary, width: 2)),
+                          borderSide:       BorderSide(color: AppColors.primary, width: 2)),
                       ),
                       items: [8,9,10].map((g) => DropdownMenuItem(value: g,
                         child: Text('Grade $g'))).toList(),
@@ -933,7 +933,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
                           borderSide: const BorderSide(color: AppColors.divider)),
                         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.primary, width: 2)),
+                          borderSide:       BorderSide(color: AppColors.primary, width: 2)),
                       ),
                       inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
                     ),
@@ -998,7 +998,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       child: Center(child: filled
                         ? Container(width: 9, height: 9,
-                            decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle))
+                            decoration:       BoxDecoration(color: AppColors.primary, shape: BoxShape.circle))
                         : null),
                     );
                   }),

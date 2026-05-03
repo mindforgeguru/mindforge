@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../providers/xp_provider.dart';
 import 'student_bottom_nav.dart';
 
 /// Responsive scaffold for student screens.
@@ -32,10 +33,23 @@ class StudentScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isWide = MediaQuery.of(context).size.width >= 900;
 
+    // Re-key the body when the palette switches. AppColors getters return
+    // the new values immediately, but screens that read them directly (no
+    // Theme.of dependency) won't auto-rebuild. Changing the KeyedSubtree
+    // key forces Flutter to dispose & rebuild the body element with fresh
+    // colors. Cost: scroll position / form state in the body resets on
+    // theme change — acceptable since the user just asked for a visual
+    // change.
+    final palette = ref.watch(currentPaletteProvider);
+    final keyedBody = KeyedSubtree(
+      key: ValueKey('palette:${palette.id}'),
+      child: body,
+    );
+
     if (!isWide) {
       return Scaffold(
         appBar: appBar,
-        body: body,
+        body: keyedBody,
         bottomNavigationBar: const StudentBottomNav(),
         floatingActionButton: floatingActionButton,
         floatingActionButtonLocation: floatingActionButtonLocation,
@@ -54,7 +68,7 @@ class StudentScaffold extends ConsumerWidget {
           StudentTopNav(auth: auth),
           Expanded(
             child: Scaffold(
-              body: body,
+              body: keyedBody,
               backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
             ),
           ),

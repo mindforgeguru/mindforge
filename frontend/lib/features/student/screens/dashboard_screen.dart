@@ -22,7 +22,10 @@ import '../../../core/widgets/badge_dot.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
+import '../providers/xp_provider.dart';
+import '../widgets/level_up_dialog.dart';
 import '../widgets/student_scaffold.dart';
+import '../widgets/xp_progress_bar.dart';
 
 // File-level DateFormat cache — avoids repeated object allocations in build().
 final _fmtYMD     = DateFormat('yyyy-MM-dd');
@@ -96,9 +99,25 @@ class _StudentDashboardScreenState
       final eventType = event['event'] as String?;
       if (eventType == 'profile_updated') {
         _showProfileUpdatedDialog(event['new_username'] as String?);
+      } else if (eventType == 'level_up') {
+        // Refresh the XP card data behind the dialog so the new level
+        // shows when the user dismisses.
+        ref.invalidate(studentXpProvider);
+        LevelUpDialog.show(
+          context,
+          newLevel: (event['level'] as num?)?.toInt() ?? 0,
+          newTitle: event['title'] as String? ?? '',
+          totalXp: (event['total_xp'] as num?)?.toInt() ?? 0,
+        );
       } else if (eventType != null) {
         // Any relevant event → refresh the single summary
         ref.invalidate(studentDashboardSummaryProvider(_todayString));
+        // Most XP-relevant events also imply XP changed — refresh the card.
+        if (eventType == 'attendance_updated' ||
+            eventType == 'grade_added' ||
+            eventType == 'test_submitted') {
+          ref.invalidate(studentXpProvider);
+        }
         // New test published → also refresh the tests screen
         if (eventType == 'new_test_available' || eventType == 'test_status_changed') {
           ref.invalidate(pendingTestsProvider);
@@ -401,7 +420,7 @@ class _StudentDashboardScreenState
                                 ),
                                 Container(
                                   padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
+                                  decoration:       BoxDecoration(
                                     color: AppColors.accent,
                                     shape: BoxShape.circle,
                                   ),
@@ -419,6 +438,9 @@ class _StudentDashboardScreenState
               ),
             ),
           ),
+
+          // ── XP card ────────────────────────────────────────────────────
+          const SliverToBoxAdapter(child: _XpHomeCard()),
 
           // ── Today's timetable header ──────────────────────────────────
           SliverToBoxAdapter(
@@ -2688,7 +2710,7 @@ class _StudentWebBroadcastsBox extends ConsumerWidget {
                           color: AppColors.accent.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.campaign_outlined, size: 16, color: AppColors.accent),
+                        child:       Icon(Icons.campaign_outlined, size: 16, color: AppColors.accent),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -2708,6 +2730,62 @@ class _StudentWebBroadcastsBox extends ConsumerWidget {
               }).toList(),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+// ─── XP card on the home dashboard ────────────────────────────────────────────
+//
+// Small clickable card showing the student's current level and progress to
+// next level. Uses the shared XPProgressBar widget in compact mode. Taps
+// route to the full XP dashboard at /student/xp.
+
+class _XpHomeCard extends ConsumerWidget {
+  const _XpHomeCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final xpAsync = ref.watch(studentXpProvider);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => context.go('${RouteNames.studentDashboard}/xp'),
+          child: xpAsync.when(
+            // Skeleton-ish placeholder while we load — mirrors the bar height
+            // so the home doesn't reflow when XP arrives.
+            loading: () => Container(
+              height: 92,
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: const Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+            // Silent on error so the rest of the dashboard stays clean.
+            // Tapping still opens the full XP screen, which surfaces the error.
+            error: (_, __) => const SizedBox.shrink(),
+            data: (xp) => XPProgressBar(
+              currentLevel: xp.currentLevel,
+              currentLevelTitle: xp.currentLevelTitle,
+              xpIntoLevel: xp.xpIntoLevel,
+              xpForNextLevel: xp.xpForNextLevel,
+              progress: xp.progressToNextLevel,
+              compact: true,
+            ),
+          ),
         ),
       ),
     );

@@ -218,9 +218,9 @@ class _AttendanceCalendarDialogState
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const _LegendDot(color: AppColors.accent, label: 'Attendance marked'),
+                        _LegendDot(color: AppColors.accent, label: 'Attendance marked'),
                   SizedBox(width: _s(context, 16, min: 10, max: 20)),
-                  const _LegendDot(color: AppColors.primary, label: 'Selected'),
+                        _LegendDot(color: AppColors.primary, label: 'Selected'),
                 ],
               ),
 

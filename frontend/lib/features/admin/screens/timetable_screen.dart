@@ -246,7 +246,7 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
                                 horizontal: 12, vertical: 4),
                             child: Text(
                               '$_periodsPerDay',
-                              style: const TextStyle(
+                              style:       TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 20,
                                   color: AppColors.primary),
@@ -443,7 +443,7 @@ class _TimeButton extends StatelessWidget {
             const SizedBox(height: 2),
             Row(
               children: [
-                const Icon(Icons.access_time,
+                      Icon(Icons.access_time,
                     size: 13, color: AppColors.primary),
                 const SizedBox(width: 4),
                 Text(formatted,

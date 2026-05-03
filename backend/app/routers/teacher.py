@@ -40,7 +40,8 @@ from app.schemas.homework import (
     BroadcastResponse,
 )
 from app.models.homework import Homework, HomeworkCompletion, Broadcast
-from app.services import ai_service, notification_service, pdf_service, storage_service
+from app.models.xp import XPReason
+from app.services import ai_service, notification_service, pdf_service, storage_service, xp_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -282,6 +283,24 @@ async def mark_attendance(
     await db.commit()
     for r in records:
         await db.refresh(r)
+
+    # Award attendance XP to every student marked present. Reference key is
+    # "<date>:<period>" so a student earns this exactly once per period
+    # even if the teacher resubmits attendance.
+    attendance_ref = f"{payload.date.isoformat()}:{payload.period}"
+    for item in payload.records:
+        if item.status == AttendanceStatus.present:
+            await xp_service.award_xp(
+                db,
+                student_id=item.student_id,
+                reason=XPReason.ATTENDANCE,
+                amount=xp_service.ATTENDANCE_XP,
+                reference_id=attendance_ref,
+                description=(
+                    f"Present on {payload.date.isoformat()} "
+                    f"(Period {payload.period})"
+                ),
+            )
 
     # Broadcast attendance update to all students in the grade
     await redis_manager.publish({
@@ -571,11 +590,28 @@ async def create_grade(
     grade_obj = Grade(
         **payload.model_dump(),
         teacher_id=current_teacher.id,
-        grade_type=payload.grade_type,
     )
     db.add(grade_obj)
     await db.commit()
     await db.refresh(grade_obj)
+
+    # Award test XP when this grade is tied to a test. Idempotent on
+    # (student_id, reason, test:<id>) so regrades don't double-award.
+    if payload.test_id is not None and payload.max_marks > 0:
+        pct = (payload.marks_obtained / payload.max_marks) * 100
+        amount, reason = xp_service.xp_for_test_score(pct)
+        if amount > 0:
+            await xp_service.award_xp(
+                db,
+                student_id=payload.student_id,
+                reason=reason,
+                amount=amount,
+                reference_id=f"test:{payload.test_id}",
+                description=(
+                    f"{payload.subject} test — {pct:.0f}% "
+                    f"({payload.marks_obtained}/{payload.max_marks})"
+                ),
+            )
 
     # Notify student
     await redis_manager.publish({
@@ -1624,6 +1660,11 @@ async def upsert_homework_completions(
         )).scalars().all()
     }
 
+    # Track who newly transitioned from "not completed" → "completed" so we
+    # award XP exactly once per homework × student. (The XP transaction is
+    # also guarded by a unique index keyed on homework_id, but the explicit
+    # transition check avoids spurious idempotency-skip work.)
+    newly_completed_student_ids: list[int] = []
     for rec in payload.records:
         if rec.student_id not in valid_student_ids:
             continue
@@ -1631,8 +1672,11 @@ async def upsert_homework_completions(
         # tried to send. See rule 2 above.
         completed = False if rec.student_id in absent_student_ids else rec.completed
         if rec.student_id in existing:
+            was_complete = existing[rec.student_id].completed
             existing[rec.student_id].completed = completed
             existing[rec.student_id].marked_by = current_teacher.id
+            if completed and not was_complete:
+                newly_completed_student_ids.append(rec.student_id)
         else:
             db.add(HomeworkCompletion(
                 homework_id=homework_id,
@@ -1640,7 +1684,28 @@ async def upsert_homework_completions(
                 completed=completed,
                 marked_by=current_teacher.id,
             ))
+            if completed:
+                newly_completed_student_ids.append(rec.student_id)
     await db.commit()
+
+    # Award homework XP — on time if marked on or before due_date, late
+    # otherwise. No due_date counts as on-time.
+    today_date = datetime.now(timezone.utc).date()
+    is_on_time = (hw.due_date is None) or (today_date <= hw.due_date)
+    hw_reason = XPReason.HOMEWORK_ON_TIME if is_on_time else XPReason.HOMEWORK_LATE
+    hw_amount = (
+        xp_service.HOMEWORK_ON_TIME_XP if is_on_time
+        else xp_service.HOMEWORK_LATE_XP
+    )
+    for student_id in newly_completed_student_ids:
+        await xp_service.award_xp(
+            db,
+            student_id=student_id,
+            reason=hw_reason,
+            amount=hw_amount,
+            reference_id=f"homework:{homework_id}",
+            description=f"Homework completed: {hw.title}",
+        )
 
     await redis_manager.publish({
         "target_type": "grade",

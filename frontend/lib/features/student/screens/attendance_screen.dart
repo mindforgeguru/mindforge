@@ -128,7 +128,7 @@ class _StudentAttendanceScreenState
                     children: [
                       Text(
                         DateFormat('MMMM yyyy').format(_displayMonth),
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.primary),
+                        style:       TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.primary),
                       ),
                       const SizedBox(height: 10),
                       Row(children: [
@@ -242,7 +242,7 @@ class _StudentAttendanceScreenState
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.fact_check_outlined, size: 16, color: AppColors.primary),
+                                      Icon(Icons.fact_check_outlined, size: 16, color: AppColors.primary),
                                 const SizedBox(width: 8),
                                 Text('Attendance Calendar',
                                     style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary)),
@@ -650,7 +650,7 @@ class _DonutLeaderboardColumn extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.pie_chart_outline, size: 16, color: AppColors.primary),
+                              Icon(Icons.pie_chart_outline, size: 16, color: AppColors.primary),
                         const SizedBox(width: 8),
                         Text('% of Attendance',
                             style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary)),
@@ -740,7 +740,7 @@ class _DonutLeaderboardColumn extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.emoji_events_outlined, size: 16, color: AppColors.accent),
+                              Icon(Icons.emoji_events_outlined, size: 16, color: AppColors.accent),
                         const SizedBox(width: 8),
                         Text('Top Students',
                             style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary)),

@@ -407,7 +407,7 @@ class _ParentDashboardScreenState
                                 Container(
                                   padding: EdgeInsets.all(
                                       _s(context, 4, min: 3, max: 6)),
-                                  decoration: const BoxDecoration(
+                                  decoration:       BoxDecoration(
                                     color: AppColors.accent,
                                     shape: BoxShape.circle,
                                   ),

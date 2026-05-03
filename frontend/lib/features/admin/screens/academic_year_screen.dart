@@ -308,7 +308,7 @@ class _PreviousYearCard extends ConsumerWidget {
               color: AppColors.primary.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.history_edu_outlined,
+            child:       Icon(Icons.history_edu_outlined,
                 color: AppColors.primary, size: 22),
           ),
           title: Text(label,

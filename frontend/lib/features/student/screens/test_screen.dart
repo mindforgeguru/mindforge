@@ -19,7 +19,7 @@ class StudentTestScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isWide = MediaQuery.of(context).size.width >= 900;
 
-    const tabBar = TabBar(
+    final tabBar = TabBar(
       labelColor: Colors.white,
       unselectedLabelColor: Colors.white60,
       indicatorColor: AppColors.accent,
@@ -191,7 +191,7 @@ class _OnlineTestCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.computer, color: AppColors.secondary, size: 22),
+                      Icon(Icons.computer, color: AppColors.secondary, size: 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(test.title, style: Theme.of(context).textTheme.titleMedium,
@@ -308,7 +308,7 @@ class _OfflineTestCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.print_outlined, color: AppColors.accent, size: 22),
+                      Icon(Icons.print_outlined, color: AppColors.accent, size: 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(test.title, style: Theme.of(context).textTheme.titleMedium,
@@ -320,7 +320,7 @@ class _OfflineTestCard extends StatelessWidget {
                     color: AppColors.accent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text('OFFLINE',
+                  child:       Text('OFFLINE',
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold,
                           color: AppColors.accent)),
                 ),
@@ -446,7 +446,7 @@ class _CompletedTestCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text('${test.subject} · ${test.totalMarks.toInt()} marks',
                       style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                  const Text('Tap to review answers',
+                        Text('Tap to review answers',
                       style: TextStyle(fontSize: 11, color: AppColors.primary)),
                 ],
               ),

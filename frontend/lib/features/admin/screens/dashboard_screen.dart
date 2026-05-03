@@ -82,10 +82,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
     final double headerH = navyH + cardInternalH - cardIntoNavy + avatarRadius;
 
     final cards = [
-      const _DashCard(icon: Icons.account_balance_wallet_outlined, label: 'Fees',
+            _DashCard(icon: Icons.account_balance_wallet_outlined, label: 'Fees',
           subtitle: 'Payment records', color: AppColors.accent,
           route: '${RouteNames.adminDashboard}/fees', badge: 0),
-      const _DashCard(icon: Icons.calendar_month_outlined, label: 'Timetable',
+            _DashCard(icon: Icons.calendar_month_outlined, label: 'Timetable',
           subtitle: 'Manage schedule', color: AppColors.primary,
           route: '${RouteNames.adminDashboard}/timetable', badge: 0),
       _DashCard(icon: Icons.people_outlined, label: 'Users',
@@ -116,7 +116,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                     top: 0, left: 0, right: 0,
                     child: Container(
                       height: navyH,
-                      decoration: const BoxDecoration(
+                      decoration:       BoxDecoration(
                         color: AppColors.primary,
                         borderRadius: BorderRadius.only(
                           bottomLeft: Radius.circular(44),

@@ -33,8 +33,10 @@ class _StudentTimetableScreenState
     super.initState();
     final now = DateTime.now();
     _calendarMonth = DateTime(now.year, now.month);
-    _selectedDate = now.weekday >= 6
-        ? now.add(Duration(days: 8 - now.weekday))
+    // Saturday is a working day at our school; only Sunday (weekday 7) jumps
+    // forward to Monday.
+    _selectedDate = now.weekday == DateTime.sunday
+        ? now.add(const Duration(days: 1))
         : now;
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) ref.invalidate(studentTimetableProvider(_dateString));
@@ -328,7 +330,7 @@ class _StudentTimetableScreenState
                   ),
                   child: Text(
                     gradeLabel,
-                    style: const TextStyle(
+                    style:       TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,

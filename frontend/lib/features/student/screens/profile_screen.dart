@@ -154,7 +154,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                         ),
                         Container(
                           padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
+                          decoration:       BoxDecoration(
                             color: AppColors.primary,
                             shape: BoxShape.circle,
                           ),
@@ -173,7 +173,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                   Wrap(
                     spacing: 8,
                     children: [
-                      const _Pill(label: 'STUDENT', color: AppColors.secondary),
+                            _Pill(label: 'STUDENT', color: AppColors.secondary),
                       gradeAsync.when(
                         loading: () => const SizedBox.shrink(),
                         error: (_, __) => const SizedBox.shrink(),
@@ -267,7 +267,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                          Row(
                       children: [
                         Icon(Icons.lock_outline,
                             size: 16, color: AppColors.primary),

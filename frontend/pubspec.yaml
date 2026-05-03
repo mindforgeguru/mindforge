@@ -55,6 +55,9 @@ dependencies:
   # Loading skeletons
   shimmer: ^3.0.0
 
+  # XP level-up celebration
+  confetti: ^0.7.0
+
   # Push notifications
   firebase_core: ^3.3.0
   firebase_messaging: ^15.1.0

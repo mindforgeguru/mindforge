@@ -118,8 +118,10 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _selectedDate = now.weekday >= 6
-        ? now.add(Duration(days: 8 - now.weekday))
+    // Saturday is a working day at our school; only Sunday (weekday 7) jumps
+    // forward to Monday.
+    _selectedDate = now.weekday == DateTime.sunday
+        ? now.add(const Duration(days: 1))
         : now;
     _weekStart = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
   }
@@ -244,7 +246,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
                               backgroundColor: AppColors.secondary
                                   .withValues(alpha: 0.15),
                               child: Text('P${slot.periodNumber}',
-                                  style: const TextStyle(
+                                  style:       TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                       color: AppColors.secondary)),
@@ -285,7 +287,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
                                   ),
                               ],
                             ),
-                            trailing: const Icon(Icons.book_outlined,
+                            trailing:       Icon(Icons.book_outlined,
                                 color: AppColors.secondary, size: 18),
                           ),
                         );
@@ -306,7 +308,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Padding(
+                            Padding(
                         padding: EdgeInsets.fromLTRB(16, 14, 16, 10),
                         child: Row(children: [
                           Icon(Icons.calendar_month_rounded, size: 16, color: AppColors.primary),
@@ -338,7 +340,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.schedule_rounded, size: 16, color: AppColors.primary),
+                                Icon(Icons.schedule_rounded, size: 16, color: AppColors.primary),
                           const SizedBox(width: 8),
                           Text(
                             DateFormat('EEEE, d MMMM').format(_selectedDate),
@@ -659,7 +661,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: Row(
                       children: [
-                        const Icon(Icons.school_outlined, size: 15, color: AppColors.primary),
+                              Icon(Icons.school_outlined, size: 15, color: AppColors.primary),
                         const SizedBox(width: 8),
                         Text('Grade $_selectedGrade',
                             style: const TextStyle(
@@ -674,7 +676,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                             ),
-                            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                            child:       Row(mainAxisSize: MainAxisSize.min, children: [
                               Text('Change', style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500)),
                               Icon(Icons.arrow_drop_down, size: 16, color: AppColors.primary),
                             ]),
@@ -769,11 +771,11 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
           color: AppColors.primary.withValues(alpha: 0.06),
           child: Row(children: [
-            const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.primary),
+                  Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.primary),
             const SizedBox(width: 6),
             Text(
               DateFormat('EEE, d MMMM yyyy').format(_selectedDate),
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+              style:       TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
             ),
           ]),
         ),
@@ -920,7 +922,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Row(children: [
+                        Row(children: [
                     Icon(Icons.calendar_month_outlined, size: 18, color: AppColors.primary),
                     SizedBox(width: 8),
                     Text('Select Date',
@@ -1037,8 +1039,10 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _selectedDate = now.weekday >= 6
-        ? now.add(Duration(days: 8 - now.weekday))
+    // Saturday is a working day at our school; only Sunday (weekday 7) jumps
+    // forward to Monday.
+    _selectedDate = now.weekday == DateTime.sunday
+        ? now.add(const Duration(days: 1))
         : now;
     _weekStart = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
   }
@@ -1091,7 +1095,7 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
                     child: Row(children: [
-                      const Icon(Icons.calendar_month_rounded, size: 16, color: AppColors.primary),
+                            Icon(Icons.calendar_month_rounded, size: 16, color: AppColors.primary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -1127,7 +1131,7 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Padding(
+                        Padding(
                     padding: EdgeInsets.fromLTRB(16, 14, 16, 10),
                     child: Row(children: [
                       Icon(Icons.school_outlined, size: 16, color: AppColors.primary),
@@ -1161,11 +1165,11 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
           color: AppColors.primary.withValues(alpha: 0.06),
           child: Row(children: [
-            const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.primary),
+                  Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.primary),
             const SizedBox(width: 6),
             Text(
               DateFormat('EEE, d MMMM yyyy').format(_selectedDate),
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+              style:       TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
             ),
             if (isToday) ...[
               const SizedBox(width: 8),
@@ -1274,12 +1278,12 @@ class _GradeSectionState extends ConsumerState<_GradeSection> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.school_outlined,
+                    Icon(Icons.school_outlined,
                   size: 16, color: AppColors.secondary),
               const SizedBox(width: 8),
               Text(
                 'Grade ${widget.grade}',
-                style: const TextStyle(
+                style:       TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                   color: AppColors.secondary,
@@ -1340,7 +1344,7 @@ class _GradeSectionState extends ConsumerState<_GradeSection> {
                         backgroundColor:
                             AppColors.primary.withValues(alpha: 0.12),
                         child: Text('P${slot.periodNumber}',
-                            style: const TextStyle(
+                            style:       TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.primary)),
@@ -1496,14 +1500,14 @@ class _SelectorPill extends StatelessWidget {
             ),
             Text(
               value,
-              style: const TextStyle(
+              style:       TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: AppColors.primary,
               ),
             ),
             if (showArrow)
-              const Icon(Icons.arrow_drop_down, size: 16, color: AppColors.primary),
+                    Icon(Icons.arrow_drop_down, size: 16, color: AppColors.primary),
           ],
         ),
       ),
@@ -1732,7 +1736,7 @@ class _MonthSection extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
             child: Text(
               DateFormat('MMMM yyyy').format(month),
-              style: const TextStyle(
+              style:       TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: AppColors.primary,
@@ -1922,7 +1926,7 @@ class _PeriodRowState extends State<_PeriodRow> {
                 radius: 18,
                 backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                 child: Text('P$period',
-                    style: const TextStyle(
+                    style:       TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary)),
@@ -2060,7 +2064,7 @@ class _WeekStrip extends StatelessWidget {
                 child: Text(
                   monthLabel,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style:       TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: AppColors.primary,
@@ -2088,7 +2092,9 @@ class _WeekStrip extends StatelessWidget {
                   date.day == today.day;
               final dateStr = DateFormat('yyyy-MM-dd').format(date);
               final hasTimetable = datesWithTimetable.contains(dateStr);
-              final isWeekend = date.weekday >= 6;
+              // Saturday is a working day; only Sunday is treated as weekend
+              // for visual styling in the calendar row.
+              final isWeekend = date.weekday == DateTime.sunday;
 
               return Expanded(
                 child: GestureDetector(

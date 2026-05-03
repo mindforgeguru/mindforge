@@ -71,9 +71,9 @@ class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
             child: DropdownButton<String>(
               value: _selectedYear,
               dropdownColor: Colors.white,
-              style: const TextStyle(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.w700),
+              style:       TextStyle(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.w700),
               underline: const SizedBox.shrink(),
-              icon: const Icon(Icons.arrow_drop_down, color: AppColors.accent),
+              icon:       Icon(Icons.arrow_drop_down, color: AppColors.accent),
               items: _yearOptions().map((y) => DropdownMenuItem(
                 value: y,
                 child: Text(y, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
@@ -370,7 +370,7 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient:       LinearGradient(
                   colors: [AppColors.primaryDark, AppColors.primary],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -1243,7 +1243,7 @@ class _FeeStructureTileState extends ConsumerState<_FeeStructureTile> {
                     Text('Grade ${s.grade}',
                         style: Theme.of(context).textTheme.titleMedium),
                     Text(fmt.format(s.totalAmount),
-                        style: const TextStyle(
+                        style:       TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
                             color: AppColors.primary)),
@@ -1532,7 +1532,7 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.edit_outlined,
+                  icon:       Icon(Icons.edit_outlined,
                       size: 16, color: AppColors.primary),
                   tooltip: 'Edit',
                   padding: EdgeInsets.zero,

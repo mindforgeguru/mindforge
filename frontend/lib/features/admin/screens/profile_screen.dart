@@ -271,7 +271,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                     child: photoUrl == null
                         ? Text(
                             username[0].toUpperCase(),
-                            style: const TextStyle(
+                            style:       TextStyle(
                                 fontSize: 42,
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.primaryDark),
@@ -282,7 +282,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                     onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,
                     child: Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
+                      decoration:       BoxDecoration(
                         color: AppColors.primary,
                         shape: BoxShape.circle,
                       ),
@@ -358,7 +358,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                   color: AppColors.primaryDark.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text('ADMIN',
+                child:       Text('ADMIN',
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -556,7 +556,7 @@ class _PinRow extends StatelessWidget {
                       ? Container(
                           width: 9,
                           height: 9,
-                          decoration: const BoxDecoration(
+                          decoration:       BoxDecoration(
                               color: AppColors.primary, shape: BoxShape.circle),
                         )
                       : null,

@@ -662,7 +662,7 @@ class _EditableQuestionCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 // Edit button
                 IconButton(
-                  icon: const Icon(Icons.edit_outlined,
+                  icon:       Icon(Icons.edit_outlined,
                       size: 18, color: AppColors.primary),
                   onPressed: onEdit,
                   padding: EdgeInsets.zero,
@@ -828,7 +828,7 @@ class _EditQuestionDialogState extends State<_EditQuestionDialog> {
             // Title row
             Row(
               children: [
-                const Icon(Icons.edit, color: AppColors.primary, size: 20),
+                      Icon(Icons.edit, color: AppColors.primary, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   'Edit Question',
@@ -969,7 +969,7 @@ class _OptionField extends StatelessWidget {
           border: const OutlineInputBorder(),
           isDense: true,
           prefixText: '($label) ',
-          prefixStyle: const TextStyle(
+          prefixStyle:       TextStyle(
               fontWeight: FontWeight.bold, color: AppColors.primary),
         ),
       ),
@@ -998,7 +998,7 @@ class _InfoChip extends StatelessWidget {
           Icon(icon, size: 13, color: AppColors.primary),
           const SizedBox(width: 4),
           Text(label,
-              style: const TextStyle(
+              style:       TextStyle(
                   fontSize: 12,
                   color: AppColors.primary,
                   fontWeight: FontWeight.w600)),
@@ -1094,7 +1094,7 @@ class _StatItem extends StatelessWidget {
     return Column(
       children: [
         Text(value,
-            style: const TextStyle(
+            style:       TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: AppColors.primary)),
@@ -1363,7 +1363,7 @@ class _MarkEntryRow extends StatelessWidget {
               backgroundColor: AppColors.primary.withValues(alpha: 0.1),
               child: Text(
                 student.username.substring(0, 1).toUpperCase(),
-                style: const TextStyle(
+                style:       TextStyle(
                     color: AppColors.primary, fontWeight: FontWeight.bold),
               ),
             ),

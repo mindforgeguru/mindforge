@@ -34,7 +34,7 @@ class ParentFeesScreen extends ConsumerWidget {
               ),
             ),
           ],
-          bottom: const TabBar(
+          bottom:       TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
             indicatorColor: AppColors.accent,
@@ -197,7 +197,7 @@ class _PaymentOptionCard extends StatelessWidget {
                   radius: 14,
                   backgroundColor: AppColors.primary.withOpacity(0.15),
                   child: Text('${info.slot}',
-                      style: const TextStyle(
+                      style:       TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                           color: AppColors.primary)),
@@ -223,7 +223,7 @@ class _PaymentOptionCard extends StatelessWidget {
                 // Bank details
                 if (hasBankDetails) ...[
                   Row(children: [
-                    const Icon(Icons.account_balance,
+                          Icon(Icons.account_balance,
                         color: AppColors.primary, size: 16),
                     const SizedBox(width: 6),
                     Text('Bank Transfer',
@@ -262,7 +262,7 @@ class _PaymentOptionCard extends StatelessWidget {
                 if (hasUpi) ...[
                   if (hasBankDetails) const SizedBox(height: 14),
                   Row(children: [
-                    const Icon(Icons.qr_code_2,
+                          Icon(Icons.qr_code_2,
                         color: AppColors.secondary, size: 16),
                     const SizedBox(width: 6),
                     Text('UPI Payment',
@@ -373,7 +373,7 @@ class _BalanceSummaryCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(fees.academicYear,
-                    style: const TextStyle(
+                    style:       TextStyle(
                         fontSize: 12,
                         color: AppColors.primary,
                         fontWeight: FontWeight.bold)),

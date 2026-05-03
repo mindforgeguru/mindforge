@@ -237,7 +237,7 @@ class _TeacherProfileScreenState
                     onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,
                     child: Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
+                      decoration:       BoxDecoration(
                         color: AppColors.secondary,
                         shape: BoxShape.circle,
                       ),
@@ -269,7 +269,7 @@ class _TeacherProfileScreenState
                   color: AppColors.secondary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text('TEACHER',
+                child:       Text('TEACHER',
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -468,7 +468,7 @@ class _PinRow extends StatelessWidget {
                       ? Container(
                           width: 9,
                           height: 9,
-                          decoration: const BoxDecoration(
+                          decoration:       BoxDecoration(
                               color: AppColors.secondary,
                               shape: BoxShape.circle),
                         )

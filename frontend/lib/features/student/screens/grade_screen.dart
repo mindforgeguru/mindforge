@@ -94,7 +94,7 @@ class StudentGradeScreen extends StatelessWidget {
               ),
             ),
           ],
-          bottom: const TabBar(
+          bottom:       TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
             indicatorColor: AppColors.accent,
@@ -557,7 +557,7 @@ class _ProgressChart extends StatelessWidget {
             padding: const EdgeInsets.only(left: 8, bottom: 12),
             child: Row(
               children: [
-                const Icon(Icons.show_chart,
+                      Icon(Icons.show_chart,
                     color: AppColors.primary, size: 18),
                 const SizedBox(width: 6),
                 Expanded(
@@ -1212,7 +1212,7 @@ class _GradeCard extends StatelessWidget {
             ),
             if (onTap != null) ...[
               const SizedBox(height: 8),
-              const Row(
+                    Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Icon(Icons.visibility_outlined,

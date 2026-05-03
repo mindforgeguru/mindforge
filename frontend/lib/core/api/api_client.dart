@@ -1011,4 +1011,66 @@ class ApiClient {
   Future<void> updateFcmToken(String token) async {
     await _dio.put('/auth/fcm-token', data: {'fcm_token': token});
   }
+
+  // ── XP / Level system ────────────────────────────────────────────────────────
+
+  /// Current student's XP snapshot — total, level, progress, last 10 txns.
+  Future<Map<String, dynamic>> getMyXp() async {
+    final res = await _dio.get('/xp/me');
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Leaderboard. `scope` is 'class' | 'grade' | 'school'.
+  Future<Map<String, dynamic>> getLeaderboard({
+    String scope = 'grade',
+    int limit = 20,
+  }) async {
+    final res = await _dio.get('/xp/leaderboard', queryParameters: {
+      'scope': scope,
+      'limit': limit,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Admin/teacher view of any student's XP. Students may only call with
+  /// their own id (server enforces — see /api/xp/student/{id}).
+  Future<Map<String, dynamic>> getStudentXp(int studentId) async {
+    final res = await _dio.get('/xp/student/$studentId');
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Admin manual XP adjustment. `amount` may be negative; `reason` required.
+  Future<Map<String, dynamic>> adjustStudentXp({
+    required int studentId,
+    required int amount,
+    required String reason,
+  }) async {
+    final res = await _dio.post('/xp/admin/adjust', data: {
+      'student_id': studentId,
+      'amount': amount,
+      'reason': reason,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Full level table (50 rows seeded by migration 021).
+  Future<List<dynamic>> getLevels() async {
+    final res = await _dio.get('/xp/levels');
+    return res.data as List<dynamic>;
+  }
+
+  /// Cosmetic theme catalogue with the current student's lock state.
+  Future<Map<String, dynamic>> getThemes() async {
+    final res = await _dio.get('/xp/themes');
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Pick an unlocked theme. Pass null to revert to the default theme.
+  /// Backend returns the refreshed catalogue.
+  Future<Map<String, dynamic>> selectTheme(String? themeId) async {
+    final res = await _dio.post('/xp/themes/select', data: {
+      'theme_id': themeId,
+    });
+    return res.data as Map<String, dynamic>;
+  }
 }

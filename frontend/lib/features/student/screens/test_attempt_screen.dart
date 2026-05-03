@@ -434,7 +434,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
             value: _answeredCount / _questions.length,
             backgroundColor: AppColors.divider,
             valueColor:
-                const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      AlwaysStoppedAnimation<Color>(AppColors.primary),
             minHeight: 3,
           ),
 
@@ -477,7 +477,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
                       const Spacer(),
                       Text(
                         '${q['marks']} mark${q['marks'] == 1 ? '' : 's'}',
-                        style: const TextStyle(
+                        style:       TextStyle(
                             fontSize: 12,
                             color: AppColors.accent,
                             fontWeight: FontWeight.bold),
