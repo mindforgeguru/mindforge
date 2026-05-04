@@ -63,7 +63,14 @@ class TeacherScaffold extends ConsumerWidget {
           Expanded(
             child: Scaffold(
               appBar: appBar,
-              body: body,
+              // Cap mobile-styled bodies at 600 px so they read like a
+              // centred column instead of stretching across the desktop.
+              body: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: body,
+                ),
+              ),
               floatingActionButton: floatingActionButton,
               floatingActionButtonLocation: floatingActionButtonLocation,
               backgroundColor: backgroundColor ?? AppColors.background,

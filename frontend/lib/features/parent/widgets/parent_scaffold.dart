@@ -43,7 +43,9 @@ class ParentScaffold extends ConsumerWidget {
       );
     }
 
-    // Web: top nav + content area, no bottom nav
+    // Web: top nav + content area, no bottom nav. Mobile-styled bodies are
+    // capped at 600 px and centred so they don't stretch on desktop. Screens
+    // with their own _buildWebLayout should bypass this branch.
     final auth = ref.watch(authProvider);
     return Scaffold(
       backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
@@ -54,7 +56,12 @@ class ParentScaffold extends ConsumerWidget {
           ParentTopNav(auth: auth),
           Expanded(
             child: Scaffold(
-              body: body,
+              body: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: body,
+                ),
+              ),
               backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
             ),
           ),

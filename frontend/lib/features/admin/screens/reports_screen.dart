@@ -9,7 +9,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
-import '../widgets/admin_bottom_nav.dart';
+import '../widgets/admin_scaffold.dart';
 
 // Responsive scale: baseline 360 logical pixels wide
 double _sp(BuildContext context, double size) {
@@ -120,9 +120,8 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
     final summariesAsync = ref.watch(feeSummariesProvider(_selectedYear));
     final pad = _hp(context);
 
-    return Scaffold(
+    return AdminScaffold(
       backgroundColor: AppColors.background,
-      bottomNavigationBar: const AdminBottomNav(),
       appBar: AppBar(
         title: const Text('Reports'),
         actions: [

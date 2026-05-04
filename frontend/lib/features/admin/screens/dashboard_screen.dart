@@ -12,7 +12,7 @@ import '../../../core/utils/responsive.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/models/user.dart';
 import '../providers/admin_provider.dart';
-import '../widgets/admin_bottom_nav.dart';
+import '../widgets/admin_scaffold.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -96,9 +96,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
           route: '${RouteNames.adminDashboard}/academic-year', badge: 0),
     ];
 
-    return Scaffold(
+    return AdminScaffold(
       backgroundColor: AppColors.background,
-      bottomNavigationBar: const AdminBottomNav(),
       body: RefreshIndicator(
         onRefresh: _refreshDashboard,
         child: CustomScrollView(

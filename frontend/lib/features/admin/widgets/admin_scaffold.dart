@@ -7,60 +7,52 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../providers/xp_provider.dart';
-import 'student_bottom_nav.dart';
+import 'admin_bottom_nav.dart';
 
-/// Responsive scaffold for student screens.
+/// Responsive scaffold for admin screens.
 /// On wide screens (≥ 900 px) shows the dark top nav and hides the bottom nav.
 /// On mobile shows the existing bottom nav — no change to mobile behaviour.
-class StudentScaffold extends ConsumerWidget {
+class AdminScaffold extends ConsumerWidget {
   final PreferredSizeWidget? appBar;
   final Widget body;
   final Widget? floatingActionButton;
   final FloatingActionButtonLocation? floatingActionButtonLocation;
   final Color? backgroundColor;
+  /// Whether to show the bottom-nav on mobile. Leaf screens (e.g. settings
+  /// pushed via back-button flow) pass false to keep their mobile look.
+  final bool showMobileBottomNav;
+  final bool? resizeToAvoidBottomInset;
 
-  const StudentScaffold({
+  const AdminScaffold({
     super.key,
     this.appBar,
     required this.body,
     this.floatingActionButton,
     this.floatingActionButtonLocation,
     this.backgroundColor,
+    this.showMobileBottomNav = true,
+    this.resizeToAvoidBottomInset,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isWide = MediaQuery.of(context).size.width >= 900;
 
-    // Re-key the body when the palette switches. AppColors getters return
-    // the new values immediately, but screens that read them directly (no
-    // Theme.of dependency) won't auto-rebuild. Changing the KeyedSubtree
-    // key forces Flutter to dispose & rebuild the body element with fresh
-    // colors. Cost: scroll position / form state in the body resets on
-    // theme change — acceptable since the user just asked for a visual
-    // change.
-    final palette = ref.watch(currentPaletteProvider);
-    final keyedBody = KeyedSubtree(
-      key: ValueKey('palette:${palette.id}'),
-      child: body,
-    );
-
     if (!isWide) {
       return Scaffold(
         appBar: appBar,
-        body: keyedBody,
-        bottomNavigationBar: const StudentBottomNav(),
+        body: body,
+        bottomNavigationBar:
+            showMobileBottomNav ? const AdminBottomNav() : null,
         floatingActionButton: floatingActionButton,
         floatingActionButtonLocation: floatingActionButtonLocation,
         backgroundColor: backgroundColor,
+        resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       );
     }
 
-    // Web: top nav + content area, no bottom nav, no secondary AppBar.
-    // Mobile-styled bodies are capped at 600 px and centred so they don't
-    // stretch across a desktop browser. Screens that need full width should
-    // build their own _buildWebLayout instead of going through this branch.
+    // Web: top nav + content area, no bottom nav. Mobile-styled bodies are
+    // capped at 600 px and centred so they don't stretch on desktop.
     final auth = ref.watch(authProvider);
     return Scaffold(
       backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
@@ -68,13 +60,13 @@ class StudentScaffold extends ConsumerWidget {
       floatingActionButtonLocation: floatingActionButtonLocation,
       body: Column(
         children: [
-          StudentTopNav(auth: auth),
+          AdminTopNav(auth: auth),
           Expanded(
             child: Scaffold(
               body: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 600),
-                  child: keyedBody,
+                  child: body,
                 ),
               ),
               backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
@@ -86,11 +78,11 @@ class StudentScaffold extends ConsumerWidget {
   }
 }
 
-// ─── Shared top navigation bar ────────────────────────────────────────────────
+// ─── Admin top navigation bar ────────────────────────────────────────────────
 
-class StudentTopNav extends ConsumerWidget {
+class AdminTopNav extends ConsumerWidget {
   final AuthState auth;
-  const StudentTopNav({super.key, required this.auth});
+  const AdminTopNav({super.key, required this.auth});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -147,13 +139,13 @@ class StudentTopNav extends ConsumerWidget {
             const Spacer(),
             // Profile avatar
             GestureDetector(
-              onTap: () => context.go('${RouteNames.studentDashboard}/profile'),
+              onTap: () => context.go('${RouteNames.adminDashboard}/profile'),
               child: Container(
                 width: 36, height: 36,
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                 child: Center(
                   child: Text(
-                    (auth.username ?? 'S').substring(0, 1).toUpperCase(),
+                    (auth.username ?? 'A').substring(0, 1).toUpperCase(),
                     style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primary),
                   ),
                 ),
@@ -177,17 +169,12 @@ class StudentTopNav extends ConsumerWidget {
 
   List<Widget> _navItems(BuildContext context, String currentPath) {
     final items = [
-      ('Home',       RouteNames.studentDashboard,                 RouteNames.studentDashboard),
-      ('Grades',     '${RouteNames.studentDashboard}/grades',     '/grades'),
-      ('Tests',      '${RouteNames.studentDashboard}/tests',      '/tests'),
-      ('Attendance', '${RouteNames.studentDashboard}/attendance', '/attendance'),
-      ('Timetable',  '${RouteNames.studentDashboard}/timetable',  '/timetable'),
-      ('Homework',   '${RouteNames.studentDashboard}/homework',   '/homework'),
-      ('Broadcasts', '${RouteNames.studentDashboard}/broadcasts', '/broadcasts'),
-      ('Fees',       '${RouteNames.studentDashboard}/fees',       '/fees'),
-      ('Faculty',    '${RouteNames.studentDashboard}/faculty',    '/faculty'),
-      ('XP',         '${RouteNames.studentDashboard}/xp',         '/xp'),
-      ('Leaderboard','${RouteNames.studentDashboard}/xp/leaderboard', '/leaderboard'),
+      ('Home',          RouteNames.adminDashboard,                       RouteNames.adminDashboard),
+      ('Users',         '${RouteNames.adminDashboard}/users',            '/users'),
+      ('Fees',          '${RouteNames.adminDashboard}/fees',             '/fees'),
+      ('Reports',       '${RouteNames.adminDashboard}/reports',          '/reports'),
+      ('Timetable',     '${RouteNames.adminDashboard}/timetable',        '/timetable'),
+      ('Academic Year', '${RouteNames.adminDashboard}/academic-year',    '/academic-year'),
     ];
 
     return items.map((item) {
@@ -195,7 +182,7 @@ class StudentTopNav extends ConsumerWidget {
       final route = item.$2;
       final match = item.$3;
       final isActive = label == 'Home'
-          ? (currentPath == RouteNames.studentDashboard)
+          ? (currentPath == RouteNames.adminDashboard)
           : currentPath.contains(match);
 
       return Padding(

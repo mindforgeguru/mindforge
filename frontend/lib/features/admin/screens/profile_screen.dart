@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../widgets/admin_scaffold.dart';
 
 class AdminProfileScreen extends ConsumerStatefulWidget {
   const AdminProfileScreen({super.key});
@@ -243,7 +244,8 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
     final username = auth.username ?? 'Admin';
     final photoUrl = auth.profilePicUrl;
 
-    return Scaffold(
+    return AdminScaffold(
+      showMobileBottomNav: false,
       appBar: AppBar(title: const Text('My Profile')),
       resizeToAvoidBottomInset: false,
       body: SafeArea(

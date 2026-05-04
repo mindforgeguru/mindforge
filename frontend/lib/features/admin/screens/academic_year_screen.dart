@@ -6,6 +6,7 @@ import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
+import '../widgets/admin_scaffold.dart';
 
 class AdminAcademicYearScreen extends ConsumerWidget {
   const AdminAcademicYearScreen({super.key});
@@ -15,7 +16,8 @@ class AdminAcademicYearScreen extends ConsumerWidget {
     final yearsAsync = ref.watch(academicYearsProvider);
     final currentAsync = ref.watch(currentAcademicYearProvider);
 
-    return Scaffold(
+    return AdminScaffold(
+      showMobileBottomNav: false,
       appBar: AppBar(
         title: const Text('Academic Year'),
         actions: [

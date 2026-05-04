@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/utils/constants.dart';
 import '../providers/admin_provider.dart';
+import '../widgets/admin_scaffold.dart';
 
 class AdminFeesScreen extends ConsumerStatefulWidget {
   const AdminFeesScreen({super.key});
@@ -61,7 +62,8 @@ class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AdminScaffold(
+      showMobileBottomNav: false,
       appBar: AppBar(
         title: const Text('Fee Management'),
         actions: [
