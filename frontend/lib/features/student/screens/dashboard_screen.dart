@@ -706,7 +706,10 @@ class _StudentDashboardScreenState
                       children: [
                         // ── Hero: greeting + fee capsules ───────────────
                         _StudentWebHeroSection(auth: auth),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
+                        // ── XP card ─────────────────────────────────────
+                        const _XpHomeCard(),
+                        const SizedBox(height: 16),
                         // ── Dashboard grid ───────────────────────────────
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
