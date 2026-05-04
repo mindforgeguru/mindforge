@@ -1406,7 +1406,7 @@ class _TimetableCard extends StatelessWidget {
               slot.comment!,
               style: GoogleFonts.poppins(
                 fontSize: (sw * 0.020).clamp(7.0, 9.0),
-                color: onMuted,
+                color: Colors.orange,
                 fontStyle: FontStyle.italic,
               ),
               maxLines: 1,

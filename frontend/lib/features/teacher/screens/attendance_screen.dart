@@ -410,10 +410,29 @@ class _TeacherAttendanceScreenState
     // Default everyone to present
     final newMap = {for (final s in students) s.id: true};
 
-    // Override with existing saved records for this specific period
-    for (final r in records) {
-      if (r.period == _selectedPeriod && newMap.containsKey(r.studentId)) {
-        newMap[r.studentId] = r.isPresent;
+    // If saved records exist for THIS period, use them.
+    // Otherwise pre-fill from the most recent period that has data for the
+    // same grade+date — students are rarely partial-present across periods,
+    // so the previous period's entries are a useful default.
+    final thisPeriodHasData =
+        records.any((r) => r.period == _selectedPeriod);
+    if (thisPeriodHasData) {
+      for (final r in records) {
+        if (r.period == _selectedPeriod && newMap.containsKey(r.studentId)) {
+          newMap[r.studentId] = r.isPresent;
+        }
+      }
+    } else {
+      final fallbackPeriod = records
+          .map((r) => r.period)
+          .where((p) => p != _selectedPeriod)
+          .fold<int?>(null, (max, p) => max == null || p > max ? p : max);
+      if (fallbackPeriod != null) {
+        for (final r in records) {
+          if (r.period == fallbackPeriod && newMap.containsKey(r.studentId)) {
+            newMap[r.studentId] = r.isPresent;
+          }
+        }
       }
     }
     _attendance
