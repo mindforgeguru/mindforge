@@ -60,24 +60,26 @@ class _ParentDashboardScreenState
     WidgetsBinding.instance.addPostFrameCallback((_) => _connectWs());
   }
 
+  // Debounce brief resume/pause flaps from notifications or system overlays.
+  DateTime? _lastPausedAt;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // On web, AppLifecycleState.resumed fires on every window-focus event and
-    // on GoRouter navigations — both cause needless invalidations that keep the
-    // dashboard in a permanent loading state. Skip lifecycle refreshes on web.
     if (kIsWeb) return;
+    if (state == AppLifecycleState.paused) {
+      _lastPausedAt = DateTime.now();
+      return;
+    }
     if (state != AppLifecycleState.resumed || !mounted) return;
-    // Defer one frame so we don't pile WS reconnect + provider invalidate +
-    // Dio request onto the very frame Android is restoring after unlock.
-    // Doing it inline freezes the UI thread on some devices.
+    final pausedFor = _lastPausedAt == null
+        ? Duration.zero
+        : DateTime.now().difference(_lastPausedAt!);
+    if (pausedFor < const Duration(seconds: 30)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _wsSub?.cancel();
-      // Force a fresh socket — Doze can leave `_channel` non-null with a
-      // dead underlying socket, so reusing it silently drops events.
       ref.read(webSocketClientProvider).forceReconnect();
       _connectWs();
-      // Only invalidate — do NOT await the network call here.
       ref.invalidate(parentDashboardSummaryProvider(_todayString));
     });
   }

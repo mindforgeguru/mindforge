@@ -66,13 +66,30 @@ class _StudentDashboardScreenState
     WidgetsBinding.instance.addPostFrameCallback((_) => _connectWs());
   }
 
+  // When the app last entered the paused state. Used to debounce brief
+  // resume/pause flaps (notification shade, system overlays) that would
+  // otherwise force a full WS reconnect every few seconds.
+  DateTime? _lastPausedAt;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // On web, AppLifecycleState.resumed fires on every window-focus event and
     // on GoRouter navigations — both cause needless invalidations that keep the
     // dashboard in a permanent loading state. Skip lifecycle refreshes on web.
     if (kIsWeb) return;
+    if (state == AppLifecycleState.paused) {
+      _lastPausedAt = DateTime.now();
+      return;
+    }
     if (state != AppLifecycleState.resumed || !mounted) return;
+    // Brief resume flaps (< 30 s) don't need a fresh socket — the underlying
+    // WS is almost certainly still alive and the dashboard data is fresh.
+    // Only after a real backgrounding (Doze territory) do we tear down and
+    // refetch.
+    final pausedFor = _lastPausedAt == null
+        ? Duration.zero
+        : DateTime.now().difference(_lastPausedAt!);
+    if (pausedFor < const Duration(seconds: 30)) return;
     // Defer one frame so we don't pile WS reconnect + provider invalidate +
     // Dio request onto the very frame Android is restoring after unlock.
     // Doing it inline freezes the UI thread on some devices.
