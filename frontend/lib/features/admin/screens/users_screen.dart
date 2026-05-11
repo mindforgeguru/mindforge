@@ -41,11 +41,14 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen>
       if (mounted) ref.invalidate(pendingUsersProvider);
     });
 
-    // Also refresh when switching to the Pending tab
+    // Also refresh when switching to the Pending tab,
+    // and rebuild so the AppBar "Delete all pending" action reflects the tab.
     _tabController.addListener(() {
-      if (_tabController.index == 0 && !_tabController.indexIsChanging) {
+      if (_tabController.indexIsChanging) return;
+      if (_tabController.index == 0) {
         ref.invalidate(pendingUsersProvider);
       }
+      if (mounted) setState(() {});
     });
   }
 
@@ -56,13 +59,71 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen>
     super.dispose();
   }
 
+  Future<void> _deleteAllPending() async {
+    final pending = ref.read(pendingUsersProvider).asData?.value ?? const [];
+    if (pending.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No pending users to delete.'),
+      ));
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete all pending users?'),
+        content: Text(
+          'This permanently removes ${pending.length} pending sign-up '
+          'request${pending.length == 1 ? '' : 's'}. Approved users are not affected.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete all'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final api = ref.read(apiClientProvider);
+      final count = await api.deleteAllPendingUsers();
+      ref.invalidate(pendingUsersProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Deleted $count pending user${count == 1 ? '' : 's'}.'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final pendingCount =
+        ref.watch(pendingUsersProvider).asData?.value.length ?? 0;
     return AdminScaffold(
       showMobileBottomNav: false,
       appBar: AppBar(
         title: const Text('User Management'),
         actions: [
+          if (_tabController.index == 0 && pendingCount > 0)
+            IconButton(
+              icon: const Icon(Icons.delete_sweep_outlined),
+              tooltip: 'Delete all pending',
+              onPressed: _deleteAllPending,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
@@ -194,13 +255,27 @@ class _PendingUserTile extends ConsumerWidget {
                 style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
           ],
         ),
-        trailing: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.success,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          onPressed: () => _approveUser(context, ref, user.id),
-          child: const Text('Approve', style: TextStyle(fontSize: 12)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.success,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              onPressed: () => _approveUser(context, ref, user.id),
+              child: const Text('Approve', style: TextStyle(fontSize: 12)),
+            ),
+            const SizedBox(width: 6),
+            IconButton(
+              tooltip: 'Reject & delete',
+              icon: const Icon(Icons.delete_outline),
+              color: AppColors.error,
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _rejectUser(context, ref, user),
+            ),
+          ],
         ),
       ),
     );
@@ -218,6 +293,50 @@ class _PendingUserTile extends ConsumerWidget {
             content: Text('User approved!'),
             backgroundColor: AppColors.success),
       );
+    }
+  }
+
+  Future<void> _rejectUser(
+      BuildContext context, WidgetRef ref, UserModel user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete pending user?'),
+        content: Text(
+            'Permanently delete the sign-up request for "${user.username}" '
+            '(${user.role})? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.deletePendingUser(user.id);
+      ref.invalidate(pendingUsersProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Deleted ${user.username}.'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppColors.error,
+        ));
+      }
     }
   }
 

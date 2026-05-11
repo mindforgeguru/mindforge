@@ -348,72 +348,87 @@ class _TeacherDashboardScreenState
                         const SizedBox(height: 20),
 
                         // Row 2: stat cards + quick actions
-                        Row(
+                        // Wrap is used so the quick-action chips fall to a
+                        // second line on narrower web widths instead of
+                        // overflowing past the hero card.
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            _HeroStatCard(
-                              value: '${todaySlots.length}',
-                              label: 'Classes Today',
-                              icon: Icons.today_rounded,
-                              accent: const Color(0xFF64B5F6),
-                              onTap: () => context.go('${RouteNames.teacherDashboard}/timetable'),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                _HeroStatCard(
+                                  value: '${todaySlots.length}',
+                                  label: 'Classes Today',
+                                  icon: Icons.today_rounded,
+                                  accent: const Color(0xFF64B5F6),
+                                  onTap: () => context.go('${RouteNames.teacherDashboard}/timetable'),
+                                ),
+                                Builder(builder: (ctx) {
+                                  final count = summaryAsync.maybeWhen(
+                                    data: (s) => ((s['grades'] as List<dynamic>?)?.length ?? 0),
+                                    orElse: () => 0,
+                                  );
+                                  return _HeroStatCard(
+                                    value: '$count',
+                                    label: 'Grade Records',
+                                    icon: Icons.grade_rounded,
+                                    accent: const Color(0xFFFFB74D),
+                                    onTap: () => context.go('${RouteNames.teacherDashboard}/grades'),
+                                  );
+                                }),
+                                Builder(builder: (ctx) {
+                                  final count = summaryAsync.maybeWhen(
+                                    data: (s) => (s['test_count'] as int? ?? 0),
+                                    orElse: () => 0,
+                                  );
+                                  return _HeroStatCard(
+                                    value: '$count',
+                                    label: 'Tests',
+                                    icon: Icons.quiz_rounded,
+                                    accent: AppColors.secondary,
+                                    onTap: () => context.go('${RouteNames.teacherDashboard}/tests'),
+                                  );
+                                }),
+                                Builder(builder: (ctx) {
+                                  final count = summaryAsync.maybeWhen(
+                                    data: (s) => ((s['broadcasts'] as List<dynamic>?)?.length ?? 0),
+                                    orElse: () => 0,
+                                  );
+                                  return _HeroStatCard(
+                                    value: '$count',
+                                    label: 'Broadcasts',
+                                    icon: Icons.campaign_rounded,
+                                    accent: const Color(0xFFCE93D8),
+                                    showBadge: hasBroadcastBadge,
+                                    onTap: () {
+                                      ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen();
+                                      context.go('${RouteNames.teacherDashboard}/broadcasts');
+                                    },
+                                  );
+                                }),
+                              ],
                             ),
-                            const SizedBox(width: 10),
-                            Builder(builder: (ctx) {
-                              final count = summaryAsync.maybeWhen(
-                                data: (s) => ((s['grades'] as List<dynamic>?)?.length ?? 0),
-                                orElse: () => 0,
-                              );
-                              return _HeroStatCard(
-                                value: '$count',
-                                label: 'Grade Records',
-                                icon: Icons.grade_rounded,
-                                accent: const Color(0xFFFFB74D),
-                                onTap: () => context.go('${RouteNames.teacherDashboard}/grades'),
-                              );
-                            }),
-                            const SizedBox(width: 10),
-                            Builder(builder: (ctx) {
-                              final count = summaryAsync.maybeWhen(
-                                data: (s) => (s['test_count'] as int? ?? 0),
-                                orElse: () => 0,
-                              );
-                              return _HeroStatCard(
-                                value: '$count',
-                                label: 'Tests',
-                                icon: Icons.quiz_rounded,
-                                accent: AppColors.secondary,
-                                onTap: () => context.go('${RouteNames.teacherDashboard}/tests'),
-                              );
-                            }),
-                            const SizedBox(width: 10),
-                            Builder(builder: (ctx) {
-                              final count = summaryAsync.maybeWhen(
-                                data: (s) => ((s['broadcasts'] as List<dynamic>?)?.length ?? 0),
-                                orElse: () => 0,
-                              );
-                              return _HeroStatCard(
-                                value: '$count',
-                                label: 'Broadcasts',
-                                icon: Icons.campaign_rounded,
-                                accent: const Color(0xFFCE93D8),
-                                showBadge: hasBroadcastBadge,
-                                onTap: () {
-                                  ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen();
-                                  context.go('${RouteNames.teacherDashboard}/broadcasts');
-                                },
-                              );
-                            }),
-                            const Spacer(),
-                            _WebQuickAction(
-                              icon: Icons.how_to_reg_outlined,
-                              label: 'Attendance',
-                              onTap: () => context.go('${RouteNames.teacherDashboard}/attendance'),
-                            ),
-                            const SizedBox(width: 8),
-                            _WebQuickAction(
-                              icon: Icons.assignment_outlined,
-                              label: 'Add Homework',
-                              onTap: () => context.go('${RouteNames.teacherDashboard}/homework'),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _WebQuickAction(
+                                  icon: Icons.how_to_reg_outlined,
+                                  label: 'Attendance',
+                                  onTap: () => context.go('${RouteNames.teacherDashboard}/attendance'),
+                                ),
+                                _WebQuickAction(
+                                  icon: Icons.assignment_outlined,
+                                  label: 'Add Homework',
+                                  onTap: () => context.go('${RouteNames.teacherDashboard}/homework'),
+                                ),
+                              ],
                             ),
                           ],
                         ),
