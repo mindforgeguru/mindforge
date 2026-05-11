@@ -558,6 +558,60 @@ async def approve_user(
     return user
 
 
+@router.delete("/users/{user_id}/pending", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_pending_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """
+    Hard-delete a still-pending (not-yet-approved) user account.
+    Used to reject sign-up requests outright and to clean up test data.
+    """
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if user.role == UserRole.admin:
+        raise HTTPException(status_code=403, detail="Cannot delete an admin account.")
+    if user.is_approved:
+        raise HTTPException(
+            status_code=400,
+            detail="User is already approved — use revoke instead.",
+        )
+
+    await _audit(db, current_admin.id, "delete_pending_user", "user", user.id,
+                 {"username": user.username, "role": user.role.value})
+    await db.delete(user)
+    await db.commit()
+
+
+@router.delete("/users/pending", status_code=status.HTTP_200_OK)
+async def delete_all_pending_users(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Hard-delete every pending (not-yet-approved) user. Returns the count."""
+    result = await db.execute(
+        select(User).where(
+            User.is_approved == False,
+            User.deleted_at.is_(None),
+            User.role != UserRole.admin,
+        )
+    )
+    pending = result.scalars().all()
+    deleted = 0
+    for user in pending:
+        await _audit(db, current_admin.id, "delete_pending_user", "user", user.id,
+                     {"username": user.username, "role": user.role.value, "bulk": True})
+        await db.delete(user)
+        deleted += 1
+    await db.commit()
+    return {"deleted": deleted}
+
+
 @router.delete("/users/{user_id}/revoke", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_user(
     user_id: int,

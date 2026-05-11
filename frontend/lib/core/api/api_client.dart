@@ -742,6 +742,17 @@ class ApiClient {
     await _dio.delete('/admin/users/$userId/revoke');
   }
 
+  Future<void> deletePendingUser(int userId) async {
+    await _dio.delete('/admin/users/$userId/pending');
+  }
+
+  Future<int> deleteAllPendingUsers() async {
+    final res = await _dio.delete('/admin/users/pending');
+    final data = res.data;
+    if (data is Map && data['deleted'] is int) return data['deleted'] as int;
+    return 0;
+  }
+
   Future<Map<String, dynamic>> editUser(int userId, Map<String, dynamic> data) async {
     final res = await _dio.put('/admin/users/$userId', data: data);
     return res.data as Map<String, dynamic>;

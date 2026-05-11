@@ -237,6 +237,8 @@ async def get_faculty(
         .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
         .where(User.role == UserRole.teacher)
         .where(User.deleted_at == None)
+        .where(User.is_approved == True)
+        .where(User.is_active == True)
         .order_by(User.username)
     )
     rows = result.all()
