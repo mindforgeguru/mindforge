@@ -45,12 +45,15 @@ class User(Base):
     # Soft delete: set to timestamp when user is revoked/deleted
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Relationships
+    # Relationships — passive_deletes=True lets the DB-level ON DELETE CASCADE
+    # handle child rows; without it, async flush tries to NULL a NOT NULL FK.
     student_profile: Mapped[Optional["StudentProfile"]] = relationship(
-        "StudentProfile", back_populates="user", foreign_keys="StudentProfile.user_id", uselist=False
+        "StudentProfile", back_populates="user", foreign_keys="StudentProfile.user_id",
+        uselist=False, passive_deletes=True,
     )
     teacher_profile: Mapped[Optional["TeacherProfile"]] = relationship(
-        "TeacherProfile", back_populates="user", foreign_keys="TeacherProfile.user_id", uselist=False
+        "TeacherProfile", back_populates="user", foreign_keys="TeacherProfile.user_id",
+        uselist=False, passive_deletes=True,
     )
 
     def soft_delete(self):
