@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
+import '../../../core/widgets/report_problem_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'parent_bottom_nav.dart';
 
@@ -145,6 +146,15 @@ class ParentTopNav extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 8),
+            // Report a problem
+            Tooltip(
+              message: 'Report a problem',
+              child: IconButton(
+                onPressed: () => showReportProblemDialog(context, ref),
+                icon: Icon(Icons.bug_report_outlined, size: 18, color: Colors.white.withOpacity(0.65)),
+                splashRadius: 18,
+              ),
+            ),
             // Logout
             Tooltip(
               message: 'Logout',

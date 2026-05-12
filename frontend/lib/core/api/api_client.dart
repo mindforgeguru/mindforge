@@ -753,6 +753,36 @@ class ApiClient {
     return 0;
   }
 
+  // ── Feedback ────────────────────────────────────────────────────────────
+  Future<void> submitFeedback({
+    required String message,
+    String? appVersion,
+    String? route,
+  }) async {
+    await _dio.post('/feedback', data: {
+      'message': message,
+      if (appVersion != null) 'app_version': appVersion,
+      if (route != null) 'route': route,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> listFeedback({
+    bool onlyOpen = true,
+    int skip = 0,
+    int limit = 50,
+  }) async {
+    final res = await _dio.get('/admin/feedback', queryParameters: {
+      'only_open': onlyOpen,
+      'skip': skip,
+      'limit': limit,
+    });
+    return (res.data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> resolveFeedback(int reportId) async {
+    await _dio.patch('/admin/feedback/$reportId/resolve');
+  }
+
   Future<Map<String, dynamic>> editUser(int userId, Map<String, dynamic> data) async {
     final res = await _dio.put('/admin/users/$userId', data: data);
     return res.data as Map<String, dynamic>;

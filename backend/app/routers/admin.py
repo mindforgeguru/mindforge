@@ -25,6 +25,7 @@ from app.schemas.fees import (
     FeeStructureCreate, FeeStructureResponse, FeeStructureUpdate,
     PaymentInfoCreate, PaymentInfoResponse,
 )
+from app.schemas.feedback import FeedbackResponse
 from app.schemas.timetable import TimetableConfigCreate, TimetableConfigResponse
 from app.schemas.user import AdminMpinUpdate, AdminUserEdit, UserResponse, UserUpdate, UserWithProfileResponse
 from app.services import storage_service
@@ -1414,3 +1415,47 @@ async def download_student_ledger(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ─── Feedback (in-app problem reports) ────────────────────────────────────────
+
+@router.get("/feedback", response_model=List[FeedbackResponse])
+async def list_feedback(
+    only_open: bool = Query(True, description="Hide resolved reports"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """List user-submitted problem reports, newest first."""
+    from app.models.feedback import FeedbackReport
+
+    stmt = select(FeedbackReport).order_by(FeedbackReport.created_at.desc())
+    if only_open:
+        stmt = stmt.where(FeedbackReport.resolved == False)
+    stmt = stmt.offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+@router.patch("/feedback/{report_id}/resolve", status_code=status.HTTP_204_NO_CONTENT)
+async def resolve_feedback(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Mark a feedback report as resolved."""
+    from app.models.feedback import FeedbackReport
+
+    result = await db.execute(
+        select(FeedbackReport).where(FeedbackReport.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="Feedback report not found.")
+    if report.resolved:
+        return
+    report.resolved = True
+    report.resolved_at = datetime.now(timezone.utc)
+    await _audit(db, current_admin.id, "resolve_feedback", "feedback_report", report.id, None)
+    await db.commit()

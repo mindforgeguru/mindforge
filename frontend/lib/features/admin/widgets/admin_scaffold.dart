@@ -173,6 +173,7 @@ class AdminTopNav extends ConsumerWidget {
       ('Users',         '${RouteNames.adminDashboard}/users',            '/users'),
       ('Fees',          '${RouteNames.adminDashboard}/fees',             '/fees'),
       ('Reports',       '${RouteNames.adminDashboard}/reports',          '/reports'),
+      ('Feedback',      '${RouteNames.adminDashboard}/feedback',         '/feedback'),
       ('Timetable',     '${RouteNames.adminDashboard}/timetable',        '/timetable'),
       ('Academic Year', '${RouteNames.adminDashboard}/academic-year',    '/academic-year'),
     ];

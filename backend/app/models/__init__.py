@@ -8,3 +8,4 @@ from app.models.fees import FeeStructure, FeePayment, PaymentInfo
 from app.models.homework import Homework, HomeworkCompletion, Broadcast
 from app.models.database_models import OldTestPaper, ChapterDocument, SyllabusEntry
 from app.models.xp import StudentXP, XPTransaction, LevelConfig, XPReason
+from app.models.feedback import FeedbackReport

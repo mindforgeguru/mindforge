@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/report_problem_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/models/user.dart';
 import '../providers/admin_provider.dart';
@@ -99,6 +100,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
       const _DashCard(icon: Icons.auto_awesome_outlined, label: 'New Year',
           subtitle: 'Academic year', color: AppColors.error,
           route: '${RouteNames.adminDashboard}/academic-year', badge: 0),
+      const _DashCard(icon: Icons.feedback_outlined, label: 'Feedback',
+          subtitle: 'User reports', color: AppColors.primary,
+          route: '${RouteNames.adminDashboard}/feedback', badge: 0),
     ];
 
     return AdminScaffold(
@@ -161,6 +165,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                           ],
                         ),
                         const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.bug_report_outlined,
+                              color: Colors.white, size: 24),
+                          tooltip: 'Report a problem',
+                          onPressed: () => showReportProblemDialog(context, ref),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.person_outline_rounded,
                               color: Colors.white, size: 26),

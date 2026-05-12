@@ -17,6 +17,7 @@ import '../../../core/models/timetable.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
+import '../../../core/widgets/report_problem_dialog.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/badge_dot.dart';
@@ -639,6 +640,24 @@ class _TeacherDashboardScreenState
                           ],
                         ),
                       ],
+                    ),
+                  ),
+
+                  // ── Report a problem ─────────────────────────────────
+                  Positioned(
+                    top: topPadding + _s(context, 10, min: 6, max: 14),
+                    right: _s(context, 52, min: 46, max: 60),
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: IconButton(
+                        tooltip: 'Report a problem',
+                        icon: Icon(Icons.bug_report_outlined,
+                            color: Colors.white,
+                            size: _s(context, 22, min: 18, max: 26)),
+                        onPressed: () => showReportProblemDialog(context, ref),
+                        padding: EdgeInsets.zero,
+                      ),
                     ),
                   ),
 

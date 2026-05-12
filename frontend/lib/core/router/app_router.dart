@@ -43,6 +43,7 @@ import '../../features/admin/screens/fees_screen.dart' as admin;
 import '../../features/admin/screens/timetable_screen.dart' as admin;
 import '../../features/admin/screens/users_screen.dart' as admin;
 import '../../features/admin/screens/profile_screen.dart' as admin;
+import '../../features/admin/screens/feedback_screen.dart' as admin;
 import '../../features/admin/screens/academic_year_screen.dart';
 import '../../features/admin/screens/reports_screen.dart';
 
@@ -319,6 +320,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'reports',
             pageBuilder: (_, __) => _slidePage(const AdminReportsScreen()),
+          ),
+          GoRoute(
+            path: 'feedback',
+            pageBuilder: (_, __) => _slidePage(const admin.AdminFeedbackScreen()),
           ),
         ],
       ),
