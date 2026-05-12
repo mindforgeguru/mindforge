@@ -112,7 +112,12 @@ final _routerNotifierProvider = Provider<_RouterNotifier>((ref) {
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(_routerNotifierProvider);
 
-  return GoRouter(
+  late final GoRouter router;
+  String? lastLoggedPath;
+  // _slidePage returns CustomTransitionPages without a name, so the built-in
+  // FirebaseAnalyticsObserver can't attribute most navigations. Listen to
+  // routerDelegate instead and emit a screen_view with the URL path.
+  router = GoRouter(
     initialLocation: RouteNames.splash,
     refreshListenable: notifier,
     redirect: notifier.redirect,
@@ -319,4 +324,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+
+  router.routerDelegate.addListener(() {
+    final path = router.routerDelegate.currentConfiguration.uri.path;
+    if (path.isNotEmpty && path != lastLoggedPath) {
+      lastLoggedPath = path;
+      Analytics.logScreenView(path);
+    }
+  });
+
+  return router;
 });

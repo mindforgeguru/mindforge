@@ -37,4 +37,10 @@ class Analytics {
       await _a.logEvent(name: name, parameters: params);
     } catch (_) {}
   }
+
+  static Future<void> logScreenView(String screenName) async {
+    try {
+      await _a.logScreenView(screenName: screenName);
+    } catch (_) {}
+  }
 }
