@@ -100,7 +100,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
       const _DashCard(icon: Icons.auto_awesome_outlined, label: 'New Year',
           subtitle: 'Academic year', color: AppColors.error,
           route: '${RouteNames.adminDashboard}/academic-year', badge: 0),
-      const _DashCard(icon: Icons.feedback_outlined, label: 'Feedback',
+      _DashCard(icon: Icons.feedback_outlined, label: 'Feedback',
           subtitle: 'User reports', color: AppColors.primary,
           route: '${RouteNames.adminDashboard}/feedback', badge: 0),
     ];

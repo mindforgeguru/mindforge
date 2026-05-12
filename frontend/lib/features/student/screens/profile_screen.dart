@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/privacy_data_section.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
 import '../../../core/utils/responsive.dart';
@@ -343,6 +344,8 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
               ),
             ),
 
+            const SizedBox(height: 12),
+            const PrivacyDataSection(),
             const SizedBox(height: 12),
           ],
         ),

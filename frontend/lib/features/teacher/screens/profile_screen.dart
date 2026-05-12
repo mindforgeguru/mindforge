@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/privacy_data_section.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 
@@ -350,6 +351,8 @@ class _TeacherProfileScreenState
               child: const Text('Clear all fields',
                   style: TextStyle(color: AppColors.textSecondary)),
             ),
+            const SizedBox(height: 12),
+            const PrivacyDataSection(),
           ],
         ),
       ),

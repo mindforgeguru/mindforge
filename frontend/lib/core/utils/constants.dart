@@ -6,12 +6,16 @@ class AppConstants {
   static const String tagline = 'AI Assisted Learning';
 
   // ⚠️  LOCAL DEV MODE — change back to false before building a release APK
-  static const bool _local = false;
+  static const bool _local = true;
 
   static const String apiBaseUrl =
-      _local ? 'http://192.168.29.211:8000/api' : 'https://api.mindforge.guru/api';
+      _local ? 'http://127.0.0.1:8000/api' : 'https://api.mindforge.guru/api';
   static const String wsBaseUrl =
-      _local ? 'ws://192.168.29.211:8000/ws' : 'wss://api.mindforge.guru/ws';
+      _local ? 'ws://127.0.0.1:8000/ws' : 'wss://api.mindforge.guru/ws';
+
+  /// Public privacy-policy URL. Required by Play Store + App Store. Leave
+  /// empty to hide the in-app link until the policy is published.
+  static const String privacyPolicyUrl = '';
 
   /// Supported grades (ICSE)
   static const List<int> grades = [8, 9, 10];

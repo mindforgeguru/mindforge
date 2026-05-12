@@ -245,6 +245,23 @@ class ApiClient {
     } catch (_) {}
   }
 
+  /// Self-service account deletion. Soft-deletes the user server-side and
+  /// revokes both tokens. Caller is responsible for clearing local state
+  /// afterwards (the standard logout flow does that).
+  Future<void> deleteMyAccount() async {
+    try {
+      _cachedRefreshToken ??=
+          await _storage.read(key: AppConstants.refreshTokenStorageKey);
+    } catch (_) {}
+    await _dio.delete(
+      '/auth/account',
+      data: _cachedRefreshToken != null
+          ? {'refresh_token': _cachedRefreshToken}
+          : null,
+      options: Options(extra: {'_skipRefresh': true}),
+    );
+  }
+
   Future<Map<String, dynamic>> register(
       String username, String mpin, String role,
       {String? phone,

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/privacy_data_section.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../widgets/parent_scaffold.dart';
 
@@ -212,6 +213,8 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
               ),
             ),
 
+            const SizedBox(height: 12),
+            const PrivacyDataSection(),
             const SizedBox(height: 24),
           ],
         ),

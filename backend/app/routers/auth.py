@@ -406,3 +406,73 @@ async def get_me(current_user: User = Depends(get_current_user)):
         deleted_at=current_user.deleted_at,
         profile_pic_url=pic,
     )
+
+
+@router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_account(
+    request: Request,
+    response: Response,
+    body: Optional[dict] = Body(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Self-service account deletion — required by Play Store / App Store.
+    Soft-deletes the user (sets deleted_at + is_active=False) so historical
+    rows referencing them stay intact. Revokes current access + refresh
+    tokens and clears the FCM token. Admins cannot self-delete (use the
+    admin user-management endpoints instead).
+    """
+    from app.models.user import UserRole
+
+    if current_user.role == UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin accounts cannot be self-deleted. Use the admin tools.",
+        )
+
+    # Revoke the access token JTI so the same bearer can't be reused.
+    access_token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if access_token:
+        try:
+            at_payload = decode_access_token(access_token)
+            jti = at_payload.get("jti")
+            exp = at_payload.get("exp")
+            if jti and exp:
+                remaining = max(int(exp - datetime.now(timezone.utc).timestamp()), 1)
+                await redis_manager.revoke_access_jti(jti, remaining)
+        except Exception:
+            pass
+
+    # Revoke the refresh token if the client sent it.
+    if isinstance(body, dict):
+        refresh_token = body.get("refresh_token")
+        if refresh_token and isinstance(refresh_token, str):
+            try:
+                rt_payload = decode_access_token(refresh_token)
+                if rt_payload.get("type") == "refresh":
+                    rt_jti = rt_payload.get("jti")
+                    rt_exp = rt_payload.get("exp")
+                    if rt_jti and rt_exp:
+                        remaining = max(
+                            int(rt_exp - datetime.now(timezone.utc).timestamp()), 1
+                        )
+                        await redis_manager.revoke_jti(rt_jti, remaining)
+            except Exception:
+                pass
+
+    current_user.fcm_token = None
+    current_user.soft_delete()
+
+    # Audit-log the self-deletion. Admin id is the same user (acting on self).
+    from app.models.audit_log import AuditLog
+    db.add(AuditLog(
+        admin_id=current_user.id,
+        action="self_delete",
+        target_type="user",
+        target_id=current_user.id,
+        details={"username": current_user.username, "role": current_user.role.value},
+    ))
+
+    await db.commit()
+    _clear_session_cookie(response)
