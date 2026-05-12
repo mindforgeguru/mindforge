@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../services/analytics.dart';
 import '../utils/constants.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -115,6 +116,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: RouteNames.splash,
     refreshListenable: notifier,
     redirect: notifier.redirect,
+    observers: [Analytics.observer],
     routes: [
       // ── Splash ────────────────────────────────────────────────────────────
       GoRoute(

@@ -66,6 +66,9 @@ dependencies:
   # Crash + error reporting
   firebase_crashlytics: ^4.1.0
 
+  # Product analytics (screen views, custom events, retention)
+  firebase_analytics: ^11.3.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

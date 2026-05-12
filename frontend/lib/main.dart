@@ -8,6 +8,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/router/app_router.dart';
+import 'core/services/analytics.dart';
 import 'core/services/crash_reporter.dart';
 import 'core/services/notification_service.dart';
 import 'core/theme/app_theme.dart';
@@ -47,6 +48,7 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     await CrashReporter.init();
+    await Analytics.init();
     // Kick off permission request + listener setup in the background.
     NotificationService.initialize().catchError((e) {
       debugPrint('NotificationService init error: $e');

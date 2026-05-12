@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/websocket_client.dart';
+import '../../../core/services/analytics.dart';
 import '../../../core/services/crash_reporter.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/constants.dart';
@@ -122,6 +123,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     if (restoredUserId != null) {
       unawaited(CrashReporter.setUser(userId: restoredUserId, role: role));
+      unawaited(Analytics.setUser(userId: restoredUserId, role: role));
     }
 
     // Register FCM token now that we have a valid session.
@@ -181,6 +183,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
 
       unawaited(CrashReporter.setUser(userId: userId, role: role));
+      unawaited(Analytics.setUser(userId: userId, role: role));
+      unawaited(Analytics.logEvent('login', {'role': role}));
 
       // Register FCM token after successful login.
       final fcmToken = await NotificationService.getToken();
@@ -247,6 +251,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _storage.deleteAll();
     } catch (_) {}
     unawaited(CrashReporter.clearUser());
+    unawaited(Analytics.clearUser());
     state = const AuthState();
   }
 
