@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/websocket_client.dart';
+import '../../../core/services/crash_reporter.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/constants.dart';
 
@@ -110,13 +111,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // refresh; all others wait and retry with the new token.
     _api.setCachedTokens(token: token, refreshToken: refreshToken);
 
+    final restoredUserId = userIdStr != null ? int.tryParse(userIdStr) : null;
     state = AuthState(
       token: token,
       role: role,
-      userId: userIdStr != null ? int.tryParse(userIdStr) : null,
+      userId: restoredUserId,
       username: username,
       profilePicUrl: profilePicUrl,
     );
+
+    if (restoredUserId != null) {
+      unawaited(CrashReporter.setUser(userId: restoredUserId, role: role));
+    }
 
     // Register FCM token now that we have a valid session.
     final fcmToken = await NotificationService.getToken();
@@ -173,6 +179,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         username: uname,
         profilePicUrl: profilePicUrl,
       );
+
+      unawaited(CrashReporter.setUser(userId: userId, role: role));
 
       // Register FCM token after successful login.
       final fcmToken = await NotificationService.getToken();
@@ -238,6 +246,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _storage.deleteAll();
     } catch (_) {}
+    unawaited(CrashReporter.clearUser());
     state = const AuthState();
   }
 

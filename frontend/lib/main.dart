@@ -1,5 +1,6 @@
+import 'dart:ui';
+
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/gestures.dart';
 import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/router/app_router.dart';
+import 'core/services/crash_reporter.dart';
 import 'core/services/notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/constants.dart';
@@ -44,6 +46,7 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    await CrashReporter.init();
     // Kick off permission request + listener setup in the background.
     NotificationService.initialize().catchError((e) {
       debugPrint('NotificationService init error: $e');
@@ -51,6 +54,14 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase.initializeApp error: $e');
   }
+
+  // Framework + async errors → Crashlytics. PlatformDispatcher.onError catches
+  // uncaught async errors without needing runZonedGuarded.
+  FlutterError.onError = CrashReporter.recordFlutterError;
+  PlatformDispatcher.instance.onError = (error, stack) {
+    CrashReporter.recordError(error, stack, fatal: true);
+    return true;
+  };
 
   final prefs = await SharedPreferences.getInstance();
   runApp(

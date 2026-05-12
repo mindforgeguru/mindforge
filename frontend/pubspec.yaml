@@ -63,6 +63,9 @@ dependencies:
   firebase_messaging: ^15.1.0
   flutter_local_notifications: ^17.2.1+2
 
+  # Crash + error reporting
+  firebase_crashlytics: ^4.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
