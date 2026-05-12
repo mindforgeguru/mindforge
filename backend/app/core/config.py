@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     # Leave empty to disable push notifications without breaking the app.
     FIREBASE_CREDENTIALS_JSON: str = ""
 
+    # ── Sentry error tracking ────────────────────────────────────────────────
+    # Empty DSN = Sentry disabled (intended for local dev). Set the DSN in
+    # production env vars to start shipping errors + traces.
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+
     # ── CORS ──────────────────────────────────────────────────────────────────
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost", "http://localhost:80",

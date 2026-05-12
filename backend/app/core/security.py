@@ -114,6 +114,19 @@ async def _get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is pending admin approval.",
         )
+
+    # Tag the Sentry scope so any error raised downstream is attributed to
+    # this user. No-op when Sentry isn't initialized (no DSN configured).
+    try:
+        import sentry_sdk
+        sentry_sdk.set_user({
+            "id": user.id,
+            "username": user.username,
+            "role": user.role.value,
+        })
+    except Exception:
+        pass
+
     return user
 
 

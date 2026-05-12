@@ -22,6 +22,46 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# ─── Sentry init ──────────────────────────────────────────────────────────────
+# Must run before FastAPI() is created so the FastAPI integration can attach.
+# Empty DSN (default in dev) skips init entirely.
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+
+    _SCRUB_KEYS = {
+        "mpin", "password", "token", "refresh_token", "mpin_hash",
+        "access_token", "authorization", "cookie",
+    }
+
+    def _scrub_event(event, hint):
+        try:
+            req = event.get("request") or {}
+            for section in ("data", "headers", "cookies"):
+                bucket = req.get(section)
+                if isinstance(bucket, dict):
+                    for k in list(bucket.keys()):
+                        if k.lower() in _SCRUB_KEYS:
+                            bucket[k] = "[scrubbed]"
+        except Exception:
+            pass
+        return event
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.APP_ENV,
+        integrations=[
+            StarletteIntegration(transaction_style="endpoint"),
+            FastApiIntegration(transaction_style="endpoint"),
+        ],
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        send_default_pii=False,
+        before_send=_scrub_event,
+    )
+    logger.info(f"Sentry initialized (env={settings.APP_ENV})")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle handler."""
