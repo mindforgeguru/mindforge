@@ -214,7 +214,12 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
             ),
 
             const SizedBox(height: 12),
-            const PrivacyDataSection(),
+            // A parent's self-deletion cascades to the linked student account
+            // on the server. Show the explicit warning so the parent doesn't
+            // delete by accident and lose their child's account too.
+            const PrivacyDataSection(
+              deleteWarning: PrivacyDataSection.parentCascadeWarning,
+            ),
             const SizedBox(height: 24),
           ],
         ),

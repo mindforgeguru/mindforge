@@ -9,9 +9,35 @@ import '../../features/auth/providers/auth_provider.dart';
 /// Drop-in "Privacy & Data" section for the Profile screens of every
 /// non-admin role. Provides:
 ///  • Privacy Policy link (hidden when AppConstants.privacyPolicyUrl is empty)
-///  • "Delete my account" with type-to-confirm dialog
+///  • Optional "Delete my account" with type-to-confirm dialog
+///
+/// As of 2026-05-14 the deletion policy is:
+///   - Admins: no self-delete (excluded from admin profile screen).
+///   - Students: no self-delete — use `showDeleteButton: false` on the
+///     student profile. Only the parent or an admin can delete a student.
+///   - Parents: self-delete cascades to the one linked student account on
+///     the server side. Show the cascade warning by passing
+///     `deleteWarning: PrivacyDataSection.parentCascadeWarning`.
 class PrivacyDataSection extends ConsumerWidget {
-  const PrivacyDataSection({super.key});
+  /// When false, the "Delete my account" tile is hidden. Used on the student
+  /// profile because students cannot self-delete server-side either.
+  final bool showDeleteButton;
+
+  /// Extra warning text shown above the "type to confirm" prompt. Used by
+  /// the parent profile to disclose the cascade-to-child deletion.
+  final String? deleteWarning;
+
+  const PrivacyDataSection({
+    super.key,
+    this.showDeleteButton = true,
+    this.deleteWarning,
+  });
+
+  /// Standard warning string for the parent's delete dialog.
+  static const String parentCascadeWarning =
+      'Your child\'s student account is linked to this parent account. '
+      'Deleting this account will also permanently delete the linked '
+      'student account. This cannot be undone.';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,12 +62,13 @@ class PrivacyDataSection extends ConsumerWidget {
               await launchUrl(uri, mode: LaunchMode.externalApplication);
             },
           ),
-        ListTile(
-          leading: const Icon(Icons.delete_forever_outlined, color: Colors.red),
-          title: const Text('Delete my account',
-              style: TextStyle(color: Colors.red)),
-          onTap: () => _confirmDelete(context, ref),
-        ),
+        if (showDeleteButton)
+          ListTile(
+            leading: const Icon(Icons.delete_forever_outlined, color: Colors.red),
+            title: const Text('Delete my account',
+                style: TextStyle(color: Colors.red)),
+            onTap: () => _confirmDelete(context, ref),
+          ),
       ],
     );
   }
@@ -58,6 +85,7 @@ class PrivacyDataSection extends ConsumerWidget {
       builder: (ctx) => _DeleteConfirmDialog(
         username: username,
         controller: controller,
+        warning: deleteWarning,
       ),
     );
     controller.dispose();
@@ -66,6 +94,12 @@ class PrivacyDataSection extends ConsumerWidget {
 
     try {
       await ref.read(apiClientProvider).deleteMyAccount();
+    } on DioMultiChildException catch (e) {
+      // Server rejected because the parent has more than one linked student.
+      messenger.showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+      return;
     } catch (_) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Could not delete account. Try again.')),
@@ -80,7 +114,12 @@ class PrivacyDataSection extends ConsumerWidget {
 class _DeleteConfirmDialog extends StatefulWidget {
   final String username;
   final TextEditingController controller;
-  const _DeleteConfirmDialog({required this.username, required this.controller});
+  final String? warning;
+  const _DeleteConfirmDialog({
+    required this.username,
+    required this.controller,
+    this.warning,
+  });
 
   @override
   State<_DeleteConfirmDialog> createState() => _DeleteConfirmDialogState();
@@ -97,6 +136,30 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.warning != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withOpacity(0.4)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.warning!,
+                      style: const TextStyle(color: Colors.red, height: 1.3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Text(
             'This permanently disables your "${widget.username}" account. '
             'Your data will be removed from the app — historical class '

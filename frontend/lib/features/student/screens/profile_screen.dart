@@ -345,7 +345,11 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
             ),
 
             const SizedBox(height: 12),
-            const PrivacyDataSection(),
+            // Students cannot self-delete (server returns 403). Only the
+            // linked parent or an admin can delete a student account. We
+            // keep the Privacy Policy link visible by passing
+            // showDeleteButton: false.
+            const PrivacyDataSection(showDeleteButton: false),
             const SizedBox(height: 12),
           ],
         ),

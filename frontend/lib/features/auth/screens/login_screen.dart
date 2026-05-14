@@ -94,14 +94,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         return;
       }
 
+      // Every student account must be linked to a parent. Account deletion
+      // can only be performed by the parent (or an admin) — without a
+      // parent in place the student has no way to be deleted later.
+      final parentUsernameTrimmed = _parentUsernameController.text.trim();
+      if (isStudent && parentUsernameTrimmed.isEmpty) {
+        _showSnack("Parent's username is required to register a student.");
+        return;
+      }
+
       final ok = await notifier.register(
         username,
         _enteredPin,
         _selectedRole,
         phone: phone.isNotEmpty ? phone : null,
         email: email.isNotEmpty ? email : null,
-        parentUsername:
-            isStudent ? _parentUsernameController.text.trim() : null,
+        parentUsername: isStudent ? parentUsernameTrimmed : null,
         grade: isStudent ? _selectedGrade : null,
         additionalSubjects: isStudent ? _selectedSubjects.toList() : null,
         teachableSubjects:
@@ -469,14 +477,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             TextField(
                               controller: _parentUsernameController,
                               decoration: const InputDecoration(
-                                labelText:
-                                    "Parent's Username (optional)",
+                                labelText: "Parent's Username *",
                                 prefixIcon:
                                     Icon(Icons.family_restroom),
                                 isDense: true,
                                 helperText:
-                                    'Link to parent account if registered.',
-                                helperMaxLines: 2,
+                                    'Required. If the parent does not have an account yet, '
+                                    'one will be created automatically with the same MPIN.',
+                                helperMaxLines: 3,
                               ),
                               inputFormatters: [
                                 FilteringTextInputFormatter.deny(
@@ -926,7 +934,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     TextField(
                       controller: _parentUsernameController,
                       decoration: InputDecoration(
-                        labelText: "Parent's Username (optional)",
+                        labelText: "Parent's Username *",
+                        helperText:
+                            'Required. If the parent does not have an account yet, '
+                            'one will be created automatically with the same MPIN.',
+                        helperMaxLines: 3,
                         prefixIcon: const Icon(Icons.family_restroom),
                         filled: true, fillColor: Colors.white,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

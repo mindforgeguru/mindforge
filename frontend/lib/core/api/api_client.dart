@@ -13,6 +13,17 @@ final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
 const _androidOptions = AndroidOptions(encryptedSharedPreferences: true);
 
+/// Thrown by [ApiClient.deleteMyAccount] when the server returns 409 because
+/// the current (parent) account is linked to more than one student and the
+/// cascade would remove multiple accounts at once. The frontend surfaces the
+/// server's `detail` field to the user so they know what to do.
+class DioMultiChildException implements Exception {
+  final String message;
+  const DioMultiChildException(this.message);
+  @override
+  String toString() => 'DioMultiChildException: $message';
+}
+
 class ApiClient {
   late final Dio _dio;
   final _storage = const FlutterSecureStorage(
@@ -248,18 +259,33 @@ class ApiClient {
   /// Self-service account deletion. Soft-deletes the user server-side and
   /// revokes both tokens. Caller is responsible for clearing local state
   /// afterwards (the standard logout flow does that).
+  ///
+  /// Throws [DioMultiChildException] when the server returns 409 — that
+  /// happens when a parent is linked to more than one student and the
+  /// cascade would remove multiple accounts at once.
   Future<void> deleteMyAccount() async {
     try {
       _cachedRefreshToken ??=
           await _storage.read(key: AppConstants.refreshTokenStorageKey);
     } catch (_) {}
-    await _dio.delete(
-      '/auth/account',
-      data: _cachedRefreshToken != null
-          ? {'refresh_token': _cachedRefreshToken}
-          : null,
-      options: Options(extra: {'_skipRefresh': true}),
-    );
+    try {
+      await _dio.delete(
+        '/auth/account',
+        data: _cachedRefreshToken != null
+            ? {'refresh_token': _cachedRefreshToken}
+            : null,
+        options: Options(extra: {'_skipRefresh': true}),
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        final detail = e.response?.data is Map
+            ? (e.response!.data['detail']?.toString() ??
+                'Cannot delete: multiple linked accounts.')
+            : 'Cannot delete: multiple linked accounts.';
+        throw DioMultiChildException(detail);
+      }
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> register(

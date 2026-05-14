@@ -88,6 +88,18 @@ async def register_user(
             detail="Phone number is required for student and teacher accounts.",
         )
 
+    # A linked parent account is mandatory for every student. Without a parent
+    # in place, no one can ever delete the student's account (students can't
+    # self-delete; only the parent or an admin can). The frontend enforces this
+    # but we double-gate here for any direct API caller.
+    if payload.role == "student" and not (
+        payload.parent_username and payload.parent_username.strip()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A parent username is required to register a student account.",
+        )
+
     # Check phone uniqueness (if provided)
     if payload.phone:
         phone_conflict = await db.execute(
@@ -418,10 +430,20 @@ async def delete_my_account(
 ):
     """
     Self-service account deletion — required by Play Store / App Store.
-    Soft-deletes the user (sets deleted_at + is_active=False) so historical
-    rows referencing them stay intact. Revokes current access + refresh
-    tokens and clears the FCM token. Admins cannot self-delete (use the
-    admin user-management endpoints instead).
+
+    Deletion policy (set 2026-05-14):
+      • Admins cannot self-delete — use the admin user-management endpoints.
+      • Students cannot self-delete — their account is created and managed by
+        a parent (and the school). Only the linked parent or an admin can
+        delete a student account.
+      • When a parent self-deletes, the deletion cascades to the parent's one
+        linked student account (parent + child are removed together). If the
+        parent has more than one linked active student, the request is
+        rejected — the school must intervene to pick which child to keep.
+
+    Soft-delete sets `deleted_at` + `is_active=False` so historical rows
+    referencing the user (attendance, grades, fees, audit trail) stay intact.
+    Revokes the current access + refresh tokens and clears the FCM token.
     """
     from app.models.user import UserRole
 
@@ -430,6 +452,41 @@ async def delete_my_account(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin accounts cannot be self-deleted. Use the admin tools.",
         )
+
+    if current_user.role == UserRole.student:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Students cannot delete their own account. Ask your parent "
+                "to delete the account (your parent's deletion also removes "
+                "the linked student account), or contact the school admin."
+            ),
+        )
+
+    # ── Parent role: find linked active student(s) and cascade ────────────────
+    cascade_student: Optional[User] = None
+    if current_user.role == UserRole.parent:
+        linked_result = await db.execute(
+            select(User)
+            .join(StudentProfile, StudentProfile.user_id == User.id)
+            .where(
+                StudentProfile.parent_user_id == current_user.id,
+                User.deleted_at.is_(None),
+            )
+        )
+        linked_students = linked_result.scalars().all()
+        if len(linked_students) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This parent account is linked to more than one student. "
+                    "Self-deletion would remove multiple accounts at once. "
+                    "Please contact the school admin to delete one specific "
+                    "student before deleting the parent account."
+                ),
+            )
+        if len(linked_students) == 1:
+            cascade_student = linked_students[0]
 
     # Revoke the access token JTI so the same bearer can't be reused.
     access_token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
@@ -464,8 +521,9 @@ async def delete_my_account(
     current_user.fcm_token = None
     current_user.soft_delete()
 
-    # Audit-log the self-deletion. Admin id is the same user (acting on self).
     from app.models.audit_log import AuditLog
+
+    # Audit-log the self-deletion. Admin id is the same user (acting on self).
     db.add(AuditLog(
         admin_id=current_user.id,
         action="self_delete",
@@ -473,6 +531,28 @@ async def delete_my_account(
         target_id=current_user.id,
         details={"username": current_user.username, "role": current_user.role.value},
     ))
+
+    # Cascade soft-delete to the parent's single linked student (if any).
+    # We don't know the student's session JTIs so we can't blacklist them in
+    # Redis — the student's tokens will keep working until natural expiry.
+    # The student row is `is_active=False + deleted_at` set, so any further
+    # request that hits the User lookup (login, /auth/me, every protected
+    # endpoint that filters on deleted_at IS NULL) will fail authentication.
+    if cascade_student is not None:
+        cascade_student.fcm_token = None
+        cascade_student.soft_delete()
+        db.add(AuditLog(
+            admin_id=current_user.id,
+            action="self_delete_cascade_child",
+            target_type="user",
+            target_id=cascade_student.id,
+            details={
+                "username": cascade_student.username,
+                "role": cascade_student.role.value,
+                "triggered_by_parent_id": current_user.id,
+                "triggered_by_parent_username": current_user.username,
+            },
+        ))
 
     await db.commit()
     _clear_session_cookie(response)
