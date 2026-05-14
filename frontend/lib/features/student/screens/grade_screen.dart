@@ -262,10 +262,12 @@ class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
   }
 
   void _connectWebSocket() {
-    final userId = ref.read(authProvider).userId;
-    if (userId == null) return;
+    final auth = ref.read(authProvider);
+    final userId = auth.userId;
+    final token = auth.token;
+    if (userId == null || token == null) return;
     final ws = ref.read(webSocketClientProvider);
-    final stream = ws.connect(userId);
+    final stream = ws.connect(userId, token);
     _wsSub = stream.listen((event) {
       final eventType = event['event'] as String?;
       if (eventType == 'grade_added' || eventType == 'offline_grade_added') {

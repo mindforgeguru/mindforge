@@ -3,12 +3,16 @@ MIND FORGE — AI Assisted Learning Platform
 FastAPI application entry point
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi import (
+    FastAPI, WebSocket, WebSocketDisconnect, WebSocketException,
+    HTTPException, Query, Request, status as http_status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import logging
+import os
 
 from app.core.config import settings
 from app.core.database import engine, Base
@@ -120,24 +124,34 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables ready.")
-    # Seed default admin if not exists
+    # Seed default admin if not exists. MPIN is read from ADMIN_SEED_MPIN to
+    # avoid shipping a known-default credential to production. If the env var
+    # is missing or malformed the seed is skipped — surfaces as a clear log
+    # warning instead of silently provisioning a weak account.
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy import select, text
     from app.models.user import User, UserRole
     import bcrypt
-    async with AsyncSession(engine) as session:
-        result = await session.execute(
-            select(User).where(User.username == "admin", User.deleted_at.is_(None))
+    seed_mpin = os.environ.get("ADMIN_SEED_MPIN", "").strip()
+    if not (seed_mpin.isdigit() and len(seed_mpin) == 6):
+        logger.warning(
+            "ADMIN_SEED_MPIN not set or not a 6-digit numeric string — "
+            "skipping admin seed. Set ADMIN_SEED_MPIN in env to provision."
         )
-        if not result.scalar_one_or_none():
-            hashed = bcrypt.hashpw(b"123456", bcrypt.gensalt(12)).decode()
-            admin_user = User(
-                username="admin", mpin_hash=hashed,
-                role=UserRole.admin, is_active=True, is_approved=True,
+    else:
+        async with AsyncSession(engine) as session:
+            result = await session.execute(
+                select(User).where(User.username == "admin", User.deleted_at.is_(None))
             )
-            session.add(admin_user)
-            await session.commit()
-            logger.info("Default admin seeded (username=admin, mpin=123456)")
+            if not result.scalar_one_or_none():
+                hashed = bcrypt.hashpw(seed_mpin.encode(), bcrypt.gensalt(12)).decode()
+                admin_user = User(
+                    username="admin", mpin_hash=hashed,
+                    role=UserRole.admin, is_active=True, is_approved=True,
+                )
+                session.add(admin_user)
+                await session.commit()
+                logger.info("Default admin seeded (username=admin) with ADMIN_SEED_MPIN")
     # Initialize Redis connection
     await redis_manager.connect()
     # Start Redis subscriber in background
@@ -196,13 +210,52 @@ app.include_router(feedback.router, prefix="/api/feedback", tags=["Feedback"])
 
 # ─── WebSocket endpoint ───────────────────────────────────────────────────────
 @app.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: int):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_id: int,
+    token: str = Query(...),
+):
     """
     WebSocket endpoint for real-time events.
-    Client connects with their user_id; the server fans out
-    events (attendance updates, grade updates, new test published, etc.)
-    using Redis pub/sub across multiple backend instances.
+
+    Authentication: the client MUST pass its current access token as a
+    `?token=` query string. We validate the JWT, confirm the `sub` claim
+    matches the URL user_id (preventing cross-user subscription), and
+    reject revoked tokens (logout/account-delete blacklists the JTI).
+    Cookies/headers can't be set on WebSocket handshakes in browsers,
+    so query string is the standard place for the token.
     """
+    from app.core.security import decode_access_token
+    from jose import JWTError
+
+    # 1008 = Policy Violation. Closing here means handshake never completes.
+    POLICY_VIOLATION = 1008
+
+    try:
+        payload = decode_access_token(token)
+    except JWTError:
+        await websocket.close(code=POLICY_VIOLATION)
+        return
+
+    if payload.get("type") == "refresh":
+        await websocket.close(code=POLICY_VIOLATION)
+        return
+
+    try:
+        token_user_id = int(payload.get("sub", -1))
+    except (TypeError, ValueError):
+        await websocket.close(code=POLICY_VIOLATION)
+        return
+
+    if token_user_id != user_id:
+        await websocket.close(code=POLICY_VIOLATION)
+        return
+
+    jti = payload.get("jti")
+    if jti and await redis_manager.is_access_jti_revoked(jti):
+        await websocket.close(code=POLICY_VIOLATION)
+        return
+
     await ws_manager.connect(websocket, user_id)
     try:
         while True:

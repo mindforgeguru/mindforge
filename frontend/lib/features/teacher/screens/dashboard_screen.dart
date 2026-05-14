@@ -89,10 +89,12 @@ class _TeacherDashboardScreenState
   }
 
   void _connectWs() {
-    final userId = ref.read(authProvider).userId;
-    if (userId == null) return;
+    final auth = ref.read(authProvider);
+    final userId = auth.userId;
+    final token = auth.token;
+    if (userId == null || token == null) return;
     final ws = ref.read(webSocketClientProvider);
-    _wsSub = ws.connect(userId).listen((event) {
+    _wsSub = ws.connect(userId, token).listen((event) {
       if (!mounted) return;
       final eventType = event['event'] as String?;
       if (eventType == 'profile_updated') {

@@ -16,6 +16,7 @@ class WebSocketClient {
   WebSocketChannel? _channel;
   StreamController<Map<String, dynamic>>? _controller;
   int? _connectedUserId;
+  String? _connectedToken;
   Timer? _pingTimer;
   // Incremented on every disconnect/reconnect cycle so stale delayed callbacks
   // can detect they belong to an old generation and skip firing.
@@ -23,29 +24,37 @@ class WebSocketClient {
 
   /// Returns a stream of WebSocket events for the given user.
   ///
+  /// [token] is the user's current JWT access token — required by the backend
+  /// to authenticate the connection and prevent cross-user subscription. It
+  /// is appended as `?token=` because WebSocket handshakes can't carry
+  /// custom Authorization headers in browsers.
+  ///
   /// If already connected for this user, the existing broadcast stream is
   /// returned so multiple screens can subscribe without tearing down the
   /// connection or replacing the controller.
-  Stream<Map<String, dynamic>> connect(int userId) {
+  Stream<Map<String, dynamic>> connect(int userId, String token) {
     if (_connectedUserId == userId &&
+        _connectedToken == token &&
         _controller != null &&
         !_controller!.isClosed) {
-      // Same user — reuse the broadcast stream but if the underlying channel
-      // is gone (killed while the phone was locked) kick off an immediate
-      // reconnect instead of waiting for the delayed-timer path.
+      // Same user + same token — reuse the broadcast stream but if the
+      // underlying channel is gone (killed while the phone was locked) kick
+      // off an immediate reconnect instead of waiting for the delayed-timer
+      // path.
       if (_channel == null) {
         _generation++;
-        _connect(userId, _generation);
+        _connect(userId, token, _generation);
       }
       return _controller!.stream;
     }
 
     _connectedUserId = userId;
+    _connectedToken = token;
     _generation++;
     _controller?.close();
     _controller = StreamController<Map<String, dynamic>>.broadcast();
 
-    _connect(userId, _generation);
+    _connect(userId, token, _generation);
     return _controller!.stream;
   }
 
@@ -57,17 +66,18 @@ class WebSocketClient {
   /// alone so existing subscribers keep receiving events.
   void forceReconnect() {
     final userId = _connectedUserId;
-    if (userId == null) return;
+    final token = _connectedToken;
+    if (userId == null || token == null) return;
     _generation++;
     _pingTimer?.cancel();
     try {
       _channel?.sink.close();
     } catch (_) {}
     _channel = null;
-    _connect(userId, _generation);
+    _connect(userId, token, _generation);
   }
 
-  void _connect(int userId, int generation) {
+  void _connect(int userId, String token, int generation) {
     // Bail out if this callback belongs to a stale reconnect cycle.
     if (generation != _generation) return;
 
@@ -76,15 +86,18 @@ class WebSocketClient {
       _channel?.sink.close();
       _channel = null;
 
-      final uri = Uri.parse('${AppConstants.wsBaseUrl}/$userId');
+      final uri = Uri.parse(
+        '${AppConstants.wsBaseUrl}/$userId?token=${Uri.encodeQueryComponent(token)}',
+      );
       _channel = WebSocketChannel.connect(uri);
 
-      // Catch connection-level errors (e.g. DNS failure, TLS rejection).
+      // Catch connection-level errors (e.g. DNS failure, TLS rejection,
+      // auth failure — the backend closes with 1008 on bad/expired token).
       _channel!.ready.catchError((_) {
         if (generation != _generation) return;
         _channel = null;
         Future.delayed(const Duration(seconds: 5), () {
-          _connect(userId, generation);
+          _connect(userId, token, generation);
         });
       });
 
@@ -106,13 +119,13 @@ class WebSocketClient {
           // Auto-reconnect after 3 seconds on disconnect.
           // Pass the current generation so stale timers self-cancel.
           Future.delayed(const Duration(seconds: 3), () {
-            _connect(userId, generation);
+            _connect(userId, token, generation);
           });
         },
         onError: (error) {
           _channel = null; // mark as dead
           Future.delayed(const Duration(seconds: 5), () {
-            _connect(userId, generation);
+            _connect(userId, token, generation);
           });
         },
         cancelOnError: false,
@@ -135,7 +148,7 @@ class WebSocketClient {
     } catch (e) {
       // Retry connection after delay
       Future.delayed(const Duration(seconds: 5), () {
-        _connect(userId, generation);
+        _connect(userId, token, generation);
       });
     }
   }
@@ -146,6 +159,7 @@ class WebSocketClient {
     _channel?.sink.close();
     _controller?.close();
     _connectedUserId = null;
+    _connectedToken = null;
     _channel = null;
   }
 
