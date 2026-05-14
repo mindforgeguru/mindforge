@@ -15,14 +15,24 @@ import re
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 from groq import Groq
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_gemini_model = None
+# Singleton Gemini client. The new google-genai SDK (replaces the deprecated
+# google-generativeai package) doesn't have a stateful "model" object — the
+# model name is passed to every generate_content call instead, so we keep one
+# Client and one reusable GenerateContentConfig.
+_gemini_client: Optional["genai.Client"] = None
+_GEMINI_GENERATION_CONFIG = genai_types.GenerateContentConfig(
+    temperature=0.4,
+    max_output_tokens=16384,
+)
+
 _groq_client = None
 
 # MIME types Gemini Files API accepts
@@ -39,18 +49,11 @@ _MIME_MAP = {
 }
 
 
-def _get_gemini_model():
-    global _gemini_model
-    if _gemini_model is None:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        _gemini_model = genai.GenerativeModel(
-            model_name=settings.GEMINI_MODEL,
-            generation_config=genai.GenerationConfig(
-                temperature=0.4,
-                max_output_tokens=16384,
-            ),
-        )
-    return _gemini_model
+def _get_gemini_client() -> "genai.Client":
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _gemini_client
 
 
 def _get_groq_client():
@@ -136,12 +139,17 @@ async def scan_document_metadata(
                 None, lambda: _upload_file_to_gemini(file_bytes, ext)
             )
             prompt = _build_scan_prompt()
-            model = _get_gemini_model()
+            client = _get_gemini_client()
             response = await loop.run_in_executor(
-                None, lambda: model.generate_content([uploaded, prompt])
+                None,
+                lambda: client.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=[uploaded, prompt],
+                    config=_GEMINI_GENERATION_CONFIG,
+                ),
             )
             await loop.run_in_executor(
-                None, lambda: genai.delete_file(uploaded.name)
+                None, lambda: client.files.delete(name=uploaded.name)
             )
             raw = response.text.strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -212,11 +220,18 @@ async def scan_syllabus(
             uploaded = await loop.run_in_executor(
                 None, lambda: _upload_file_to_gemini(file_bytes, ext)
             )
-            model = _get_gemini_model()
+            client = _get_gemini_client()
             response = await loop.run_in_executor(
-                None, lambda: model.generate_content([uploaded, prompt])
+                None,
+                lambda: client.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=[uploaded, prompt],
+                    config=_GEMINI_GENERATION_CONFIG,
+                ),
             )
-            await loop.run_in_executor(None, lambda: genai.delete_file(uploaded.name))
+            await loop.run_in_executor(
+                None, lambda: client.files.delete(name=uploaded.name)
+            )
             raw = response.text.strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
@@ -554,7 +569,11 @@ def _upload_file_to_gemini(file_bytes: bytes, ext: str):
         with tempfile.NamedTemporaryFile(suffix=f".{ext.lower()}", delete=False) as tmp:
             tmp.write(file_bytes)
             tmp_path = tmp.name
-        uploaded = genai.upload_file(tmp_path, mime_type=mime_type)
+        client = _get_gemini_client()
+        uploaded = client.files.upload(
+            file=tmp_path,
+            config=genai_types.UploadFileConfig(mime_type=mime_type),
+        )
         logger.info(f"Uploaded file to Gemini: {uploaded.name}, size={len(file_bytes)} bytes")
         return uploaded
     finally:
@@ -633,9 +652,14 @@ async def _generate_with_gemini(
         prompt = _build_prompt(params, syllabus_chapters=syllabus_chapters)
         content_parts.append(prompt)
 
-        model = _get_gemini_model()
+        client = _get_gemini_client()
         response = await loop.run_in_executor(
-            None, lambda: model.generate_content(content_parts)
+            None,
+            lambda: client.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=content_parts,
+                config=_GEMINI_GENERATION_CONFIG,
+            ),
         )
         # response.text raises ValueError if the response was blocked by safety
         # filters. Catch that and surface a useful message.
@@ -656,9 +680,12 @@ async def _generate_with_gemini(
         )
         return questions
     finally:
+        client = _get_gemini_client()
         for uf in all_uploaded:
             try:
-                await loop.run_in_executor(None, lambda f=uf: genai.delete_file(f.name))
+                await loop.run_in_executor(
+                    None, lambda f=uf: client.files.delete(name=f.name)
+                )
             except Exception:
                 pass
 

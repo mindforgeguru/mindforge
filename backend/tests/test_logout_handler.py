@@ -58,7 +58,8 @@ redis_mock.revoke_access_jti = AsyncMock()
 _stub("app.core.redis_client", redis_manager=redis_mock)
 
 # Stub AI / PDF services that auth.py pulls in transitively via app.services
-_stub("google.generativeai")
+_stub("google", genai=MagicMock())
+_stub("google.genai", Client=MagicMock(), types=MagicMock())
 _stub("groq")
 _stub("pytesseract")
 _stub("reportlab")
