@@ -10,16 +10,21 @@ import 'package:mindforge/main.dart' as app;
 const _adminMpin = String.fromEnvironment('ADMIN_MPIN', defaultValue: '300573');
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  // Set a phone-sized viewport so the full login screen (including PIN pad)
-  // is on-screen. Default macOS test canvas is 800×600 which clips the pad.
-  const _phoneSize = Size(390.0, 844.0);   // iPhone 14 logical points
+  // Phone-sized viewport for unit-test mode only. On a real device /
+  // simulator the binding is LiveTestWidgetsFlutterBinding and the device's
+  // real viewport is used — forcing physicalSize there causes hit-tests to
+  // land off-screen (the widget tree still uses the real size for layout,
+  // but tester.tap's hit-test uses the overridden frame).
+  const _phoneSize = Size(390.0, 844.0); // iPhone 14 logical points
+  final bool _isUnitTestBinding =
+      binding is! LiveTestWidgetsFlutterBinding;
 
-  // Clear saved auth token before every test so each one starts from scratch.
-  // Wrapped in try-catch: on macOS the keychain requires a signed app; in
-  // test mode the app falls back to "no stored token" automatically.
   setUp(() async {
+    // Clear saved auth token before every test so each one starts from
+    // scratch. Wrapped in try-catch: on macOS the keychain requires a signed
+    // app; in test mode the app falls back to "no stored token" automatically.
     try {
       await const FlutterSecureStorage().deleteAll();
     } catch (_) {
@@ -27,15 +32,27 @@ void main() {
     }
   });
 
+  // NOTE: A `tearDown(() => binding.takeException())` hook was tried here to
+  // stop one failing test from cascading to the rest of the file. It does NOT
+  // work on `LiveTestWidgetsFlutterBinding` — `takeException()` asserts
+  // `inTest == true` and the binding has already exited the test by the time
+  // tearDown runs, so every test fails with `'inTest': is not true`. The
+  // proper mitigation here is to make sure each test passes in the first
+  // place (cascade only triggers after a failure).
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   /// Advance through the splash screen (total ~4.2s of delays + animations).
-  /// Also sets a phone-sized viewport so the PIN pad is fully on-screen
-  /// (default macOS test canvas 800×600 clips the bottom of the login screen).
+  /// In unit-test mode (macOS desktop binding) we also pin a phone-sized
+  /// viewport because the default 800×600 canvas clips the PIN pad. On real
+  /// simulators we let the device's own viewport govern layout.
   Future<void> passSplash(WidgetTester tester) async {
-    tester.view.physicalSize = _phoneSize;
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
+    if (_isUnitTestBinding) {
+      tester.view.physicalSize = _phoneSize;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+    }
     for (int i = 0; i < 60; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }

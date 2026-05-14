@@ -29,12 +29,20 @@ session_mock = MagicMock()
 session_mock.__aenter__ = AsyncMock(return_value=session_mock)
 session_mock.__aexit__ = AsyncMock(return_value=False)
 
+# NOTE: Base and AsyncSession must be real classes, not MagicMock. FastAPI's
+# annotation resolver (Python ≥3.12) calls ForwardRef() on each parameter type
+# when a router is registered, and ForwardRef rejects non-string MagicMock
+# values with a SyntaxError. Real type() classes resolve cleanly.
+_Base = type("Base", (), {"__init_subclass__": classmethod(lambda cls, **kw: None)})
+_AsyncSession = type("AsyncSession", (), {})
+
 db_module = _stub(
     "app.core.database",
     engine=engine_mock,
-    Base=MagicMock(),
+    Base=_Base,
     get_db=MagicMock(),
-    AsyncSession=MagicMock(return_value=session_mock),
+    AsyncSession=_AsyncSession,
+    AsyncSessionLocal=MagicMock(),
 )
 
 # ── Redis ─────────────────────────────────────────────────────────────────────

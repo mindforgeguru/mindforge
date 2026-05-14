@@ -24,9 +24,23 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt pytest pytest-asyncio
 
+      # Each test file gets its own pytest process. test_logout_handler.py and
+      # test_websocket_auth.py install module-level sys.modules stubs that
+      # mutate state shared with test_unit.py — keeping them in separate
+      # interpreters avoids order-dependent failures (e.g. JWT secret
+      # rebinding silently passing a tampered-token assertion). See
+      # TEST_RECORD.md §10 if you want to revisit this.
       - name: Run unit tests
         working-directory: backend
         run: python -m pytest tests/test_unit.py -v
+
+      - name: Run logout-handler tests
+        working-directory: backend
+        run: python -m pytest tests/test_logout_handler.py -v
+
+      - name: Run WebSocket auth tests
+        working-directory: backend
+        run: python -m pytest tests/test_websocket_auth.py -v
 
   # ── Flutter unit + widget tests ───────────────────────────────────────────────
   flutter:
