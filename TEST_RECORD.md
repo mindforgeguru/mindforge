@@ -1,6 +1,6 @@
 # Mindforge — Testing Record
 
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-19
 **Maintainer:** chinmay1975@gmail.com
 **Scope:** Reference document for every kind of testing performed on the Mindforge app — automated tests, security/privacy verification, and manual QA. Update this file every time a significant test session is run.
 
@@ -222,7 +222,23 @@ Run this end-to-end before every release build. Tick PASS/FAIL with date.
 - [ ] Profile **does NOT** show "Delete my account" (admin protection)
 - [ ] Attempting `DELETE /api/auth/account` as admin → 403
 
-### 5.6 Cross-cutting
+### 5.6 Web build QA
+
+Run before publishing the web build. Verified 2026-05-19 on Flutter 3.41.7 / Chrome, against local stack (`docker-compose.local.yml`) with seeded integration-test users.
+
+- [x] Debug build (`flutter run -d chrome --web-port=5001`) loads — **PASS** (2026-05-19)
+- [x] CORS preflight from `http://localhost:5001` returns 200 with correct allow-origin — **PASS** (`backend/app/core/config.py:69-76` allowlists `:5001` and `:8080`)
+- [x] Login + golden path on all four roles (admin / teacher / student / parent) — **PASS** (2026-05-19)
+- [x] Responsive at iPhone-SE (375px) / iPad (768px) / desktop (1280px+) — **PASS** (2026-05-19)
+- [x] Hard refresh on a deep route keeps the user logged in (token persists in localStorage) — **PASS** (2026-05-19)
+- [x] Browser back/forward navigates inside the SPA (go_router) — **PASS** (2026-05-19)
+- [x] Logout clears `mindforge_*` keys in localStorage — **PASS** (2026-05-19)
+- [x] WebSocket upgrades to 101 at `ws://127.0.0.1:8000/ws/<userid>?token=...` and pushes realtime messages — **PASS** (2026-05-19)
+- [x] Release bundle (`flutter build web --release`) sanity check against `python3 -m http.server 8080` — **PASS** (2026-05-19)
+- [x] SPA dev server falls back deep routes to `index.html`; prod served by Netlify-style `frontend/web/_redirects` (`/* /index.html 200`) — **PASS** (2026-05-19)
+- [ ] Firebase on web (FCM/Analytics/Crashlytics) — **FAIL** as of 2026-05-19. See Known Issues §10 item 8.
+
+### 5.7 Cross-cutting
 
 - [ ] Pull-to-refresh on every list screen
 - [ ] Error states show `ErrorView` with retry
@@ -282,6 +298,32 @@ CI workflow: `.github/workflows/ci.yml`
 
 ## 9. Past Test Sessions (History)
 
+### 2026-05-19 (full security audit + critical fixes)
+- Wrote `tests/security_test_extended.py` covering privilege-escalation matrix, IDOR/BOLA, mass-assignment, path traversal, WebSocket auth, JTI revoke after logout, refresh-token rotation. Initial run: 47 PASS / 2 FAIL / 0 WARN.
+- **CRITICAL — Mass-assignment on `/api/auth/register` (fixed).** Schema accepted any `UserRole`; verified live that `role="admin"` rows could be created (pending approval). Fix in `backend/app/schemas/user.py`: added `restrict_self_register_role` validator that only allows `student` or `teacher`. Re-run: **49 PASS / 0 FAIL / 0 WARN**. Sanity-checked all four register scenarios via curl: student 201, teacher 201, admin 422, parent 422. The parent flow that auto-creates a parent from a student's `parent_username` still works (verified — registering a student created the parent user too).
+- **HIGH — Backend dependency CVEs (3 of 6 packages patched).** `pip-audit` inside backend container flagged 17 CVEs across 6 packages. Bumped in `backend/requirements.txt`:
+  - `python-jose[cryptography]` 3.3.0 → 3.4.0 (PYSEC-2024-232 / 2024-233, algorithm-confusion in JWT verification — highest priority because every access/refresh token flows through this)
+  - `python-multipart` 0.0.9 → 0.0.27 (CVE-2024-53981 + 3 newer, DoS via crafted boundary headers in file uploads)
+  - `python-dotenv` 1.0.1 → 1.2.2 (CVE-2026-28684)
+  - Rebuilt backend image, re-ran backend unit suite: **38/38 PASS**. Re-ran extended security probes: 49/0/0.
+- **Follow-up patch wave (later same day) — Pillow + FastAPI/Starlette bumped.** Pillow 10.3.0 → 12.2.0 fixes the 5 Pillow CVEs. fastapi 0.111.0 → 0.120.4 pulls starlette 0.37.2 → 0.49.3, fixing CVE-2024-47874, CVE-2025-54121, **and** the newer CVE-2025-62727 that surfaced after the first jump to fastapi 0.118 (which only got starlette to 0.48.0). Backend tests + extended probes re-ran clean after each rebuild. Final pip-audit: 17 CVEs → **2 CVEs** (pyasn1 0.4.8, wheel 0.45.1). Both remaining are blocked / low-impact — see §10 item 12.
+- **`docker-compose.yml` host-port hardening (§10 item 11 resolved).** Removed `ports:` for postgres / redis / minio from the base compose so a future self-hosted prod deploy doesn't expose them. Moved the same bindings into `docker-compose.local.yml` so dev still gets psql/redis-cli/minio-console access on the host.
+- Tier-D / Tier-E findings (logged in §10 items 10 + 11): no CSP `<meta>` on the Flutter web `index.html`; production `docker-compose.yml` exposes postgres/redis/minio admin ports to 0.0.0.0 (not used in prod — Railway hosts the API — but a footgun for anyone self-hosting via this compose).
+- **CSP meta added (§10 item 10 resolved).** Allowlist had to include `https://www.gstatic.com` (canvaskit) and `https://fonts.gstatic.com` (google_fonts) on top of `'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'`. Release bundle re-served via static http.server renders correctly; `frame-ancestors 'none'` plus `base-uri 'self'` plus `form-action 'self'` add clickjacking + base-tag + form-submission hardening on top of the existing `X-Frame-Options: DENY` (which only protects API responses, not the SPA HTML).
+- Tier-C static checks clean: no hardcoded secrets in backend Python, no `eval/exec/os.system/shell=True/pickle.loads/yaml.load`, no f-string SQL interpolation, `.env` + `.env.local` gitignored.
+
+### 2026-05-19 (web build QA + security re-run)
+- Brought up local stack via `docker compose -f docker-compose.yml -f docker-compose.local.yml up -d` — postgres / redis / minio / backend all healthy, `/api/health` → 200 in ~55 ms.
+- Re-seeded integration-test users via `backend/scripts/seed_integration_test_users.py` — idempotent, 4 users updated (admin, chinmay_sir, dummy8, dummy8_dad).
+- `flutter run -d chrome --web-port=5001` launched cleanly. CORS preflight from `:5001` returns 200 with correct `Access-Control-Allow-Origin`.
+- Manual golden path PASS on all four roles (admin / teacher / student / parent) in debug build. Web-specific checks all PASS: responsive at 375/768/1280px, hard-refresh on deep route stays logged in (localStorage persists JWT), browser back/forward works, logout clears `mindforge_*` keys, WS upgrade to 101 + realtime push messages observed.
+- Release bundle: `flutter build web --release` succeeded in 58.9s. Tree-shaken icon fonts (99.4% / 98.2% reduction). Served via `python3 -m http.server 8080`; golden-path sanity passed against the minified bundle.
+- **`tests/security_test.py` re-run against local stack — 21 PASS / 1 FAIL / 1 WARN.** Both non-passes are local-stack artifacts, not production issues:
+  - "HTTPS enforced" FAIL — testing http://localhost:8000 directly; prod uses Railway's TLS edge (`server: railway-edge` confirmed via live `curl https://api.mindforge.guru/api/health`).
+  - "Server header version leak" WARN — local uvicorn returns `server: uvicorn`; Railway edge overrides this header to `railway-edge` in prod.
+  - Headers, login rate limit (429 after 10 attempts), JWT tampering rejection, 5 SQL-injection payloads, role isolation (admin token rejected on teacher route), unauth student access rejected, oversized/null-byte/missing-field input validation — all PASS.
+- Two findings logged in §10 (items 8 + 9): Firebase web config missing → FCM/Analytics/Crashlytics disabled on web (non-fatal, swallowed by try/catch in `main.dart:46-58`); `flutter_secure_storage_web` blocks future wasm builds.
+
 ### 2026-05-14 (fifth pass — integration tests now 5/5 PASS)
 - Identified the iPhone 17 Pro failures from the fourth pass as a single bug in `app_test.dart`: unconditional `tester.view.physicalSize` override breaks taps on the live binding.
 - Fix: gated the override on `binding is! LiveTestWidgetsFlutterBinding`. Briefly tried adding `tearDown(() => binding.takeException())` to drain cascade state — that broke every test because `takeException` asserts `inTest == true` and is not callable from tearDown on the live binding. Reverted that part; the cascade goes away on its own once root failures are fixed.
@@ -338,6 +380,14 @@ CI workflow: `.github/workflows/ci.yml`
 5. **~~`google.generativeai` package is deprecated~~** — migrated to `google-genai==2.2.0` on 2026-05-14. Changes in `backend/app/services/ai_service.py`: `genai.configure(...)` + `GenerativeModel` → singleton `genai.Client`; `model.generate_content(...)` → `client.models.generate_content(model=..., contents=..., config=_GEMINI_GENERATION_CONFIG)`; `genai.upload_file(...)` → `client.files.upload(file=..., config=types.UploadFileConfig(mime_type=...))`; `genai.delete_file(name)` → `client.files.delete(name=name)`. Test stub in `test_logout_handler.py` updated to match. `requirements.txt` pin updated. All 38 backend tests still pass; local Docker backend restarted with new package; `/api/health` confirmed green. New SDK emits one cosmetic `_UnionGenericAlias` DeprecationWarning that's an upstream Python 3.17 concern, not ours.
 6. **~~Add `test_websocket_auth.py` to CI~~** — done 2026-05-14. CI now runs each backend test file in its own `pytest` invocation (`test_unit.py`, `test_logout_handler.py`, `test_websocket_auth.py` as separate steps). Split was necessary because `test_logout_handler.py` and `test_websocket_auth.py` install module-level `sys.modules` stubs that mutate state shared with `test_unit.py` — running them in one session causes order-dependent failures (specifically, a tampered-JWT assertion silently passes). Long-term cleanup: refactor the stubs into `conftest.py` so a single pytest invocation works. Tracked separately.
 7. **~~Integration test suite needs maintenance~~** — fixed 2026-05-14. Root cause was a single line in `setUp` / `passSplash`: `tester.view.physicalSize = (390, 844)` was being applied unconditionally, including on the live integration binding. On a real simulator the widget tree still laid out at the device's true size, but `tester.tap` hit-tests used the overridden frame — so computed tap centers (e.g. `(570, 1335)`) fell outside the virtual frame and missed. Once the first test failed, the framework's exception state cascaded and every subsequent test reported "did not complete." Fix in `frontend/integration_test/app_test.dart`: gate the `physicalSize` / `devicePixelRatio` override on `binding is! LiveTestWidgetsFlutterBinding` so unit-test mode still gets the phone canvas but the live binding uses the device's real viewport. **Result on iPhone 17 Pro: 5/5 PASS**, including the admin-login end-to-end flow.
+
+8. **Firebase is not configured for the Flutter web build.** `frontend/lib/firebase_options.dart` explicitly throws `UnsupportedError` on `kIsWeb`. `main.dart:46-58` wraps the init in try/catch so the app still mounts, but FCM push, Analytics, and Crashlytics are silently disabled on web. Run `flutterfire configure --platforms=web` and add the generated `web` block before shipping the web app to users who need push or analytics.
+9. **`flutter_secure_storage_web` blocks future wasm builds.** Wasm dry-run during `flutter build web --release` flags `dart:html` + `dart:js_util` usage in the package. JS build works today; revisit when Flutter's wasm web target stabilises (or replace with a wasm-compatible storage shim).
+10. **~~No Content-Security-Policy `<meta>` on the Flutter web entry HTML.~~** Fixed 2026-05-19. Added a CSP meta tag to `frontend/web/index.html`. Final policy: `default-src 'self'` baseline; `script-src` allows `'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:` (required for Flutter web bootstrap + wasm) plus `https://www.gstatic.com` (canvaskit CDN); `font-src` and `connect-src` allow `https://fonts.gstatic.com` (google_fonts package); `connect-src` lists localhost dev origins + `https://api.mindforge.guru` and `wss://api.mindforge.guru` for prod; `frame-ancestors 'none'` blocks framing. Verified locally: release build served via `python3 -m http.server 8080` renders correctly (initial blank screen + missing-text reveal taught us we needed gstatic and fonts.gstatic).
+11. **~~Production `docker-compose.yml` exposes postgres / redis / minio admin to the host.~~** Fixed 2026-05-19. Removed the `ports:` blocks for postgres / redis / minio from `docker-compose.yml`. The same bindings (`5432`, `6379`, `9000`, `9001`) are now declared in `docker-compose.local.yml` so local dev keeps direct CLI access. Verified: `docker compose -f docker-compose.yml -f docker-compose.local.yml ps` shows all four host ports bound; the prod compose alone would keep these services on the docker network only.
+12. **Backend dep CVEs partially patched (was 17, now 2 / 17 fixed).** As of 2026-05-19 — bumped `python-jose 3.3.0 → 3.4.0`, `python-multipart 0.0.9 → 0.0.27`, `python-dotenv 1.0.1 → 1.2.2`, `Pillow 10.3.0 → 12.2.0`, `fastapi 0.111.0 → 0.120.4` (which pulls `starlette 0.37.2 → 0.49.3`). Re-verified 38/38 backend tests + 49/0/0 extended security probes after each rebuild. Two CVEs remain blocked:
+    - `pyasn1==0.4.8` / CVE-2026-30922 — fix is 0.6.3, but `python-jose==3.4.0` pins `pyasn1<0.5.0`. Unblock requires upgrading python-jose past the 3.4 line (next release), or migrating to `PyJWT` (refactor in `app/core/security.py`).
+    - `wheel==0.45.1` / CVE-2026-24049 — build-time only; affects local pip install, not the runtime container image. Defer.
 
 ### Resolved (kept for history)
 - ~~`test_logout_handler.py` fails on Python ≥3.12 locally~~ — fixed 2026-05-14 by giving `Base` and `AsyncSession` real `type()` classes in `conftest.py`.

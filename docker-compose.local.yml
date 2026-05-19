@@ -8,6 +8,22 @@
 #   • Uses .env.local instead of .env for secrets
 
 services:
+  # Expose datastore ports on the host for local dev only — psql, redis-cli,
+  # and the MinIO admin console at :9001 should never be reachable from
+  # outside the docker network in production.
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
   backend:
     env_file:
       - .env.local

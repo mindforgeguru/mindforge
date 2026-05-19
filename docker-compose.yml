@@ -12,8 +12,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
-    ports:
-      - "5432:5432"
+    # Host port binding only in docker-compose.local.yml — postgres should never
+    # be reachable from outside the docker network in a self-hosted prod setup.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mindforge}"]
       interval: 10s
@@ -27,8 +27,7 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secret}
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
+    # Host port binding only in docker-compose.local.yml.
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret}", "ping"]
       interval: 10s
@@ -45,9 +44,8 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_secret}
     volumes:
       - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    # Host port binding only in docker-compose.local.yml — the admin console on
+    # 9001 is especially dangerous to expose publicly.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s

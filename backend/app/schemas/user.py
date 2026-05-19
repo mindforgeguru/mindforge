@@ -26,6 +26,16 @@ class UserRegisterRequest(BaseModel):
     additional_subjects: Optional[List[str]] = None  # student only
     teachable_subjects: Optional[List[str]] = None   # teacher only
 
+    @field_validator("role")
+    @classmethod
+    def restrict_self_register_role(cls, v: UserRole) -> UserRole:
+        # Admin accounts are created via the seed script; parent accounts are
+        # auto-created from a student's `parent_username` in the register
+        # endpoint. Only student and teacher may self-register.
+        if v not in (UserRole.student, UserRole.teacher):
+            raise ValueError("Self-registration is only allowed for student or teacher accounts.")
+        return v
+
     @field_validator("phone")
     @classmethod
     def validate_phone(cls, v: Optional[str]) -> Optional[str]:
