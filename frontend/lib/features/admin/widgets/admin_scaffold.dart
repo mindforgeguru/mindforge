@@ -23,6 +23,11 @@ class AdminScaffold extends ConsumerWidget {
   final bool showMobileBottomNav;
   final bool? resizeToAvoidBottomInset;
 
+  /// When `true`, the web branch does NOT wrap the body in
+  /// `Center + ConstrainedBox(maxWidth: 600)`. Use for screens that build
+  /// their own desktop-wide layout so they fill the browser width.
+  final bool wideContent;
+
   const AdminScaffold({
     super.key,
     this.appBar,
@@ -32,6 +37,7 @@ class AdminScaffold extends ConsumerWidget {
     this.backgroundColor,
     this.showMobileBottomNav = true,
     this.resizeToAvoidBottomInset,
+    this.wideContent = false,
   });
 
   @override
@@ -52,8 +58,17 @@ class AdminScaffold extends ConsumerWidget {
     }
 
     // Web: top nav + content area, no bottom nav. Mobile-styled bodies are
-    // capped at 600 px and centred so they don't stretch on desktop.
+    // capped at 600 px and centred so they don't stretch on desktop. Screens
+    // with their own desktop-wide layout opt out with `wideContent: true`.
     final auth = ref.watch(authProvider);
+    final innerBody = wideContent
+        ? body
+        : Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: body,
+            ),
+          );
     return Scaffold(
       backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
       floatingActionButton: floatingActionButton,
@@ -63,12 +78,8 @@ class AdminScaffold extends ConsumerWidget {
           AdminTopNav(auth: auth),
           Expanded(
             child: Scaffold(
-              body: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: body,
-                ),
-              ),
+              appBar: appBar,
+              body: innerBody,
               backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
             ),
           ),
