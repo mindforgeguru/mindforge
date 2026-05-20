@@ -86,8 +86,13 @@ class _WideGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final crossCount = width >= 1400 ? 4 : width >= 1100 ? 3 : 2;
+    const horizontalPadding = 48 * 2;
+    const gutter = 20;
+    final cardWidth =
+        (width - horizontalPadding - gutter * (crossCount - 1)) / crossCount;
 
-    return Padding(
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(48, 28, 48, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,17 +111,15 @@ class _WideGrid extends StatelessWidget {
                 fontSize: 13, color: AppColors.textMuted),
           ),
           const SizedBox(height: 24),
-          Expanded(
-            child: GridView.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossCount,
-                crossAxisSpacing: 20,
-                mainAxisSpacing: 20,
-                childAspectRatio: 0.66,
-              ),
-              itemCount: faculty.length,
-              itemBuilder: (_, i) => _FacultyCard(teacher: faculty[i]),
-            ),
+          Wrap(
+            spacing: gutter.toDouble(),
+            runSpacing: gutter.toDouble(),
+            children: faculty
+                .map((t) => SizedBox(
+                      width: cardWidth,
+                      child: _FacultyCard(teacher: t),
+                    ))
+                .toList(),
           ),
         ],
       ),
@@ -156,9 +159,10 @@ class _FacultyCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            flex: 5,
+          AspectRatio(
+            aspectRatio: 4 / 5,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -208,51 +212,45 @@ class _FacultyCard extends StatelessWidget {
               ],
             ),
           ),
-          Expanded(
-            flex: 4,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (subjects.isNotEmpty) ...[
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: subjects
-                          .take(3)
-                          .map((s) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: AppColors.accent.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(s,
-                                    style: GoogleFonts.poppins(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.accent)),
-                              ))
-                          .toList(),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  Expanded(
-                    child: Text(
-                      bio?.isNotEmpty == true
-                          ? bio!
-                          : 'Dedicated educator committed to student excellence.',
-                      style: GoogleFonts.poppins(
-                          fontSize: 11.5,
-                          color: AppColors.textSecondary,
-                          height: 1.45),
-                      maxLines: 9,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (subjects.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: subjects
+                        .take(3)
+                        .map((s) => Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(s,
+                                  style: GoogleFonts.poppins(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.accent)),
+                            ))
+                        .toList(),
                   ),
+                  const SizedBox(height: 8),
                 ],
-              ),
+                Text(
+                  bio?.isNotEmpty == true
+                      ? bio!
+                      : 'Dedicated educator committed to student excellence.',
+                  style: GoogleFonts.poppins(
+                      fontSize: 11.5,
+                      color: AppColors.textSecondary,
+                      height: 1.45),
+                ),
+              ],
             ),
           ),
         ],
