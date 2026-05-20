@@ -12,6 +12,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, func, select, update
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.mask_utils import mask_phone, mask_email
 from app.core.redis_client import redis_manager
