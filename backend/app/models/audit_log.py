@@ -3,7 +3,7 @@ AuditLog model — immutable record of every admin action.
 Rows are never updated or deleted; new rows are always appended.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, func

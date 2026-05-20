@@ -14,12 +14,12 @@ from app.core.security import get_current_parent
 from app.models.attendance import Attendance, AttendanceStatus
 from app.models.fees import FeePayment, FeeStructure, PaymentInfo
 from app.models.grade import Grade
-from app.models.test import Test, TestType
+from app.models.test import Test
 from app.models.timetable import TimetableConfig, TimetableSlot
 from app.models.user import StudentProfile, User
 from sqlalchemy.orm import aliased
 from app.schemas.attendance import AttendanceResponse, AttendanceSummary
-from app.schemas.fees import FeePaymentResponse, FeeStructureResponse, PaymentInfoResponse, StudentFeeSummary
+from app.schemas.fees import FeePaymentResponse, PaymentInfoResponse, StudentFeeSummary
 from app.schemas.grade import GradeResponse
 from app.schemas.test import TestResponse
 from app.schemas.timetable import TimetableSlotWithTeacherResponse

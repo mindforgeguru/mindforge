@@ -3,7 +3,6 @@ Teacher router — all endpoints require teacher role.
 """
 
 import asyncio
-import io
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
@@ -23,12 +22,10 @@ from app.models.grade import Grade, GradeType
 from app.models.test import Test, TestSubmission, TestType
 from app.models.timetable import TimetableConfig, TimetableSlot
 from app.models.user import User, StudentProfile, TeacherProfile
-from app.schemas.attendance import (
-    AttendanceCreate, AttendanceBulkCreate, AttendanceResponse, AttendanceSummary
-)
-from app.schemas.grade import GradeCreate, GradeResponse, GradeStats
+from app.schemas.attendance import AttendanceBulkCreate, AttendanceResponse
+from app.schemas.grade import GradeCreate, GradeResponse
 from app.schemas.test import TestGenerationParams, TestResponse, OfflineGradesBulk
-from app.schemas.timetable import TimetableConfigResponse, TimetableSlotCreate, TimetableSlotResponse, TimetableSlotUpdate
+from app.schemas.timetable import TimetableConfigResponse, TimetableSlotCreate, TimetableSlotResponse
 from app.schemas.user import AdminMpinUpdate, UserResponse, TeacherWithSubjectsResponse
 from app.schemas.homework import (
     HomeworkCreate,
@@ -418,8 +415,6 @@ async def get_my_timetable(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Return all upcoming timetable slots assigned to the current teacher."""
-    from datetime import date as date_type
-    today = date_type.today()
     result = await db.execute(
         select(TimetableSlot)
         .where(
@@ -1755,7 +1750,6 @@ async def get_today_workflow(
     no slots today is "timetable not created yet", not a holiday.
     """
     today = datetime.now(timezone.utc).date()
-    tomorrow = today + timedelta(days=1)
     lookback = today - timedelta(days=14)
     today_start = datetime.combine(
         today, datetime.min.time(), tzinfo=timezone.utc

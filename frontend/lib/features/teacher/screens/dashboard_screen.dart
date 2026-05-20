@@ -19,11 +19,9 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
 import '../../../core/providers/badge_provider.dart';
-import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/badge_dot.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
-import '../widgets/teacher_bottom_nav.dart';
 import '../widgets/teacher_scaffold.dart';
 
 // File-level DateFormat cache.
@@ -264,8 +262,14 @@ class _TeacherDashboardScreenState
         : (avatarRadius + 116).clamp(152.0, 185.0);
     final double headerH = navyH + cardInternalH - cardIntoNavy + avatarRadius;
 
-    // ── Web layout ─────────────────────────────────────────────────────────
-    if (screenWidth >= 900) {
+    // Web + mobile use the same sliver-based layout below — same navy hero
+    // with MIND FORGE branding + overlapping avatar + "Welcome back" card
+    // that the student dashboard uses. TeacherScaffold caps the body at
+    // 600 px on web, so it reads as a phone-shaped centred column.
+    // (The earlier custom web hero with stat tiles is intentionally retired
+    // so all three roles look the same on web.)
+    // ignore: dead_code
+    if (false) {
       final hour = DateTime.now().hour;
       final greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
       return TeacherScaffold(
@@ -465,82 +469,84 @@ class _TeacherDashboardScreenState
                       orElse: () => const SizedBox.shrink(),
                     ),
 
-                    // Two columns
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 6,
-                          child: _WebSection(
-                            icon: Icons.calendar_today_rounded,
-                            title: "Today's Timetable",
-                            trailing: Text(
-                              _fmtEDMon.format(DateTime.now()),
-                              style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textMuted),
-                            ),
-                            onSeeAll: () => context.go('${RouteNames.teacherDashboard}/timetable'),
-                            child: summaryAsync.when(
-                              loading: () => const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()),
-                              error: (_, __) => const SizedBox.shrink(),
-                              data: (_) => todaySlots.isEmpty
-                                  ? _WebEmptyState(icon: Icons.event_busy_rounded, message: 'No classes scheduled for today')
-                                  : Wrap(
-                                      spacing: 12,
-                                      runSpacing: 12,
-                                      children: todaySlots.map((slot) => SizedBox(
-                                        width: 180,
-                                        child: _WebTimetableCard(slot: slot),
-                                      )).toList(),
-                                    ),
-                            ),
+                    // Today's workflow card — same widget the mobile dashboard
+                    // uses. Sits above Today's Timetable so the teacher's eye
+                    // lands on the grade-wide workflow first, matching mobile.
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final workflowAsync = ref.watch(teacherTodayWorkflowProvider);
+                        return workflowAsync.when(
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                          data: (data) => Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: _TodayWorkflowCard(data: data),
                           ),
-                        ),
-                        const SizedBox(width: 20),
-                        Expanded(
-                          flex: 4,
-                          child: Column(
-                            children: [
-                              _WebSection(
-                                icon: Icons.assignment_outlined,
-                                title: 'Recent Homework',
-                                onSeeAll: () => context.go('${RouteNames.teacherDashboard}/homework'),
-                                child: summaryAsync.when(
-                                  loading: () => const LinearProgressIndicator(),
-                                  error: (_, __) => const SizedBox.shrink(),
-                                  data: (summary) {
-                                    final rawHw = (summary['homework'] as List<dynamic>? ?? []);
-                                    final list = rawHw.map((e) => HomeworkModel.fromJson(e as Map<String, dynamic>)).toList();
-                                    return list.isEmpty
-                                        ? _WebEmptyState(icon: Icons.assignment_outlined, message: 'No homework assigned yet')
-                                        : Column(children: list.take(3).map((h) => _DashHomeworkTile(hw: h)).toList());
-                                  },
-                                ),
+                        );
+                      },
+                    ),
+                    // Single column — one section per row so the dashboard
+                    // reads top-to-bottom like the parent / student layouts.
+                    _WebSection(
+                      icon: Icons.calendar_today_rounded,
+                      title: "Today's Timetable",
+                      trailing: Text(
+                        _fmtEDMon.format(DateTime.now()),
+                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textMuted),
+                      ),
+                      onSeeAll: () => context.go('${RouteNames.teacherDashboard}/timetable'),
+                      child: summaryAsync.when(
+                        loading: () => const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (_) => todaySlots.isEmpty
+                            ? _WebEmptyState(icon: Icons.event_busy_rounded, message: 'No classes scheduled for today')
+                            : Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: todaySlots.map((slot) => SizedBox(
+                                  width: 180,
+                                  child: _WebTimetableCard(slot: slot),
+                                )).toList(),
                               ),
-                              const SizedBox(height: 16),
-                              _WebSection(
-                                icon: Icons.campaign_outlined,
-                                title: 'Announcements',
-                                showBadge: hasBroadcastBadge,
-                                onSeeAll: () {
-                                  ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen();
-                                  context.go('${RouteNames.teacherDashboard}/broadcasts');
-                                },
-                                child: summaryAsync.when(
-                                  loading: () => const LinearProgressIndicator(),
-                                  error: (_, __) => const SizedBox.shrink(),
-                                  data: (summary) {
-                                    final rawBc = (summary['broadcasts'] as List<dynamic>? ?? []);
-                                    final list = rawBc.map((e) => BroadcastModel.fromJson(e as Map<String, dynamic>)).toList();
-                                    return list.isEmpty
-                                        ? _WebEmptyState(icon: Icons.campaign_outlined, message: 'No announcements yet')
-                                        : Column(children: list.take(3).map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast)).toList());
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _WebSection(
+                      icon: Icons.assignment_outlined,
+                      title: 'Recent Homework',
+                      onSeeAll: () => context.go('${RouteNames.teacherDashboard}/homework'),
+                      child: summaryAsync.when(
+                        loading: () => const LinearProgressIndicator(),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (summary) {
+                          final rawHw = (summary['homework'] as List<dynamic>? ?? []);
+                          final list = rawHw.map((e) => HomeworkModel.fromJson(e as Map<String, dynamic>)).toList();
+                          return list.isEmpty
+                              ? _WebEmptyState(icon: Icons.assignment_outlined, message: 'No homework assigned yet')
+                              : Column(children: list.take(3).map((h) => _DashHomeworkTile(hw: h)).toList());
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _WebSection(
+                      icon: Icons.campaign_outlined,
+                      title: 'Announcements',
+                      showBadge: hasBroadcastBadge,
+                      onSeeAll: () {
+                        ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen();
+                        context.go('${RouteNames.teacherDashboard}/broadcasts');
+                      },
+                      child: summaryAsync.when(
+                        loading: () => const LinearProgressIndicator(),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (summary) {
+                          final rawBc = (summary['broadcasts'] as List<dynamic>? ?? []);
+                          final list = rawBc.map((e) => BroadcastModel.fromJson(e as Map<String, dynamic>)).toList();
+                          return list.isEmpty
+                              ? _WebEmptyState(icon: Icons.campaign_outlined, message: 'No announcements yet')
+                              : Column(children: list.take(3).map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast)).toList());
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -1244,35 +1250,6 @@ class _SubjectChip extends StatelessWidget {
 
 // ─── Broadcast Icon Button (dashboard header) ─────────────────────────────────
 
-class _BroadcastIconButton extends ConsumerWidget {
-  const _BroadcastIconButton();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final iconSz = R.fluid(context, 20, min: 18, max: 24);
-    return Tooltip(
-      message: 'Send Broadcast',
-      child: SizedBox(
-        width: 40,
-        height: 40,
-        child: Material(
-          color: AppColors.accent.withOpacity(0.12),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => context.go('${RouteNames.teacherDashboard}/broadcasts'),
-            child: Center(
-              child: Icon(Icons.campaign_outlined,
-                  size: iconSz, color: AppColors.accent),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-
 // ─── Horizontal Timetable ────────────────────────────────────────────────────
 
 class _TimetableEmpty extends StatelessWidget {
@@ -1465,123 +1442,6 @@ class _TimetableCard extends StatelessWidget {
 }
 
 // ─── Timetable Tile ──────────────────────────────────────────────────────────
-
-class _TimetableTile extends StatelessWidget {
-  final TimetableSlotModel slot;
-  const _TimetableTile({required this.slot});
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    bool isNow = false;
-    if (!slot.isHoliday && slot.startTime != null && slot.endTime != null) {
-      try {
-        final start = _parseTime(slot.startTime!, now);
-        final end = _parseTime(slot.endTime!, now);
-        isNow = now.isAfter(start) && now.isBefore(end);
-      } catch (_) {}
-    }
-
-    final accent = slot.isHoliday
-        ? AppColors.warning
-        : isNow
-            ? AppColors.accent
-            : AppColors.primary;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: isNow ? Border.all(color: AppColors.accent, width: 1.5) : null,
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x0C1D3557), blurRadius: 10, offset: Offset(0, 3)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: R.fluid(context, 42, min: 36, max: 50),
-            height: R.fluid(context, 42, min: 36, max: 50),
-            decoration: BoxDecoration(
-              color: accent.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                'P${slot.periodNumber}',
-                style: GoogleFonts.poppins(
-                  fontSize: R.fs(context, 11, min: 10, max: 13),
-                  fontWeight: FontWeight.w600,
-                  color: accent,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  slot.isHoliday
-                      ? 'Holiday'
-                      : (slot.subject?.isNotEmpty == true ? slot.subject! : slot.teacherUsername ?? 'Period ${slot.periodNumber}'),
-                  style: GoogleFonts.poppins(
-                    fontSize: R.fs(context, 14, min: 12, max: 16),
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (!slot.isHoliday && slot.startTime != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    '${slot.startTime}  –  ${slot.endTime}',
-                    style: GoogleFonts.poppins(
-                        fontSize: R.fs(context, 11, min: 10, max: 13),
-                        color: AppColors.textMuted),
-                  ),
-                ],
-                if (!slot.isHoliday) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'Grade ${slot.grade}',
-                    style: GoogleFonts.poppins(
-                        fontSize: R.fs(context, 11, min: 10, max: 13),
-                        color: AppColors.textSecondary),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (isNow)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.accent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text('NOW',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  )),
-            ),
-        ],
-      ),
-    );
-  }
-
-  DateTime _parseTime(String t, DateTime base) {
-    final parts = t.split(':');
-    return DateTime(base.year, base.month, base.day,
-        int.parse(parts[0]), int.parse(parts[1]));
-  }
-}
 
 // ─── Web-only widgets ─────────────────────────────────────────────────────────
 
@@ -1788,58 +1648,6 @@ class _HeroStatCard extends StatelessWidget {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _WebNavCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  final bool showBadge;
-  const _WebNavCard({required this.icon, required this.label, required this.color, required this.onTap, this.showBadge = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.divider),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                BadgeDot(
-                  show: showBadge,
-                  child: Container(
-                    width: 42, height: 42,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(icon, size: 22, color: color),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );

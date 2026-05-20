@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
-from jose import JWTError, jwt as _jose_jwt
+from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -24,7 +24,7 @@ from app.models.academic_year import AcademicYear
 from app.models.user import User, StudentProfile, TeacherProfile
 from app.schemas.user import (
     UserRegisterRequest, UserLoginRequest, TokenResponse,
-    RefreshRequest, RefreshResponse, UserResponse, StudentProfileCreate
+    RefreshRequest, RefreshResponse, UserResponse,
 )
 from app.core.redis_client import redis_manager
 from app.services import storage_service

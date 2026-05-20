@@ -5,7 +5,6 @@ Uses redis-py async client for both regular commands and pub/sub messaging.
 
 import json
 import logging
-import asyncio
 from typing import TYPE_CHECKING
 
 import redis.asyncio as aioredis

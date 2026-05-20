@@ -4,7 +4,7 @@ All values are loaded from environment variables / .env file.
 """
 
 from typing import List, Union
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────────────────────
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost", "http://localhost:80",
+        # Flutter `flutter run -d chrome --web-port=5001` dev server
+        "http://localhost:5001", "http://127.0.0.1:5001",
+        # Default dart2js port some IDE flows use
+        "http://localhost:8080", "http://127.0.0.1:8080",
         "https://mindforge.guru", "https://www.mindforge.guru",
     ]
 

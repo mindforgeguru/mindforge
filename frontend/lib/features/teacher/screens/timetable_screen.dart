@@ -56,6 +56,10 @@ class _TeacherTimetableScreenState
 
   @override
   Widget build(BuildContext context) {
+    // Render the same mobile-styled layout everywhere — TeacherScaffold caps
+    // it at a 600 px centred column on web (matching the dashboard + parent
+    // app). The inner wide-mode Row branches throughout this file are
+    // suppressed below by forcing each local `isWide` to `false`.
     return TeacherScaffold(
       appBar: AppBar(
         title: const Text('Timetable'),
@@ -166,7 +170,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
             _selectedDate.month == today.month &&
             _selectedDate.day == today.day;
 
-        final isWide = MediaQuery.of(context).size.width >= 900;
+        const isWide = false; // Mobile layout on all form factors; web caps at 600 px.
 
 
         // ── Day header (mobile only) ───────────────────────────────────────
@@ -519,7 +523,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
             .toSet() ??
         const <String>{};
 
-    final isWide = MediaQuery.of(context).size.width >= 900;
+    const isWide = false; // Mobile layout on all form factors; web caps at 600 px.
 
     // ── Period editor widget (built from async data) ─────────────────────
     Widget periodEditor = timetableAsync.when(
@@ -1065,7 +1069,7 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
         _selectedDate.month == today.month &&
         _selectedDate.day == today.day;
 
-    final isWide = MediaQuery.of(context).size.width >= 900;
+    const isWide = false; // Mobile layout on all form factors; web caps at 600 px.
 
     final gradeList = ListView(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
@@ -1456,64 +1460,6 @@ class _GradeSectionState extends ConsumerState<_GradeSection> {
 }
 
 // ─── Selector pill ────────────────────────────────────────────────────────────
-
-class _SelectorPill extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData? leadingIcon;
-  final bool showArrow;
-  final VoidCallback onTap;
-
-  const _SelectorPill({
-    required this.label,
-    required this.value,
-    required this.onTap,
-    this.leadingIcon,
-    this.showArrow = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
-          borderRadius: BorderRadius.circular(8),
-          color: AppColors.primary.withValues(alpha: 0.04),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (leadingIcon != null) ...[
-              Icon(leadingIcon, size: 13, color: AppColors.primary),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              '$label: ',
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.primary.withValues(alpha: 0.7),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            Text(
-              value,
-              style:       TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
-            if (showArrow)
-                    Icon(Icons.arrow_drop_down, size: 16, color: AppColors.primary),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 // ─── Calendar grid ────────────────────────────────────────────────────────────
 

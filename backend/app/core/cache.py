@@ -5,7 +5,6 @@ All functions check Redis first; on miss they query Postgres and fill the cache.
 
 import json
 from dataclasses import dataclass
-from datetime import date, time
 from typing import Optional
 
 from sqlalchemy import select

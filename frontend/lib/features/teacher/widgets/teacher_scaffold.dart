@@ -8,12 +8,13 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/badge_dot.dart';
+import '../../../core/widgets/report_problem_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
 import 'teacher_bottom_nav.dart';
 
 /// Responsive scaffold for teacher screens.
-/// On wide screens (≥ 900 px) shows a left side-nav.
+/// On wide screens (≥ 900 px) shows the dark top nav and hides the bottom nav.
 /// On mobile shows the existing bottom nav — no change to mobile behaviour.
 class TeacherScaffold extends ConsumerWidget {
   final PreferredSizeWidget? appBar;
@@ -22,6 +23,11 @@ class TeacherScaffold extends ConsumerWidget {
   final FloatingActionButtonLocation? floatingActionButtonLocation;
   final Color? backgroundColor;
 
+  /// When `true`, the web branch does NOT wrap the body in
+  /// `Center + ConstrainedBox(maxWidth: 600)`. Use for screens that build
+  /// their own desktop-wide layout so they fill the browser width.
+  final bool wideContent;
+
   const TeacherScaffold({
     super.key,
     this.appBar,
@@ -29,6 +35,7 @@ class TeacherScaffold extends ConsumerWidget {
     this.floatingActionButton,
     this.floatingActionButtonLocation,
     this.backgroundColor,
+    this.wideContent = false,
   });
 
   @override
@@ -47,32 +54,31 @@ class TeacherScaffold extends ConsumerWidget {
       );
     }
 
-    // ── Web: side nav + content ────────────────────────────────────────────
-    // NOTE: do NOT wrap `body` in an inner Navigator. A Navigator captures its
-    // initial route builder in a closure, freezing whatever `body` was passed
-    // on first push. Riverpod provider updates rebuild the outer widget tree
-    // but never update the Navigator's already-pushed route — so the dashboard
-    // would be permanently stuck on the initial loading state after a page
-    // reload. Direct nesting with a plain Scaffold lets Flutter reconcile the
-    // body widget normally on every rebuild.
+    // ── Web: top nav + content ─────────────────────────────────────────────
+    // Mirrors ParentScaffold/StudentScaffold for visual consistency across
+    // roles. Mobile-styled bodies are capped at 600 px and centred so they
+    // don't stretch across the desktop. Screens that already build a
+    // desktop-wide layout opt out with `wideContent: true`.
+    final auth = ref.watch(authProvider);
+    final innerBody = wideContent
+        ? body
+        : Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: body,
+            ),
+          );
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Row(
+      backgroundColor: backgroundColor ?? AppColors.background,
+      floatingActionButton: floatingActionButton,
+      floatingActionButtonLocation: floatingActionButtonLocation,
+      body: Column(
         children: [
-          const _TeacherSideNav(),
+          TeacherTopNav(auth: auth),
           Expanded(
             child: Scaffold(
               appBar: appBar,
-              // Cap mobile-styled bodies at 600 px so they read like a
-              // centred column instead of stretching across the desktop.
-              body: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: body,
-                ),
-              ),
-              floatingActionButton: floatingActionButton,
-              floatingActionButtonLocation: floatingActionButtonLocation,
+              body: innerBody,
               backgroundColor: backgroundColor ?? AppColors.background,
             ),
           ),
@@ -82,38 +88,35 @@ class TeacherScaffold extends ConsumerWidget {
   }
 }
 
-// ─── Side navigation panel ─────────────────────────────────────────────────────
+// ─── Teacher top navigation bar ───────────────────────────────────────────────
 
-class _TeacherSideNav extends ConsumerWidget {
-  const _TeacherSideNav();
+class TeacherTopNav extends ConsumerWidget {
+  final AuthState auth;
+  const TeacherTopNav({super.key, required this.auth});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authProvider);
     final currentPath = GoRouterState.of(context).uri.toString();
 
-    // Badge: grade activity
+    // Badges: grades and broadcasts pulse a small dot in the top nav when
+    // there's something new since the last time the teacher viewed them.
     final lastSeenGrade = ref.watch(teacherGradeBadgeNotifier);
     final gradesAsync = ref.watch(teacherGradesProvider((null, null)));
     final hasGradeBadge = gradesAsync.maybeWhen(
       data: (list) {
         if (list.isEmpty) return false;
-        final latest = list
-            .map((g) => g.createdAt)
+        final latest = list.map((g) => g.createdAt)
             .reduce((a, b) => a.isAfter(b) ? a : b);
         return lastSeenGrade == null || latest.isAfter(lastSeenGrade);
       },
       orElse: () => false,
     );
-
-    // Badge: broadcasts
     final lastSeenBroadcast = ref.watch(teacherBroadcastBadgeNotifier);
     final broadcastsAsync = ref.watch(teacherBroadcastsProvider);
     final hasBroadcastBadge = broadcastsAsync.maybeWhen(
       data: (list) {
         if (list.isEmpty) return false;
-        final latest = list
-            .map((b) => b.createdAt)
+        final latest = list.map((b) => b.createdAt)
             .reduce((a, b) => a.isAfter(b) ? a : b);
         return lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast);
       },
@@ -121,296 +124,170 @@ class _TeacherSideNav extends ConsumerWidget {
     );
 
     return Container(
-      width: 230,
+      height: 60,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
           colors: [Color(0xFF0F1F35), Color(0xFF1D3557)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x30000000),
-            blurRadius: 16,
-            offset: Offset(4, 0),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 10, offset: Offset(0, 3))],
       ),
-      child: Column(
-        children: [
-          // ── Logo header ───────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 32, 20, 28),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Row(
+          children: [
+            // Hansal logo
+            Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 6, offset: const Offset(0, 2))],
+              ),
+              padding: const EdgeInsets.all(3),
+              child: Image.asset('assets/images/hansal_logo.png', fit: BoxFit.contain),
+            ),
+            const SizedBox(width: 8),
+            // MindForge logo
+            Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 6, offset: const Offset(0, 2))],
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'MIND FORGE',
+              style: GoogleFonts.poppins(
+                fontSize: 13, fontWeight: FontWeight.w800,
+                color: Colors.white, letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(width: 24),
+            // Nav links (horizontally scrollable in case the window is narrow)
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _navItems(context, ref, currentPath,
+                      hasGradeBadge: hasGradeBadge,
+                      hasBroadcastBadge: hasBroadcastBadge),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Profile avatar
+            GestureDetector(
+              onTap: () => context.go('${RouteNames.teacherDashboard}/profile'),
+              child: Container(
+                width: 36, height: 36,
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: Center(
+                  child: Text(
+                    (auth.username ?? 'T').substring(0, 1).toUpperCase(),
+                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primary),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Tooltip(
+              message: 'Report a problem',
+              child: IconButton(
+                onPressed: () => showReportProblemDialog(context, ref),
+                icon: Icon(Icons.bug_report_outlined, size: 18, color: Colors.white.withOpacity(0.65)),
+                splashRadius: 18,
+              ),
+            ),
+            Tooltip(
+              message: 'Logout',
+              child: IconButton(
+                onPressed: () => confirmLogout(context, ref),
+                icon: Icon(Icons.logout_rounded, size: 18, color: Colors.white.withOpacity(0.65)),
+                splashRadius: 18,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _navItems(BuildContext context, WidgetRef ref, String currentPath,
+      {required bool hasGradeBadge, required bool hasBroadcastBadge}) {
+    // (label, route, path-substring-for-active-check, optional-badge,
+    //  optional-onTap-side-effect)
+    final items = <(String, String, String, bool, VoidCallback?)>[
+      ('Home', RouteNames.teacherDashboard, RouteNames.teacherDashboard, false, null),
+      ('Grades', '${RouteNames.teacherDashboard}/grades', '/grades', hasGradeBadge,
+          () => ref.read(teacherGradeBadgeNotifier.notifier).markSeen()),
+      ('Tests', '${RouteNames.teacherDashboard}/tests', '/tests', false, null),
+      ('Attendance', '${RouteNames.teacherDashboard}/attendance', '/attendance', false, null),
+      ('Timetable', '${RouteNames.teacherDashboard}/timetable', '/timetable', false, null),
+      ('Homework', '${RouteNames.teacherDashboard}/homework', '/homework', false, null),
+      ('Broadcasts', '${RouteNames.teacherDashboard}/broadcasts', '/broadcasts', hasBroadcastBadge,
+          () => ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen()),
+      ('Database', '${RouteNames.teacherDashboard}/database', '/database', false, null),
+    ];
+
+    return items.map((item) {
+      final label = item.$1;
+      final route = item.$2;
+      final match = item.$3;
+      final hasBadge = item.$4;
+      final sideEffect = item.$5;
+      final isActive = label == 'Home'
+          ? (currentPath == RouteNames.teacherDashboard ||
+              currentPath == '${RouteNames.teacherDashboard}/')
+          : currentPath.contains(match);
+
+      final btn = TextButton(
+        onPressed: () {
+          sideEffect?.call();
+          context.go(route);
+        },
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          backgroundColor: isActive ? Colors.white.withOpacity(0.15) : null,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 12.5,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+            color: isActive ? Colors.white : Colors.white.withOpacity(0.65),
+          ),
+        ),
+      );
+
+      return Padding(
+        padding: const EdgeInsets.only(right: 2),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            btn,
+            if (hasBadge)
+              Positioned(
+                right: 6, top: 6,
+                child: Container(
+                  width: 8, height: 8,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3)),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(5),
-                  child: Image.asset('assets/images/logo.png',
-                      fit: BoxFit.contain),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'MIND FORGE',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    Text(
-                      'Teacher Portal',
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        color: Colors.white.withOpacity(0.5),
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(color: Colors.white12, height: 1),
-          const SizedBox(height: 12),
-
-          // ── Nav items ─────────────────────────────────────────────────────
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
-                _SideNavItem(
-                  icon: Icons.home_outlined,
-                  activeIcon: Icons.home_rounded,
-                  label: 'Home',
-                  active: currentPath == RouteNames.teacherDashboard ||
-                      currentPath == '${RouteNames.teacherDashboard}/',
-                  onTap: () => context.go(RouteNames.teacherDashboard),
-                ),
-                _SideNavItem(
-                  icon: Icons.grade_outlined,
-                  activeIcon: Icons.grade_rounded,
-                  label: 'Grades',
-                  active: currentPath.contains('/grades'),
-                  showBadge: hasGradeBadge,
-                  onTap: () {
-                    ref.read(teacherGradeBadgeNotifier.notifier).markSeen();
-                    context.go('${RouteNames.teacherDashboard}/grades');
-                  },
-                ),
-                _SideNavItem(
-                  icon: Icons.quiz_outlined,
-                  activeIcon: Icons.quiz_rounded,
-                  label: 'Tests',
-                  active: currentPath.contains('/tests'),
-                  onTap: () =>
-                      context.go('${RouteNames.teacherDashboard}/tests'),
-                ),
-                _SideNavItem(
-                  icon: Icons.how_to_reg_outlined,
-                  activeIcon: Icons.how_to_reg_rounded,
-                  label: 'Attendance',
-                  active: currentPath.contains('/attendance'),
-                  onTap: () =>
-                      context.go('${RouteNames.teacherDashboard}/attendance'),
-                ),
-                _SideNavItem(
-                  icon: Icons.calendar_month_outlined,
-                  activeIcon: Icons.calendar_month_rounded,
-                  label: 'Timetable',
-                  active: currentPath.contains('/timetable'),
-                  onTap: () =>
-                      context.go('${RouteNames.teacherDashboard}/timetable'),
-                ),
-                _SideNavItem(
-                  icon: Icons.assignment_outlined,
-                  activeIcon: Icons.assignment_rounded,
-                  label: 'Homework',
-                  active: currentPath.contains('/homework'),
-                  onTap: () =>
-                      context.go('${RouteNames.teacherDashboard}/homework'),
-                ),
-                _SideNavItem(
-                  icon: Icons.campaign_outlined,
-                  activeIcon: Icons.campaign_rounded,
-                  label: 'Broadcasts',
-                  active: currentPath.contains('/broadcasts'),
-                  showBadge: hasBroadcastBadge,
-                  onTap: () {
-                    ref
-                        .read(teacherBroadcastBadgeNotifier.notifier)
-                        .markSeen();
-                    context
-                        .go('${RouteNames.teacherDashboard}/broadcasts');
-                  },
-                ),
-                _SideNavItem(
-                  icon: Icons.storage_outlined,
-                  activeIcon: Icons.storage_rounded,
-                  label: 'Database',
-                  active: currentPath.contains('/database'),
-                  onTap: () =>
-                      context.go('${RouteNames.teacherDashboard}/database'),
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(color: Colors.white12, height: 1),
-
-          // ── User + profile + logout ───────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Profile link
-                _SideNavItem(
-                  icon: Icons.person_outline,
-                  activeIcon: Icons.person_rounded,
-                  label: 'Profile',
-                  active: currentPath.contains('/profile'),
-                  onTap: () =>
-                      context.go('${RouteNames.teacherDashboard}/profile'),
-                ),
-                const SizedBox(height: 8),
-                // User info row
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: AppColors.accent.withOpacity(0.25),
-                      child: Text(
-                        (auth.username ?? 'T').substring(0, 1).toUpperCase(),
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.accentLight,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        auth.username ?? 'Teacher',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.8),
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Consumer(builder: (context, ref, _) {
-                      return GestureDetector(
-                        onTap: () => confirmLogout(context, ref),
-                        child: Tooltip(
-                          message: 'Logout',
-                          child: Icon(Icons.logout_rounded,
-                              size: 18,
-                              color: Colors.white.withOpacity(0.45)),
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Single side nav item ──────────────────────────────────────────────────────
-
-class _SideNavItem extends StatelessWidget {
-  final IconData icon;
-  final IconData activeIcon;
-  final String label;
-  final bool active;
-  final bool showBadge;
-  final VoidCallback onTap;
-
-  const _SideNavItem({
-    required this.icon,
-    required this.activeIcon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-    this.showBadge = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              color: active
-                  ? AppColors.accent.withOpacity(0.18)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
-              border: active
-                  ? Border.all(
-                      color: AppColors.accent.withOpacity(0.35), width: 1)
-                  : null,
-            ),
-            child: Row(
-              children: [
-                BadgeDot(
-                  show: showBadge,
-                  child: Icon(
-                    active ? activeIcon : icon,
-                    size: 19,
-                    color: active
-                        ? AppColors.accentLight
-                        : Colors.white.withOpacity(0.6),
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.2),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight:
-                        active ? FontWeight.w700 : FontWeight.w400,
-                    color: active
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.65),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+          ],
         ),
-      ),
-    );
+      );
+    }).toList();
   }
 }
+

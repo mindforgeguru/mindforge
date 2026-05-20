@@ -17,10 +17,10 @@ from app.core.upload_utils import validate_and_strip_exif
 from app.models.attendance import Attendance
 from app.models.grade import Grade
 from app.models.test import Test, TestSubmission, TestType
-from app.models.timetable import TimetableConfig, TimetableSlot
+from app.models.timetable import TimetableSlot
 from app.models.user import StudentProfile, User
 from app.schemas.attendance import AttendanceResponse, AttendanceSummary
-from app.schemas.grade import GradeResponse, GradeStats
+from app.schemas.grade import GradeResponse
 from app.schemas.test import (
     TestAnswersSave,
     TestAttemptResponse,
@@ -37,7 +37,6 @@ from app.schemas.homework import (
 from app.schemas.fees import StudentFeeSummary
 from app.models.homework import Homework, HomeworkCompletion, Broadcast
 from app.models.fees import FeeStructure, FeePayment, PaymentInfo
-from app.models.xp import XPReason
 from app.schemas.fees import FeePaymentResponse, PaymentInfoResponse
 from app.services import storage_service, xp_service
 from app.core.cache import (
@@ -1169,7 +1168,6 @@ async def get_student_dashboard_summary(
     Returns timetable, broadcasts, homework, attendance summary,
     pending tests, offline tests, grades, and fees — in one round trip.
     """
-    import asyncio
     from datetime import date as date_type, datetime, timezone
     from sqlalchemy import or_
     from app.models.attendance import AttendanceStatus

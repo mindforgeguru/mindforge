@@ -185,8 +185,12 @@ class _StudentDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 900;
-    if (isWide) return _buildWebLayout(context);
+    // The dashboard uses the same single-column sliver layout on every form
+    // factor. On web, StudentScaffold caps it at a 600 px centred column —
+    // identical to the parent dashboard so all three roles look consistent.
+    // (The earlier 2-column `_buildWebLayout` is intentionally retired; its
+    // helper widgets remain in this file so we can revive a wide layout
+    // later without re-implementing the test/timetable/attendance/HW boxes.)
 
     final auth = ref.watch(authProvider);
     final summaryAsync = ref.watch(studentDashboardSummaryProvider(_todayString));
@@ -1104,114 +1108,6 @@ class _TimetableCard extends StatelessWidget {
 }
 
 // ─── Timetable Tile ──────────────────────────────────────────────────────────
-
-class _TimetableTile extends StatelessWidget {
-  final TimetableSlotModel slot;
-  const _TimetableTile({required this.slot});
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    bool isNow = false;
-    if (!slot.isHoliday && slot.startTime != null && slot.endTime != null) {
-      try {
-        final start = _parseTime(slot.startTime!, now);
-        final end = _parseTime(slot.endTime!, now);
-        isNow = now.isAfter(start) && now.isBefore(end);
-      } catch (_) {}
-    }
-
-    final accent = slot.isHoliday
-        ? AppColors.warning
-        : isNow
-            ? AppColors.accent
-            : AppColors.primary;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: isNow ? Border.all(color: AppColors.accent, width: 1.5) : null,
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x0C1D3557), blurRadius: 10, offset: Offset(0, 3)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: accent.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                'P${slot.periodNumber}',
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: accent,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  slot.isHoliday
-                      ? 'Holiday'
-                      : (slot.subject?.isNotEmpty == true
-                          ? slot.subject!
-                          : slot.teacherUsername ?? 'Period ${slot.periodNumber}'),
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
-                ),
-                if (!slot.isHoliday && slot.startTime != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    '${slot.startTime}  –  ${slot.endTime}',
-                    style: GoogleFonts.poppins(
-                        fontSize: 11, color: AppColors.textMuted),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (isNow)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.accent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text('NOW',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  )),
-            ),
-        ],
-      ),
-    );
-  }
-
-  DateTime _parseTime(String t, DateTime base) {
-    final parts = t.split(':');
-    return DateTime(base.year, base.month, base.day,
-        int.parse(parts[0]), int.parse(parts[1]));
-  }
-}
 
 // ── _DashSectionHeader ────────────────────────────────────────────
 class _DashSectionHeader extends StatelessWidget {
@@ -2203,7 +2099,15 @@ class _StudentWebAttendanceBox extends ConsumerWidget {
                             fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.primary)),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 6),
+
+                // ── Pie chart (Full / Partial / Absent days) ─────────
+                // Same widget the mobile dashboard uses. Lives inside this
+                // web box so the desktop layout gets the visual breakdown
+                // too, not just the segmented bars below.
+                _AttendancePieChart(records: records),
+
+                const SizedBox(height: 4),
 
                 // ── Three segmented bars ─────────────────────────────
                 Row(
@@ -2611,6 +2515,7 @@ class _StudentWebHomeworkBox extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final hwAsync = ref.watch(studentHomeworkProvider);
+    final completionsAsync = ref.watch(studentHomeworkCompletionsProvider);
 
     return _DashCard(
       title: 'Homework',
@@ -2628,8 +2533,21 @@ class _StudentWebHomeworkBox extends ConsumerWidget {
                 child: Center(child: Text('No homework yet', style: TextStyle(color: AppColors.textMuted))),
               );
             }
+            // Completion ring chart at the top — same widget the mobile
+            // dashboard uses. Fall back to the list-only layout while the
+            // completion data is still loading.
+            final hwIds = list.map((h) => h.id).toSet();
+            final ringChart = completionsAsync.when(
+              data: (completions) => _HomeworkCompletionPie(
+                homeworkIds: hwIds, completions: completions),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            );
             return Column(
-              children: list.take(4).map((hw) {
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ringChart,
+                ...list.take(4).map((hw) {
                 final isTest = hw.isOnlineTest;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -2678,7 +2596,8 @@ class _StudentWebHomeworkBox extends ConsumerWidget {
                     ],
                   ),
                 );
-              }).toList(),
+              }),
+              ],
             );
           },
         ),

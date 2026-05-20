@@ -79,7 +79,6 @@ class WebSocketManager:
 
     async def broadcast_all(self, event: dict):
         """Send an event to every connected WebSocket client."""
-        message = json.dumps(event)
         all_user_ids = list(self._user_connections.keys())
         for user_id in all_user_ids:
             await self.broadcast_to_user(user_id, event)

@@ -12,7 +12,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db

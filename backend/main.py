@@ -4,15 +4,14 @@ FastAPI application entry point
 """
 
 from fastapi import (
-    FastAPI, WebSocket, WebSocketDisconnect, WebSocketException,
-    HTTPException, Query, Request, status as http_status,
+    FastAPI, WebSocket, WebSocketDisconnect,
+    HTTPException, Query, Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import logging
-import os
 
 from app.core.config import settings
 from app.core.database import engine, Base
@@ -297,5 +296,5 @@ async def serve_media(bucket: str, key: str):
         response = client.get_object(bucket, key)
         content_type = response.headers.get("content-type", "image/jpeg")
         return StreamingResponse(response, media_type=content_type)
-    except S3Error as e:
+    except S3Error:
         raise HTTPException(status_code=404, detail="File not found")
