@@ -17,6 +17,7 @@ class StudentFacultyScreen extends ConsumerWidget {
     final isWide = MediaQuery.of(context).size.width >= 900;
 
     return StudentScaffold(
+      wideContent: isWide,
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
@@ -113,7 +114,7 @@ class _WideGrid extends StatelessWidget {
                 crossAxisCount: crossCount,
                 crossAxisSpacing: 20,
                 mainAxisSpacing: 20,
-                childAspectRatio: 0.82,
+                childAspectRatio: 0.66,
               ),
               itemCount: faculty.length,
               itemBuilder: (_, i) => _FacultyCard(teacher: faculty[i]),
@@ -172,6 +173,7 @@ class _FacultyCard extends StatelessWidget {
                     ? CachedNetworkImage(
                         imageUrl: picUrl,
                         fit: BoxFit.cover,
+                        alignment: Alignment.topCenter,
                         placeholder: (_, __) => Container(
                           color: AppColors.primary.withValues(alpha: 0.08),
                           child: const Center(
@@ -257,7 +259,7 @@ class _FacultyCard extends StatelessWidget {
                           fontSize: 11.5,
                           color: AppColors.textSecondary,
                           height: 1.45),
-                      maxLines: 4,
+                      maxLines: 9,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
