@@ -404,6 +404,37 @@ async def get_parent_broadcasts(
     ]
 
 
+# ─── Faculty ──────────────────────────────────────────────────────────────────
+
+@router.get("/faculty")
+async def get_faculty_for_parent(
+    db: AsyncSession = Depends(get_db),
+    current_parent: User = Depends(get_current_parent),
+):
+    """Return all approved teachers with photo, subjects, and bio.
+    Mirrors /api/student/faculty so the parent UI can use the same data shape."""
+    from app.models.user import UserRole, TeacherProfile
+    result = await db.execute(
+        select(User, TeacherProfile)
+        .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
+        .where(User.role == UserRole.teacher)
+        .where(User.deleted_at == None)
+        .where(User.is_approved == True)
+        .where(User.is_active == True)
+        .order_by(User.username)
+    )
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "profile_pic_url": user.profile_pic_url,
+            "subjects": profile.teachable_subjects if profile else [],
+            "bio": profile.bio if profile else None,
+        }
+        for user, profile in result.all()
+    ]
+
+
 # ─── Dashboard Summary ─────────────────────────────────────────────────────────
 
 @router.get("/dashboard-summary")

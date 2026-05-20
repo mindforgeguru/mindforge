@@ -645,6 +645,110 @@ async def revoke_user(
     })
 
 
+# ─── Teacher profiles (admin edits any teacher's bio + photo) ─────────────────
+#
+# The teacher can already edit their own bio + photo via /api/teacher/profile/*.
+# These endpoints let admins do the same for any teacher — writing to the same
+# columns so the student/parent faculty endpoints surface the change with no
+# extra wiring.
+
+@router.get("/teachers")
+async def list_teachers_for_admin(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """List every approved+active teacher with their bio, photo, and subjects."""
+    result = await db.execute(
+        select(User, TeacherProfile)
+        .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
+        .where(User.role == UserRole.teacher)
+        .where(User.deleted_at == None)
+        .order_by(User.username)
+    )
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "is_active": user.is_active,
+            "is_approved": user.is_approved,
+            "profile_pic_url": user.profile_pic_url,
+            "subjects": profile.teachable_subjects if profile else [],
+            "bio": profile.bio if profile else None,
+        }
+        for user, profile in result.all()
+    ]
+
+
+@router.put("/teachers/{teacher_id}/bio")
+async def admin_update_teacher_bio(
+    teacher_id: int,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Admin updates a teacher's bio (max 500 chars)."""
+    user_result = await db.execute(
+        select(User).where(
+            User.id == teacher_id,
+            User.role == UserRole.teacher,
+            User.deleted_at == None,
+        )
+    )
+    teacher = user_result.scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found.")
+
+    bio = (payload.get("bio") or "").strip()[:500]
+    profile_result = await db.execute(
+        select(TeacherProfile).where(TeacherProfile.user_id == teacher_id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    if not profile:
+        # Teacher exists but has no TeacherProfile row yet — create one.
+        profile = TeacherProfile(user_id=teacher_id, teachable_subjects=[])
+        db.add(profile)
+        await db.flush()
+    profile.bio = bio or None
+
+    await _audit(db, current_admin.id, "update_teacher_bio", "user", teacher_id,
+                 {"username": teacher.username})
+    await db.commit()
+    return {"id": teacher_id, "bio": profile.bio}
+
+
+@router.post("/teachers/{teacher_id}/photo", status_code=status.HTTP_200_OK)
+async def admin_upload_teacher_photo(
+    teacher_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Admin uploads or replaces a teacher's profile picture."""
+    user_result = await db.execute(
+        select(User).where(
+            User.id == teacher_id,
+            User.role == UserRole.teacher,
+            User.deleted_at == None,
+        )
+    )
+    teacher = user_result.scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found.")
+
+    raw = await file.read()
+    file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
+    bucket = "mindforge-profiles"
+    key = f"profiles/teacher/{teacher_id}/avatar.{ext}"
+    await storage_service.upload_file(bucket, key, file_bytes)
+    public_url = storage_service.get_public_url(bucket, key)
+
+    teacher.profile_pic_url = public_url
+    await _audit(db, current_admin.id, "update_teacher_photo", "user", teacher_id,
+                 {"username": teacher.username})
+    await db.commit()
+    return {"id": teacher_id, "profile_pic_url": public_url}
+
+
 # ─── Audit log ────────────────────────────────────────────────────────────────
 
 @router.get("/audit-log")
