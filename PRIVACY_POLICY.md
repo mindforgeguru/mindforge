@@ -1,19 +1,19 @@
 # Privacy Policy for Mindforge
 
-**Effective date:** 14 May 2026
-**Last updated:** 14 May 2026
+**Effective date:** 19 May 2026
+**Last updated:** 19 May 2026
 
-> **Note to the publisher:** Square-bracketed fields (e.g., `[School Name]`) must be filled in before this policy is published. This draft is a starting point and has not been reviewed by a lawyer. If you operate in regulated jurisdictions (EU, US, etc.) or process payments, you should have legal counsel review it before publishing.
+> **Note to the publisher:** This policy has not been reviewed by a lawyer. If you operate in regulated jurisdictions (EU, US) or process payments, you should have legal counsel review it before publishing.
 
 ---
 
 ## 1. Who we are
 
-Mindforge ("Mindforge", "we", "us", "our") is a school-management application operated by Mindforge/ Chinmay Jobanputra, located at F-7 Maharaja Arcade , near Agrasen Bhavan Citylight Surat India 395007 .
+Mindforge ("Mindforge", "we", "us", "our") is a school-management application operated by Chinmay Jobanputra, located at F-7 Maharaja Arcade, near Agrasen Bhavan, Citylight, Surat, India 395007.
 
 For privacy questions, contact us at: chinmay1975@gmail.com
 
-The school is the data controller for student, parent, teacher, and administrator data processed through Mindforge. Mindforge operates the application on behalf of the classes.
+The school is the data controller for student, parent, teacher, and administrator data processed through Mindforge. Mindforge operates the application on behalf of the school.
 
 ## 2. Scope
 
@@ -33,7 +33,7 @@ When an account is created (by the school administrator or via self-registration
 
 ### 3.2 Information collected automatically
 
-- Device & technical data: device model, OS version, app version, language, time zone, IP address (logged transiently for security / abuse prevention).
+- Device & technical data: device model, OS version, app version, language, time zone, IP address (recorded in audit-log entries for security and abuse prevention; retained per §9).
 - Push-notification token: a Firebase Cloud Messaging (FCM) token tied to your install, used only to deliver app notifications. Deleted on logout and on account deletion.
 - Crash & error reports: when the app crashes or the backend errors, Firebase Crashlytics (app) and Sentry (backend) collect a stack trace, device metadata, and a non-personal user identifier so we can diagnose and fix the bug.
 - Analytics events: Firebase Analytics records anonymous events such as screen views, button taps, and session duration so we can understand which features are used and where users get stuck. We do not link analytics events to your real name.
@@ -53,11 +53,13 @@ We use the information above to:
 - Diagnose crashes and bugs (Crashlytics / Sentry) and improve the product (Analytics).
 - Comply with the school's record-keeping obligations and respond to legal requests.
 
-We do not sell your personal information. We do not use your information for advertising or for profiling unrelated to school activity. We do not train AI models on student data.
+We do not sell your personal information. We do not use your information for advertising or for profiling unrelated to school activity. We do not train any AI models on student data. The AI providers we use (Google Gemini and Groq) operate under their own data-use terms — see their respective privacy policies for how they handle content submitted to their APIs.
 
 ## 5. AI features
 
 Mindforge uses third-party AI services (Google Gemini and Groq) for features such as test grading and content generation. Where AI features process student-submitted content (e.g., a test answer), we send only the minimum data needed for the feature and do not send personally identifying fields (name, phone, email) as part of the AI prompt. Outputs are reviewed by teachers before being recorded.
+
+Teachers may also upload source documents (chapter scans, past test papers, answer keys) when generating tests or grading. These files are sent in full to the AI provider so that questions, answer keys, or graded responses can be extracted. Such documents may incidentally contain identifying information (e.g., student names on a scanned answer sheet); we recommend teachers redact identifiable student information before uploading.
 
 ## 6. Children's privacy
 
@@ -65,7 +67,7 @@ Mindforge is a school application; the majority of student users are minors. Bec
 
 - Accounts for students under 18 are created and managed by the school under the school's authority and with parental notice obtained by the school at enrolment.
 - A linked parent account is provided so parents can view their child's academic data, receive notifications, and exercise privacy rights on the child's behalf.
-- Parents may at any time request deletion of their child's account via the in-app "Delete my account" button (Profile screen) or by emailing us.
+- Parents may delete their child's account at any time by deleting their own linked parent account from the **Profile** screen — the linked student account is automatically deleted at the same time. Parents may also request the school admin to remove a specific student. Students cannot delete their own account from the app.
 - We do not knowingly collect data from children outside of the school-mediated enrolment process. We do not show advertising. We do not use children's data for any purpose other than operating the school's academic features.
 
 If you are a parent or guardian and believe your child's data has been collected without proper consent, contact us at chinmay1975@gmail.com and we will delete it.
@@ -80,8 +82,7 @@ We share data only with the parties needed to run the service:
 |---|---|---|
 | **The school you belong to** | Day-to-day operation — teachers see their students, admins see their school | Academic records, profile data |
 | **Linked parent account** | Parental oversight | Their child's attendance, tests, homework, fees |
-| **Railway** (backend hosting) | Hosts the backend API and database | All stored data, encrypted in transit and at rest |
-| **MinIO / object storage** | Stores profile pictures and uploaded documents | Uploaded files |
+| **Railway** (backend hosting) | Hosts the backend API, database, and self-hosted object storage (MinIO) for profile pictures and uploaded documents | All stored data, encrypted in transit and at rest |
 | **Firebase (Google) — Cloud Messaging** | Push notifications | Your FCM token, notification payload |
 | **Firebase (Google) — Crashlytics** | Crash diagnostics | Crash stack traces, device metadata, anonymous user ID |
 | **Firebase (Google) — Analytics** | Usage analytics | Anonymous event data |
@@ -92,12 +93,14 @@ We do not share data with advertisers, data brokers, or unrelated third parties.
 
 ## 8. Where your data is stored
 
-Mindforge's backend and database are hosted on Railway (United States). Object storage and Firebase services are operated by their respective providers and may transfer data outside your country of residence. By using Mindforge you consent to this transfer; we rely on the providers' standard contractual and security measures for cross-border transfers.
+Mindforge's backend, database, and object storage are hosted on Railway (United States). Firebase services are operated by their respective providers and may transfer data outside your country of residence. By using Mindforge you consent to this transfer; we rely on the providers' standard contractual and security measures for cross-border transfers.
+
+For users in India, cross-border transfer of personal data is permitted under the conditions set by the Digital Personal Data Protection Act, 2023 and any rules or notifications issued thereunder by the Central Government.
 
 ## 9. How long we keep data
 
 - **Active accounts:** for as long as the account is active at the school.
-- **Soft-deleted accounts:** when you delete your account, we mark it as deleted, revoke your sessions, and clear your push-notification token immediately. Underlying records are retained for up to  36 months for audit and dispute-resolution purposes, then permanently removed, unless the school's record-keeping obligations require longer retention of academic records (e.g., grade transcripts).
+- **Soft-deleted accounts:** when you delete your account, we mark it as deleted, revoke your sessions, and clear your push-notification token immediately so the account can no longer be used. Underlying records are retained for at least 36 months for audit and dispute-resolution purposes, and then removed in accordance with the school's record-keeping schedule. Some academic records (such as grade transcripts) may be retained longer where the school is required to preserve them.
 - **Database backups:** encrypted daily snapshots are taken by our hosting provider (Railway) and retained for **30 days** before being overwritten. Deleted account data may persist in these backups for up to 30 days after deletion, after which the snapshot containing it is permanently removed.
 - **Crash and analytics data:** retained per Firebase / Sentry default retention windows (typically 90 days for crashes, up to 14 months for analytics).
 
@@ -120,7 +123,12 @@ Depending on your jurisdiction, you have the right to:
 
 - **Access** the personal data we hold about you.
 - **Correct** inaccurate data.
-- **Delete** your account and associated data — available in-app under **Profile → Privacy & Data → Delete my account**, or by emailing us.
+- **Export** a machine-readable copy of your data — email us at chinmay1975@gmail.com to request one. We will respond within 30 days.
+- **Delete** your account and associated data:
+  - **Parents** — use **Profile → Privacy & Data → Delete my account**. Your linked student's account is deleted at the same time.
+  - **Teachers** — use **Profile → Privacy & Data → Delete my account**.
+  - **Students** — students cannot self-delete from the app. Ask your linked parent to delete their account (which also removes yours), or contact the school admin.
+  - **Anyone** may also request deletion by emailing us at chinmay1975@gmail.com.
 - **Object to or restrict** certain processing.
 - **Withdraw consent** where processing is based on consent.
 - **Lodge a complaint** with the data-protection authority in your jurisdiction (in India: the Data Protection Board, once operational).
@@ -129,97 +137,38 @@ For students under 18, these rights are typically exercised by a parent or guard
 
 To exercise any right, email **chinmay1975@gmail.com** with your username and the action you want to take. We will respond within 30 days.
 
-## 12. Cookies and similar technologies
+## 12. Cookies and browser storage
 
-The Mindforge web app uses only essential cookies needed to keep you logged in. We do not use advertising cookies or third-party trackers on the web app.
+The Mindforge web app stores a short-lived session token and your role in your browser's `localStorage` so you stay logged in across page reloads. These tokens are removed automatically when you log out. We do not set advertising cookies and do not use third-party trackers on the web app.
 
 ## 13. Changes to this policy
 
 We may update this policy from time to time. The "Last updated" date at the top reflects the most recent change. Material changes will be communicated via an in-app notice. Continued use of Mindforge after a change means you accept the updated policy.
 
-## 14. Contact
+## 14. App permissions
+
+Mindforge requests the following operating-system permissions. Each is requested only at the point of first use, and the app continues to function (with the corresponding feature disabled) if you decline.
+
+| Permission | When requested | Why |
+|---|---|---|
+| **Notifications** (iOS / Android) | First launch after login | To deliver attendance, test, homework, fee, and announcement alerts via Firebase Cloud Messaging. |
+| **Photo library** (iOS / Android) | When you tap "upload profile picture" or attach a file to homework | To pick the image / document you want to upload. |
+| **Camera** (iOS / Android) | When you choose "take a photo" instead of picking from the library | Same purpose as above. |
+| **Storage** (Android) | When you download a generated test PDF or other document | To save the file to your device. |
+
+We do not request: precise location, microphone, contacts, calendar, or background location.
+
+## 15. Contact
 
 Privacy questions, requests, or complaints:
 
-**Mind Forge**
-**F-7 Maharaja Arcade , near Agrasen Bhavan Citylight Surat India 395007 **
+**Grievance Officer:** Chinmay Jobanputra
+**Mindforge** (operated by Chinmay Jobanputra)
+**F-7 Maharaja Arcade, near Agrasen Bhavan, Citylight, Surat, India 395007**
 Email: **chinmay1975@gmail.com**
+
+We aim to acknowledge privacy requests within 7 working days and resolve them within 30 days.
 
 ---
 
 *This policy is provided in good faith and is not legal advice.*
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Draft saved to PRIVACY_POLICY.md at the repo root.
-
-  What's in it — tailored to what Mindforge actually does:
-  - Lists every category of data your models store (user, attendance, tests, homework, fees, XP, FCM tokens).
-  - Names every third party from requirements.txt and pubspec.yaml: Firebase (Messaging/Crashlytics/Analytics), Sentry, Railway, MinIO,
-  Gemini, Groq.
-  - Calls out children's privacy (DPDP Act / COPPA / GDPR-K) — important because this is a school app with minors.
-  - References the security measures already in the code (bcrypt MPIN, SSL pinning, 60-min access + 30-day refresh tokens, audit log,
-  soft delete + JTI revoke + FCM clear).
-  - Points users to the in-app Profile → Privacy & Data → Delete my account flow you just shipped.
-
-  Before you publish, you must fill in:
-  1. [INSERT DATE BEFORE PUBLISHING] — effective + last-updated dates (×2).
-  2. [School Name / Operator Legal Name] and [School Address] (×3).
-  3. [e.g., 12 months] — how long you keep soft-deleted accounts.
-  4. [e.g., 30 days] — backup retention window.
-  
-  Then to ship it:
-  1. Convert MD → HTML (any markdown converter, or just paste into a Notion/Google Sites page).
-  2. Host at a public URL (GitHub Pages is free — drop the HTML in a public repo, enable Pages).
-  3. Set the URL in frontend/lib/core/utils/constants.dart:18:
-  static const String privacyPolicyUrl = 'https://your-url.example/privacy';
-  4. Paste the same URL into Play Console and App Store Connect listings.
-
-  Caveat: I'm not a lawyer and this hasn't been reviewed by one. For a school app handling minors' data, getting even a 30-minute paid
-  review from an Indian DPDP-familiar lawyer would be a smart investment before you submit to the stores.
