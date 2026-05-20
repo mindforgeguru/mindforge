@@ -20,6 +20,11 @@ class ParentScaffold extends ConsumerWidget {
   final FloatingActionButtonLocation? floatingActionButtonLocation;
   final Color? backgroundColor;
 
+  /// When `true`, the web branch does NOT wrap the body in
+  /// `Center + ConstrainedBox(maxWidth: 600)`. Use for screens that build
+  /// their own desktop-wide layout so they fill the browser width.
+  final bool wideContent;
+
   const ParentScaffold({
     super.key,
     this.appBar,
@@ -27,6 +32,7 @@ class ParentScaffold extends ConsumerWidget {
     this.floatingActionButton,
     this.floatingActionButtonLocation,
     this.backgroundColor,
+    this.wideContent = false,
   });
 
   @override
@@ -46,8 +52,16 @@ class ParentScaffold extends ConsumerWidget {
 
     // Web: top nav + content area, no bottom nav. Mobile-styled bodies are
     // capped at 600 px and centred so they don't stretch on desktop. Screens
-    // with their own _buildWebLayout should bypass this branch.
+    // that already build a desktop-wide layout opt out with `wideContent`.
     final auth = ref.watch(authProvider);
+    final innerBody = wideContent
+        ? body
+        : Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: body,
+            ),
+          );
     return Scaffold(
       backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
       floatingActionButton: floatingActionButton,
@@ -57,12 +71,7 @@ class ParentScaffold extends ConsumerWidget {
           ParentTopNav(auth: auth),
           Expanded(
             child: Scaffold(
-              body: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: body,
-                ),
-              ),
+              body: innerBody,
               backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
             ),
           ),
@@ -178,6 +187,7 @@ class ParentTopNav extends ConsumerWidget {
       ('Timetable',  '${RouteNames.parentDashboard}/timetable',  '/timetable'),
       ('Fees',       '${RouteNames.parentDashboard}/fees',       '/fees'),
       ('Homework',   '${RouteNames.parentDashboard}/homework',   '/homework'),
+      ('Faculty',    '${RouteNames.parentDashboard}/faculty',    '/faculty'),
     ];
 
     return items.map((item) {

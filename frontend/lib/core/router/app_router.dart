@@ -38,10 +38,12 @@ import '../../features/parent/screens/grade_screen.dart' as parent;
 import '../../features/parent/screens/fees_screen.dart' as parent;
 import '../../features/parent/screens/profile_screen.dart' as parent;
 import '../../features/parent/screens/homework_screen.dart' as parent;
+import '../../features/parent/screens/faculty_screen.dart' as parent;
 import '../../features/admin/screens/dashboard_screen.dart' as admin;
 import '../../features/admin/screens/fees_screen.dart' as admin;
 import '../../features/admin/screens/timetable_screen.dart' as admin;
 import '../../features/admin/screens/users_screen.dart' as admin;
+import '../../features/admin/screens/teachers_screen.dart' as admin;
 import '../../features/admin/screens/profile_screen.dart' as admin;
 import '../../features/admin/screens/feedback_screen.dart' as admin;
 import '../../features/admin/screens/academic_year_screen.dart';
@@ -289,6 +291,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               return _slidePage(parent.ParentHomeworkScreen(initialTab: tab));
             },
           ),
+          GoRoute(
+            path: 'faculty',
+            pageBuilder: (_, __) => _slidePage(const parent.ParentFacultyScreen()),
+          ),
         ],
       ),
 
@@ -308,6 +314,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'users',
             pageBuilder: (_, __) => _slidePage(const admin.AdminUsersScreen()),
+          ),
+          GoRoute(
+            path: 'teachers',
+            pageBuilder: (_, __) => _slidePage(const admin.AdminTeachersScreen()),
           ),
           GoRoute(
             path: 'profile',

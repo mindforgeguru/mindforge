@@ -182,6 +182,7 @@ class AdminTopNav extends ConsumerWidget {
     final items = [
       ('Home',          RouteNames.adminDashboard,                       RouteNames.adminDashboard),
       ('Users',         '${RouteNames.adminDashboard}/users',            '/users'),
+      ('Teachers',      '${RouteNames.adminDashboard}/teachers',         '/teachers'),
       ('Fees',          '${RouteNames.adminDashboard}/fees',             '/fees'),
       ('Reports',       '${RouteNames.adminDashboard}/reports',          '/reports'),
       ('Feedback',      '${RouteNames.adminDashboard}/feedback',         '/feedback'),

@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/api/websocket_client.dart';
+import '../../../core/models/attendance.dart';
 import '../../../core/models/grade.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/models/timetable.dart';
@@ -539,6 +540,29 @@ class _ParentDashboardScreenState
                 return _RecentMarksChart(grades: list);
               },
             ),
+          ),
+
+          // ── Attendance breakdown (full / partial / absent days) ───────
+          SliverToBoxAdapter(
+            child: _DashSectionHeader(
+              icon: Icons.pie_chart_rounded,
+              title: 'Attendance Breakdown',
+              onSeeAll: () =>
+                  context.go('${RouteNames.parentDashboard}/attendance'),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Consumer(builder: (context, ref, _) {
+              final attAsync = ref.watch(parentChildAttendanceProvider);
+              return attAsync.when(
+                skipLoadingOnReload: true,
+                loading: () =>
+                    const ShimmerCards(count: 1, cardHeight: 220),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (records) =>
+                    _AttendancePieChart(records: records),
+              );
+            }),
           ),
 
           // ── Homework completion (ring pie) ────────────────────────────
@@ -1413,6 +1437,131 @@ class _HomeworkCompletionPie extends StatelessWidget {
                 _PieLegendDot(
                     color: _pendingColor,
                     label: 'Pending  ·  $pending'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Attendance breakdown pie ─────────────────────────────────────────────────
+//
+// Mirrors the student dashboard's pie: buckets calendar days into full,
+// partial, and absent based on the per-period attendance rows for that day.
+// Uses the same colour palette so the two roles render identically.
+class _AttendancePieChart extends StatelessWidget {
+  final List<AttendanceModel> records;
+  const _AttendancePieChart({required this.records});
+
+  static const _fullColor = Color(0xFF10B981);
+  static const _partialColor = Color(0xFFF59E0B);
+  static const _absentColor = Color(0xFFEF4444);
+
+  @override
+  Widget build(BuildContext context) {
+    if (records.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Text(
+          'No attendance recorded yet',
+          style: GoogleFonts.poppins(
+              fontSize: 11, color: AppColors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    // Dedupe by (date, period) before counting — duplicate rows for the
+    // same slot would otherwise bucket a day as "partial" incorrectly.
+    final perSlot = <String, AttendanceModel>{};
+    for (final r in records) {
+      final slotKey = '${_fmtYMD.format(r.date)}_${r.period}';
+      final existing = perSlot[slotKey];
+      if (existing == null || r.id > existing.id) {
+        perSlot[slotKey] = r;
+      }
+    }
+    final byDay = <String, (int present, int absent)>{};
+    for (final r in perSlot.values) {
+      final key = _fmtYMD.format(r.date);
+      final cur = byDay[key] ?? (0, 0);
+      byDay[key] = r.isPresent
+          ? (cur.$1 + 1, cur.$2)
+          : (cur.$1, cur.$2 + 1);
+    }
+    var fullDays = 0, partialDays = 0, absentDays = 0;
+    for (final entry in byDay.values) {
+      if (entry.$1 > 0 && entry.$2 == 0) {
+        fullDays++;
+      } else if (entry.$1 == 0 && entry.$2 > 0) {
+        absentDays++;
+      } else {
+        partialDays++;
+      }
+    }
+    final totalDays = fullDays + partialDays + absentDays;
+
+    final sections = <PieChartSectionData>[];
+    void addSection(int count, Color color) {
+      if (count == 0) return;
+      final pct = count / totalDays * 100;
+      sections.add(PieChartSectionData(
+        value: count.toDouble(),
+        color: color,
+        radius: 58,
+        title: '${pct.toStringAsFixed(0)}%',
+        titleStyle: GoogleFonts.poppins(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ));
+    }
+    addSection(fullDays, _fullColor);
+    addSection(partialDays, _partialColor);
+    addSection(absentDays, _absentColor);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEAEEF3)),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 160,
+              child: PieChart(
+                PieChartData(
+                  startDegreeOffset: -90,
+                  sectionsSpace: 2,
+                  centerSpaceRadius: 36,
+                  sections: sections,
+                ),
+                swapAnimationDuration:
+                    const Duration(milliseconds: 350),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                _PieLegendDot(
+                    color: _fullColor,
+                    label: 'Present  ·  $fullDays'),
+                _PieLegendDot(
+                    color: _partialColor,
+                    label: 'Partial  ·  $partialDays'),
+                _PieLegendDot(
+                    color: _absentColor,
+                    label: 'Absent  ·  $absentDays'),
               ],
             ),
           ],

@@ -796,6 +796,35 @@ class ApiClient {
     return 0;
   }
 
+  // ── Admin: teacher profiles ─────────────────────────────────────────────
+  Future<List<dynamic>> getAdminTeachers() async {
+    final res = await _dio.get('/admin/teachers');
+    return res.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateTeacherBioAsAdmin(
+      int teacherId, String bio) async {
+    final res = await _dio.put('/admin/teachers/$teacherId/bio',
+        data: {'bio': bio});
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> uploadTeacherPhotoAsAdmin(
+      int teacherId, List<int> bytes, String filename) async {
+    final formData = dio_pkg.FormData.fromMap({
+      'file': dio_pkg.MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    final res =
+        await _dio.post('/admin/teachers/$teacherId/photo', data: formData);
+    return res.data as Map<String, dynamic>;
+  }
+
+  // ── Parent: faculty ─────────────────────────────────────────────────────
+  Future<List<dynamic>> getParentFaculty() async {
+    final res = await _dio.get('/parent/faculty');
+    return res.data as List<dynamic>;
+  }
+
   // ── Feedback ────────────────────────────────────────────────────────────
   Future<void> submitFeedback({
     required String message,

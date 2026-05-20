@@ -6,6 +6,15 @@ import '../../../core/models/timetable.dart';
 import '../../../core/models/user.dart';
 import '../../auth/providers/auth_provider.dart';
 
+final adminTeachersProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final token = ref.watch(authProvider.select((s) => s.token));
+  if (token == null) return [];
+  final api = ref.watch(apiClientProvider);
+  final raw = await api.getAdminTeachers();
+  return raw.cast<Map<String, dynamic>>();
+});
+
 final pendingUsersProvider =
     FutureProvider<List<UserModel>>((ref) async {
   final token = ref.watch(authProvider.select((s) => s.token));
