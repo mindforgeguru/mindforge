@@ -18,8 +18,11 @@ class Settings(BaseSettings):
 
     # ── App ──────────────────────────────────────────────────────────────────
     APP_NAME: str = "MIND FORGE"
-    APP_ENV: str = "development"
-    DEBUG: bool = True
+    # Secure default: production hides API docs (/docs, /openapi.json) and
+    # any other dev-only surfaces. Local dev opts in via .env.local /
+    # docker-compose.local.yml setting APP_ENV=development.
+    APP_ENV: str = "production"
+    DEBUG: bool = False
 
     # ── Database ─────────────────────────────────────────────────────────────
     DB_URL: str = "postgresql+asyncpg://mindforge:mindforge_secret@localhost:5432/mindforge"
@@ -41,7 +44,9 @@ class Settings(BaseSettings):
     BACKEND_PUBLIC_URL: str = "https://api.mindforge.guru"
 
     # ── JWT ───────────────────────────────────────────────────────────────────
-    JWT_SECRET: str = "change_me_super_secret_jwt_key_at_least_32_chars"
+    # Required: no default. Generate with: python -c "import secrets; print(secrets.token_urlsafe(64))"
+    # App refuses to start if unset — never run with a hardcoded fallback secret.
+    JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60           # 1 hour access token
     JWT_REFRESH_EXPIRE_DAYS: int = 30      # 30 day refresh token

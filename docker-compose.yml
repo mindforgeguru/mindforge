@@ -6,9 +6,11 @@ services:
     container_name: mindforge_postgres
     restart: unless-stopped
     environment:
+      # Non-secrets (db/user names) keep harmless defaults.
       POSTGRES_DB: ${POSTGRES_DB:-mindforge}
       POSTGRES_USER: ${POSTGRES_USER:-mindforge}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mindforge_secret}
+      # Secrets — compose refuses to start if unset. Set in .env on the host.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
@@ -24,12 +26,12 @@ services:
     image: redis:7-alpine
     container_name: mindforge_redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secret}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     volumes:
       - redis_data:/data
     # Host port binding only in docker-compose.local.yml.
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,8 +42,10 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_secret}
+      # MINIO_ROOT_USER default of "minioadmin" is a well-known credential —
+      # require explicit override.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set in .env}
     volumes:
       - minio_data:/data
     # Host port binding only in docker-compose.local.yml — the admin console on
@@ -61,8 +65,8 @@ services:
     env_file:
       - .env
     environment:
-      DB_URL: postgresql+asyncpg://${POSTGRES_USER:-mindforge}:${POSTGRES_PASSWORD:-mindforge_secret}@postgres:5432/${POSTGRES_DB:-mindforge}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      DB_URL: postgresql+asyncpg://${POSTGRES_USER:-mindforge}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-mindforge}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0
       MINIO_ENDPOINT: minio:9000
     depends_on:
       postgres:
@@ -73,8 +77,10 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    ports:
-      - "8000:8000"
+    # No host port mapping in production — nginx is the only ingress.
+    # Exposing 8000 on the host bypasses nginx (rate limiting, security
+    # headers) and lets a client forge X-Forwarded-For. docker-compose.local.yml
+    # re-adds the host binding for local dev where nginx is disabled.
 
   nginx:
     image: nginx:alpine

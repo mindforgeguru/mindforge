@@ -45,6 +45,16 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _require_test_owner(test: Test, teacher_id: int) -> None:
+    # Defend against cross-teacher IDOR on owned-test endpoints. Return 404
+    # (not 403) so other teachers' test IDs are indistinguishable from
+    # non-existent ones. The /tests listing is intentionally school-wide,
+    # but operating on a specific test (read details, modify, delete,
+    # download artifacts, post grades, publish) must be owner-only.
+    if test.teacher_id != teacher_id:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+
 # ─── Teacher Profile ───────────────────────────────────────────────────────────
 
 @router.get("/profile", response_model=UserResponse)
@@ -955,6 +965,7 @@ async def get_test(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+    _require_test_owner(test, current_teacher.id)
     return test
 
 
@@ -972,6 +983,7 @@ async def update_test_questions(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+    _require_test_owner(test, current_teacher.id)
 
     questions = payload.get("questions", [])
     if not isinstance(questions, list):
@@ -1004,6 +1016,7 @@ async def delete_test(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+    _require_test_owner(test, current_teacher.id)
 
     # Collect affected student IDs from grades before deleting
     grade_rows = await db.execute(
@@ -1056,6 +1069,7 @@ async def get_test_pdf_urls(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+    _require_test_owner(test, current_teacher.id)
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="PDF URLs only available for offline tests")
 
@@ -1085,6 +1099,7 @@ async def download_test_pdf(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+    _require_test_owner(test, current_teacher.id)
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="PDF only available for offline tests")
 
@@ -1115,6 +1130,7 @@ async def download_answer_key_pdf(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+    _require_test_owner(test, current_teacher.id)
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="PDF only available for offline tests")
 
@@ -1239,6 +1255,7 @@ async def save_offline_grades(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+    _require_test_owner(test, current_teacher.id)
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="Manual grades only allowed for offline tests")
 

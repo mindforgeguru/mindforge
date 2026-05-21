@@ -21,6 +21,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _parentUsernameController = TextEditingController();
+  final _parentMpinController = TextEditingController();
+  bool _obscureParentMpin = true;
   final List<String> _pin = ['', '', '', '', '', ''];
   int _pinIndex = 0;
   bool _isRegister = false;
@@ -41,6 +43,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _parentUsernameController.dispose();
+    _parentMpinController.dispose();
     super.dispose();
   }
 
@@ -98,8 +101,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // can only be performed by the parent (or an admin) — without a
       // parent in place the student has no way to be deleted later.
       final parentUsernameTrimmed = _parentUsernameController.text.trim();
+      final parentMpinTrimmed = _parentMpinController.text.trim();
       if (isStudent && parentUsernameTrimmed.isEmpty) {
         _showSnack("Parent's username is required to register a student.");
+        return;
+      }
+      // Parent's MPIN is required for student registration. If the parent
+      // already has an account, this MPIN must match (server verifies). If
+      // the parent doesn't exist yet, this becomes the new parent's MPIN
+      // — never reuses the student's MPIN.
+      if (isStudent && parentMpinTrimmed.length != 6) {
+        _showSnack("Parent's 6-digit MPIN is required to register a student.");
         return;
       }
 
@@ -110,10 +122,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         phone: phone.isNotEmpty ? phone : null,
         email: email.isNotEmpty ? email : null,
         parentUsername: isStudent ? parentUsernameTrimmed : null,
+        parentMpin: isStudent ? parentMpinTrimmed : null,
         grade: isStudent ? _selectedGrade : null,
         additionalSubjects: isStudent ? _selectedSubjects.toList() : null,
-        teachableSubjects:
-            isTeacher ? _selectedTeacherSubjects.toList() : null,
+        teachableSubjects: isTeacher ? _selectedTeacherSubjects.toList() : null,
       );
       if (ok && mounted) {
         _showSnack('Registration submitted! Await admin approval.',
@@ -125,6 +137,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _phoneController.clear();
           _emailController.clear();
           _parentUsernameController.clear();
+          _parentMpinController.clear();
           _selectedGrade = 8;
           _selectedSubjects.clear();
         });
@@ -164,12 +177,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final compact = sh < 700;
     // viewPadding.bottom covers BOTH 3-button nav (48dp) and gesture nav (30dp).
     // Clamp to a minimum of 32 so the Login button always clears the nav bar.
-    final safeBottom = MediaQuery.of(context).viewPadding.bottom.clamp(32.0, 80.0);
+    final safeBottom =
+        MediaQuery.of(context).viewPadding.bottom.clamp(32.0, 80.0);
 
     // Fluid header height — scales with viewport height (CSS vh equivalent)
     // 19 vh ≈ 148px on 780px screen; 27 vh ≈ 224px on 830px screen
-    final hPad = R.vh(context, compact ? 2.8 : 4.5);   // vertical padding inside header
-    final logoScale = R.fluid(context, compact ? 1.05 : 1.25, min: 0.9, max: 1.4);
+    final hPad =
+        R.vh(context, compact ? 2.8 : 4.5); // vertical padding inside header
+    final logoScale =
+        R.fluid(context, compact ? 1.05 : 1.25, min: 0.9, max: 1.4);
 
     return Scaffold(
       backgroundColor: AppColors.primary,
@@ -193,8 +209,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   // ── Logo header ──────────────────────────────────────
                   Padding(
-                    padding: EdgeInsets.fromLTRB(
-                        hzPad, hPad, hzPad, hPad),
+                    padding: EdgeInsets.fromLTRB(hzPad, hPad, hzPad, hPad),
                     child: MindForgeLogo(
                       size: logoScale,
                       dark: true,
@@ -220,8 +235,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         // ── Tabs — Expanded fills available width (Flexbox) ──
                         Container(
                           decoration: BoxDecoration(
-                            color:
-                                AppColors.divider.withValues(alpha: 0.5),
+                            color: AppColors.divider.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           padding: const EdgeInsets.all(4),
@@ -234,6 +248,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   _isRegister = false;
                                   _clearPin();
                                   _parentUsernameController.clear();
+                                  _parentMpinController.clear();
                                 }),
                               ),
                               _Tab(
@@ -259,8 +274,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             isDense: true,
                           ),
                           inputFormatters: [
-                            FilteringTextInputFormatter.deny(
-                                RegExp(r'\s')),
+                            FilteringTextInputFormatter.deny(RegExp(r'\s')),
                           ],
                           textInputAction: TextInputAction.done,
                         ),
@@ -278,13 +292,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             items: ['student', 'teacher', 'parent']
                                 .map((r) => DropdownMenuItem(
                                       value: r,
-                                      child: Text(r[0].toUpperCase() +
-                                          r.substring(1)),
+                                      child: Text(
+                                          r[0].toUpperCase() + r.substring(1)),
                                     ))
                                 .toList(),
                             onChanged: (v) => setState(() {
                               _selectedRole = v ?? 'student';
                               _parentUsernameController.clear();
+                              _parentMpinController.clear();
                               _selectedSubjects.clear();
                               _selectedTeacherSubjects.clear();
                               _selectedGrade = 8;
@@ -344,14 +359,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               spacing: 8,
                               runSpacing: 6,
                               children: AppConstants.subjects.map((s) {
-                                final sel = _selectedTeacherSubjects.contains(s);
+                                final sel =
+                                    _selectedTeacherSubjects.contains(s);
                                 return GestureDetector(
                                   onTap: () => setState(() => sel
                                       ? _selectedTeacherSubjects.remove(s)
                                       : _selectedTeacherSubjects.add(s)),
                                   child: AnimatedContainer(
-                                    duration:
-                                        const Duration(milliseconds: 150),
+                                    duration: const Duration(milliseconds: 150),
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 10, vertical: 7),
                                     decoration: BoxDecoration(
@@ -364,8 +379,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                             : AppColors.divider,
                                         width: sel ? 2 : 1,
                                       ),
-                                      borderRadius:
-                                          BorderRadius.circular(20),
+                                      borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Text(
                                       s,
@@ -401,8 +415,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         child: Text('Grade $g'),
                                       ))
                                   .toList(),
-                              onChanged: (v) => setState(
-                                  () => _selectedGrade = v ?? 8),
+                              onChanged: (v) =>
+                                  setState(() => _selectedGrade = v ?? 8),
                             ),
                             const SizedBox(height: 10),
                             Text(
@@ -418,18 +432,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               spacing: 8,
                               runSpacing: 6,
                               children: _subjectOptions.map((s) {
-                                final sel =
-                                    _selectedSubjects.contains(s.key);
+                                final sel = _selectedSubjects.contains(s.key);
                                 return GestureDetector(
                                   onTap: () => setState(() => sel
                                       ? _selectedSubjects.remove(s.key)
                                       : _selectedSubjects.add(s.key)),
                                   child: AnimatedContainer(
-                                    duration: const Duration(
-                                        milliseconds: 150),
-                                    padding:
-                                        const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 8),
+                                    duration: const Duration(milliseconds: 150),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
                                     decoration: BoxDecoration(
                                       color: sel
                                           ? AppColors.primary
@@ -440,8 +451,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                             : AppColors.divider,
                                         width: sel ? 2 : 1,
                                       ),
-                                      borderRadius:
-                                          BorderRadius.circular(20),
+                                      borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -450,21 +460,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                             size: 15,
                                             color: sel
                                                 ? Colors.white
-                                                : AppColors
-                                                    .textSecondary),
+                                                : AppColors.textSecondary),
                                         const SizedBox(width: 5),
                                         Text(
                                           s.label,
-                                          style:
-                                              GoogleFonts.poppins(
+                                          style: GoogleFonts.poppins(
                                             fontSize: 12,
                                             fontWeight: sel
                                                 ? FontWeight.w700
                                                 : FontWeight.normal,
                                             color: sel
                                                 ? Colors.white
-                                                : AppColors
-                                                    .textSecondary,
+                                                : AppColors.textSecondary,
                                           ),
                                         ),
                                       ],
@@ -478,17 +485,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               controller: _parentUsernameController,
                               decoration: const InputDecoration(
                                 labelText: "Parent's Username *",
-                                prefixIcon:
-                                    Icon(Icons.family_restroom),
+                                prefixIcon: Icon(Icons.family_restroom),
                                 isDense: true,
                                 helperText:
-                                    'Required. If the parent does not have an account yet, '
-                                    'one will be created automatically with the same MPIN.',
+                                    'Required. If the parent does not have an '
+                                    'account yet, one will be created with the '
+                                    "Parent's MPIN you enter below.",
                                 helperMaxLines: 3,
                               ),
                               inputFormatters: [
-                                FilteringTextInputFormatter.deny(
-                                    RegExp(r'\s')),
+                                FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                              ],
+                              textInputAction: TextInputAction.next,
+                            ),
+                            const SizedBox(height: 10),
+                            TextField(
+                              controller: _parentMpinController,
+                              obscureText: _obscureParentMpin,
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              decoration: InputDecoration(
+                                labelText: "Parent's 6-digit MPIN *",
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                isDense: true,
+                                counterText: '',
+                                helperText:
+                                    "If the parent already has an account this "
+                                    "must match their MPIN. Don't reuse the "
+                                    "student's MPIN.",
+                                helperMaxLines: 3,
+                                suffixIcon: IconButton(
+                                  icon: Icon(_obscureParentMpin
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined),
+                                  onPressed: () => setState(() =>
+                                      _obscureParentMpin = !_obscureParentMpin),
+                                ),
+                              ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
                               ],
                               textInputAction: TextInputAction.done,
                             ),
@@ -528,8 +563,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               height: dotH,
                               decoration: BoxDecoration(
                                 color: filled
-                                    ? AppColors.primary
-                                        .withValues(alpha: 0.12)
+                                    ? AppColors.primary.withValues(alpha: 0.12)
                                     : AppColors.surface,
                                 border: Border.all(
                                   color: active
@@ -542,9 +576,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: Center(
                                 child: filled
                                     ? Container(
-                                        width: R.fluid(context, 10, min: 8, max: 12),
-                                        height: R.fluid(context, 10, min: 8, max: 12),
-                                        decoration:       BoxDecoration(
+                                        width: R.fluid(context, 10,
+                                            min: 8, max: 12),
+                                        height: R.fluid(context, 10,
+                                            min: 8, max: 12),
+                                        decoration: BoxDecoration(
                                           color: AppColors.primary,
                                           shape: BoxShape.circle,
                                         ),
@@ -590,8 +626,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           ? 'Submit Registration'
                                           : 'Login',
                                       style: GoogleFonts.poppins(
-                                        fontSize: R.fs(context, 15,
-                                            min: 13, max: 17),
+                                        fontSize:
+                                            R.fs(context, 15, min: 13, max: 17),
                                         fontWeight: FontWeight.w700,
                                         color: AppColors.textOnDark,
                                         letterSpacing: 1.2,
@@ -648,17 +684,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       child: Stack(
         children: [
           // Large soft glow circles
-          Positioned(top: -100, left: -100,
-            child: Container(width: 360, height: 360,
-              decoration: BoxDecoration(shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.025)))),
-          Positioned(bottom: -90, right: -70,
-            child: Container(width: 400, height: 400,
-              decoration: BoxDecoration(shape: BoxShape.circle,
-                color: AppColors.accent.withOpacity(0.08)))),
+          Positioned(
+              top: -100,
+              left: -100,
+              child: Container(
+                  width: 360,
+                  height: 360,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.025)))),
+          Positioned(
+              bottom: -90,
+              right: -70,
+              child: Container(
+                  width: 400,
+                  height: 400,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.accent.withOpacity(0.08)))),
           // Accent vertical edge glow
           Positioned(
-            left: 0, top: 100, bottom: 100,
+            left: 0,
+            top: 100,
+            bottom: 100,
             child: Container(
               width: 3,
               decoration: BoxDecoration(
@@ -686,44 +734,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     children: [
                       // Hansal Sir logo
                       Container(
-                        width: 80, height: 80,
+                        width: 80,
+                        height: 80,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(18),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3),
-                            blurRadius: 20, offset: const Offset(0, 6))],
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 6))
+                          ],
                         ),
                         padding: const EdgeInsets.all(8),
-                        child: Image.asset('assets/images/hansal_logo.png', fit: BoxFit.contain),
+                        child: Image.asset('assets/images/hansal_logo.png',
+                            fit: BoxFit.contain),
                       ),
                       // Vertical divider
                       Container(
-                        width: 1, height: 52,
+                        width: 1,
+                        height: 52,
                         margin: const EdgeInsets.symmetric(horizontal: 18),
                         color: Colors.white.withOpacity(0.2),
                       ),
                       // MindForge logo + name
                       Container(
-                        width: 80, height: 80,
+                        width: 80,
+                        height: 80,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(18),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3),
-                            blurRadius: 20, offset: const Offset(0, 6))],
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 6))
+                          ],
                         ),
                         padding: const EdgeInsets.all(10),
-                        child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                        child: Image.asset('assets/images/logo.png',
+                            fit: BoxFit.contain),
                       ),
                       const SizedBox(width: 16),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('MIND FORGE',
-                            style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w800,
-                              color: Colors.white, letterSpacing: 1.5)),
+                              style: GoogleFonts.poppins(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  letterSpacing: 1.5)),
                           Text('AI Assisted Learning',
-                            style: GoogleFonts.poppins(fontSize: 12,
-                              color: Colors.white.withOpacity(0.5))),
+                              style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: Colors.white.withOpacity(0.5))),
                         ],
                       ),
                     ],
@@ -731,70 +796,93 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   const SizedBox(height: 56),
 
-
-
                   // Hero text
                   Text('Smart Learning\nStarts Here.',
-                    style: GoogleFonts.poppins(fontSize: 44, fontWeight: FontWeight.w800,
-                      color: Colors.white, height: 1.1, letterSpacing: -0.5)),
+                      style: GoogleFonts.poppins(
+                          fontSize: 44,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.1,
+                          letterSpacing: -0.5)),
                   const SizedBox(height: 14),
-                  Text('A complete platform for teachers,\nstudents, and parents.',
-                    style: GoogleFonts.poppins(fontSize: 14,
-                      color: Colors.white.withOpacity(0.55), height: 1.65)),
+                  Text(
+                      'A complete platform for teachers,\nstudents, and parents.',
+                      style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.55),
+                          height: 1.65)),
 
                   const SizedBox(height: 40),
 
                   // Feature list
                   ...[
-                    (Icons.auto_awesome_rounded, 'AI-Generated Tests & Answer Keys'),
+                    (
+                      Icons.auto_awesome_rounded,
+                      'AI-Generated Tests & Answer Keys'
+                    ),
                     (Icons.how_to_reg_rounded, 'Real-Time Attendance Tracking'),
                     (Icons.bar_chart_rounded, 'Smart Grade Analytics'),
-                    (Icons.account_balance_wallet_rounded, 'Fee Management & Receipts'),
-                  ].map((f) => Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 34, height: 34,
-                          decoration: BoxDecoration(
-                            color: AppColors.accent.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: Icon(f.$1, size: 16, color: AppColors.accentLight),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(f.$2, style: GoogleFonts.poppins(fontSize: 13,
-                          color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.w500)),
-                      ],
+                    (
+                      Icons.account_balance_wallet_rounded,
+                      'Fee Management & Receipts'
                     ),
-                  )),
+                  ].map((f) => Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: AppColors.accent.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              child: Icon(f.$1,
+                                  size: 16, color: AppColors.accentLight),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(f.$2,
+                                style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    color: Colors.white.withOpacity(0.8),
+                                    fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                      )),
 
                   const SizedBox(height: 48),
 
                   // Capsule — adapted from splash screen for dark background
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: Colors.white.withOpacity(0.22), width: 1),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.22), width: 1),
                       color: Colors.white.withOpacity(0.07),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.workspace_premium_rounded,
-                          size: 18, color: Colors.white.withOpacity(0.85)),
+                            size: 18, color: Colors.white.withOpacity(0.85)),
                         const SizedBox(width: 10),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text('25+ YEARS OF EXCELLENCE',
-                              style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700,
-                                color: Colors.white, letterSpacing: 1.4)),
+                                style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: 1.4)),
                             Text('Trusted education since 1997',
-                              style: GoogleFonts.poppins(fontSize: 10,
-                                color: Colors.white.withOpacity(0.55), letterSpacing: 0.2)),
+                                style: GoogleFonts.poppins(
+                                    fontSize: 10,
+                                    color: Colors.white.withOpacity(0.55),
+                                    letterSpacing: 0.2)),
                           ],
                         ),
                       ],
@@ -824,16 +912,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               children: [
                 // Heading
                 Text(_isRegister ? 'Request Access' : 'Welcome back',
-                  style: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0D1B2A), letterSpacing: -0.5)),
+                    style: GoogleFonts.poppins(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0D1B2A),
+                        letterSpacing: -0.5)),
                 const SizedBox(height: 4),
-                Text(_isRegister
-                  ? 'Fill in your details and await admin approval.'
-                  : 'Sign in to your MIND FORGE account.',
-                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textMuted)),
+                Text(
+                    _isRegister
+                        ? 'Fill in your details and await admin approval.'
+                        : 'Sign in to your MIND FORGE account.',
+                    style: GoogleFonts.poppins(
+                        fontSize: 12, color: AppColors.textMuted)),
                 const SizedBox(height: 4),
                 Container(
-                  width: 40, height: 3,
+                  width: 40,
+                  height: 3,
                   decoration: BoxDecoration(
                     color: AppColors.accent,
                     borderRadius: BorderRadius.circular(2),
@@ -850,14 +944,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     prefixIcon: const Icon(Icons.person_outline),
                     filled: true,
                     fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.divider)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.divider)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                      borderSide:       BorderSide(color: AppColors.primary, width: 2)),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.divider)),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.divider)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            BorderSide(color: AppColors.primary, width: 2)),
                   ),
-                  inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r'\s'))
+                  ],
                 ),
 
                 // Register fields
@@ -865,22 +965,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
                     value: _selectedRole,
-                    decoration: InputDecoration(labelText: 'Register as',
+                    decoration: InputDecoration(
+                      labelText: 'Register as',
                       prefixIcon: const Icon(Icons.badge_outlined),
-                      filled: true, fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.divider)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                        borderSide:       BorderSide(color: AppColors.primary, width: 2)),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: AppColors.divider)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: AppColors.primary, width: 2)),
                     ),
-                    items: ['student','teacher','parent']
-                      .map((r) => DropdownMenuItem(value: r,
-                        child: Text(r[0].toUpperCase() + r.substring(1))))
-                      .toList(),
+                    items: ['student', 'teacher', 'parent']
+                        .map((r) => DropdownMenuItem(
+                            value: r,
+                            child: Text(r[0].toUpperCase() + r.substring(1))))
+                        .toList(),
                     onChanged: (v) => setState(() {
                       _selectedRole = v ?? 'student';
                       _parentUsernameController.clear();
+                      _parentMpinController.clear();
                       _selectedSubjects.clear();
                       _selectedTeacherSubjects.clear();
                       _selectedGrade = 8;
@@ -890,42 +999,65 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 14),
                     DropdownButtonFormField<int>(
                       value: _selectedGrade,
-                      decoration: InputDecoration(labelText: 'Grade',
+                      decoration: InputDecoration(
+                        labelText: 'Grade',
                         prefixIcon: const Icon(Icons.school_outlined),
-                        filled: true, fillColor: Colors.white,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.divider)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                          borderSide:       BorderSide(color: AppColors.primary, width: 2)),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.divider)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: AppColors.primary, width: 2)),
                       ),
-                      items: [8,9,10].map((g) => DropdownMenuItem(value: g,
-                        child: Text('Grade $g'))).toList(),
+                      items: [8, 9, 10]
+                          .map((g) => DropdownMenuItem(
+                              value: g, child: Text('Grade $g')))
+                          .toList(),
                       onChanged: (v) => setState(() => _selectedGrade = v ?? 8),
                     ),
                     const SizedBox(height: 14),
                     Text('Additional Subjects',
-                      style: GoogleFonts.poppins(fontSize: 12,
-                        color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                        style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 6,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
                       children: _subjectOptions.map((s) {
                         final sel = _selectedSubjects.contains(s.key);
                         return GestureDetector(
                           onTap: () => setState(() => sel
-                            ? _selectedSubjects.remove(s.key)
-                            : _selectedSubjects.add(s.key)),
+                              ? _selectedSubjects.remove(s.key)
+                              : _selectedSubjects.add(s.key)),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 7),
                             decoration: BoxDecoration(
                               color: sel ? AppColors.primary : Colors.white,
-                              border: Border.all(color: sel ? AppColors.primary : AppColors.divider),
+                              border: Border.all(
+                                  color: sel
+                                      ? AppColors.primary
+                                      : AppColors.divider),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Text(s.label, style: GoogleFonts.poppins(fontSize: 11,
-                              color: sel ? Colors.white : AppColors.textSecondary,
-                              fontWeight: sel ? FontWeight.w700 : FontWeight.normal)),
+                            child: Text(s.label,
+                                style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: sel
+                                        ? Colors.white
+                                        : AppColors.textSecondary,
+                                    fontWeight: sel
+                                        ? FontWeight.w700
+                                        : FontWeight.normal)),
                           ),
                         );
                       }).toList(),
@@ -937,43 +1069,101 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         labelText: "Parent's Username *",
                         helperText:
                             'Required. If the parent does not have an account yet, '
-                            'one will be created automatically with the same MPIN.',
+                            "one will be created with the Parent's MPIN you enter below.",
                         helperMaxLines: 3,
                         prefixIcon: const Icon(Icons.family_restroom),
-                        filled: true, fillColor: Colors.white,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.divider)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                          borderSide:       BorderSide(color: AppColors.primary, width: 2)),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.divider)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: AppColors.primary, width: 2)),
                       ),
-                      inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(RegExp(r'\s'))
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _parentMpinController,
+                      obscureText: _obscureParentMpin,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      decoration: InputDecoration(
+                        labelText: "Parent's 6-digit MPIN *",
+                        helperText:
+                            "If the parent already has an account this must "
+                            "match their MPIN. Don't reuse the student's MPIN.",
+                        helperMaxLines: 3,
+                        counterText: '',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureParentMpin
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined),
+                          onPressed: () => setState(
+                              () => _obscureParentMpin = !_obscureParentMpin),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.divider)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: AppColors.primary, width: 2)),
+                      ),
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                   ],
                   if (_selectedRole == 'teacher') ...[
                     const SizedBox(height: 14),
                     Text('Subjects you can teach',
-                      style: GoogleFonts.poppins(fontSize: 12,
-                        color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                        style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 6,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
                       children: AppConstants.subjects.map((s) {
                         final sel = _selectedTeacherSubjects.contains(s);
                         return GestureDetector(
                           onTap: () => setState(() => sel
-                            ? _selectedTeacherSubjects.remove(s)
-                            : _selectedTeacherSubjects.add(s)),
+                              ? _selectedTeacherSubjects.remove(s)
+                              : _selectedTeacherSubjects.add(s)),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 7),
                             decoration: BoxDecoration(
                               color: sel ? AppColors.primary : Colors.white,
-                              border: Border.all(color: sel ? AppColors.primary : AppColors.divider),
+                              border: Border.all(
+                                  color: sel
+                                      ? AppColors.primary
+                                      : AppColors.divider),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Text(s, style: GoogleFonts.poppins(fontSize: 11,
-                              color: sel ? Colors.white : AppColors.textSecondary,
-                              fontWeight: sel ? FontWeight.w700 : FontWeight.normal)),
+                            child: Text(s,
+                                style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: sel
+                                        ? Colors.white
+                                        : AppColors.textSecondary,
+                                    fontWeight: sel
+                                        ? FontWeight.w700
+                                        : FontWeight.normal)),
                           ),
                         );
                       }).toList(),
@@ -984,10 +1174,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 16),
 
                 // MPIN label
-                Text(_isRegister ? 'Set a 6-digit MPIN' : 'Enter your 6-digit MPIN',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary)),
+                Text(
+                    _isRegister
+                        ? 'Set a 6-digit MPIN'
+                        : 'Enter your 6-digit MPIN',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary)),
                 const SizedBox(height: 10),
 
                 // PIN dots
@@ -998,20 +1193,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     final active = i == _pinIndex;
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 4),
-                      width: 40, height: 46,
+                      width: 40,
+                      height: 46,
                       decoration: BoxDecoration(
-                        color: filled ? AppColors.primary.withOpacity(0.1) : Colors.white,
+                        color: filled
+                            ? AppColors.primary.withOpacity(0.1)
+                            : Colors.white,
                         border: Border.all(
-                          color: active ? AppColors.primary : filled ? AppColors.primary.withOpacity(0.5) : AppColors.divider,
-                          width: active ? 2 : 1),
+                            color: active
+                                ? AppColors.primary
+                                : filled
+                                    ? AppColors.primary.withOpacity(0.5)
+                                    : AppColors.divider,
+                            width: active ? 2 : 1),
                         borderRadius: BorderRadius.circular(10),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04),
-                          blurRadius: 4, offset: const Offset(0, 2))],
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2))
+                        ],
                       ),
-                      child: Center(child: filled
-                        ? Container(width: 9, height: 9,
-                            decoration:       BoxDecoration(color: AppColors.primary, shape: BoxShape.circle))
-                        : null),
+                      child: Center(
+                          child: filled
+                              ? Container(
+                                  width: 9,
+                                  height: 9,
+                                  decoration: BoxDecoration(
+                                      color: AppColors.primary,
+                                      shape: BoxShape.circle))
+                              : null),
                     );
                   }),
                 ),
@@ -1027,15 +1238,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: auth.isLoading ? null : _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
                       elevation: 3,
                     ),
                     child: auth.isLoading
-                      ? const SizedBox(width: 22, height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                      : Text(_isRegister ? 'Submit Registration' : 'Sign In',
-                          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700,
-                            color: Colors.white, letterSpacing: 0.5)),
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.5, color: Colors.white))
+                        : Text(_isRegister ? 'Submit Registration' : 'Sign In',
+                            style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: 0.5)),
                   ),
                 ),
 
@@ -1048,17 +1266,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     _clearPin();
                     _usernameController.clear();
                     _parentUsernameController.clear();
+                    _parentMpinController.clear();
                     _selectedGrade = 8;
                     _selectedSubjects.clear();
                     _selectedTeacherSubjects.clear();
                   }),
                   child: Text(
                     _isRegister
-                      ? 'Already have an account? Sign In'
-                      : "Don't have an account? Request Access",
+                        ? 'Already have an account? Sign In'
+                        : "Don't have an account? Request Access",
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(fontSize: 12,
-                      color: AppColors.secondary, fontWeight: FontWeight.w600),
+                    style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: AppColors.secondary,
+                        fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -1120,9 +1341,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           style: GoogleFonts.poppins(
                             fontSize: isDel ? delFs : numFs,
                             fontWeight: FontWeight.w700,
-                            color: isDel
-                                ? AppColors.error
-                                : AppColors.textPrimary,
+                            color:
+                                isDel ? AppColors.error : AppColors.textPrimary,
                           ),
                         ),
                       ),
@@ -1153,8 +1373,7 @@ class _Tab extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
-  const _Tab(
-      {required this.label, required this.active, required this.onTap});
+  const _Tab({required this.label, required this.active, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1176,11 +1395,8 @@ class _Tab extends StatelessWidget {
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 12,
-                fontWeight:
-                    active ? FontWeight.w700 : FontWeight.normal,
-                color: active
-                    ? AppColors.textOnDark
-                    : AppColors.textSecondary,
+                fontWeight: active ? FontWeight.w700 : FontWeight.normal,
+                color: active ? AppColors.textOnDark : AppColors.textSecondary,
               ),
             ),
           ),

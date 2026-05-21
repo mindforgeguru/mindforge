@@ -32,6 +32,9 @@ class StudentGradeScreen extends StatelessWidget {
 
     if (isWide) {
       return StudentScaffold(
+        // Three-column layout needs the full browser width — opt out of the
+        // scaffold's default 600 px phone-shaped centre column.
+        wideContent: true,
         body: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Row(

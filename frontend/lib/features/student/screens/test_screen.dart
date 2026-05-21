@@ -42,6 +42,7 @@ class StudentTestScreen extends ConsumerWidget {
       return DefaultTabController(
         length: 3,
         child: StudentScaffold(
+          wideContent: true,
           body: Padding(
             padding: const EdgeInsets.fromLTRB(48, 28, 48, 20),
             child: Container(

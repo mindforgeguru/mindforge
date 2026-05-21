@@ -64,6 +64,7 @@ def _get_client_ip(request: Request) -> str:
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
+    request: Request,
     payload: UserRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -71,7 +72,23 @@ async def register_user(
     Register a new user. Account is created in pending state (is_approved=False).
     Admin must approve before the user can log in.
     """
-    # Check username uniqueness
+    # Per-IP rate limit (5 attempts per minute). Combined with the generic
+    # phone-conflict error below, this caps how fast someone can probe for
+    # registered phone numbers / PII.
+    ip = _get_client_ip(request)
+    if await redis_manager.rate_limit(
+        f"rate_limit:register:{ip}", max_attempts=5, window_seconds=60
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many registration attempts. Please wait 60 seconds.",
+            headers={"Retry-After": "60"},
+        )
+
+    # Check username uniqueness. We keep this error specific (the chosen
+    # username is not PII; users expect clear "already taken" feedback at
+    # signup) — but pair it with the rate limit above so it can't be used
+    # to enumerate usernames quickly.
     existing = await db.execute(
         select(User).where(User.username == payload.username, User.deleted_at.is_(None))
     )
@@ -100,7 +117,11 @@ async def register_user(
             detail="A parent username is required to register a student account.",
         )
 
-    # Check phone uniqueness (if provided)
+    # Check phone uniqueness (if provided).
+    # IMPORTANT: phone numbers are PII. We return a generic error here so an
+    # attacker can't probe "is this phone registered as a parent on this
+    # school's app?" The user who genuinely typed a duplicate phone will
+    # contact the school admin, which is the right out-of-band channel anyway.
     if payload.phone:
         phone_conflict = await db.execute(
             select(User).where(User.phone == payload.phone, User.deleted_at.is_(None))
@@ -108,7 +129,11 @@ async def register_user(
         if phone_conflict.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this phone number already exists.",
+                detail=(
+                    "Registration could not be completed with the details "
+                    "provided. Please contact the school admin if this is "
+                    "unexpected."
+                ),
             )
 
     # Resolve current academic year (if any)
@@ -142,6 +167,18 @@ async def register_user(
     if payload.role == "student":
         parent_user_id = None
         if payload.parent_username:
+            # A distinct parent MPIN is required for student registration. Two
+            # purposes: (1) when the parent doesn't yet exist, this is the MPIN
+            # the new parent account is created with — never reuses the
+            # student's MPIN; (2) when the parent already exists, this proves
+            # the student is authorized to link to that parent (otherwise any
+            # student could claim any parent as theirs).
+            if not payload.parent_mpin:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="A parent MPIN is required to register a student account.",
+                )
+
             from sqlalchemy import func as sa_func
             parent_result = await db.execute(
                 select(User).where(
@@ -152,13 +189,36 @@ async def register_user(
             )
             parent = parent_result.scalar_one_or_none()
             if parent:
+                # Existing parent — verify the supplied parent MPIN matches.
+                # Generic error so we don't leak whether the parent exists.
+                if not verify_mpin(payload.parent_mpin, parent.mpin_hash):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Parent username or MPIN is incorrect.",
+                    )
                 parent_user_id = parent.id
             else:
-                # Parent account doesn't exist — auto-create it with the same
-                # MPIN so the parent can log in after admin approval.
+                # Refuse to squat on an existing non-parent username (admin,
+                # teacher, or student). Username uniqueness is per-role-blind
+                # in the schema but we don't want a student creating a "parent"
+                # row that collides with an admin's username.
+                conflict = await db.execute(
+                    select(User).where(
+                        sa_func.lower(User.username) == payload.parent_username.strip().lower(),
+                        User.deleted_at.is_(None),
+                    )
+                )
+                if conflict.scalar_one_or_none():
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="The parent username is already in use by another account.",
+                    )
+
+                # Parent account doesn't exist — auto-create it with the
+                # student-supplied parent MPIN (NOT the student's own MPIN).
                 new_parent = User(
                     username=payload.parent_username.strip(),
-                    mpin_hash=hash_mpin(payload.mpin),
+                    mpin_hash=hash_mpin(payload.parent_mpin),
                     role="parent",
                     is_active=True,
                     is_approved=False,

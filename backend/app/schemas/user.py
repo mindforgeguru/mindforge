@@ -13,6 +13,50 @@ from app.models.user import UserRole
 VALID_SUBJECTS = {"economics", "computer", "ai"}
 
 
+# ── MPIN strength ─────────────────────────────────────────────────────────────
+
+def _is_weak_mpin(v: str) -> bool:
+    """True if the MPIN is trivially guessable. Login still accepts any
+    6-digit MPIN — we only reject weak MPINs at the SET boundary so legacy
+    users with weak MPINs can still log in and change them."""
+    if len(set(v)) == 1:                       # 000000, 111111, ... 999999
+        return True
+    digits = [int(c) for c in v]
+    diffs = {b - a for a, b in zip(digits, digits[1:])}
+    if diffs == {1} or diffs == {-1}:          # 123456, 234567, 654321, ...
+        return True
+    if v[:3] == v[3:]:                         # 123123, 456456, ...
+        return True
+    if v[:2] == v[2:4] == v[4:]:               # 121212, 343434, ...
+        return True
+    # Common typing-pattern PINs that don't fit a math rule above.
+    if v in {"159753", "147258", "258369", "369258",
+             "753951", "951357", "789456", "456789"}:
+        return True
+    return False
+
+
+_WEAK_MPIN_MSG = (
+    "MPIN is too easy to guess. Avoid all-same-digit (e.g. 000000), "
+    "simple sequences (e.g. 123456), and repeated patterns (e.g. 121212)."
+)
+
+
+def _validate_mpin_format(v: str) -> str:
+    """Shape only: 6 digits. Used at verification sites (login, current MPIN)."""
+    if not re.fullmatch(r"\d{6}", v):
+        raise ValueError("MPIN must be exactly 6 digits.")
+    return v
+
+
+def _validate_strong_mpin(v: str) -> str:
+    """Shape + weak-MPIN rejection. Used at SET sites (register, change, reset)."""
+    _validate_mpin_format(v)
+    if _is_weak_mpin(v):
+        raise ValueError(_WEAK_MPIN_MSG)
+    return v
+
+
 # ── Auth / Registration ───────────────────────────────────────────────────────
 
 class UserRegisterRequest(BaseModel):
@@ -22,6 +66,10 @@ class UserRegisterRequest(BaseModel):
     phone: Optional[str] = None                  # required for student/teacher; optional for parent
     email: Optional[str] = None                  # optional for all
     parent_username: Optional[str] = None        # student only
+    # Required when role=student. Used to (a) auto-create the parent account if
+    # parent_username doesn't exist yet, or (b) prove the student is authorized
+    # to link to an existing parent. Never falls back to the student's own MPIN.
+    parent_mpin: Optional[str] = None            # student only
     grade: Optional[int] = None                  # student only (8, 9, or 10)
     additional_subjects: Optional[List[str]] = None  # student only
     teachable_subjects: Optional[List[str]] = None   # teacher only
@@ -59,9 +107,14 @@ class UserRegisterRequest(BaseModel):
     @field_validator("mpin")
     @classmethod
     def validate_mpin(cls, v: str) -> str:
-        if not re.fullmatch(r"\d{6}", v):
-            raise ValueError("MPIN must be exactly 6 digits.")
-        return v
+        return _validate_strong_mpin(v)
+
+    @field_validator("parent_mpin")
+    @classmethod
+    def validate_parent_mpin(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        return _validate_strong_mpin(v)
 
     @field_validator("username")
     @classmethod
@@ -109,9 +162,9 @@ class UserLoginRequest(BaseModel):
     @field_validator("mpin")
     @classmethod
     def validate_mpin(cls, v: str) -> str:
-        if not re.fullmatch(r"\d{6}", v):
-            raise ValueError("MPIN must be exactly 6 digits.")
-        return v
+        # Shape only — legacy users with weak MPINs must still be able to log in
+        # so they can change them.
+        return _validate_mpin_format(v)
 
 
 class TokenResponse(BaseModel):
@@ -154,12 +207,17 @@ class AdminMpinUpdate(BaseModel):
     current_mpin: str
     new_mpin: str
 
-    @field_validator("current_mpin", "new_mpin")
+    @field_validator("current_mpin")
     @classmethod
-    def validate_mpin(cls, v: str) -> str:
-        if not re.fullmatch(r"\d{6}", v):
-            raise ValueError("MPIN must be exactly 6 digits.")
-        return v
+    def validate_current_mpin(cls, v: str) -> str:
+        # Shape only — the user is *proving* their existing MPIN; we don't
+        # block weak values here or legacy weak-MPIN users couldn't change.
+        return _validate_mpin_format(v)
+
+    @field_validator("new_mpin")
+    @classmethod
+    def validate_new_mpin(cls, v: str) -> str:
+        return _validate_strong_mpin(v)
 
 
 class UserWithProfileResponse(UserResponse):
@@ -214,9 +272,9 @@ class AdminUserEdit(BaseModel):
     @field_validator("new_mpin")
     @classmethod
     def validate_mpin(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and not re.fullmatch(r"\d{6}", v):
-            raise ValueError("MPIN must be exactly 6 digits.")
-        return v
+        if v is None:
+            return v
+        return _validate_strong_mpin(v)
 
 
 # ── StudentProfile ────────────────────────────────────────────────────────────

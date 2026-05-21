@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_teacher
 from app.models.user import User
 from app.models.database_models import OldTestPaper, ChapterDocument, SyllabusEntry
 from app.services import ai_service, storage_service
@@ -42,7 +42,7 @@ def _ext(filename: str) -> str:
 async def upload_old_test_paper(
     files: List[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     """
     Upload one or more old test paper files.
@@ -91,7 +91,7 @@ async def list_old_test_papers(
     grade: Optional[int] = None,
     subject: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     q = select(OldTestPaper).where(OldTestPaper.teacher_id == current_user.id)
     if grade is not None:
@@ -107,7 +107,7 @@ async def list_old_test_papers(
 async def delete_old_test_paper(
     paper_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     result = await db.execute(
         select(OldTestPaper).where(
@@ -150,7 +150,7 @@ async def upload_chapter_document(
     subject: str = Form(...),
     chapter_name: str = Form(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     """Upload a chapter PDF/image for a specific grade, subject, and chapter."""
     data = await file.read()
@@ -182,7 +182,7 @@ async def list_chapter_names(
     grade: int,
     subject: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     """
     Return a deduplicated, sorted list of chapter names for a grade+subject.
@@ -221,7 +221,7 @@ async def list_chapter_documents(
     grade: Optional[int] = None,
     subject: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     q = select(ChapterDocument).where(ChapterDocument.teacher_id == current_user.id)
     if grade is not None:
@@ -237,7 +237,7 @@ async def list_chapter_documents(
 async def delete_chapter_document(
     chapter_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     result = await db.execute(
         select(ChapterDocument).where(
@@ -277,7 +277,7 @@ async def upload_syllabus(
     grade: int = Form(...),
     subject: str = Form(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     """
     Upload a syllabus PDF. AI scans it to extract the chapter list for
@@ -338,7 +338,7 @@ async def list_syllabus(
     grade: Optional[int] = None,
     subject: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     q = select(SyllabusEntry).where(SyllabusEntry.teacher_id == current_user.id)
     if grade is not None:
@@ -354,7 +354,7 @@ async def list_syllabus(
 async def delete_syllabus(
     syllabus_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_teacher),
 ):
     result = await db.execute(
         select(SyllabusEntry).where(

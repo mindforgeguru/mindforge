@@ -34,6 +34,11 @@ services:
       BACKEND_PUBLIC_URL: http://localhost:8000
       APP_ENV: development
       DEBUG: "true"
+    # Local-dev only: expose the backend on the host so http://localhost:8000
+    # works without nginx. The production compose file deliberately omits
+    # this so nginx is the only ingress in prod.
+    ports:
+      - "8000:8000"
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     # Run as root for hot-reload file watching (dev only)
     user: root

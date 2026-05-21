@@ -4,7 +4,6 @@ Handles file uploads and pre-signed URL generation.
 """
 
 import io
-import json
 import logging
 from typing import Optional
 
@@ -25,10 +24,10 @@ REQUIRED_BUCKETS = [
     settings.MINIO_BUCKET_DATABASE,
 ]
 
-# Buckets that should allow anonymous (public) GET access
-PUBLIC_READ_BUCKETS = [
-    settings.MINIO_BUCKET_PROFILES,
-]
+# All buckets are private. External access to profile pics goes through the
+# authenticated /api/media/{bucket}/{key} proxy in main.py — never directly.
+# Keeping the bucket private is defence-in-depth in case MinIO is ever exposed
+# publicly (Railway domain, port forward, etc.).
 
 
 def _get_client() -> Minio:
@@ -46,7 +45,11 @@ def _get_client() -> Minio:
 
 
 def _ensure_buckets(client: Minio):
-    """Create required buckets if they don't exist and apply public-read policy."""
+    """Create required buckets if missing and force every bucket to private.
+
+    Revoking any public-read policy lingering from older boots — the proxy
+    in main.py is the only legitimate external access path to objects.
+    """
     for bucket in REQUIRED_BUCKETS:
         try:
             if not client.bucket_exists(bucket):
@@ -55,21 +58,12 @@ def _ensure_buckets(client: Minio):
         except S3Error as e:
             logger.error(f"MinIO bucket setup error for '{bucket}': {e}")
 
-    for bucket in PUBLIC_READ_BUCKETS:
         try:
-            policy = json.dumps({
-                "Version": "2012-10-17",
-                "Statement": [{
-                    "Effect": "Allow",
-                    "Principal": {"AWS": ["*"]},
-                    "Action": ["s3:GetObject"],
-                    "Resource": [f"arn:aws:s3:::{bucket}/*"],
-                }],
-            })
-            client.set_bucket_policy(bucket, policy)
-            logger.info(f"Set public-read policy on bucket: {bucket}")
+            client.delete_bucket_policy(bucket)
         except S3Error as e:
-            logger.error(f"MinIO policy error for '{bucket}': {e}")
+            # NoSuchBucketPolicy is the expected case (already private) — ignore.
+            if getattr(e, "code", "") != "NoSuchBucketPolicy":
+                logger.warning(f"Could not clear bucket policy on '{bucket}': {e}")
 
 
 def get_public_url(bucket: str, key: str) -> str:

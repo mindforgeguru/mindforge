@@ -56,6 +56,7 @@ class StudentBroadcastsScreen extends ConsumerWidget {
         );
 
     return StudentScaffold(
+      wideContent: isWide,
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: FittedBox(

@@ -522,6 +522,16 @@ async def _sweep_expired_attempts_for_student(
         )
 
 
+async def _ensure_test_in_student_grade(
+    test: Test, student_id: int, db: AsyncSession
+) -> None:
+    # Defend against cross-grade IDOR: returns 404 (not 403) so out-of-grade
+    # test IDs are indistinguishable from non-existent ones.
+    profile = await get_student_profile_cached(student_id, db)
+    if profile is None or profile.grade != test.grade:
+        raise HTTPException(status_code=404, detail="Test not found.")
+
+
 def _attempt_response(
     submission: TestSubmission, test: Test, *, now: datetime
 ) -> TestAttemptResponse:
@@ -663,6 +673,7 @@ async def start_test_attempt(
     test = test_result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found.")
+    await _ensure_test_in_student_grade(test, current_student.id, db)
     if test.test_type != TestType.online:
         raise HTTPException(status_code=400, detail="Only online tests can be attempted.")
     if not test.is_published:
@@ -739,6 +750,7 @@ async def forfeit_test_attempt(
     test = test_result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found.")
+    await _ensure_test_in_student_grade(test, current_student.id, db)
 
     now = datetime.now(timezone.utc)
     sub_result = await db.execute(
@@ -777,6 +789,12 @@ async def save_test_answers(
     If the attempt's deadline has passed this finalizes the submission and
     returns 410 so the client can show the result dialog.
     """
+    test_result = await db.execute(select(Test).where(Test.id == test_id))
+    test = test_result.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found.")
+    await _ensure_test_in_student_grade(test, current_student.id, db)
+
     sub_result = await db.execute(
         select(TestSubmission).where(
             TestSubmission.test_id == test_id,
@@ -791,16 +809,13 @@ async def save_test_answers(
 
     now = datetime.now(timezone.utc)
     if submission.attempt_expires_at and submission.attempt_expires_at <= now:
-        test_result = await db.execute(select(Test).where(Test.id == test_id))
-        test = test_result.scalar_one_or_none()
-        if test is not None:
-            await _finalize_submission(
-                submission,
-                test,
-                db,
-                auto_submitted=True,
-                finalized_at=submission.attempt_expires_at,
-            )
+        await _finalize_submission(
+            submission,
+            test,
+            db,
+            auto_submitted=True,
+            finalized_at=submission.attempt_expires_at,
+        )
         raise HTTPException(status_code=410, detail="Time is up — attempt finalized.")
 
     submission.answers = payload.answers
@@ -831,6 +846,7 @@ async def submit_test(
     test = test_result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found.")
+    await _ensure_test_in_student_grade(test, current_student.id, db)
 
     now = datetime.now(timezone.utc)
     if test.expires_at and test.expires_at < now:
@@ -899,6 +915,7 @@ async def get_test_review(
     test = test_result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found.")
+    await _ensure_test_in_student_grade(test, current_student.id, db)
 
     sub_result = await db.execute(
         select(TestSubmission).where(

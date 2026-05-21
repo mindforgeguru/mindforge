@@ -44,3 +44,5 @@ minio_data/
 .DS_Store
 Thumbs.db
 .env
+.env.local
+.env.*.local

@@ -165,6 +165,7 @@ class _StudentAttendanceScreenState
     // ── Wide (web) — 3-column layout ─────────────────────────────────────────
     if (isWide) {
       return StudentScaffold(
+        wideContent: true,
         backgroundColor: AppColors.background,
         appBar: AppBar(
           backgroundColor: AppColors.primary,

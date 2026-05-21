@@ -213,6 +213,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       {String? phone,
       String? email,
       String? parentUsername,
+      String? parentMpin,
       int? grade,
       List<String>? additionalSubjects,
       List<String>? teachableSubjects}) async {
@@ -222,6 +223,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           phone: phone,
           email: email,
           parentUsername: parentUsername,
+          parentMpin: parentMpin,
           grade: grade,
           additionalSubjects: additionalSubjects,
           teachableSubjects: teachableSubjects);

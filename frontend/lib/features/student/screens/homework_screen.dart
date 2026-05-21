@@ -41,6 +41,7 @@ class StudentHomeworkScreen extends ConsumerWidget {
     final isWide = MediaQuery.of(context).size.width >= 900;
 
     return StudentScaffold(
+      wideContent: isWide,
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: FittedBox(

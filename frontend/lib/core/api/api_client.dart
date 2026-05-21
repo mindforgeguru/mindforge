@@ -293,6 +293,7 @@ class ApiClient {
       {String? phone,
       String? email,
       String? parentUsername,
+      String? parentMpin,
       int? grade,
       List<String>? additionalSubjects,
       List<String>? teachableSubjects}) async {
@@ -304,6 +305,8 @@ class ApiClient {
       if (email != null && email.isNotEmpty) 'email': email,
       if (parentUsername != null && parentUsername.isNotEmpty)
         'parent_username': parentUsername,
+      if (parentMpin != null && parentMpin.isNotEmpty)
+        'parent_mpin': parentMpin,
       if (grade != null) 'grade': grade,
       if (additionalSubjects != null) 'additional_subjects': additionalSubjects,
       if (teachableSubjects != null) 'teachable_subjects': teachableSubjects,

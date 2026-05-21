@@ -21,6 +21,13 @@ class StudentScaffold extends ConsumerWidget {
   final FloatingActionButtonLocation? floatingActionButtonLocation;
   final Color? backgroundColor;
 
+  /// When `true`, the web branch does NOT wrap the body in
+  /// `Center + ConstrainedBox(maxWidth: 600)`. Use this for screens that
+  /// build their own desktop-wide layout (e.g. multi-column views) so they
+  /// can fill the available browser width instead of being squished into
+  /// a 600 px phone-shaped centre column.
+  final bool wideContent;
+
   const StudentScaffold({
     super.key,
     this.appBar,
@@ -28,6 +35,7 @@ class StudentScaffold extends ConsumerWidget {
     this.floatingActionButton,
     this.floatingActionButtonLocation,
     this.backgroundColor,
+    this.wideContent = false,
   });
 
   @override
@@ -60,9 +68,19 @@ class StudentScaffold extends ConsumerWidget {
 
     // Web: top nav + content area, no bottom nav, no secondary AppBar.
     // Mobile-styled bodies are capped at 600 px and centred so they don't
-    // stretch across a desktop browser. Screens that need full width should
-    // build their own _buildWebLayout instead of going through this branch.
+    // stretch across a desktop browser. Screens that already build a
+    // desktop-wide layout (multi-column grids, three-pane tabs, etc.) opt
+    // out by passing `wideContent: true` and receive the full available
+    // width instead.
     final auth = ref.watch(authProvider);
+    final innerBody = wideContent
+        ? keyedBody
+        : Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: keyedBody,
+            ),
+          );
     return Scaffold(
       backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
       floatingActionButton: floatingActionButton,
@@ -72,12 +90,7 @@ class StudentScaffold extends ConsumerWidget {
           StudentTopNav(auth: auth),
           Expanded(
             child: Scaffold(
-              body: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: keyedBody,
-                ),
-              ),
+              body: innerBody,
               backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
             ),
           ),

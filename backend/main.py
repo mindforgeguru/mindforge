@@ -162,11 +162,19 @@ async def lifespan(app: FastAPI):
     await redis_manager.disconnect()
 
 
+# API docs (Swagger UI + ReDoc + openapi.json) are an information-disclosure
+# surface — they enumerate every endpoint, parameter, and role. Expose them
+# only when APP_ENV is explicitly set to "development".
+_dev_mode = settings.APP_ENV == "development"
+
 app = FastAPI(
     title="MIND FORGE API",
     description="AI Assisted Learning Platform — Backend API",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if _dev_mode else None,
+    redoc_url="/redoc" if _dev_mode else None,
+    openapi_url="/openapi.json" if _dev_mode else None,
 )
 
 # ─── Security headers ─────────────────────────────────────────────────────────
