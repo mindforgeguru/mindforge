@@ -140,7 +140,11 @@ class TestUserLoginRequest:
 
 class TestUserRegisterRequest:
     def _valid(self, **kwargs):
-        defaults = dict(username="bob", mpin="123456", role=UserRole.student)
+        # "123456" intentionally avoided here — UserRegisterRequest.mpin uses
+        # the strong-MPIN validator which rejects trivial sequences. "482917"
+        # has random-looking digits with no all-same / sequential / repeating
+        # structure.
+        defaults = dict(username="bob", mpin="482917", role=UserRole.student)
         defaults.update(kwargs)
         return UserRegisterRequest(**defaults)
 
