@@ -1189,4 +1189,90 @@ class ApiClient {
     });
     return res.data as Map<String, dynamic>;
   }
+
+  // ── Auto-presentations ───────────────────────────────────────────────────
+
+  /// Upload a chapter PDF. Backend kicks off Gemini in the background and
+  /// returns immediately with status=PROCESSING. Poll getPresentation(id)
+  /// or listen on WebSocket `presentation_ready` for completion.
+  Future<Map<String, dynamic>> uploadChapterPresentation({
+    required int grade,
+    required String subject,
+    required String chapterName,
+    required List<int> fileBytes,
+    required String filename,
+  }) async {
+    final formData = dio_pkg.FormData.fromMap({
+      'grade': grade,
+      'subject': subject,
+      'chapter_name': chapterName,
+      'file': dio_pkg.MultipartFile.fromBytes(fileBytes, filename: filename),
+    });
+    final res = await _dio.post(
+      '/presentations/upload',
+      data: formData,
+      options: Options(receiveTimeout: const Duration(seconds: 180)),
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// School-wide list. One item per (teacher, presentation).
+  Future<List<dynamic>> listPresentations() async {
+    final res = await _dio.get('/presentations/');
+    return res.data as List<dynamic>;
+  }
+
+  /// Full deck for one presentation. Auto-creates the caller's progress row.
+  Future<Map<String, dynamic>> getPresentation(int id) async {
+    final res = await _dio.get('/presentations/$id');
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> adoptPresentation(int id) async {
+    final res = await _dio.post('/presentations/$id/adopt');
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> patchPresentationSlide(
+    int presentationId,
+    int slideId, {
+    String? title,
+    String? bodyMd,
+    String? speakerNotes,
+  }) async {
+    final body = <String, dynamic>{};
+    if (title != null) body['title'] = title;
+    if (bodyMd != null) body['body_md'] = bodyMd;
+    if (speakerNotes != null) body['speaker_notes'] = speakerNotes;
+    final res = await _dio.patch(
+      '/presentations/$presentationId/slides/$slideId',
+      data: body,
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Log a period taught. `slidesCoveredTo` is the 0-based index of the
+  /// LAST slide finished in this period (advances the caller's pointer).
+  Future<Map<String, dynamic>> logPresentationPeriod(
+    int presentationId, {
+    required String periodDate, // ISO yyyy-MM-dd
+    int? periodNumber,
+    required int slidesCoveredTo,
+    String? notes,
+  }) async {
+    final res = await _dio.post(
+      '/presentations/$presentationId/period-log',
+      data: {
+        'period_date': periodDate,
+        if (periodNumber != null) 'period_number': periodNumber,
+        'slides_covered_to': slidesCoveredTo,
+        if (notes != null) 'notes': notes,
+      },
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<void> deletePresentation(int id) async {
+    await _dio.delete('/presentations/$id');
+  }
 }

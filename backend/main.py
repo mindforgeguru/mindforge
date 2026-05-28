@@ -18,7 +18,7 @@ from app.core.database import engine, Base
 from app.core.redis_client import redis_manager
 from app.websockets.manager import ws_manager
 from app.routers import auth, teacher, student, parent, admin, xp
-from app.routers import database_router, feedback
+from app.routers import database_router, feedback, presentations
 import app.models  # noqa: F401 — registers all models with Base
 
 logging.basicConfig(level=logging.INFO)
@@ -213,6 +213,7 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(database_router.router, prefix="/api/teacher/database", tags=["Teacher Database"])
 app.include_router(xp.router, prefix="/api/xp", tags=["XP"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["Feedback"])
+app.include_router(presentations.router, prefix="/api/presentations", tags=["Auto Presentations"])
 
 
 # ─── WebSocket endpoint ───────────────────────────────────────────────────────
