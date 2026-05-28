@@ -527,11 +527,28 @@ class _EditUserSheetState extends State<_EditUserSheet> {
     } on DioException catch (e) {
       if (mounted) {
         // Surface the backend's `detail` message instead of the raw Dio
-        // stack trace — much friendlier for the admin reading the snackbar.
+        // stack trace. FastAPI returns two shapes:
+        //   - HTTPException: detail is a plain string
+        //   - Pydantic validation (422): detail is a List of {loc, msg, ...}
         final body = e.response?.data;
         String message;
         if (body is Map && body['detail'] is String) {
           message = body['detail'] as String;
+        } else if (body is Map && body['detail'] is List) {
+          final parts = <String>[];
+          for (final item in body['detail'] as List) {
+            if (item is Map && item['msg'] is String) {
+              var msg = item['msg'] as String;
+              // Pydantic prefixes field validators with "Value error, ".
+              if (msg.startsWith('Value error, ')) {
+                msg = msg.substring('Value error, '.length);
+              }
+              parts.add(msg);
+            }
+          }
+          message = parts.isEmpty
+              ? 'Request failed (status ${e.response?.statusCode ?? '?'}).'
+              : parts.join('\n');
         } else if (body is Map && body['detail'] != null) {
           message = body['detail'].toString();
         } else {
@@ -779,8 +796,9 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                     counterText: '',
                     helperText:
                         'Required only if no account exists with the username above. '
-                        'The new parent will use this MPIN to log in.',
-                    helperMaxLines: 3,
+                        'Avoid all-same-digit (000000), sequences (123456) and '
+                        'repeated patterns (121212).',
+                    helperMaxLines: 4,
                   ),
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
