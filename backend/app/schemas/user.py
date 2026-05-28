@@ -249,6 +249,7 @@ class AdminUserEdit(BaseModel):
     phone: Optional[str] = None        # any user
     email: Optional[str] = None        # any user
     parent_username: Optional[str] = None   # students only — link to parent account
+    parent_mpin: Optional[str] = None       # students only — used when creating a new parent inline
     student_username: Optional[str] = None  # parents only — link to student account
     teachable_subjects: Optional[List[str]] = None  # teachers only
     additional_subjects: Optional[List[str]] = None  # students only
@@ -272,6 +273,13 @@ class AdminUserEdit(BaseModel):
     @field_validator("new_mpin")
     @classmethod
     def validate_mpin(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _validate_strong_mpin(v)
+
+    @field_validator("parent_mpin")
+    @classmethod
+    def validate_parent_mpin(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
         return _validate_strong_mpin(v)

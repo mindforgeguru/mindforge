@@ -337,20 +337,53 @@ async def edit_user(
                         sp.parent_user_id = None
                     else:
                         from sqlalchemy import func as sa_func
+                        parent_username_clean = payload.parent_username.strip()
                         parent_res = await db.execute(
                             select(User).where(
-                                sa_func.lower(User.username) == payload.parent_username.strip().lower(),
+                                sa_func.lower(User.username) == parent_username_clean.lower(),
                                 User.role == UserRole.parent,
                                 User.deleted_at.is_(None),
                             )
                         )
                         parent = parent_res.scalar_one_or_none()
-                        if not parent:
-                            raise HTTPException(
-                                status_code=404,
-                                detail=f"No parent account found with username '{payload.parent_username.strip()}'.",
+                        if parent:
+                            sp.parent_user_id = parent.id
+                        else:
+                            # No parent with that username — but the admin may be
+                            # backfilling a parent for a legacy student account.
+                            # If a non-parent user already has that username, refuse.
+                            collision = await db.execute(
+                                select(User).where(
+                                    sa_func.lower(User.username) == parent_username_clean.lower(),
+                                    User.deleted_at.is_(None),
+                                )
                             )
-                        sp.parent_user_id = parent.id
+                            if collision.scalar_one_or_none():
+                                raise HTTPException(
+                                    status_code=409,
+                                    detail=f"The username '{parent_username_clean}' is already in use by another account.",
+                                )
+                            if not payload.parent_mpin:
+                                raise HTTPException(
+                                    status_code=422,
+                                    detail=(
+                                        f"No parent account exists with username "
+                                        f"'{parent_username_clean}'. Provide a 6-digit "
+                                        f"parent MPIN to create one."
+                                    ),
+                                )
+                            from app.core.security import hash_mpin
+                            new_parent = User(
+                                username=parent_username_clean,
+                                mpin_hash=hash_mpin(payload.parent_mpin),
+                                role=UserRole.parent,
+                                is_active=True,
+                                is_approved=True,
+                                academic_year_id=user.academic_year_id,
+                            )
+                            db.add(new_parent)
+                            await db.flush()
+                            sp.parent_user_id = new_parent.id
 
         # No role change — update student_username link if parent
         elif user.role == UserRole.parent and payload.student_username is not None:
@@ -394,10 +427,13 @@ async def edit_user(
                 tp.teachable_subjects = payload.teachable_subjects
 
     # Build a compact diff for the audit record — only include fields that changed
-    _changed = {k: v for k, v in payload.model_dump(exclude_none=True).items()
-                if k != "new_mpin"}  # never log MPINs
-    if "new_mpin" in payload.model_dump(exclude_none=True):
+    _dumped = payload.model_dump(exclude_none=True)
+    _changed = {k: v for k, v in _dumped.items()
+                if k not in ("new_mpin", "parent_mpin")}  # never log MPINs
+    if "new_mpin" in _dumped:
         _changed["new_mpin"] = "***"
+    if "parent_mpin" in _dumped:
+        _changed["parent_mpin"] = "***"
     await _audit(db, current_admin.id, "edit_user", "user", user_id, _changed)
 
     await db.commit()

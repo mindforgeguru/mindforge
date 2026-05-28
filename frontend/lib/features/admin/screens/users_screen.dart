@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -375,6 +376,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _parentUsernameCtrl;
+  late final TextEditingController _parentMpinCtrl;
   late final TextEditingController _studentUsernameCtrl;
   late String _selectedRole;
   late int? _selectedGrade;
@@ -392,6 +394,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
     _phoneCtrl = TextEditingController(text: widget.user.phone ?? '');
     _emailCtrl = TextEditingController(text: widget.user.email ?? '');
     _parentUsernameCtrl = TextEditingController(text: widget.user.parentUsername ?? '');
+    _parentMpinCtrl = TextEditingController();
     _studentUsernameCtrl = TextEditingController(text: widget.user.studentUsername ?? '');
     _selectedRole = widget.user.role;
     _selectedGrade = widget.user.grade;
@@ -405,6 +408,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
     _parentUsernameCtrl.dispose();
+    _parentMpinCtrl.dispose();
     _studentUsernameCtrl.dispose();
     super.dispose();
   }
@@ -471,6 +475,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
     // Parent field for students:
     // - If a parent is already linked → renaming the parent user
     // - If no parent linked yet → linking to an existing parent account
+    //   (or creating one when the typed username has no matching account)
     if (_selectedRole == 'student') {
       final newParent = _parentUsernameCtrl.text.trim();
       final hasLinkedParent = widget.user.parentUserId != null;
@@ -481,9 +486,24 @@ class _EditUserSheetState extends State<_EditUserSheet> {
           data['_rename_parent_to'] = newParent;
         }
       } else {
-        // Link to an existing parent account by username
+        // Link to an existing parent account by username — or create one
+        // if no such parent exists yet. A 6-digit MPIN is required when
+        // creating; admins can leave it blank to attempt linking only.
         if (newParent != (widget.user.parentUsername ?? '')) {
           data['parent_username'] = newParent; // empty string = unlink
+          final newParentMpin = _parentMpinCtrl.text.trim();
+          if (newParent.isNotEmpty && newParentMpin.isNotEmpty) {
+            if (newParentMpin.length != 6 ||
+                int.tryParse(newParentMpin) == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Parent's MPIN must be 6 digits."),
+                ),
+              );
+              return;
+            }
+            data['parent_mpin'] = newParentMpin;
+          }
         }
       }
     }
@@ -504,6 +524,23 @@ class _EditUserSheetState extends State<_EditUserSheet> {
     try {
       await widget.onSave(data);
       if (mounted) Navigator.pop(context, data);
+    } on DioException catch (e) {
+      if (mounted) {
+        // Surface the backend's `detail` message instead of the raw Dio
+        // stack trace — much friendlier for the admin reading the snackbar.
+        final body = e.response?.data;
+        String message;
+        if (body is Map && body['detail'] is String) {
+          message = body['detail'] as String;
+        } else if (body is Map && body['detail'] != null) {
+          message = body['detail'].toString();
+        } else {
+          message = 'Request failed (status ${e.response?.statusCode ?? '?'}).';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: AppColors.error),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -717,16 +754,40 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                 decoration: InputDecoration(
                   labelText: widget.user.parentUserId != null
                       ? "Parent's Username (rename)"
-                      : "Link Parent Account",
+                      : "Link or Create Parent Account",
                   prefixIcon: const Icon(Icons.family_restroom),
                   isDense: true,
                   helperText: widget.user.parentUserId != null
                       ? 'Change to rename the parent\'s login username.'
-                      : 'Enter an existing parent\'s username to link.',
-                  helperMaxLines: 2,
+                      : 'If an account with this username already exists it will be linked, '
+                          'otherwise a new parent account is created with the MPIN below.',
+                  helperMaxLines: 3,
                 ),
                 inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
               ),
+              if (widget.user.parentUserId == null) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _parentMpinCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: "Parent's 6-digit MPIN (only if creating new)",
+                    prefixIcon: Icon(Icons.lock_outline),
+                    isDense: true,
+                    counterText: '',
+                    helperText:
+                        'Required only if no account exists with the username above. '
+                        'The new parent will use this MPIN to log in.',
+                    helperMaxLines: 3,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                ),
+              ],
             ],
 
             // Student username (parents only)
@@ -1174,9 +1235,13 @@ class _ActiveUserTileState extends ConsumerState<_ActiveUserTile> {
         changes.add('MPIN reset');
       }
       if (result.containsKey('parent_username')) {
-        changes.add(result['parent_username'].toString().isEmpty
-            ? 'Parent unlinked'
-            : 'Parent linked → "${result['parent_username']}"');
+        if (result['parent_username'].toString().isEmpty) {
+          changes.add('Parent unlinked');
+        } else if (result.containsKey('parent_mpin')) {
+          changes.add('Parent created & linked → "${result['parent_username']}"');
+        } else {
+          changes.add('Parent linked → "${result['parent_username']}"');
+        }
       }
       if (result.containsKey('_rename_parent_to')) {
         changes.add('Parent username → "${result['_rename_parent_to']}"');
