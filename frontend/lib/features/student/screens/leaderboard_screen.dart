@@ -17,6 +17,99 @@ class LeaderboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isWide = MediaQuery.of(context).size.width >= 900;
+
+    final tabBar = TabBar(
+      labelColor: Colors.white,
+      unselectedLabelColor: Colors.white60,
+      indicatorColor: AppColors.accent,
+      tabs: const [
+        Tab(text: 'Class'),
+        Tab(text: 'Points Table'),
+        Tab(text: 'All'),
+      ],
+    );
+
+    const tabBarView = TabBarView(
+      children: [
+        _LeaderboardTab(scope: 'class'),
+        _PointsTableTab(),
+        _LeaderboardTab(scope: 'school'),
+      ],
+    );
+
+    if (isWide) {
+      // StudentScaffold drops `appBar` on web (the top nav replaces it),
+      // which would also drop the TabBar living inside AppBar.bottom. So
+      // on web we inline the TabBar at the top of the body — same pattern
+      // used by test_screen.
+      return DefaultTabController(
+        length: 3,
+        child: StudentScaffold(
+          backgroundColor: AppColors.background,
+          wideContent: true,
+          body: Padding(
+            padding: const EdgeInsets.fromLTRB(48, 28, 48, 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Icon(Icons.leaderboard_outlined,
+                            size: 16, color: AppColors.primary),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Leaderboard',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: tabBar,
+                  ),
+                  const SizedBox(height: 8),
+                  const Expanded(child: tabBarView),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return DefaultTabController(
       length: 3,
       child: StudentScaffold(
@@ -37,24 +130,9 @@ class LeaderboardScreen extends ConsumerWidget {
               ),
             ),
           ],
-          bottom: TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            indicatorColor: AppColors.accent,
-            tabs: const [
-              Tab(text: 'Class'),
-              Tab(text: 'Points Table'),
-              Tab(text: 'All'),
-            ],
-          ),
+          bottom: tabBar,
         ),
-        body: const TabBarView(
-          children: [
-            _LeaderboardTab(scope: 'class'),
-            _PointsTableTab(),
-            _LeaderboardTab(scope: 'school'),
-          ],
-        ),
+        body: tabBarView,
       ),
     );
   }
