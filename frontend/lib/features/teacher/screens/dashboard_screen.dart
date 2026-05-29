@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -22,6 +23,7 @@ import '../../../core/providers/badge_provider.dart';
 import '../../../core/widgets/badge_dot.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
+import '../providers/presentation_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 
 // File-level DateFormat cache.
@@ -53,6 +55,12 @@ class _TeacherDashboardScreenState
     extends ConsumerState<TeacherDashboardScreen>
     with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _wsSub;
+
+  // Safety net for the post-login race: even with the provider-level wait
+  // on the auth token, some sessions still surface a transient error on
+  // first load (WebSocket reconnect spam, browser back/forward, etc.).
+  // Auto-retry once before showing the error UI.
+  bool _autoRetryScheduled = false;
 
   @override
   void initState() {
@@ -154,8 +162,35 @@ class _TeacherDashboardScreenState
     final auth = ref.watch(authProvider);
     final summaryAsync = ref.watch(teacherDashboardSummaryProvider);
 
+    // Reset the auto-retry flag on success so a transient failure later
+    // in the session (backend hiccup, brief disconnect) can also self-heal
+    // once instead of dumping the user to "Try Again".
+    if (summaryAsync.hasValue) {
+      _autoRetryScheduled = false;
+    }
+
     // ── Error state: show retry UI instead of silently blank sections ─────
     if (summaryAsync.hasError) {
+      // First failure → log the underlying error to DevTools, schedule a
+      // single auto-retry, and show a spinner instead of the error UI.
+      if (!_autoRetryScheduled) {
+        _autoRetryScheduled = true;
+        // ignore: avoid_print
+        print('[dashboard] first load failed, auto-retrying once. '
+            'Error: ${summaryAsync.error}');
+        Future.delayed(const Duration(milliseconds: 900), () {
+          if (!mounted) return;
+          ref.invalidate(teacherDashboardSummaryProvider);
+          ref.invalidate(teacherTodayWorkflowProvider);
+        });
+        return const TeacherScaffold(
+          backgroundColor: AppColors.background,
+          body: Center(child: CircularProgressIndicator()),
+        );
+      }
+      // Second failure → surface to user.
+      // ignore: avoid_print
+      print('[dashboard] retry also failed: ${summaryAsync.error}');
       return TeacherScaffold(
         backgroundColor: AppColors.background,
         body: Center(
@@ -485,6 +520,34 @@ class _TeacherDashboardScreenState
                         );
                       },
                     ),
+                    _WebSection(
+                      icon: Icons.slideshow_outlined,
+                      title: 'Presentation progress',
+                      onSeeAll: () =>
+                          context.go('${RouteNames.teacherDashboard}/presentations'),
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final presAsync = ref.watch(presentationListProvider);
+                          return presAsync.when(
+                            loading: () => const LinearProgressIndicator(),
+                            error: (_, __) => const SizedBox.shrink(),
+                            data: (rows) {
+                              if (rows.isEmpty) {
+                                return _WebEmptyState(
+                                  icon: Icons.slideshow_outlined,
+                                  message: 'No presentations yet',
+                                );
+                              }
+                              final cards = _buildTeacherRingsCards(
+                                rows.cast<Map<String, dynamic>>(),
+                              );
+                              return Column(children: cards);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     // Single column — one section per row so the dashboard
                     // reads top-to-bottom like the parent / student layouts.
                     _WebSection(
@@ -788,6 +851,48 @@ class _TeacherDashboardScreenState
               },
             ),
           ),
+
+          // ── Presentation progress (school-wide) ───────────────────────
+          SliverToBoxAdapter(
+            child: _DashSectionHeader(
+              icon: Icons.slideshow_outlined,
+              title: 'Presentation progress',
+              onSeeAll: () =>
+                  context.go('${RouteNames.teacherDashboard}/presentations'),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final presAsync = ref.watch(presentationListProvider);
+                return presAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: LinearProgressIndicator(),
+                  ),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (rows) {
+                    if (rows.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: Text(
+                          'No presentations yet',
+                          style: GoogleFonts.poppins(
+                              fontSize: 11, color: AppColors.textMuted),
+                          textAlign: TextAlign.center,
+                        ),
+                      );
+                    }
+                    final cards = _buildTeacherRingsCards(
+                      rows.cast<Map<String, dynamic>>(),
+                    );
+                    return Column(children: cards);
+                  },
+                );
+              },
+            ),
+          ),
+          SliverToBoxAdapter(child: SizedBox(height: _s(context, 8, min: 6, max: 12))),
 
           // ── Today's timetable header ──────────────────────────────────
           SliverToBoxAdapter(
@@ -2223,14 +2328,19 @@ class _WorkflowRoad extends StatelessWidget {
 
       final centerY = constraints.maxHeight / 2;
 
-      // Solid colored line ends at the last completed milestone.
+      // Solid colored line spans EVERY pixel the car has driven over —
+      // i.e. from the start of the road all the way to the car's current
+      // position (or the final milestone if all tasks are done). Previously
+      // this stopped at the last completed milestone, which left the
+      // segment between the last-done milestone and the car looking like
+      // remaining road.
       double doneEndX;
       if (currentIdx == 0) {
         doneEndX = leftPad; // nothing done yet — no solid line
       } else if (currentIdx >= n) {
         doneEndX = xAt(n - 1);
       } else {
-        doneEndX = xAt(currentIdx - 1);
+        doneEndX = xAt(currentIdx);
       }
 
       return Stack(
@@ -2411,4 +2521,641 @@ class _RoadPainter extends CustomPainter {
       old.centerY != centerY ||
       old.color != color ||
       old.pendingColor != pendingColor;
+}
+
+// ── _DashPresentationTile ─────────────────────────────────────────────────────
+// Single row in the dashboard's "Presentation progress" section. Shows one
+// teacher's pace through one chapter as a thin progress bar with caption.
+
+/// Fixed palette of distinct, accessible colours used to give each teacher a
+/// consistent visual identity across the dashboard. Index is teacher_id %
+/// palette.length so the same teacher always lands on the same colour, no
+/// matter which presentation row is being rendered.
+const List<Color> _teacherPalette = <Color>[
+  Color(0xFF3B82F6), // blue
+  Color(0xFF8B5CF6), // purple
+  Color(0xFFF97316), // orange
+  Color(0xFF22C55E), // green
+  Color(0xFFEF4444), // red
+  Color(0xFF06B6D4), // cyan
+  Color(0xFFD946EF), // fuchsia
+  Color(0xFFEAB308), // amber
+  Color(0xFF14B8A6), // teal
+  Color(0xFFEC4899), // pink
+];
+
+Color _teacherColor(int? teacherId) =>
+    _teacherPalette[(teacherId ?? 0).abs() % _teacherPalette.length];
+
+// ignore: unused_element
+class _DashPresentationTile extends StatelessWidget {
+  final Map<String, dynamic> row;
+  const _DashPresentationTile({required this.row});
+
+  // Subject → tiny pictogram. Mirrors the palette used inside the
+  // presentation viewer so dashboard, library, and detail screens all share
+  // the same emoji vocabulary.
+  String _subjectEmoji(String? subject) {
+    final s = (subject ?? '').toLowerCase();
+    if (s.contains('phys')) return '⚛️';
+    if (s.contains('chem')) return '🧪';
+    if (s.contains('bio')) return '🌿';
+    if (s.contains('math')) return '🔢';
+    if (s.contains('hist') || s.contains('civic')) return '🏛️';
+    if (s.contains('geo')) return '🌍';
+    if (s.contains('eco')) return '💹';
+    if (s.contains('comp') || s.contains('ai')) return '💻';
+    if (s.contains('eng')) return '📖';
+    if (s.contains('env')) return '🌱';
+    return '📚';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final id = row['presentation_id'] as int;
+    final status = (row['status'] as String? ?? 'PROCESSING');
+    final isProcessing = status == 'PROCESSING';
+    final isFailed = status == 'FAILED';
+    final periodsUsed = (row['periods_used'] as int?) ?? 0;
+    final periodsRec = (row['recommended_periods'] as int?) ?? 0;
+    final current = (row['current_slide_index'] as int?) ?? 0;
+    final total = (row['total_slides'] as int?) ?? 0;
+    final teacherId = row['teacher_id'] as int?;
+    final tColor = _teacherColor(teacherId);
+    final emoji = _subjectEmoji(row['subject']?.toString());
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: GestureDetector(
+        onTap: isProcessing
+            ? null
+            : () => context.go(
+                '${RouteNames.teacherDashboard}/presentations/$id'),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: tColor.withOpacity(0.18)),
+            boxShadow: [
+              BoxShadow(
+                color: tColor.withOpacity(0.10),
+                blurRadius: 8, offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Teacher-coloured left stripe.
+                  Container(width: 4, color: tColor),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Title row: subject emoji + chapter name + status.
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  color: tColor.withOpacity(0.10),
+                                  borderRadius: BorderRadius.circular(7),
+                                ),
+                                child: Text(emoji,
+                                    style: const TextStyle(fontSize: 14)),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  row['chapter_name']?.toString() ?? '—',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13, fontWeight: FontWeight.w700,
+                                    color: tColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              if (isProcessing)
+                                SizedBox(
+                                  width: 12, height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor:
+                                        AlwaysStoppedAnimation(tColor),
+                                  ),
+                                )
+                              else if (isFailed)
+                                const Icon(Icons.error_outline,
+                                    size: 14, color: AppColors.error),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: Text(
+                              '${row['teacher_username']}  ·  Grade ${row['grade']} ${row['subject']}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                fontSize: 10.5,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                          if (!isProcessing && !isFailed
+                              && periodsRec > 0) ...[
+                            const SizedBox(height: 10),
+                            // Segmented progress: one block per period.
+                            // Filled = period taught; the "current" block
+                            // shows a partial fill based on slide ratio
+                            // within that period.
+                            _PresentationSegments(
+                              periodsTotal: periodsRec,
+                              periodsDone: periodsUsed,
+                              slidesDone: current,
+                              slidesTotal: total,
+                              color: tColor,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '$periodsUsed / $periodsRec periods'
+                              '   ·   $current / $total slides',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10.5,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ] else if (isFailed) ...[
+                            const SizedBox(height: 6),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 32),
+                              child: Text(
+                                'Generation failed — tap to view.',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10.5, color: AppColors.error,
+                                ),
+                              ),
+                            ),
+                          ] else if (isProcessing) ...[
+                            const SizedBox(height: 6),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 32),
+                              child: Text(
+                                'Generating slides…',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10.5, color: AppColors.textMuted,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Segmented progress bar for the dashboard presentation-progress tile.
+/// One block per recommended period, laid out as equal-width rounded
+/// rectangles with a small gap between each. Three states per block:
+///   - taught:       solid teacher colour
+///   - in-progress:  partial fill based on slide ratio (current period)
+///   - remaining:    soft tinted background with a 1-px coloured border
+///
+/// Reads as a series of milestones without the visual noise of a road +
+/// dots + car icon — easier to scan at a glance.
+class _PresentationSegments extends StatelessWidget {
+  final int periodsTotal;
+  final int periodsDone;
+  final int slidesDone;
+  final int slidesTotal;
+  final Color color;
+  const _PresentationSegments({
+    required this.periodsTotal,
+    required this.periodsDone,
+    required this.slidesDone,
+    required this.slidesTotal,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final n = periodsTotal.clamp(1, 30);
+    final done = periodsDone.clamp(0, n);
+
+    // Partial fill ratio for the in-progress period: slides covered inside
+    // the current period divided by slides expected in that period.
+    // Defaults to 0 (block stays empty) if we can't infer.
+    double inProgressRatio = 0.0;
+    if (done < n && slidesTotal > 0) {
+      final slidesPerPeriod = slidesTotal / periodsTotal;
+      final slidesIntoCurrent = slidesDone - (done * slidesPerPeriod);
+      if (slidesPerPeriod > 0) {
+        inProgressRatio =
+            (slidesIntoCurrent / slidesPerPeriod).clamp(0.0, 1.0);
+      }
+    }
+
+    return SizedBox(
+      height: 12,
+      child: Row(
+        children: [
+          for (var i = 0; i < n; i++) ...[
+            Expanded(
+              child: _ProgressBlock(
+                color: color,
+                fillRatio: i < done
+                    ? 1.0
+                    : i == done
+                        ? inProgressRatio
+                        : 0.0,
+              ),
+            ),
+            if (i < n - 1) const SizedBox(width: 3),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgressBlock extends StatelessWidget {
+  final Color color;
+  final double fillRatio; // 0..1
+  const _ProgressBlock({required this.color, required this.fillRatio});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.14),
+          border: Border.all(color: color.withOpacity(0.45), width: 1),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        // Fill from the left using a FractionallySizedBox so the partial
+        // state on the in-progress block reads as a familiar "filling up"
+        // motion.
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: FractionallySizedBox(
+            widthFactor: fillRatio,
+            child: Container(color: color),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── _TeacherRingsCard ────────────────────────────────────────────────────────
+// One card per teacher on the dashboard. Concentric circular rings — one per
+// the teacher's active presentation — show slide-progress as an arc. Center
+// shows the aggregate %. Legend below maps each ring colour back to its
+// chapter name and period count.
+
+const List<Color> _ringPalette = <Color>[
+  Color(0xFF8B5CF6), // purple
+  Color(0xFFF97316), // orange
+  Color(0xFF14B8A6), // teal
+  Color(0xFFEC4899), // pink
+  Color(0xFF06B6D4), // cyan
+  Color(0xFFEAB308), // yellow
+  Color(0xFF22C55E), // green
+  Color(0xFFEF4444), // red
+];
+
+/// Group dashboard rows by teacher and emit one ring card per teacher.
+/// Caller supplies an optional `take` to cap the number of teachers shown.
+List<Widget> _buildTeacherRingsCards(
+  List<Map<String, dynamic>> rows, {
+  int? take,
+}) {
+  final byTeacher = <int, List<Map<String, dynamic>>>{};
+  for (final r in rows) {
+    final tid = r['teacher_id'] as int? ?? -1;
+    byTeacher.putIfAbsent(tid, () => []).add(r);
+  }
+  // Stable sort teachers by username.
+  final entries = byTeacher.entries.toList()
+    ..sort((a, b) {
+      final au = a.value.first['teacher_username']?.toString() ?? '';
+      final bu = b.value.first['teacher_username']?.toString() ?? '';
+      return au.compareTo(bu);
+    });
+  final limited = take == null ? entries : entries.take(take);
+  return limited
+      .map((e) => _TeacherRingsCard(rows: e.value))
+      .toList();
+}
+
+class _TeacherRingsCard extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  const _TeacherRingsCard({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final teacherUsername =
+        rows.first['teacher_username']?.toString() ?? 'teacher';
+    final teacherId = rows.first['teacher_id'] as int? ?? 0;
+    final tColor = _teacherColor(teacherId);
+
+    // Sort the teacher's decks by chapter name so the ring order is
+    // stable across rebuilds.
+    final decks = [...rows]..sort((a, b) =>
+        (a['chapter_name']?.toString() ?? '')
+            .compareTo(b['chapter_name']?.toString() ?? ''));
+    final visibleDecks = decks.take(_ringPalette.length).toList();
+    final hiddenCount = decks.length - visibleDecks.length;
+
+    // Aggregate slide progress across the visible rings.
+    int slidesDone = 0;
+    int slidesTotal = 0;
+    for (final r in visibleDecks) {
+      slidesDone += (r['current_slide_index'] as int? ?? 0);
+      slidesTotal += (r['total_slides'] as int? ?? 0);
+    }
+    final aggregatePct = slidesTotal > 0
+        ? (slidesDone / slidesTotal).clamp(0.0, 1.0)
+        : 0.0;
+
+    // Compute per-deck slide ratio for the rings.
+    final ringSpecs = <_RingSpec>[];
+    for (var i = 0; i < visibleDecks.length; i++) {
+      final r = visibleDecks[i];
+      final t = r['total_slides'] as int? ?? 0;
+      final c = r['current_slide_index'] as int? ?? 0;
+      final pct = t > 0 ? (c / t).clamp(0.0, 1.0) : 0.0;
+      ringSpecs.add(_RingSpec(color: _ringPalette[i], progress: pct));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: tColor.withOpacity(0.20)),
+          boxShadow: [
+            BoxShadow(
+              color: tColor.withOpacity(0.08),
+              blurRadius: 8, offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: teacher pill
+            Row(
+              children: [
+                Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: tColor.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      teacherUsername.isNotEmpty
+                          ? teacherUsername.substring(0, 1).toUpperCase()
+                          : '?',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13, fontWeight: FontWeight.w800,
+                        color: tColor,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    teacherUsername,
+                    style: GoogleFonts.poppins(
+                      fontSize: 14, fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: tColor.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${decks.length} active',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10.5, fontWeight: FontWeight.w700,
+                      color: tColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Rings + centre text
+            Center(
+              child: SizedBox(
+                width: 150, height: 150,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _ConcentricRingsPainter(
+                          rings: ringSpecs,
+                        ),
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${(aggregatePct * 100).round()}%',
+                          style: GoogleFonts.poppins(
+                            fontSize: 22, fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          '$slidesDone / $slidesTotal slides',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10.5, color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Legend
+            for (var i = 0; i < visibleDecks.length; i++)
+              _RingLegendRow(
+                color: _ringPalette[i],
+                row: visibleDecks[i],
+              ),
+            if (hiddenCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 18),
+                child: Text(
+                  '+ $hiddenCount more — see all →',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11, color: AppColors.textMuted,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RingSpec {
+  final Color color;
+  final double progress; // 0..1
+  const _RingSpec({required this.color, required this.progress});
+}
+
+class _RingLegendRow extends StatelessWidget {
+  final Color color;
+  final Map<String, dynamic> row;
+  const _RingLegendRow({required this.color, required this.row});
+
+  /// Trim a trailing "(by foo)" suffix off the chapter name — the teacher
+  /// is already named at the top of the card, so repeating it in the
+  /// legend just adds noise.
+  String _cleanChapter(String raw) =>
+      raw.replaceFirst(RegExp(r'\s*\(by\s+[^)]+\)\s*$'), '').trim();
+
+  @override
+  Widget build(BuildContext context) {
+    final id = row['presentation_id'] as int;
+    final chapter = _cleanChapter(row['chapter_name']?.toString() ?? '—');
+    final grade = row['grade'];
+    return InkWell(
+      onTap: () =>
+          context.go('${RouteNames.teacherDashboard}/presentations/$id'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Container(
+              width: 10, height: 10,
+              decoration: BoxDecoration(
+                color: color, shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: RichText(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                text: TextSpan(
+                  style: GoogleFonts.poppins(
+                    fontSize: 12, color: AppColors.textPrimary,
+                  ),
+                  children: [
+                    TextSpan(
+                      text: 'Grade $grade  ',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11, color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    TextSpan(
+                      text: chapter,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Paints concentric rings — outermost ring first, each inner ring drawn
+/// at a smaller radius. Each ring has a faint background full circle plus
+/// a darker arc representing progress.
+class _ConcentricRingsPainter extends CustomPainter {
+  final List<_RingSpec> rings;
+  _ConcentricRingsPainter({required this.rings});
+
+  static const double _strokeWidth = 9.0;
+  static const double _gap = 4.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (rings.isEmpty) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    final maxR = size.shortestSide / 2 - _strokeWidth / 2;
+    for (var i = 0; i < rings.length; i++) {
+      final r = maxR - i * (_strokeWidth + _gap);
+      if (r < _strokeWidth) break;
+      final spec = rings[i];
+      // background ring
+      final bg = Paint()
+        ..color = spec.color.withOpacity(0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _strokeWidth;
+      canvas.drawCircle(center, r, bg);
+      // progress arc — starts at top (-90°), sweeps clockwise.
+      if (spec.progress > 0) {
+        final fg = Paint()
+          ..color = spec.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = _strokeWidth
+          ..strokeCap = StrokeCap.round;
+        final sweep = (spec.progress.clamp(0.0, 1.0)) * 2 * math.pi;
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: r),
+          -math.pi / 2,
+          sweep,
+          false,
+          fg,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ConcentricRingsPainter old) {
+    if (old.rings.length != rings.length) return true;
+    for (var i = 0; i < rings.length; i++) {
+      if (old.rings[i].color != rings[i].color ||
+          old.rings[i].progress != rings[i].progress) {
+        return true;
+      }
+    }
+    return false;
+  }
 }

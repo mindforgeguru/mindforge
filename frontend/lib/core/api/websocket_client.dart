@@ -5,14 +5,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../utils/constants.dart';
+import 'api_client.dart';
 
 final webSocketClientProvider = Provider<WebSocketClient>((ref) {
-  final client = WebSocketClient();
+  final client = WebSocketClient(
+    // Inject a callback that returns the freshest access token — when Dio
+    // rotates the JWT mid-session, reconnects use the new one instead of a
+    // stale closure-captured value (the previous 403-storm bug).
+    getCurrentToken: () => ref.read(apiClientProvider).cachedToken,
+  );
   ref.onDispose(client.disconnect);
   return client;
 });
 
 class WebSocketClient {
+  final String? Function()? _getCurrentToken;
+
+  WebSocketClient({String? Function()? getCurrentToken})
+      : _getCurrentToken = getCurrentToken;
+
   WebSocketChannel? _channel;
   StreamController<Map<String, dynamic>>? _controller;
   int? _connectedUserId;
@@ -74,12 +85,26 @@ class WebSocketClient {
       _channel?.sink.close();
     } catch (_) {}
     _channel = null;
-    _connect(userId, token, _generation);
+    _connect(userId, _resolveReconnectToken(token), _generation);
+  }
+
+  /// Resolves the token to use for the *next* reconnect. Prefers the
+  /// freshly-cached token from the API client (which Dio rotates on every
+  /// successful refresh) over the closure-captured one. Falls back to the
+  /// captured token if the callback is unavailable or returns null —
+  /// preserves behavior for callers that don't inject a token resolver.
+  String _resolveReconnectToken(String capturedToken) {
+    final current = _getCurrentToken?.call();
+    return (current != null && current.isNotEmpty) ? current : capturedToken;
   }
 
   void _connect(int userId, String token, int generation) {
     // Bail out if this callback belongs to a stale reconnect cycle.
     if (generation != _generation) return;
+
+    // Cache the actually-used token on the instance so a same-token
+    // connect() call short-circuits correctly.
+    _connectedToken = token;
 
     try {
       // Close any existing channel before opening a new one.
@@ -97,7 +122,7 @@ class WebSocketClient {
         if (generation != _generation) return;
         _channel = null;
         Future.delayed(const Duration(seconds: 5), () {
-          _connect(userId, token, generation);
+          _connect(userId, _resolveReconnectToken(token), generation);
         });
       });
 
@@ -119,13 +144,13 @@ class WebSocketClient {
           // Auto-reconnect after 3 seconds on disconnect.
           // Pass the current generation so stale timers self-cancel.
           Future.delayed(const Duration(seconds: 3), () {
-            _connect(userId, token, generation);
+            _connect(userId, _resolveReconnectToken(token), generation);
           });
         },
         onError: (error) {
           _channel = null; // mark as dead
           Future.delayed(const Duration(seconds: 5), () {
-            _connect(userId, token, generation);
+            _connect(userId, _resolveReconnectToken(token), generation);
           });
         },
         cancelOnError: false,
@@ -148,7 +173,7 @@ class WebSocketClient {
     } catch (e) {
       // Retry connection after delay
       Future.delayed(const Duration(seconds: 5), () {
-        _connect(userId, token, generation);
+        _connect(userId, _resolveReconnectToken(token), generation);
       });
     }
   }

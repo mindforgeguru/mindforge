@@ -233,6 +233,7 @@ class TeacherTopNav extends ConsumerWidget {
       ('Broadcasts', '${RouteNames.teacherDashboard}/broadcasts', '/broadcasts', hasBroadcastBadge,
           () => ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen()),
       ('Database', '${RouteNames.teacherDashboard}/database', '/database', false, null),
+      ('Presentations', '${RouteNames.teacherDashboard}/presentations', '/presentations', false, null),
     ];
 
     return items.map((item) {
