@@ -12,6 +12,46 @@ import '../../../core/widgets/error_view.dart';
 import '../providers/presentation_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 
+// ── Grade colour palette ─────────────────────────────────────────────────────
+// Same hues the dashboard's Today's Workflow card uses for grade pills, so
+// the presentation viewer feels like part of the same colour-coded system.
+
+const _grade8Color = Color(0xFF3B82F6); // blue
+const _grade9Color = Color(0xFF8B5CF6); // purple
+const _grade10Color = Color(0xFFF97316); // orange
+
+Color _gradeColor(int? grade) {
+  switch (grade) {
+    case 8:
+      return _grade8Color;
+    case 9:
+      return _grade9Color;
+    case 10:
+      return _grade10Color;
+    default:
+      return AppColors.primary;
+  }
+}
+
+/// Slightly lighter variant used as the second stop in gradients.
+Color _gradeColorLight(int? grade) =>
+    Color.lerp(_gradeColor(grade), Colors.white, 0.25)!;
+
+String _subjectEmoji(String? subject) {
+  final s = (subject ?? '').toLowerCase();
+  if (s.contains('phys')) return '⚛️';
+  if (s.contains('chem')) return '🧪';
+  if (s.contains('bio')) return '🌿';
+  if (s.contains('math')) return '🔢';
+  if (s.contains('hist') || s.contains('civic')) return '🏛️';
+  if (s.contains('geo')) return '🌍';
+  if (s.contains('eco')) return '💹';
+  if (s.contains('comp') || s.contains('ai')) return '💻';
+  if (s.contains('eng')) return '📖';
+  if (s.contains('env')) return '🌱';
+  return '📚';
+}
+
 class AutoPresentationViewScreen extends ConsumerStatefulWidget {
   final int presentationId;
   const AutoPresentationViewScreen({super.key, required this.presentationId});
@@ -203,6 +243,7 @@ class _ReadyView extends ConsumerWidget {
     final slides = (data['slides'] as List<dynamic>? ?? <dynamic>[])
         .cast<Map<String, dynamic>>();
     final total = data['total_slides'] as int? ?? slides.length;
+    final myAdopted = data['my_adopted'] as bool? ?? false;
     final myCurrent = data['my_current_slide_index'] as int? ?? 0;
     final myPeriods = data['my_periods_used'] as int? ?? 0;
     final recPeriods = data['recommended_periods'] as int? ?? 0;
@@ -214,6 +255,12 @@ class _ReadyView extends ConsumerWidget {
 
     final progressPct =
         total > 0 ? (myCurrent / total).clamp(0.0, 1.0) : 0.0;
+    final presentationId = data['id'] as int;
+    final grade = data['grade'] as int?;
+    final subject = data['subject']?.toString();
+    final gColor = _gradeColor(grade);
+    final gColorLight = _gradeColorLight(grade);
+    final emoji = _subjectEmoji(subject);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
@@ -221,19 +268,26 @@ class _ReadyView extends ConsumerWidget {
         children: [
           // ── Plan summary banner ────────────────────────────────────────
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppColors.primary, AppColors.primaryLight],
+                colors: [gColor, gColorLight],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: gColor.withOpacity(0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                const Icon(Icons.auto_awesome, color: Colors.amberAccent, size: 22),
-                const SizedBox(width: 10),
+                Text(emoji, style: const TextStyle(fontSize: 26)),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,7 +295,7 @@ class _ReadyView extends ConsumerWidget {
                       Text(
                         '${data['chapter_name']}',
                         style: GoogleFonts.poppins(
-                          fontSize: 14, fontWeight: FontWeight.w700,
+                          fontSize: 15, fontWeight: FontWeight.w800,
                           color: Colors.white,
                         ),
                       ),
@@ -249,16 +303,23 @@ class _ReadyView extends ConsumerWidget {
                         'Grade ${data['grade']} · ${data['subject']}',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withOpacity(0.85),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Text(
-                        'Plan: $recPeriods × 1-hour periods · $defaultPerPeriod slides per period',
-                        style: GoogleFonts.poppins(
-                          fontSize: 11, color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Row(
+                        children: [
+                          _BannerStat(
+                            icon: '⏱️',
+                            label: '$recPeriods periods',
+                          ),
+                          const SizedBox(width: 6),
+                          _BannerStat(
+                            icon: '🎯',
+                            label: '$defaultPerPeriod / period',
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -267,68 +328,143 @@ class _ReadyView extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 10),
-          // ── Progress bar + period log button ────────────────────────────
+          // ── Progress card OR adopt prompt ───────────────────────────────
+          // Uniform border + ClipRRect + inner 4-px stripe avoid Flutter's
+          // "non-uniform Border + BorderRadius silently drops children"
+          // bug (which left this box blank on Flutter web).
           Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
             decoration: BoxDecoration(
               color: AppColors.cardBackground,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.divider),
+              border: Border.all(color: gColor.withOpacity(0.18)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Your progress',
-                  style: GoogleFonts.poppins(
-                    fontSize: 11, fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
-                    letterSpacing: 1.2,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(11),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(width: 4, color: gColor),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                        child: myAdopted
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text('📈',
+                              style: const TextStyle(fontSize: 14)),
+                          const SizedBox(width: 6),
+                          Text(
+                            'YOUR PROGRESS',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11, fontWeight: FontWeight.w800,
+                              color: gColor,
+                              letterSpacing: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progressPct,
+                          minHeight: 10,
+                          backgroundColor: gColor.withOpacity(0.12),
+                          valueColor: AlwaysStoppedAnimation(gColor),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '$myCurrent / $total slides   ·   $myPeriods / $recPeriods periods used',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12, color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (slidesLeft > 0) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '$periodsLeft periods left · aim for ~$perPeriodSuggested slides next period',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11, color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: () => _showPeriodLogDialog(
+                          context, ref, data, viewerIndex,
+                        ),
+                        icon: const Icon(Icons.check_circle_outline,
+                            size: 16),
+                        label: Text(
+                          'Log this period',
+                          style: GoogleFonts.poppins(
+                              fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: gColor,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 42),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text('🪧',
+                              style: const TextStyle(fontSize: 14)),
+                          const SizedBox(width: 6),
+                          Text(
+                            'NOT ON YOUR DASHBOARD',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11, fontWeight: FontWeight.w800,
+                              color: gColor,
+                              letterSpacing: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'You can browse this deck without adopting it. '
+                        'Adopt it for your class to track progress and log '
+                        'periods.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12, color: AppColors.textPrimary,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: () => _adoptThisDeck(context, ref, presentationId),
+                        icon: const Icon(Icons.add_to_photos_outlined,
+                            size: 16),
+                        label: Text(
+                          'Adopt for my class',
+                          style: GoogleFonts.poppins(
+                              fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: gColor,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 42),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progressPct,
-                    minHeight: 8,
-                    backgroundColor: AppColors.divider,
-                    valueColor: AlwaysStoppedAnimation(AppColors.primary),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '$myCurrent / $total slides   ·   $myPeriods / $recPeriods periods used',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12, color: AppColors.textPrimary,
-                  ),
-                ),
-                if (slidesLeft > 0) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    '$periodsLeft periods left · aim for ~$perPeriodSuggested slides next period',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11, color: AppColors.textMuted,
+                      ),
                     ),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: () => _showPeriodLogDialog(
-                    context, ref, data, viewerIndex,
-                  ),
-                  icon: const Icon(Icons.check_circle_outline, size: 16),
-                  label: Text(
-                    'Log this period',
-                    style: GoogleFonts.poppins(
-                        fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.accent,
-                    minimumSize: const Size(double.infinity, 40),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -347,6 +483,7 @@ class _ReadyView extends ConsumerWidget {
                     pageCtrl: pageCtrl,
                     viewerIndex: viewerIndex,
                     onPage: onPage,
+                    accentColor: gColor,
                     onEditSlide: (slide) => _showEditSlideDialog(
                       context, ref, data['id'] as int, slide,
                     ),
@@ -364,12 +501,44 @@ class _ReadyView extends ConsumerWidget {
   }
 }
 
+class _BannerStat extends StatelessWidget {
+  final String icon;
+  final String label;
+  const _BannerStat({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.22),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 10.5, color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SlideViewer extends StatelessWidget {
   final List<Map<String, dynamic>> slides;
   final PageController pageCtrl;
   final int viewerIndex;
   final ValueChanged<int> onPage;
   final void Function(Map<String, dynamic>) onEditSlide;
+  final Color accentColor;
 
   const _SlideViewer({
     required this.slides,
@@ -377,6 +546,7 @@ class _SlideViewer extends StatelessWidget {
     required this.viewerIndex,
     required this.onPage,
     required this.onEditSlide,
+    required this.accentColor,
   });
 
   @override
@@ -393,6 +563,7 @@ class _SlideViewer extends StatelessWidget {
               index: i,
               total: slides.length,
               slide: slides[i],
+              accentColor: accentColor,
             ),
           ),
         ),
@@ -438,15 +609,97 @@ class _SlideViewer extends StatelessWidget {
   }
 }
 
+class _SlideBody extends StatelessWidget {
+  final String markdown;
+  final Color accentColor;
+  const _SlideBody({required this.markdown, required this.accentColor});
+
+  @override
+  Widget build(BuildContext context) {
+    // Gemini's body_md is "- bullet\n- bullet\n…" markdown. Render it as a
+    // proper bullet column instead of dumping raw markdown into a Text() —
+    // a single long unwrapped line was painting Flutter's yellow-and-black
+    // overflow indicator over the slide.
+    final raw = markdown.trim();
+    if (raw.isEmpty) return const SizedBox.shrink();
+
+    final lines = raw
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final blocks = <Widget>[];
+    for (final line in lines) {
+      String text = line;
+      bool bullet = false;
+      // Strip common markdown bullet markers
+      if (text.startsWith('- ') || text.startsWith('* ')) {
+        text = text.substring(2);
+        bullet = true;
+      } else if (RegExp(r'^\d+[.)]\s').hasMatch(text)) {
+        // Numbered list — keep the number but treat as bullet for layout
+        bullet = true;
+      } else if (text.startsWith('#')) {
+        // Drop headings — the slide already has a title
+        text = text.replaceAll(RegExp(r'^#+\s*'), '');
+      }
+      // Strip a few inline markdown markers so they don't appear as raw chars.
+      text = text
+          .replaceAll(RegExp(r'\*\*(.*?)\*\*'), r'$1')
+          .replaceAll(RegExp(r'\*(.*?)\*'), r'$1')
+          .replaceAll(RegExp(r'`(.*?)`'), r'$1');
+
+      blocks.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (bullet) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 7, right: 8),
+                child: Container(
+                  width: 7, height: 7,
+                  decoration: BoxDecoration(
+                    color: accentColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ],
+            Expanded(
+              child: Text(
+                text,
+                softWrap: true,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: blocks,
+    );
+  }
+}
+
 class _SlideCard extends StatelessWidget {
   final int index;
   final int total;
   final Map<String, dynamic> slide;
+  final Color accentColor;
 
   const _SlideCard({
     required this.index,
     required this.total,
     required this.slide,
+    required this.accentColor,
   });
 
   @override
@@ -456,90 +709,130 @@ class _SlideCard extends StatelessWidget {
     final notes = slide['speaker_notes']?.toString() ?? '';
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.divider),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accentColor.withOpacity(0.25)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: accentColor.withOpacity(0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.iconContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${index + 1} / $total',
-                  style: GoogleFonts.poppins(
-                    fontSize: 11, fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
-                  ),
-                ),
+          // Coloured top accent strip — visual hook that ties the slide
+          // card to the grade-coloured banner.
+          Container(
+            height: 6,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  accentColor,
+                  Color.lerp(accentColor, Colors.white, 0.4)!,
+                ],
               ),
-              if ((slide['last_edited_by_username']?.toString() ?? '').isNotEmpty) ...[
-                const Spacer(),
-                Text(
-                  'edited by ${slide['last_edited_by_username']}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10, color: AppColors.textMuted,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'Slide ${index + 1} of $total',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11, fontWeight: FontWeight.w800,
+                      color: accentColor,
+                    ),
                   ),
                 ),
+                if ((slide['last_edited_by_username']?.toString() ?? '').isNotEmpty) ...[
+                  const Spacer(),
+                  Text(
+                    '✏️  ${slide['last_edited_by_username']}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10, color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           const SizedBox(height: 14),
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontSize: 22, fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              height: 1.2,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 22, fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+                height: 1.2,
+              ),
             ),
           ),
           const SizedBox(height: 14),
           Expanded(
             child: SingleChildScrollView(
-              child: Text(
-                body,
-                style: GoogleFonts.poppins(
-                  fontSize: 14, color: AppColors.textPrimary,
-                  height: 1.5,
-                ),
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _SlideBody(markdown: body, accentColor: accentColor),
             ),
           ),
           if (notes.trim().isNotEmpty) ...[
-            const Divider(),
-            Text(
-              'SPEAKER NOTES',
-              style: GoogleFonts.poppins(
-                fontSize: 10, fontWeight: FontWeight.w700,
-                color: AppColors.textSecondary,
-                letterSpacing: 1.5,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Divider(color: accentColor.withOpacity(0.2)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Text('🎤', style: const TextStyle(fontSize: 12)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'SPEAKER NOTES',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10, fontWeight: FontWeight.w800,
+                      color: accentColor,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              notes,
-              style: GoogleFonts.poppins(
-                fontSize: 12, color: AppColors.textSecondary,
-                fontStyle: FontStyle.italic,
-                height: 1.4,
+            // Cap the notes block so very long Gemini-generated notes don't
+            // blow past the card height (RenderFlex overflow). 120 px fits
+            // ~6 lines at fontSize=12 height=1.4; long notes scroll within.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 120),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  notes,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12, color: AppColors.textSecondary,
+                    fontStyle: FontStyle.italic,
+                    height: 1.4,
+                  ),
+                ),
               ),
             ),
-          ],
+            const SizedBox(height: 18),
+          ] else
+            const SizedBox(height: 18),
         ],
       ),
     );
@@ -608,7 +901,40 @@ class _PeriodLogsStrip extends StatelessWidget {
   }
 }
 
-// ── Dialogs ──────────────────────────────────────────────────────────────────
+// ── Adopt + dialogs ──────────────────────────────────────────────────────────
+
+Future<void> _adoptThisDeck(
+  BuildContext context, WidgetRef ref, int presentationId,
+) async {
+  try {
+    final api = ref.read(apiClientProvider);
+    await api.adoptPresentation(presentationId);
+    // Refresh the open detail screen so it flips to "adopted" mode, plus
+    // the dashboard list and the library tab where adopter counts live.
+    ref.invalidate(presentationDetailProvider(presentationId));
+    try { ref.invalidate(presentationListProvider); } catch (_) {}
+    try { ref.invalidate(presentationLibraryProvider); } catch (_) {}
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Added to your dashboard.')),
+    );
+  } on DioException catch (e) {
+    final body = e.response?.data;
+    final msg = body is Map && body['detail'] is String
+        ? body['detail'] as String
+        : 'Adopt failed: ${e.response?.statusCode ?? '?'}';
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Adopt failed: $e'),
+          backgroundColor: AppColors.error),
+    );
+  }
+}
 
 Future<void> _showPeriodLogDialog(
   BuildContext context,

@@ -42,6 +42,16 @@ class ChapterPresentation(Base):
     subject: Mapped[str] = mapped_column(String(100), nullable=False)
     chapter_name: Mapped[str] = mapped_column(String(300), nullable=False)
     source_pdf_key: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Optional FK to ChapterDocument when the presentation was created from
+    # an existing chapter PDF in the school-wide chapter database. NULL when
+    # the teacher uploaded a fresh PDF via /upload. Used as the dedupe key
+    # by POST /from-chapter so two teachers don't trigger Gemini twice for
+    # the same chapter.
+    source_chapter_document_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("chapter_documents.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
     total_slides: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     recommended_periods: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     default_slides_per_period: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

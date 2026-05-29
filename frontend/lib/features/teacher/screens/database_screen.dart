@@ -2,12 +2,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../providers/database_provider.dart';
+import '../providers/presentation_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 
 class TeacherDatabaseScreen extends ConsumerStatefulWidget {
@@ -25,7 +27,7 @@ class _TeacherDatabaseScreenState extends ConsumerState<TeacherDatabaseScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -60,6 +62,7 @@ class _TeacherDatabaseScreenState extends ConsumerState<TeacherDatabaseScreen>
             Tab(icon: Icon(Icons.history_edu_outlined, size: 18), text: 'Old Tests'),
             Tab(icon: Icon(Icons.menu_book_outlined, size: 18), text: 'Chapters'),
             Tab(icon: Icon(Icons.list_alt_outlined, size: 18), text: 'Syllabus'),
+            Tab(icon: Icon(Icons.slideshow_outlined, size: 18), text: 'Presentations'),
           ],
         ),
       ),
@@ -69,6 +72,7 @@ class _TeacherDatabaseScreenState extends ConsumerState<TeacherDatabaseScreen>
           _OldTestsTab(),
           _ChaptersTab(),
           _SyllabusTab(),
+          _PresentationsTab(),
         ],
       ),
     );
@@ -929,6 +933,611 @@ class _Tag extends StatelessWidget {
       child: Text(label,
           style: TextStyle(
               fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRESENTATIONS TAB — school-wide presentation library
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PresentationsTab extends ConsumerStatefulWidget {
+  const _PresentationsTab();
+
+  @override
+  ConsumerState<_PresentationsTab> createState() => _PresentationsTabState();
+}
+
+class _PresentationsTabState extends ConsumerState<_PresentationsTab> {
+  int? _gradeFilter;
+  String _subjectFilter = '';
+  int? _adoptingPresentationId;
+
+  @override
+  Widget build(BuildContext context) {
+    final asyncLib = ref.watch(presentationLibraryProvider);
+
+    return Column(
+      children: [
+        // Filter bar
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _gradeFilter,
+                  decoration: const InputDecoration(
+                    labelText: 'Grade',
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('All')),
+                    DropdownMenuItem(value: 8, child: Text('Grade 8')),
+                    DropdownMenuItem(value: 9, child: Text('Grade 9')),
+                    DropdownMenuItem(value: 10, child: Text('Grade 10')),
+                  ],
+                  onChanged: (v) => setState(() => _gradeFilter = v),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Subject filter',
+                    isDense: true,
+                  ),
+                  onChanged: (v) =>
+                      setState(() => _subjectFilter = v.trim().toLowerCase()),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async =>
+                ref.invalidate(presentationLibraryProvider),
+            child: asyncLib.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Could not load library.\n$e',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textMuted),
+                  ),
+                ),
+              ),
+              data: (rows) {
+                final filtered = rows.where((r) {
+                  if (_gradeFilter != null && r['grade'] != _gradeFilter) {
+                    return false;
+                  }
+                  if (_subjectFilter.isNotEmpty &&
+                      !(r['subject'] as String? ?? '')
+                          .toLowerCase()
+                          .contains(_subjectFilter)) {
+                    return false;
+                  }
+                  return true;
+                }).toList();
+                if (filtered.isEmpty) {
+                  return ListView(children: [
+                    const SizedBox(height: 60),
+                    Center(
+                      child: Icon(Icons.slideshow_outlined,
+                          size: 48, color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Text(
+                        rows.isEmpty
+                            ? 'No presentations in the library yet.'
+                            : 'No presentations match the filter.',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          rows.isEmpty
+                              ? 'When a teacher uploads a chapter PDF and the slides are generated, it shows up here for everyone to adopt.'
+                              : 'Try a wider grade or subject filter.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.textMuted),
+                        ),
+                      ),
+                    ),
+                  ]);
+                }
+                // Group by lifecycle_state (PENDING / ONGOING / COMPLETED)
+                // and sort each bucket sensibly.
+                final buckets = <String, List<Map<String, dynamic>>>{
+                  'ONGOING': <Map<String, dynamic>>[],
+                  'PENDING': <Map<String, dynamic>>[],
+                  'COMPLETED': <Map<String, dynamic>>[],
+                };
+                for (final r in filtered) {
+                  final state = (r['lifecycle_state'] as String? ?? 'PENDING')
+                      .toUpperCase();
+                  buckets.putIfAbsent(state, () => []).add(r);
+                }
+                // Sort each bucket: completed → by completion date desc,
+                // ongoing/pending → by created_at desc.
+                int byDateDesc(String key, Map a, Map b) {
+                  final av = a[key]?.toString() ?? '';
+                  final bv = b[key]?.toString() ?? '';
+                  return bv.compareTo(av); // empty strings end up last
+                }
+                buckets['COMPLETED']!.sort((a, b) {
+                  // Primary: last_completion_at desc. Fallback: created_at.
+                  final cmp = byDateDesc('last_completion_at', a, b);
+                  return cmp != 0 ? cmp : byDateDesc('created_at', a, b);
+                });
+                buckets['ONGOING']!.sort((a, b) => byDateDesc('created_at', a, b));
+                buckets['PENDING']!.sort((a, b) => byDateDesc('created_at', a, b));
+
+                // Flatten into a list of widgets with sticky section
+                // headers — keeps ListView lightweight without needing
+                // SliverList.
+                final widgets = <Widget>[];
+                final order = <(String, String, Color)>[
+                  ('PENDING', 'Pending', AppColors.warning),
+                  ('ONGOING', 'On going', AppColors.primary),
+                  ('COMPLETED', 'Completed', AppColors.success),
+                ];
+                for (final (state, label, color) in order) {
+                  final group = buckets[state] ?? const [];
+                  if (group.isEmpty) continue;
+                  widgets.add(_GroupHeader(
+                    label: label,
+                    count: group.length,
+                    color: color,
+                  ));
+                  for (final r in group) {
+                    widgets.add(Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _LibraryRow(
+                        data: r,
+                        submitting: _adoptingPresentationId ==
+                            r['presentation_id'],
+                        onOpen: () => _openOrAdopt(r),
+                        onDelete: () => _confirmAndDelete(r),
+                      ),
+                    ));
+                  }
+                  widgets.add(const SizedBox(height: 8));
+                }
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                  children: widgets,
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _confirmAndDelete(Map<String, dynamic> row) async {
+    final id = row['presentation_id'] as int;
+    final chapter = row['chapter_name']?.toString() ?? 'this presentation';
+    final adopterCount = row['adopter_count'] as int? ?? 0;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete presentation?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('"$chapter" will be permanently deleted.'),
+            const SizedBox(height: 8),
+            if (adopterCount > 0)
+              Text(
+                '$adopterCount teacher${adopterCount == 1 ? '' : 's'} currently '
+                'use${adopterCount == 1 ? 's' : ''} this deck — their progress '
+                'bars and period logs will be removed too.',
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.error,
+                    fontWeight: FontWeight.w600),
+              )
+            else
+              const Text(
+                'No teachers have adopted it yet.',
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(apiClientProvider).deletePresentation(id);
+      ref.invalidate(presentationLibraryProvider);
+      try {
+        ref.invalidate(presentationListProvider);
+      } catch (_) {}
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Deleted "$chapter".')),
+      );
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      final msg = body is Map && body['detail'] is String
+          ? body['detail'] as String
+          : 'Delete failed: ${e.response?.statusCode ?? '?'}';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e'),
+            backgroundColor: AppColors.error),
+      );
+    }
+  }
+
+  Future<void> _openOrAdopt(Map<String, dynamic> row) async {
+    final id = row['presentation_id'] as int;
+    final alreadyAdopted =
+        row['already_adopted_by_me'] as bool? ?? false;
+
+    if (alreadyAdopted) {
+      // Already on your dashboard — just open.
+      context.go('${RouteNames.teacherDashboard}/presentations/$id');
+      return;
+    }
+
+    setState(() => _adoptingPresentationId = id);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.adoptPresentation(id);
+      ref.invalidate(presentationLibraryProvider);
+      // refresh dashboard tile too
+      try {
+        ref.invalidate(presentationListProvider);
+      } catch (_) {}
+      if (!mounted) return;
+      context.go('${RouteNames.teacherDashboard}/presentations/$id');
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      final msg = body is Map && body['detail'] is String
+          ? body['detail'] as String
+          : 'Failed: ${e.response?.statusCode ?? '?'}';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e'),
+            backgroundColor: AppColors.error),
+      );
+    } finally {
+      if (mounted) setState(() => _adoptingPresentationId = null);
+    }
+  }
+}
+
+class _LibraryRow extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final bool submitting;
+  final VoidCallback onOpen;
+  final VoidCallback onDelete;
+
+  const _LibraryRow({
+    required this.data,
+    required this.submitting,
+    required this.onOpen,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final adoptedByMe = data['already_adopted_by_me'] as bool? ?? false;
+    final adopterCount = data['adopter_count'] as int? ?? 0;
+    final completedCount = data['completed_count'] as int? ?? 0;
+    final myIsCompleted = data['my_is_completed'] as bool? ?? false;
+    final total = data['total_slides'] as int? ?? 0;
+    final periods = data['recommended_periods'] as int? ?? 0;
+    final status = (data['status'] as String? ?? 'READY').toUpperCase();
+    final lifecycle =
+        (data['lifecycle_state'] as String? ?? 'PENDING').toUpperCase();
+    final isReady = status == 'READY';
+    final isProcessing = status == 'PROCESSING';
+    final isFailed = status == 'FAILED';
+
+    // Status capsule. PROCESSING/FAILED show their generation status so
+    // teachers can spot decks still being made or broken. Otherwise show
+    // the lifecycle bucket (Pending / On going / Completed).
+    final (statusLabel, statusColor) = isProcessing
+        ? ('Generating…', AppColors.warning)
+        : isFailed
+            ? ('Failed', AppColors.error)
+            : switch (lifecycle) {
+                'COMPLETED' => ('Completed', AppColors.success),
+                'ONGOING' => ('On going', AppColors.primary),
+                _ => ('Pending', AppColors.warning),
+              };
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Grade ${data['grade']} · ${data['subject']}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Status pill — always visible so PROCESSING / FAILED rows
+              // surface immediately in the library.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isProcessing) ...[
+                      SizedBox(
+                        width: 9, height: 9,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          valueColor: AlwaysStoppedAnimation(statusColor),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                    ],
+                    Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w700,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              // Per-teacher state pill — completed / in progress / nothing.
+              if (myIsCompleted)
+                _StatePill(
+                  label: '✓ You completed',
+                  color: AppColors.success,
+                )
+              else if (adoptedByMe)
+                _StatePill(
+                  label: 'On your dashboard',
+                  color: AppColors.primary,
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            data['chapter_name']?.toString() ?? '—',
+            style: const TextStyle(
+              fontSize: 14, fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'by ${data['created_by_username']}'
+            '   ·   $total slides · $periods × 1-hour periods'
+            '   ·   ${_adoptionSummary(adopterCount, completedCount)}',
+            style: const TextStyle(
+              fontSize: 11, color: AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  // Disable Adopt while the deck is still generating or
+                  // has failed — only adopt READY decks.
+                  onPressed: (submitting || !isReady) ? null : onOpen,
+                  icon: submitting
+                      ? const SizedBox(
+                          height: 14, width: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Icon(
+                          myIsCompleted
+                              ? Icons.replay_circle_filled
+                              : adoptedByMe
+                                  ? Icons.open_in_new
+                                  : isProcessing
+                                      ? Icons.hourglass_top
+                                      : isFailed
+                                          ? Icons.error_outline
+                                          : Icons.add_to_photos_outlined,
+                          size: 16,
+                        ),
+                  label: Text(
+                    submitting
+                        ? 'Adopting…'
+                        : myIsCompleted
+                            ? 'Open completed deck'
+                            : adoptedByMe
+                                ? 'Open'
+                                : isProcessing
+                                    ? 'Generating…'
+                                    : isFailed
+                                        ? 'Failed — delete?'
+                                        : 'Adopt for my class',
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: myIsCompleted
+                        ? AppColors.success
+                        : adoptedByMe
+                            ? AppColors.primary
+                            : AppColors.accent,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline,
+                    size: 18, color: AppColors.error),
+                onPressed: submitting ? null : onDelete,
+                tooltip: 'Delete presentation',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _adoptionSummary(int adopterCount, int completedCount) {
+  final inProgress = (adopterCount - completedCount).clamp(0, adopterCount);
+  if (adopterCount == 0) return 'No teachers using it yet';
+  final parts = <String>[];
+  if (inProgress > 0) {
+    parts.add('$inProgress teaching');
+  }
+  if (completedCount > 0) {
+    parts.add('$completedCount completed');
+  }
+  return parts.join(' · ');
+}
+
+class _StatePill extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _StatePill({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupHeader extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+  const _GroupHeader({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
+      child: Row(
+        children: [
+          Container(
+            width: 4, height: 14,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: color,
+              letterSpacing: 1.4,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Divider(color: color.withOpacity(0.25), thickness: 1),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -165,9 +165,23 @@ final teacherBroadcastsProvider =
 
 // ── Dashboard Summary ──────────────────────────────────────────────────────
 
+/// Brief retry loop that waits for the in-memory JWT cache to be primed
+/// before letting a provider fire its API call. After login, the token is
+/// set synchronously before the route transitions, so this exits on the
+/// first iteration. The exception is the moment right after startup, when
+/// Riverpod can warm a dashboard provider during the auth-restore window —
+/// without this guard the first request goes out without a token and
+/// returns 401.
+Future<void> _waitForAuthToken(ApiClient api) async {
+  for (int i = 0; i < 40 && api.cachedToken == null; i++) {
+    await Future.delayed(const Duration(milliseconds: 50));
+  }
+}
+
 final teacherDashboardSummaryProvider =
     FutureProvider<Map<String, dynamic>>((ref) async {
   final api = ref.watch(apiClientProvider);
+  await _waitForAuthToken(api);
   // Use a Dart-level timeout because Dio's connectTimeout / receiveTimeout
   // are not reliably enforced on Flutter web (XMLHttpRequest backing).
   // 45 s is generous enough for a Railway cold start (~30 s) while still
@@ -180,5 +194,6 @@ final teacherDashboardSummaryProvider =
 final teacherTodayWorkflowProvider =
     FutureProvider<Map<String, dynamic>>((ref) async {
   final api = ref.watch(apiClientProvider);
+  await _waitForAuthToken(api);
   return api.getTeacherTodayWorkflow();
 });

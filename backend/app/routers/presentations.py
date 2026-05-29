@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.security import get_current_user
+from app.models.database_models import ChapterDocument
 from app.models.presentation import (
     ChapterPresentation,
     PresentationPeriodLog,
@@ -37,6 +38,9 @@ from app.models.presentation import (
 )
 from app.models.user import User, UserRole
 from app.schemas.presentation import (
+    AvailableChapter,
+    FromChapterRequest,
+    LibraryPresentation,
     PresentationCreateResponse,
     PresentationDetail,
     PresentationListItem,
@@ -137,21 +141,282 @@ async def upload_chapter(
         status=PresentationStatus.PROCESSING,
     )
     db.add(row)
-    await db.flush()
-
-    # Create a progress row for the uploader so the card shows up immediately
-    # in their list, even before slides exist.
-    db.add(PresentationTeacherProgress(
-        presentation_id=row.id, teacher_id=current_user.id,
-        current_slide_index=0, periods_used=0,
-    ))
     await db.commit()
+    # Note: no PresentationTeacherProgress row is created here. The uploader
+    # has to explicitly hit POST /{id}/adopt (the "Adopt for my class"
+    # button) to put the deck on their dashboard. Uploading just adds it
+    # to the school-wide library.
 
     background_tasks.add_task(_run_generation_job, row.id)
 
     return PresentationCreateResponse(
         presentation_id=row.id, status=row.status.value
     )
+
+
+# ── GET /available-chapters ──────────────────────────────────────────────────
+
+
+@router.get("/available-chapters", response_model=List[AvailableChapter])
+async def list_available_chapters(
+    grade: Optional[int] = None,
+    subject: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[AvailableChapter]:
+    """List every chapter PDF in the school-wide database, plus a flag for
+    whether an auto-presentation has already been generated for it. The
+    intended UX is to pick a row and click "Generate" (or "Open existing")
+    rather than re-uploading the same chapter PDF.
+
+    Note: /teacher/database/chapters filters by current teacher; this view
+    is intentionally school-wide so any teacher can pick any chapter doc.
+    """
+    _require_teacher_or_admin(current_user)
+
+    q = select(ChapterDocument)
+    if grade is not None:
+        q = q.where(ChapterDocument.grade == grade)
+    if subject:
+        q = q.where(ChapterDocument.subject == subject)
+    q = q.order_by(
+        ChapterDocument.subject, ChapterDocument.grade,
+        ChapterDocument.created_at.desc(),
+    )
+    chapters = (await db.execute(q)).scalars().all()
+
+    if not chapters:
+        return []
+
+    chapter_ids = [c.id for c in chapters]
+    teacher_ids = {c.teacher_id for c in chapters}
+
+    # One-shot lookup of any existing presentations for these chapter docs.
+    existing_rows = (await db.execute(
+        select(ChapterPresentation).where(
+            ChapterPresentation.source_chapter_document_id.in_(chapter_ids)
+        )
+    )).scalars().all()
+    existing_map: dict[int, ChapterPresentation] = {}
+    for p in existing_rows:
+        cid = p.source_chapter_document_id
+        if cid is None:
+            continue
+        # If there are somehow multiple presentations for the same chapter
+        # doc, prefer the READY one, else the most recent. (Shouldn't happen
+        # in steady state because find-or-create dedupes, but be defensive.)
+        prev = existing_map.get(cid)
+        if prev is None:
+            existing_map[cid] = p
+        elif (prev.status != PresentationStatus.READY
+              and p.status == PresentationStatus.READY):
+            existing_map[cid] = p
+
+    username_rows = (await db.execute(
+        select(User.id, User.username).where(User.id.in_(teacher_ids))
+    )).all()
+    username_map = {uid: uname for uid, uname in username_rows}
+
+    return [
+        AvailableChapter(
+            chapter_document_id=c.id,
+            teacher_id=c.teacher_id,
+            teacher_username=username_map.get(c.teacher_id, "?"),
+            grade=c.grade,
+            subject=c.subject,
+            chapter_name=c.chapter_name,
+            original_filename=c.original_filename,
+            created_at=c.created_at,
+            existing_presentation_id=existing_map[c.id].id
+                if c.id in existing_map else None,
+            existing_presentation_status=existing_map[c.id].status.value
+                if c.id in existing_map else None,
+        )
+        for c in chapters
+    ]
+
+
+# ── POST /from-chapter ───────────────────────────────────────────────────────
+
+
+@router.post("/from-chapter", response_model=PresentationCreateResponse,
+             status_code=status.HTTP_201_CREATED)
+async def create_from_chapter(
+    payload: FromChapterRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PresentationCreateResponse:
+    """Find-or-create a presentation for an existing chapter document.
+
+    If a presentation already exists for the chapter doc, just adopt it
+    (create the caller's teacher_progress row) and return its id. If not,
+    create a new ChapterPresentation pointing at the chapter doc's
+    file_key and kick off Gemini generation in the background. Either
+    way, the caller ends up with a teacher_progress row pointing at the
+    deck.
+    """
+    _require_teacher_or_admin(current_user)
+
+    chapter = (await db.execute(
+        select(ChapterDocument).where(
+            ChapterDocument.id == payload.chapter_document_id
+        )
+    )).scalar_one_or_none()
+    if chapter is None:
+        raise HTTPException(status_code=404, detail="Chapter document not found.")
+
+    # Find-or-create the shared presentation row.
+    existing = (await db.execute(
+        select(ChapterPresentation).where(
+            ChapterPresentation.source_chapter_document_id == chapter.id
+        ).order_by(ChapterPresentation.id.desc())
+    )).scalars().first()
+
+    if existing is not None:
+        # Idempotent — return the deck someone already generated for this
+        # chapter doc. No auto-adopt: caller still has to POST /adopt to
+        # put it on their dashboard.
+        return PresentationCreateResponse(
+            presentation_id=existing.id, status=existing.status.value
+        )
+
+    # Create fresh. Reuse the chapter doc's file_key directly — no copy.
+    row = ChapterPresentation(
+        created_by_teacher_id=current_user.id,
+        grade=chapter.grade,
+        subject=chapter.subject,
+        chapter_name=(payload.chapter_name_override or chapter.chapter_name).strip(),
+        source_pdf_key=f"{settings.MINIO_BUCKET_DATABASE}/{chapter.file_key}",
+        source_chapter_document_id=chapter.id,
+        status=PresentationStatus.PROCESSING,
+    )
+    db.add(row)
+    await db.commit()
+    # Same as /upload — no auto-progress row. Caller must explicitly adopt.
+
+    background_tasks.add_task(_run_generation_job, row.id)
+    return PresentationCreateResponse(
+        presentation_id=row.id, status=row.status.value
+    )
+
+
+# ── GET /library ─────────────────────────────────────────────────────────────
+
+
+@router.get("/library", response_model=List[LibraryPresentation])
+async def list_library(
+    grade: Optional[int] = None,
+    subject: Optional[str] = None,
+    include_processing: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[LibraryPresentation]:
+    """School-wide presentation library — one row per presentation (NOT per
+    teacher-progress). Used by the "Presentations" tab in the teacher
+    Database screen so any teacher can browse + adopt a deck someone else
+    already generated.
+
+    By default only includes READY decks; pass include_processing=true to
+    also surface ones still being generated.
+    """
+    _require_teacher_or_admin(current_user)
+
+    q = select(ChapterPresentation)
+    if not include_processing:
+        q = q.where(ChapterPresentation.status == PresentationStatus.READY)
+    if grade is not None:
+        q = q.where(ChapterPresentation.grade == grade)
+    if subject:
+        q = q.where(ChapterPresentation.subject == subject)
+    q = q.order_by(
+        ChapterPresentation.subject,
+        ChapterPresentation.grade,
+        ChapterPresentation.created_at.desc(),
+    )
+    presentations = (await db.execute(q)).scalars().all()
+    if not presentations:
+        return []
+
+    pres_ids = [p.id for p in presentations]
+    creator_ids = {p.created_by_teacher_id for p in presentations}
+
+    # Bulk fetch progress rows for all of these presentations in one round
+    # trip — used to count adopters, count who's completed, and look up
+    # the caller's own progress.
+    full_progress_rows = (await db.execute(
+        select(PresentationTeacherProgress)
+        .where(PresentationTeacherProgress.presentation_id.in_(pres_ids))
+    )).scalars().all()
+    adopters_by_pres: dict[int, set[int]] = {}
+    completed_by_pres: dict[int, set[int]] = {}
+    last_completion_by_pres: dict[int, datetime] = {}
+    my_progress_by_pres: dict[int, PresentationTeacherProgress] = {}
+    # Need quick lookup of presentation meta to decide "completed"
+    pres_by_id = {p.id: p for p in presentations}
+    for pr in full_progress_rows:
+        adopters_by_pres.setdefault(pr.presentation_id, set()).add(pr.teacher_id)
+        pres = pres_by_id.get(pr.presentation_id)
+        if pres is not None:
+            slides_done = (
+                pres.total_slides > 0
+                and pr.current_slide_index >= pres.total_slides
+            )
+            periods_done = (
+                pres.recommended_periods > 0
+                and pr.periods_used >= pres.recommended_periods
+            )
+            if slides_done or periods_done:
+                completed_by_pres.setdefault(pr.presentation_id, set()).add(
+                    pr.teacher_id
+                )
+                # Track the most recent completion timestamp for sorting.
+                prev = last_completion_by_pres.get(pr.presentation_id)
+                if prev is None or pr.updated_at > prev:
+                    last_completion_by_pres[pr.presentation_id] = pr.updated_at
+        if pr.teacher_id == current_user.id:
+            my_progress_by_pres[pr.presentation_id] = pr
+
+    username_rows = (await db.execute(
+        select(User.id, User.username).where(User.id.in_(creator_ids))
+    )).all()
+    username_map = {uid: uname for uid, uname in username_rows}
+
+    def _lifecycle(p: ChapterPresentation) -> str:
+        """Per-caller state — describes the current teacher's relationship
+        to this deck, not the school-wide aggregate. This is what drives the
+        Pending / On going / Completed grouping in the library tab."""
+        if current_user.id in completed_by_pres.get(p.id, set()):
+            return "COMPLETED"
+        if current_user.id in adopters_by_pres.get(p.id, set()):
+            return "ONGOING"
+        return "PENDING"
+
+    return [
+        LibraryPresentation(
+            presentation_id=p.id,
+            grade=p.grade,
+            subject=p.subject,
+            chapter_name=p.chapter_name,
+            status=p.status.value,
+            total_slides=p.total_slides,
+            recommended_periods=p.recommended_periods,
+            default_slides_per_period=p.default_slides_per_period,
+            created_by_username=username_map.get(p.created_by_teacher_id, "?"),
+            created_at=p.created_at,
+            adopter_count=len(adopters_by_pres.get(p.id, set())),
+            completed_count=len(completed_by_pres.get(p.id, set())),
+            already_adopted_by_me=(
+                current_user.id in adopters_by_pres.get(p.id, set())
+            ),
+            my_is_completed=(
+                current_user.id in completed_by_pres.get(p.id, set())
+            ),
+            last_completion_at=last_completion_by_pres.get(p.id),
+            lifecycle_state=_lifecycle(p),
+        )
+        for p in presentations
+    ]
 
 
 # ── GET / (list) ─────────────────────────────────────────────────────────────
@@ -162,8 +427,17 @@ async def list_presentations(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[PresentationListItem]:
-    """School-wide list. One card per (teacher_progress) row so the same
-    chapter taught by three teachers shows three cards."""
+    """School-wide dashboard list — IN-PROGRESS decks only. One card per
+    (teacher_progress) row so the same chapter taught by three teachers
+    shows three cards.
+
+    A deck disappears from the dashboard once the teacher has finished it
+    (slides_covered >= total_slides OR periods_used >= recommended_periods),
+    but it stays in the library tab as "completed". Only READY presentations
+    are shown — PROCESSING and FAILED rows live exclusively in the library.
+    """
+    from sqlalchemy import or_
+
     _require_teacher_or_admin(current_user)
 
     rows = (await db.execute(
@@ -171,6 +445,21 @@ async def list_presentations(
         .join(
             PresentationTeacherProgress,
             PresentationTeacherProgress.presentation_id == ChapterPresentation.id,
+        )
+        .where(
+            ChapterPresentation.status == PresentationStatus.READY,
+            # NOT completed by slide-count
+            or_(
+                ChapterPresentation.total_slides == 0,
+                PresentationTeacherProgress.current_slide_index
+                    < ChapterPresentation.total_slides,
+            ),
+            # AND NOT completed by period-count
+            or_(
+                ChapterPresentation.recommended_periods == 0,
+                PresentationTeacherProgress.periods_used
+                    < ChapterPresentation.recommended_periods,
+            ),
         )
         .order_by(PresentationTeacherProgress.updated_at.desc())
     )).all()
@@ -262,18 +551,26 @@ async def get_presentation(
         )).all()
         user_map = {uid: uname for uid, uname in rows}
 
-    # Ensure the caller has a progress row so the convenience fields below
-    # always have data; auto-creation here makes the deck "adoptable"
-    # without a separate /adopt call when teachers just open someone else's
-    # deck. (They can still POST /adopt explicitly — it's idempotent.)
-    me_progress = await presentation_service.get_or_create_progress(
-        db, presentation_id, current_user.id
+    # Look up — but do NOT create — the caller's progress row. Adoption is
+    # explicit via POST /{id}/adopt or via the "Adopt for my class" button
+    # in the library tab. Viewing the deck no longer puts it on the
+    # caller's dashboard.
+    me_progress = next(
+        (p for p in progress_rows if p.teacher_id == current_user.id),
+        None,
     )
-    await db.commit()
+    my_adopted = me_progress is not None
 
-    remaining = presentation_service.estimate_remaining(
-        me_progress, pres.total_slides, pres.recommended_periods
-    )
+    if me_progress is not None:
+        remaining = presentation_service.estimate_remaining(
+            me_progress, pres.total_slides, pres.recommended_periods
+        )
+    else:
+        remaining = {
+            "slides_left": pres.total_slides,
+            "periods_left": pres.recommended_periods,
+            "slides_per_period_suggested": pres.default_slides_per_period,
+        }
 
     return PresentationDetail(
         id=pres.id,
@@ -325,8 +622,11 @@ async def get_presentation(
             )
             for log in period_logs
         ],
-        my_current_slide_index=me_progress.current_slide_index,
-        my_periods_used=me_progress.periods_used,
+        my_adopted=my_adopted,
+        my_current_slide_index=(
+            me_progress.current_slide_index if me_progress else 0
+        ),
+        my_periods_used=(me_progress.periods_used if me_progress else 0),
         my_slides_left=remaining["slides_left"],
         my_periods_left=remaining["periods_left"],
         my_slides_per_period_suggested=remaining["slides_per_period_suggested"],
@@ -454,9 +754,24 @@ async def create_period_log(
             detail="Presentation is not ready yet — wait for generation to finish.",
         )
 
-    progress = await presentation_service.get_or_create_progress(
-        db, presentation_id, current_user.id
-    )
+    # Period logs require an explicit adoption — the dashboard progress
+    # bar only exists after the teacher hits POST /adopt. We don't auto-
+    # create here because that would put the deck on the teacher's
+    # dashboard via a side-channel.
+    progress = (await db.execute(
+        select(PresentationTeacherProgress).where(
+            PresentationTeacherProgress.presentation_id == presentation_id,
+            PresentationTeacherProgress.teacher_id == current_user.id,
+        )
+    )).scalar_one_or_none()
+    if progress is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Adopt this presentation first (\"Adopt for my class\") "
+                "before logging a period."
+            ),
+        )
     if payload.slides_covered_to < progress.current_slide_index:
         raise HTTPException(
             status_code=422,

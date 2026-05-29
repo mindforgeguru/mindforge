@@ -63,6 +63,12 @@ class ApiClient {
     _cachedRefreshToken = null;
   }
 
+  /// Read-only view of the cached access token. The Dio interceptor updates
+  /// this on every successful refresh, so external callers (e.g. the
+  /// WebSocket client picking a token for a reconnect) can pull the
+  /// freshest token without going through the keystore.
+  String? get cachedToken => _cachedToken;
+
   ApiClient() {
     _dio = Dio(
       BaseOptions(
@@ -1220,6 +1226,57 @@ class ApiClient {
   Future<List<dynamic>> listPresentations() async {
     final res = await _dio.get('/presentations/');
     return res.data as List<dynamic>;
+  }
+
+  /// School-wide presentation LIBRARY — one item per presentation (not per
+  /// teacher-progress). Used by the "Presentations" tab in the teacher
+  /// Database screen so any teacher can browse + adopt a deck someone else
+  /// generated.
+  Future<List<dynamic>> listPresentationLibrary({
+    int? grade,
+    String? subject,
+    bool includeProcessing = false,
+  }) async {
+    final res = await _dio.get(
+      '/presentations/library',
+      queryParameters: {
+        if (grade != null) 'grade': grade,
+        if (subject != null) 'subject': subject,
+        if (includeProcessing) 'include_processing': true,
+      },
+    );
+    return res.data as List<dynamic>;
+  }
+
+  /// School-wide chapter database with "presentation already exists?" hint.
+  /// Use this to let a teacher pick an existing chapter PDF instead of
+  /// uploading a fresh copy.
+  Future<List<dynamic>> listAvailableChapters({
+    int? grade,
+    String? subject,
+  }) async {
+    final res = await _dio.get(
+      '/presentations/available-chapters',
+      queryParameters: {
+        if (grade != null) 'grade': grade,
+        if (subject != null) 'subject': subject,
+      },
+    );
+    return res.data as List<dynamic>;
+  }
+
+  /// Find-or-create a presentation for an existing chapter document.
+  /// Idempotent across teachers (the chapter doc is the dedupe key).
+  Future<Map<String, dynamic>> createPresentationFromChapter({
+    required int chapterDocumentId,
+    String? chapterNameOverride,
+  }) async {
+    final res = await _dio.post('/presentations/from-chapter', data: {
+      'chapter_document_id': chapterDocumentId,
+      if (chapterNameOverride != null && chapterNameOverride.isNotEmpty)
+        'chapter_name_override': chapterNameOverride,
+    });
+    return res.data as Map<String, dynamic>;
   }
 
   /// Full deck for one presentation. Auto-creates the caller's progress row.

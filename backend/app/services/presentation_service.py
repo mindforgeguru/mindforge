@@ -17,6 +17,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
+from google.genai import types as genai_types
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +30,15 @@ from app.models.presentation import (
     PresentationTeacherProgress,
 )
 from app.services import ai_service
+
+
+# Outline + slide-fill responses can be huge (80+ slides × multi-line text)
+# and the default 16k cap caused Gemini to truncate JSON mid-string. Gemini
+# 2.5 Flash supports up to 65k output tokens.
+_PRESENTATION_GEN_CONFIG = genai_types.GenerateContentConfig(
+    temperature=0.4,
+    max_output_tokens=65536,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,15 +74,16 @@ Respond ONLY with a valid JSON object — no markdown fences, no explanation:
   "slides_per_period": <integer {_MIN_SLIDES_PER_PERIOD}-{_MAX_SLIDES_PER_PERIOD}>,
   "outline": [
     {{
-      "title": "<short slide title>",
-      "key_points": ["<bullet 1>", "<bullet 2>", ...]
+      "title": "<short slide title, max 12 words>",
+      "key_points": ["<short bullet>", "<short bullet>", ...]
     }},
     ...
   ]
 }}
 
 The total number of outline items MUST equal recommended_periods * slides_per_period.
-Every key_points array must have 2–5 short bullets that capture the slide's substance.
+Each key_points array has 2–4 SHORT bullets (max 12 words each) — these are
+hints for the slide-fill stage, not final slide content. Keep them terse.
 
 JSON:"""
 
@@ -138,7 +149,7 @@ async def _gemini_call(file_bytes: Optional[bytes], ext: Optional[str],
             lambda: client.models.generate_content(
                 model=settings.GEMINI_MODEL,
                 contents=contents,
-                config=ai_service._GEMINI_GENERATION_CONFIG,
+                config=_PRESENTATION_GEN_CONFIG,
             ),
         )
         return response.text
