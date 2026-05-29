@@ -126,6 +126,25 @@ def _strip_json_fences(raw: str) -> str:
     return raw
 
 
+_JSON_DECODER = json.JSONDecoder()
+
+
+def _parse_lenient_json(raw: str):
+    """Parse the first JSON value in `raw`, ignoring leading prose / code
+    fences and any trailing commentary Gemini sometimes appends after the
+    JSON document closes (root cause of the "Extra data" parse failures).
+    """
+    stripped = _strip_json_fences(raw)
+    start = next(
+        (i for i, ch in enumerate(stripped) if ch in "{["),
+        -1,
+    )
+    if start < 0:
+        raise ValueError("Gemini response contained no JSON object or array.")
+    value, _ = _JSON_DECODER.raw_decode(stripped[start:])
+    return value
+
+
 def _clamp(value: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, value))
 
@@ -181,7 +200,7 @@ async def analyze_chapter(
     """
     prompt = _build_outline_prompt(grade, subject, chapter)
     raw = await _gemini_call(file_bytes, ext, prompt)
-    parsed = json.loads(_strip_json_fences(raw))
+    parsed = _parse_lenient_json(raw)
 
     periods = _clamp(int(parsed.get("recommended_periods", 3)),
                      _MIN_PERIODS, _MAX_PERIODS)
@@ -221,7 +240,7 @@ async def generate_slides(grade: int, subject: str, chapter: str,
         chunk = outline[start:start + CHUNK]
         prompt = _build_slide_fill_prompt(grade, subject, chapter, chunk)
         raw = await _gemini_call(None, None, prompt)
-        parsed = json.loads(_strip_json_fences(raw))
+        parsed = _parse_lenient_json(raw)
         if not isinstance(parsed, list):
             raise ValueError("Gemini slide-fill returned non-array.")
         for item, source in zip(parsed, chunk):
