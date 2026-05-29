@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -604,7 +605,174 @@ class _SlideViewer extends StatelessWidget {
             ),
           ],
         ),
+        Center(
+          child: TextButton.icon(
+            icon: const Icon(Icons.fullscreen, size: 18),
+            label: Text(
+              'View fullscreen',
+              style: GoogleFonts.poppins(
+                fontSize: 12, fontWeight: FontWeight.w600,
+              ),
+            ),
+            style: TextButton.styleFrom(foregroundColor: accentColor),
+            onPressed: () => Navigator.of(context).push(
+              PageRouteBuilder(
+                opaque: true,
+                barrierColor: Colors.black,
+                fullscreenDialog: true,
+                transitionDuration: const Duration(milliseconds: 180),
+                pageBuilder: (_, __, ___) => _FullscreenSlideOverlay(
+                  slides: slides,
+                  initialIndex: viewerIndex,
+                  accentColor: accentColor,
+                ),
+              ),
+            ),
+          ),
+        ),
       ],
+    );
+  }
+}
+
+// ── Fullscreen overlay ───────────────────────────────────────────────────────
+//
+// Modal route that fills the whole viewport with a single slide at a time.
+// Reuses _SlideCard so the look is identical to the inline viewer, just
+// scaled up to the available width/height. Prev/next arrows + a close X
+// in the corner. Keyboard ←/→/Esc also navigate / dismiss.
+
+class _FullscreenSlideOverlay extends StatefulWidget {
+  final List<Map<String, dynamic>> slides;
+  final int initialIndex;
+  final Color accentColor;
+
+  const _FullscreenSlideOverlay({
+    required this.slides,
+    required this.initialIndex,
+    required this.accentColor,
+  });
+
+  @override
+  State<_FullscreenSlideOverlay> createState() =>
+      _FullscreenSlideOverlayState();
+}
+
+class _FullscreenSlideOverlayState extends State<_FullscreenSlideOverlay> {
+  late PageController _ctrl;
+  late int _idx;
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _idx = widget.initialIndex;
+    _ctrl = PageController(initialPage: _idx);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _go(int delta) {
+    final target = (_idx + delta).clamp(0, widget.slides.length - 1);
+    if (target == _idx) return;
+    _ctrl.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
+  }
+
+  KeyEventResult _onKey(FocusNode _, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    if (e.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _go(1);
+      return KeyEventResult.handled;
+    }
+    if (e.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _go(-1);
+      return KeyEventResult.handled;
+    }
+    if (e.logicalKey == LogicalKeyboardKey.escape) {
+      Navigator.of(context).maybePop();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.slides.length;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Focus(
+          focusNode: _focus,
+          autofocus: true,
+          onKeyEvent: _onKey,
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 56, 24, 64),
+                child: PageView.builder(
+                  controller: _ctrl,
+                  itemCount: total,
+                  onPageChanged: (i) => setState(() => _idx = i),
+                  itemBuilder: (_, i) => _SlideCard(
+                    index: i,
+                    total: total,
+                    slide: widget.slides[i],
+                    accentColor: widget.accentColor,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 12, right: 12,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  tooltip: 'Exit fullscreen',
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+              ),
+              Positioned(
+                left: 0, top: 0, bottom: 0,
+                child: Center(
+                  child: IconButton(
+                    iconSize: 36,
+                    icon: const Icon(Icons.chevron_left, color: Colors.white70),
+                    onPressed: _idx == 0 ? null : () => _go(-1),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 0, top: 0, bottom: 0,
+                child: Center(
+                  child: IconButton(
+                    iconSize: 36,
+                    icon: const Icon(Icons.chevron_right, color: Colors.white70),
+                    onPressed: _idx >= total - 1 ? null : () => _go(1),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 16, left: 0, right: 0,
+                child: Center(
+                  child: Text(
+                    'Slide ${_idx + 1} of $total   ·   Esc to exit',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12, color: Colors.white60,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
