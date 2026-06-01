@@ -6,41 +6,60 @@ import 'package:flutter/foundation.dart';
 
 /// SSL Certificate Pinning for api.mindforge.guru
 ///
-/// How it works:
-///   After the OS validates the certificate chain normally (CA trust, expiry,
-///   hostname), our callback additionally checks that the leaf certificate's
-///   SHA-256 fingerprint matches one of the pinned values below.
+/// ── How it works ─────────────────────────────────────────────────────────────
+/// dio calls [IOHttpClientAdapter.validateCertificate] ONLY after the OS /
+/// SecurityContext (and badCertificateCallback) have already validated the full
+/// chain — trusted root, intermediate, hostname, and expiry. So this callback
+/// only ever receives an already-OS-trusted leaf certificate. We add ONE extra
+/// constraint on top of that: the leaf must be issued by our CA, Let's Encrypt.
 ///
-/// ── Certificate rotation guide ──────────────────────────────────────────────
-/// The leaf cert (Let's Encrypt) auto-renews every ~90 days on Railway.
-/// Current leaf cert expires: 2026-06-28
+/// This is **CA pinning**, deliberately chosen over leaf-fingerprint pinning:
+///   • It survives the ~90-day Let's Encrypt leaf renewal that Railway performs
+///     automatically. Leaf-fingerprint pinning locked every app build out of
+///     the API on 2026-05-29 when the leaf rotated (web was unaffected because
+///     browsers trust the CA chain rather than a pinned leaf). CA pinning does
+///     not have that failure mode.
+///   • It still defends against the threat pinning exists for: an OS-trusted
+///     cert MIS-ISSUED for our host by a *different* CA. Such a cert passes the
+///     OS chain check but fails the issuer test here and is rejected.
+///   • It is safe against forged-issuer self-signed certs: those never pass the
+///     OS chain validation, so this callback is never reached for them.
 ///
-/// When the cert renews, run this command and update [_pinnedFingerprints]:
+/// The known-good leaf fingerprints below are kept as a fast path / audit trail
+/// of certs we've explicitly seen; they are not required for a connection to
+/// succeed (the issuer check covers all valid renewals).
+///
+/// ── If we ever move off Let's Encrypt ────────────────────────────────────────
+/// Update [_trustedIssuerOrgs] to the new CA's organisation name. To inspect the
+/// current issuer + leaf fingerprint:
 ///
 ///   echo | openssl s_client -connect api.mindforge.guru:443 2>/dev/null \
-///     | openssl x509 -noout -fingerprint -sha256 \
-///     | tr -d ':' | tr '[:upper:]' '[:lower:]'
-///
-/// Keep the OLD fingerprint in the set for one release cycle as a backup
-/// so users on the previous app version aren't immediately locked out.
-///
-/// Intermediate CA fingerprint is included as a stable backup — it changes
-/// far less frequently than the leaf cert. Issuing intermediate may also
-/// change between cert rotations (e.g. R12 → E8 when Railway switches from
-/// RSA to ECDSA), so list known intermediates here too.
+///     | openssl x509 -noout -issuer -fingerprint -sha256
 /// ────────────────────────────────────────────────────────────────────────────
-const _pinnedFingerprints = {
-  // Leaf cert — current, expires 2026-06-28 (issued 2026-03-30, ECDSA via E8)
+
+/// Issuer organisation(s) we accept for [_pinnedHost], matched case-insensitively
+/// against the leaf's issuer DN with apostrophes stripped (so both "Let's
+/// Encrypt" and "Lets Encrypt" match regardless of DN formatting).
+const _trustedIssuerOrgs = <String>{
+  'lets encrypt',
+};
+
+/// Known-good leaf fingerprints (SHA-256 of DER). Fast-path + audit trail only;
+/// a valid Let's Encrypt renewal not listed here is still accepted via the
+/// issuer check, by design.
+const _knownLeafFingerprints = <String>{
+  // Current leaf — expires 2026-08-27 (issued 2026-05-29, via Let's Encrypt YE1).
+  '1cc35babfed16ce0ae3cf524d9b5fe4aed52ebeebfd7242aaba3433504ceeb46',
+  // Previous leaf — expired 2026-06-28 (issued 2026-03-30, via E8).
   '2489dccbd08cea6663085e5c809239c84b818020389e45086c2e544a716e26f7',
-  // Let's Encrypt E8 intermediate CA (current issuer)
-  '83624fd338c8d9b023c18a67cb7a9c0519da43d11775b4c6cbdad45c3d997c52',
-  // Previous leaf (kept one release cycle for older app installs)
+  // Older leaf (deep backup).
   '9b4febcb02f1649d17f95a3bf08509364beebf17fe046706e1463de5fb8ec413',
-  // Let's Encrypt R12 intermediate CA (previous RSA chain)
-  '131fce7784016899a5a00203a9efc80f18ebbd75580717edc1553580930836ec',
 };
 
 const _pinnedHost = 'api.mindforge.guru';
+
+String _normalizeDn(String dn) =>
+    dn.toLowerCase().replaceAll("'", '').replaceAll('’', '');
 
 /// Applies certificate pinning to a [IOHttpClientAdapter].
 ///
@@ -56,18 +75,22 @@ void applySSLPinning(IOHttpClientAdapter adapter) {
 
     if (cert == null) return false;
 
+    // Fast path: a leaf we've explicitly recorded.
     final fingerprint = sha256.convert(cert.der).toString();
-    final trusted = _pinnedFingerprints.contains(fingerprint);
+    if (_knownLeafFingerprints.contains(fingerprint)) return true;
 
-    if (!trusted) {
-      // Log mismatch so it shows up in crash reports / logs.
-      debugPrint(
-        '[SSL Pinning] REJECTED certificate for $host\n'
-        '  Got:      $fingerprint\n'
-        '  Expected: ${_pinnedFingerprints.join(' | ')}',
-      );
-    }
+    // Resilient path: any leaf issued by our CA. The chain is already
+    // OS-validated at this point, so this only accepts genuinely trusted certs
+    // that are *also* from Let's Encrypt — and survives leaf renewals.
+    final issuer = _normalizeDn(cert.issuer);
+    if (_trustedIssuerOrgs.any(issuer.contains)) return true;
 
-    return trusted;
+    // Log mismatch so it surfaces in crash reports / logs.
+    debugPrint(
+      '[SSL Pinning] REJECTED certificate for $host\n'
+      '  fingerprint: $fingerprint\n'
+      '  issuer:      ${cert.issuer}',
+    );
+    return false;
   };
 }

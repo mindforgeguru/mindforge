@@ -275,10 +275,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final status = e.response?.statusCode;
       if (status == 403) return 'Your account is pending admin approval.';
       if (status == 401) return 'Invalid username or MPIN.';
-      final detail = e.response?.data?['detail'];
-      if (detail != null) return detail.toString();
+      // Pull a human message out of the body WITHOUT assuming its shape. The
+      // body may be a Map ({"detail": "..."} or FastAPI's 422
+      // {"detail": [{"msg": ...}]}), a String (an HTML/plain 5xx page from the
+      // Railway edge when the backend is cold/restarting), or null. Indexing a
+      // String with ['detail'] throws, so the old code could crash here and
+      // surface the opaque fallback — guard every access.
+      final data = e.response?.data;
+      if (data is Map) {
+        final detail = data['detail'];
+        if (detail is String && detail.isNotEmpty) return detail;
+        if (detail is List && detail.isNotEmpty) {
+          final first = detail.first;
+          if (first is Map && first['msg'] is String) {
+            return first['msg'] as String;
+          }
+        }
+        if (detail != null) return detail.toString();
+      }
+      // Recognised as an HTTP error but with no usable body — surface the
+      // status code so a field failure is diagnosable instead of opaque.
+      if (status != null) return 'Request failed (HTTP $status). Please try again.';
+      return 'Request failed. Please try again.';
     }
-    return 'Something went wrong. Please try again.';
+    // Non-Dio error (e.g. an unexpected client-side failure after the network
+    // call returned). Report it to Crashlytics so we capture the stack trace
+    // from the field, and include the type so it's not a blind dead-end.
+    unawaited(CrashReporter.recordError(e, StackTrace.current));
+    return 'Something went wrong (${e.runtimeType}). Please try again.';
   }
 }
 
