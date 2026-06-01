@@ -4,11 +4,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/constants.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/presentation_provider.dart';
 import '../widgets/teacher_scaffold.dart';
@@ -87,6 +89,59 @@ class _AutoPresentationViewScreenState
     _processingPoll = null;
   }
 
+  /// Delete this presentation (uploader/admin only on the backend) and return
+  /// to the dashboard list. Used to clear out a deck whose generation failed.
+  Future<void> _deletePresentation(String? chapter) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete presentation?'),
+        content: Text(
+          '"${chapter ?? 'This presentation'}" will be permanently deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    _stopProcessingPoll();
+    try {
+      await ref.read(apiClientProvider).deletePresentation(widget.presentationId);
+      try { ref.invalidate(presentationListProvider); } catch (_) {}
+      try { ref.invalidate(presentationLibraryProvider); } catch (_) {}
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Deleted "${chapter ?? 'presentation'}".')),
+      );
+      context.go('${RouteNames.teacherDashboard}/presentations');
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      final msg = body is Map && body['detail'] is String
+          ? body['detail'] as String
+          : 'Delete failed: ${e.response?.statusCode ?? '?'}';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e'),
+            backgroundColor: AppColors.error),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final detailAsync =
@@ -130,6 +185,8 @@ class _AutoPresentationViewScreenState
               reason: data['failure_reason']?.toString(),
               onRetry: () => ref.invalidate(
                   presentationDetailProvider(widget.presentationId)),
+              onDelete: () =>
+                  _deletePresentation(data['chapter_name']?.toString()),
             );
           }
           return _ReadyView(
@@ -184,7 +241,12 @@ class _ProcessingView extends StatelessWidget {
 class _FailedView extends StatelessWidget {
   final String? reason;
   final VoidCallback onRetry;
-  const _FailedView({required this.reason, required this.onRetry});
+  final VoidCallback onDelete;
+  const _FailedView({
+    required this.reason,
+    required this.onRetry,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -214,10 +276,25 @@ class _FailedView extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 14),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.refresh),
-              label: const Text('Refresh'),
-              onPressed: onRetry,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh'),
+                  onPressed: onRetry,
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Delete'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: BorderSide(color: AppColors.error),
+                  ),
+                  onPressed: onDelete,
+                ),
+              ],
             ),
           ],
         ),

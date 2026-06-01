@@ -145,6 +145,62 @@ def _parse_lenient_json(raw: str):
     return value
 
 
+# Extensions Gemini's Files API actually accepts (mirrors ai_service._MIME_MAP).
+_GEMINI_SUPPORTED_EXTS = frozenset(ai_service._MIME_MAP.keys())
+
+
+def _sniff_ext(file_bytes: bytes, fallback: str) -> str:
+    """Pick a Gemini-supported file extension from the file's magic bytes.
+
+    Chapter documents are stored under a key whose extension comes from the
+    original filename — a file uploaded without an extension lands as
+    ``.bin``, and a key-derived ``bin`` extension maps to
+    ``application/octet-stream``, which Gemini rejects with
+    ``400 INVALID_ARGUMENT: Unsupported MIME type``. Sniffing the real type
+    keeps a mislabelled key from hard-failing generation.
+    """
+    head = file_bytes[:8]
+    if head[:5] == b"%PDF-":
+        return "pdf"
+    if head[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if head[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if head[:4] in (b"GIF8",):
+        return "gif"
+    if head[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
+        return "webp"
+    fb = (fallback or "").lower()
+    # Trust the key-derived extension only if Gemini supports it; otherwise
+    # assume PDF (the overwhelmingly common chapter-document format).
+    return fb if fb in _GEMINI_SUPPORTED_EXTS else "pdf"
+
+
+def _friendly_failure_reason(exc: Exception) -> str:
+    """Map a raw Gemini/processing exception to a teacher-readable reason.
+
+    The raw error is still logged in full; this is only what gets stored on
+    the row and shown in the UI's "Generation failed" view.
+    """
+    msg = str(exc)
+    low = msg.lower()
+    if "unsupported mime type" in low:
+        return ("The chapter file isn't in a format the AI can read. "
+                "Please re-upload the chapter as a standard PDF.")
+    if "no pages" in low or "has no pages" in low:
+        return ("The chapter PDF couldn't be opened — it may be empty, "
+                "password-protected, or corrupted. Try re-uploading a "
+                "standard, non-encrypted PDF.")
+    if "invalid_argument" in low or "400" in low:
+        return ("The AI rejected the chapter file — it may be scanned, "
+                "encrypted, or in an unsupported format. Try re-uploading a "
+                "text-based PDF.")
+    if "no json" in low or "json" in low:
+        return ("The AI returned an unreadable response. Please try "
+                "generating again.")
+    return msg[:500]
+
+
 def _clamp(value: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, value))
 
@@ -278,7 +334,10 @@ async def run_generation(db: AsyncSession, presentation_id: int) -> None:
             raise ValueError("Presentation row has no source_pdf_key.")
         bucket, key = row.source_pdf_key.split("/", 1)
         file_bytes = await storage_service.download_file(bucket, key)
-        ext = key.rsplit(".", 1)[-1].lower() if "." in key else "pdf"
+        key_ext = key.rsplit(".", 1)[-1].lower() if "." in key else "pdf"
+        # Sniff the real type so a mislabelled key (e.g. a '.bin' chapter doc)
+        # doesn't upload as an unsupported MIME and trip Gemini's 400.
+        ext = _sniff_ext(file_bytes, key_ext)
 
         plan = await analyze_chapter(
             file_bytes, ext, row.grade, row.subject, row.chapter_name
@@ -320,7 +379,7 @@ async def run_generation(db: AsyncSession, presentation_id: int) -> None:
     except Exception as exc:
         logger.exception("Presentation generation failed for id=%s", presentation_id)
         row.status = PresentationStatus.FAILED
-        row.failure_reason = str(exc)[:500]
+        row.failure_reason = _friendly_failure_reason(exc)
         try:
             await db.commit()
         except Exception:

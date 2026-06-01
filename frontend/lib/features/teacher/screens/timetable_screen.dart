@@ -819,6 +819,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
       await api.deleteTimetable(_selectedGrade, _dateString);
       ref.invalidate(teacherTimetableProvider((_selectedGrade, _dateString)));
       ref.invalidate(myTimetableProvider);
+      ref.invalidate(teacherDashboardSummaryProvider);
       // Clear form
       setState(() {
         _teacherIds.clear();
@@ -995,6 +996,10 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
       ref.invalidate(teacherTimetableProvider((_selectedGrade, _dateString)));
       ref.invalidate(myTimetableProvider);
       ref.invalidate(teacherTodayWorkflowProvider);
+      // The teacher dashboard's "Today's Timetable" reads from the summary
+      // (summary['my_timetable']), so it must be invalidated too — otherwise
+      // the dashboard shows stale slots until a manual refresh.
+      ref.invalidate(teacherDashboardSummaryProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1245,6 +1250,7 @@ class _GradeSectionState extends ConsumerState<_GradeSection> {
       await api.deleteTimetable(widget.grade, widget.dateString);
       ref.invalidate(teacherTimetableProvider((widget.grade, widget.dateString)));
       ref.invalidate(myTimetableProvider);
+      ref.invalidate(teacherDashboardSummaryProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Timetable deleted — Grade ${widget.grade} · $dateLabel'),
