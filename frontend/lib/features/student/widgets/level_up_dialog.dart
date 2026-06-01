@@ -36,7 +36,7 @@ class LevelUpDialog extends ConsumerStatefulWidget {
       context: context,
       useRootNavigator: true,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.55),
+      barrierColor: Colors.black.withValues(alpha: 0.55),
       builder: (_) => LevelUpDialog(
         newLevel: newLevel,
         newTitle: newTitle,
@@ -116,7 +116,7 @@ class _LevelUpDialogState extends ConsumerState<LevelUpDialog>
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 24,
                       offset: const Offset(0, 6),
                     ),

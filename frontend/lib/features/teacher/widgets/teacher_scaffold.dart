@@ -143,7 +143,7 @@ class TeacherTopNav extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 6, offset: const Offset(0, 2))],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 6, offset: const Offset(0, 2))],
               ),
               padding: const EdgeInsets.all(3),
               child: Image.asset('assets/images/hansal_logo.png', fit: BoxFit.contain),
@@ -155,7 +155,7 @@ class TeacherTopNav extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 6, offset: const Offset(0, 2))],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 6, offset: const Offset(0, 2))],
               ),
               padding: const EdgeInsets.all(4),
               child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
@@ -200,7 +200,7 @@ class TeacherTopNav extends ConsumerWidget {
               message: 'Report a problem',
               child: IconButton(
                 onPressed: () => showReportProblemDialog(context, ref),
-                icon: Icon(Icons.bug_report_outlined, size: 18, color: Colors.white.withOpacity(0.65)),
+                icon: Icon(Icons.bug_report_outlined, size: 18, color: Colors.white.withValues(alpha: 0.65)),
                 splashRadius: 18,
               ),
             ),
@@ -208,7 +208,7 @@ class TeacherTopNav extends ConsumerWidget {
               message: 'Logout',
               child: IconButton(
                 onPressed: () => confirmLogout(context, ref),
-                icon: Icon(Icons.logout_rounded, size: 18, color: Colors.white.withOpacity(0.65)),
+                icon: Icon(Icons.logout_rounded, size: 18, color: Colors.white.withValues(alpha: 0.65)),
                 splashRadius: 18,
               ),
             ),
@@ -254,7 +254,7 @@ class TeacherTopNav extends ConsumerWidget {
         },
         style: TextButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          backgroundColor: isActive ? Colors.white.withOpacity(0.15) : null,
+          backgroundColor: isActive ? Colors.white.withValues(alpha: 0.15) : null,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         child: Text(
@@ -262,7 +262,7 @@ class TeacherTopNav extends ConsumerWidget {
           style: GoogleFonts.poppins(
             fontSize: 12.5,
             fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-            color: isActive ? Colors.white : Colors.white.withOpacity(0.65),
+            color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.65),
           ),
         ),
       );

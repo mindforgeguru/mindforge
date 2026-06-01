@@ -187,9 +187,9 @@ class _PayTab extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.08),
+                color: AppColors.error.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -234,7 +234,7 @@ class _PaymentOptionCard extends StatelessWidget {
 
     return Container(
       decoration:
-          mindForgeCardDecoration(color: AppColors.primary.withOpacity(0.02)),
+          mindForgeCardDecoration(color: AppColors.primary.withValues(alpha: 0.02)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -244,7 +244,7 @@ class _PaymentOptionCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 14,
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                   child: Text('${info.slot}',
                       style:       TextStyle(
                           fontSize: 12,
@@ -401,8 +401,8 @@ class _BalanceSummaryCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: mindForgeCardDecoration(
           color: isDue
-              ? AppColors.error.withOpacity(0.04)
-              : AppColors.success.withOpacity(0.04)),
+              ? AppColors.error.withValues(alpha: 0.04)
+              : AppColors.success.withValues(alpha: 0.04)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -415,7 +415,7 @@ class _BalanceSummaryCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(fees.academicYear,
@@ -551,7 +551,7 @@ class _PaymentTile extends StatelessWidget {
       decoration: mindForgeCardDecoration(),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: AppColors.success.withOpacity(0.15),
+          backgroundColor: AppColors.success.withValues(alpha: 0.15),
           child: const Icon(Icons.check, color: AppColors.success),
         ),
         title: Text(formatter.format(payment.amount),

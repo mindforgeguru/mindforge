@@ -53,7 +53,7 @@ class XPProgressBar extends ConsumerWidget {
         border: Border.all(color: AppColors.divider),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -103,7 +103,7 @@ class XPProgressBar extends ConsumerWidget {
               child: Stack(
                 children: [
                   // Track
-                  Container(color: AppColors.divider.withOpacity(0.5)),
+                  Container(color: AppColors.divider.withValues(alpha: 0.5)),
                   // Fill — animates between progress values
                   TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0, end: progress.clamp(0.0, 1.0)),
@@ -132,7 +132,7 @@ class XPProgressBar extends ConsumerWidget {
   Widget _maxBadge(BrandPalette palette) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: palette.accent.withOpacity(0.15),
+          color: palette.accent.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(

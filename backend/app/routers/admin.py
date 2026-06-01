@@ -14,7 +14,7 @@ from sqlalchemy import func as sqlfunc
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
 from app.core.security import get_current_admin
-from app.core.upload_utils import validate_and_strip_exif
+from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.models.academic_year import AcademicYear
 from app.models.audit_log import AuditLog
 from app.models.fees import FeePayment, FeeStructure, PaymentInfo
@@ -77,6 +77,7 @@ async def upload_admin_photo(
     current_admin: User = Depends(get_current_admin),
 ):
     """Upload or replace the admin's profile picture."""
+    reject_if_oversize(file)
     raw = await file.read()
     file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"
@@ -771,6 +772,7 @@ async def admin_upload_teacher_photo(
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found.")
 
+    reject_if_oversize(file)
     raw = await file.read()
     file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"

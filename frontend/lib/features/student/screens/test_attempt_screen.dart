@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/leave_guard.dart' as leave_guard;
 import '../../../core/utils/responsive.dart';
 import '../providers/student_provider.dart';
 
@@ -53,6 +55,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autosaveTimer?.cancel();
+    leave_guard.disableLeaveConfirmation();
     for (final c in _textCtrls.values) {
       c.dispose();
     }
@@ -65,22 +68,37 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Strict single-attempt policy: backgrounding the app forfeits the
-    // attempt (score=0). 'inactive' is skipped because it fires on
+    // Strict single-attempt policy: leaving the app ends the attempt. Rather
+    // than zeroing it, we auto-submit whatever has been answered so far, so
+    // the student keeps credit. 'inactive' is skipped because it fires on
     // transient overlays (notification panel, control center) — those
-    // shouldn't lose the test. 'paused' and 'hidden' are real exits.
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
+    // shouldn't end the test. 'paused' and 'hidden' are real exits.
+    //
+    // Web is excluded: there, 'hidden'/'paused' also fire on a mere tab-switch
+    // or window-minimize, which shouldn't auto-submit. On web, a real exit
+    // (closing/refreshing/navigating the tab away) is caught by the
+    // beforeunload guard in leave_guard instead; answers are autosaved every
+    // 20s and finalized server-side on the next /start.
+    if (!kIsWeb &&
+        (state == AppLifecycleState.paused ||
+            state == AppLifecycleState.hidden)) {
       if (!_submitted) {
         _submitted = true;
         _pendingResultDialog = true;
         _autosaveTimer?.cancel();
+        _flushAnswers();
         // Fire-and-forget — the screen is going into the background, so
-        // there's nothing to await against. /start also forfeits on the
-        // server next time the student opens the test, so the row ends
-        // up finalized even if this request is lost.
+        // there's nothing to await against. The server finalizes with these
+        // answers; /start also finalizes the row server-side next time the
+        // student opens the test, so it ends up submitted even if lost.
         final api = ref.read(apiClientProvider);
-        api.forfeitTest(widget.testId).catchError((_) => <String, dynamic>{});
+        api
+            .submitTest(
+              widget.testId,
+              Map<String, dynamic>.from(_answers),
+              true,
+            )
+            .catchError((_) => <String, dynamic>{});
         ref.invalidate(pendingTestsProvider);
         ref.invalidate(completedTestsProvider);
         ref.invalidate(studentGradesProvider);
@@ -88,34 +106,84 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     } else if (state == AppLifecycleState.resumed) {
       if (_pendingResultDialog) {
         _pendingResultDialog = false;
-        _surfaceForfeitResult();
+        _surfaceAutoSubmitResult();
       } else if (!_submitted) {
         _refreshAttemptOnResume();
       }
     }
   }
 
-  /// Forfeit synchronously and pop. Used for the back button — we're in
-  /// the foreground so we can show the dialog right away.
-  Future<void> _forfeitAndExit() async {
-    if (_submitted) return;
-    _submitted = true;
-    _autosaveTimer?.cancel();
-    final api = ref.read(apiClientProvider);
-    try {
-      await api.forfeitTest(widget.testId);
-    } catch (_) {
-      // Best effort. /start will forfeit on the server side anyway.
-    }
-    ref.invalidate(pendingTestsProvider);
-    ref.invalidate(completedTestsProvider);
-    ref.invalidate(studentGradesProvider);
-    await _surfaceForfeitResult();
+  /// One-time notice shown as soon as the attempt loads, warning the student
+  /// that going back or closing the app will end the test and auto-submit.
+  Future<void> _showStartWarning() async {
+    if (!mounted || _submitted) return;
+    await showDialog<void>(
+      context: context,
+      useRootNavigator: false,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: AppColors.warning),
+            SizedBox(width: 8),
+            Expanded(child: Text('Before you begin')),
+          ],
+        ),
+        content: const Text(
+          'This is a single attempt. If you press back or close the app, '
+          'the test will be automatically submitted with your answers so far '
+          'and you will not be able to resume.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('I understand'),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _surfaceForfeitResult() async {
+  /// Confirmation shown when the student tries to leave the test (Android back
+  /// button / iOS swipe-back). Returns true if they chose to submit and leave.
+  Future<bool> _confirmExitSubmit() async {
+    if (_submitted) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('Are you sure?'),
+        content: const Text('This will submit your test.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep going'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  /// After a background auto-submit, fetch the finalized score and show it.
+  Future<void> _surfaceAutoSubmitResult() async {
     if (!mounted) return;
-    await _showResultDialog(score: 0, autoSubmitted: true);
+    double score = 0;
+    try {
+      final data =
+          await ref.read(apiClientProvider).startTestAttempt(widget.testId);
+      score = (data['score'] as num?)?.toDouble() ?? 0;
+    } catch (_) {
+      // Network hiccup on resume — fall back to 0 in the dialog; the grade
+      // list will still reflect the real server-side score.
+    }
+    await _showResultDialog(score: score, autoSubmitted: true);
     if (mounted) context.pop();
   }
 
@@ -139,6 +207,14 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
         const Duration(seconds: 20),
         (_) => _autosaveNow(silent: true),
       );
+      // Web only: warn (native browser prompt) if they try to close the tab,
+      // refresh, or navigate the browser away mid-test. The in-app back button
+      // is handled separately by the PopScope dialog below.
+      leave_guard.enableLeaveConfirmation();
+      // One-time heads-up so the student understands the strict single-attempt
+      // policy before answering: leaving the screen / closing the app ends the
+      // attempt and auto-submits whatever has been answered.
+      await _showStartWarning();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -281,6 +357,8 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     required bool autoSubmitted,
     bool fromTimeout = false,
   }) async {
+    // The attempt is over — stop warning about leaving the page.
+    leave_guard.disableLeaveConfirmation();
     if (!mounted) return;
     await showDialog(
       context: context,
@@ -394,14 +472,18 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     final qType = (q['type'] as String? ?? '').toLowerCase();
     final isLast = _currentIndex == _questions.length - 1;
 
-    // Back button: under the strict single-attempt policy, exiting the
-    // screen forfeits the attempt (score=0). Once submitted/forfeited
+    // Back button: under the strict single-attempt policy, exiting the screen
+    // ends the attempt. We warn first ("Are you sure? This will submit your
+    // test.") and, if confirmed, submit the current answers. Once submitted
     // canPop=true so the pop goes through normally.
     return PopScope(
       canPop: _submitted,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop || _submitted) return;
-        await _forfeitAndExit();
+        final confirmed = await _confirmExitSubmit();
+        if (confirmed) {
+          await _submitTest(autoSubmitted: true);
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -419,17 +501,18 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
               ),
             ],
           ),
-          actions: [
-            _CountdownBadge(
-              key: ValueKey(_initialSeconds),
-              initialSeconds: _initialSeconds,
-              onExpired: () => _submitTest(autoSubmitted: true),
-            ),
-          ],
         ),
       body: Column(
         children: [
-          // ── Overall progress bar ─────────────────────────────────────────
+          // ── Prominent countdown timer ────────────────────────────────────
+          // Keyed on _initialSeconds so it resets cleanly when the remaining
+          // time is resynced after the app is backgrounded and resumed.
+          _CountdownBar(
+            key: ValueKey(_initialSeconds),
+            initialSeconds: _initialSeconds,
+            onExpired: () => _submitTest(autoSubmitted: true),
+          ),
+          // ── Overall progress bar (questions answered) ────────────────────
           LinearProgressIndicator(
             value: _answeredCount / _questions.length,
             backgroundColor: AppColors.divider,
@@ -491,7 +574,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: mindForgeCardDecoration(
-                        color: AppColors.primary.withOpacity(0.05)),
+                        color: AppColors.primary.withValues(alpha: 0.05)),
                     child: Text(
                       q['question'] as String? ?? '',
                       style: Theme.of(context)
@@ -531,7 +614,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
               color: AppColors.cardBackground,
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
+                    color: Colors.black.withValues(alpha: 0.06),
                     blurRadius: 8,
                     offset: const Offset(0, -2))
               ],
@@ -580,7 +663,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: isSelected
-                ? AppColors.primary.withOpacity(0.10)
+                ? AppColors.primary.withValues(alpha: 0.10)
                 : AppColors.cardBackground,
             border: Border.all(
               color: isSelected ? AppColors.primary : AppColors.divider,
@@ -618,24 +701,26 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
   }
 }
 
-// ─── Countdown badge ──────────────────────────────────────────────────────────
-// Owns the 1-second Timer so its setState only repaints the badge, not the
-// entire screen (question dots, content, progress bar stay untouched).
+// ─── Countdown bar ────────────────────────────────────────────────────────────
+// Prominent full-width timer shown at the top of the test body: a coloured
+// banner with "MM:SS remaining" and a time-left progress bar that drains as
+// the clock runs down. Owns the 1-second Timer so its setState only repaints
+// the bar, not the whole screen (question dots, content stay untouched).
 
-class _CountdownBadge extends StatefulWidget {
+class _CountdownBar extends StatefulWidget {
   final int initialSeconds;
   final VoidCallback onExpired;
-  const _CountdownBadge({
+  const _CountdownBar({
     super.key,
     required this.initialSeconds,
     required this.onExpired,
   });
 
   @override
-  State<_CountdownBadge> createState() => _CountdownBadgeState();
+  State<_CountdownBar> createState() => _CountdownBarState();
 }
 
-class _CountdownBadgeState extends State<_CountdownBadge> {
+class _CountdownBarState extends State<_CountdownBar> {
   late int _secondsLeft;
   Timer? _timer;
 
@@ -673,27 +758,49 @@ class _CountdownBadgeState extends State<_CountdownBadge> {
     return AppColors.error;
   }
 
+  // Fraction of the originally-remaining time that is still left, so the bar
+  // starts full when the screen opens and drains to empty at expiry.
+  double get _fraction => widget.initialSeconds > 0
+      ? (_secondsLeft / widget.initialSeconds).clamp(0.0, 1.0)
+      : 0.0;
+
   @override
   Widget build(BuildContext context) {
+    // Solid coloured banner with white text/track for maximum contrast — the
+    // timer must be obvious at a glance. Colour shifts green → amber → red as
+    // the clock runs down.
     return Container(
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: _color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _color),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      color: _color,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(Icons.timer, size: 14, color: _color),
-          const SizedBox(width: 4),
-          Text(
-            _display,
-            style: TextStyle(
-                color: _color,
-                fontWeight: FontWeight.bold,
-                fontSize: R.fs(context, 15, min: 13, max: 17)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.timer_outlined, size: 20, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                '$_display remaining',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: R.fs(context, 17, min: 15, max: 20),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: _fraction,
+              minHeight: 6,
+              backgroundColor: Colors.white.withValues(alpha: 0.30),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
           ),
         ],
       ),
@@ -739,7 +846,7 @@ class _QuestionDotsRow extends StatelessWidget {
                 color: isCurrent
                     ? AppColors.primary
                     : isAnswered
-                        ? AppColors.success.withOpacity(0.85)
+                        ? AppColors.success.withValues(alpha: 0.85)
                         : AppColors.divider,
                 borderRadius: BorderRadius.circular(8),
                 border: isCurrent
@@ -798,9 +905,9 @@ class _TypeChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.10),
+        color: _color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _color.withOpacity(0.3)),
+        border: Border.all(color: _color.withValues(alpha: 0.3)),
       ),
       child: Text(_label,
           style: TextStyle(
@@ -864,7 +971,7 @@ class _TrueFalseSelector extends StatelessWidget {
               margin: const EdgeInsets.symmetric(horizontal: 6),
               padding: const EdgeInsets.symmetric(vertical: 20),
               decoration: BoxDecoration(
-                color: isSelected ? color.withOpacity(0.12) : AppColors.background,
+                color: isSelected ? color.withValues(alpha: 0.12) : AppColors.background,
                 border: Border.all(
                   color: isSelected ? color : AppColors.divider,
                   width: isSelected ? 2 : 1,
@@ -946,7 +1053,7 @@ class _ResultDialog extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.warning.withOpacity(0.1),
+                color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -960,7 +1067,7 @@ class _ResultDialog extends StatelessWidget {
           const SizedBox(height: 16),
           CircleAvatar(
             radius: 52,
-            backgroundColor: color.withOpacity(0.15),
+            backgroundColor: color.withValues(alpha: 0.15),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

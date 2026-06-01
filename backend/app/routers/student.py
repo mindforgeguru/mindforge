@@ -2,8 +2,10 @@
 Student router — all endpoints require student role.
 """
 
+import hashlib
+import random
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +15,7 @@ from sqlalchemy.orm import aliased
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
 from app.core.security import get_current_student
-from app.core.upload_utils import validate_and_strip_exif
+from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.models.attendance import Attendance
 from app.models.grade import Grade
 from app.models.test import Test, TestSubmission, TestType
@@ -330,11 +332,43 @@ async def get_my_grades(
 # ─── Tests ─────────────────────────────────────────────────────────────────────
 
 
-def _grade_submission(test: Test, answers: dict) -> float:
+def _mcq_answer_is_correct(
+    question: Dict[str, Any], displayed_letter: str, correct_answer: str,
+    *, student_id: int, test_id: int,
+) -> bool:
+    """True if the student's tapped option is correct, accounting for the
+    per-student option shuffle applied at display time. `displayed_letter` is
+    the A/B/C... the student saw; we reconstruct the same shuffle to map it
+    back to the original option, then compare against the answer key (which may
+    be a letter or the option text)."""
+    if not displayed_letter:
+        return False
+    original = question.get("options")
+    if not isinstance(original, dict) or not original:
+        # No options to remap — fall back to a direct comparison.
+        return displayed_letter == correct_answer
+    order = _mcq_display_order(
+        question.get("id"), list(original.keys()),
+        student_id=student_id, test_id=test_id,
+    )
+    idx = ord(displayed_letter.upper()[:1]) - 65
+    if not (0 <= idx < len(order)):
+        return False
+    original_key = order[idx]
+    selected_text = str(original.get(original_key, "")).strip().lower()
+    return (original_key.strip().lower() == correct_answer
+            or (bool(selected_text) and selected_text == correct_answer))
+
+
+def _grade_submission(
+    test: Test, answers: dict, *, student_id: int, test_id: int
+) -> float:
     """Auto-grade the answers against the test's question key.
 
     Pure function — does not touch the DB. Used both at /submit time and when
     an in-progress attempt is finalized lazily after its deadline passes.
+    `student_id`/`test_id` are needed to reconstruct the per-student MCQ option
+    shuffle that was applied when the questions were served.
     """
     score = 0.0
     questions = test.questions or []
@@ -345,7 +379,13 @@ def _grade_submission(test: Test, answers: dict) -> float:
         q_type = question.get("type", "").lower()
         marks = question.get("marks", 1)
 
-        if q_type in ("mcq", "true_false", "fill_blank"):
+        if q_type == "mcq":
+            if _mcq_answer_is_correct(
+                question, student_answer, correct_answer,
+                student_id=student_id, test_id=test_id,
+            ):
+                score += marks
+        elif q_type in ("true_false", "fill_blank"):
             if student_answer and student_answer == correct_answer:
                 score += marks
         elif q_type in ("vsa", "numerical"):
@@ -375,15 +415,19 @@ async def _finalize_submission(
     Idempotent: if the submission is already finalized this is a no-op. Used
     by /submit (manual finalization) and by the lazy expiry sweep.
 
-    `forfeit=True` forces score=0 regardless of saved answers — used when the
-    student abandons the attempt (back button, app close, /start called twice).
+    `forfeit=True` forces score=0 regardless of saved answers. No longer used
+    by the exit paths (back/app-close auto-submit the saved answers now); kept
+    only for the never-attempted 48h sweep, which materializes a genuine 0.
     """
     if submission.is_finalized:
         return
 
     from app.models.grade import Grade, GradeType
 
-    score = 0.0 if forfeit else _grade_submission(test, submission.answers or {})
+    score = 0.0 if forfeit else _grade_submission(
+        test, submission.answers or {},
+        student_id=submission.student_id, test_id=test.id,
+    )
     submission.score = score
     submission.auto_submitted = auto_submitted
     submission.is_finalized = True
@@ -522,6 +566,80 @@ async def _sweep_expired_attempts_for_student(
         )
 
 
+async def _sweep_missed_tests_for_grade(grade: int, db: AsyncSession) -> None:
+    """Materialise score=0 results for students who never took an online test
+    whose 48h window has now closed — so the grade reflects to the student and
+    their parent like any other test.
+
+    For each published online test in this grade whose `expires_at` has passed
+    and that isn't fully graded yet:
+      1. finalise any in-progress (started-but-unfinalised) attempts that ran
+         out of time, grading whatever was saved;
+      2. create a finalised score=0 submission for every student in the grade
+         with no submission at all.
+
+    Once every student has a finalised row, `_finalize_submission` flips the
+    test's `is_graded` flag, so this is a one-shot per test (cheap thereafter).
+    """
+    now = datetime.now(timezone.utc)
+    tests = (await db.execute(
+        select(Test).where(
+            Test.grade == grade,
+            Test.test_type == TestType.online,
+            Test.is_published == True,          # noqa: E712
+            Test.is_graded == False,            # noqa: E712
+            Test.expires_at != None,            # noqa: E711
+            Test.expires_at <= now,
+        )
+    )).scalars().all()
+    if not tests:
+        return
+
+    student_ids = {
+        row[0] for row in (await db.execute(
+            select(StudentProfile.user_id).where(StudentProfile.grade == grade)
+        )).all()
+    }
+    if not student_ids:
+        return
+
+    for test in tests:
+        subs = (await db.execute(
+            select(TestSubmission).where(TestSubmission.test_id == test.id)
+        )).scalars().all()
+        submitted_ids = {s.student_id for s in subs}
+
+        # 1. Finalise expired in-progress attempts (grade saved answers).
+        for sub in subs:
+            if not sub.is_finalized:
+                await _finalize_submission(
+                    sub, test, db,
+                    auto_submitted=True,
+                    finalized_at=sub.attempt_expires_at or test.expires_at,
+                )
+
+        # 2. Zero-out students who never opened it.
+        for student_id in student_ids - submitted_ids:
+            missed = TestSubmission(
+                test_id=test.id,
+                student_id=student_id,
+                answers={},
+                score=None,
+                started_at=test.expires_at,
+                attempt_expires_at=test.expires_at,
+                is_finalized=False,
+                auto_submitted=True,
+            )
+            db.add(missed)
+            await db.flush()
+            await _finalize_submission(
+                missed, test, db,
+                auto_submitted=True,
+                finalized_at=test.expires_at,
+                forfeit=True,
+            )
+
+
 async def _ensure_test_in_student_grade(
     test: Test, student_id: int, db: AsyncSession
 ) -> None:
@@ -532,11 +650,91 @@ async def _ensure_test_in_student_grade(
         raise HTTPException(status_code=404, detail="Test not found.")
 
 
+def _strip_answer_key(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return a copy of the questions with the answer key removed, so the
+    client never receives the correct answers while the attempt is live.
+    Grading happens server-side against the stored Test.questions."""
+    cleaned: List[Dict[str, Any]] = []
+    for q in questions or []:
+        c = dict(q)
+        c.pop("answer", None)
+        cleaned.append(c)
+    return cleaned
+
+
+def _tests_without_answers(tests: List[Test]) -> List[TestResponse]:
+    """Serialise tests for a student-facing list with the answer key removed.
+    The attempt screen pulls questions from /start, so list views never need
+    the answers — and shouldn't leak them before the student has attempted."""
+    out: List[TestResponse] = []
+    for t in tests:
+        resp = TestResponse.model_validate(t)
+        if resp.questions:
+            resp.questions = _strip_answer_key(resp.questions)
+        out.append(resp)
+    return out
+
+
+def _seed_int(*parts: object) -> int:
+    """Stable cross-process integer seed derived from the given parts."""
+    raw = ":".join(str(p) for p in parts).encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], "big")
+
+
+def _mcq_display_order(
+    q_id: object, original_keys: List[str], *, student_id: int, test_id: int
+) -> List[str]:
+    """Deterministic per-(student, test, question) ordering of an MCQ's option
+    keys. The SAME function is used at display time (to relabel the shuffled
+    options A, B, C... in this order) and at grading time (to map the letter the
+    student tapped back to the original option), so option shuffling never
+    desyncs from scoring."""
+    keys = list(original_keys)
+    random.Random(_seed_int(student_id, test_id, q_id, "opts")).shuffle(keys)
+    return keys
+
+
+def _personalize_questions(
+    questions: List[Dict[str, Any]], *, student_id: int, test_id: int
+) -> List[Dict[str, Any]]:
+    """Build the per-student question payload for an attempt:
+      - strip the answer key (grading is server-side);
+      - shuffle each MCQ's options into fresh A/B/C/... labels so neighbours
+        can't copy "the answer is C";
+      - shuffle the question order so they can't copy by position.
+    All shuffles are deterministic on (student, test[, question]) so they're
+    stable across resume/autosave, and each question keeps its `id` so grading
+    is unaffected."""
+    prepared: List[Dict[str, Any]] = []
+    for q in questions or []:
+        c = dict(q)
+        c.pop("answer", None)
+        if (c.get("type") == "mcq"
+                and isinstance(c.get("options"), dict) and c["options"]):
+            original = c["options"]
+            order = _mcq_display_order(
+                c.get("id"), list(original.keys()),
+                student_id=student_id, test_id=test_id,
+            )
+            c["options"] = {
+                chr(65 + i): original[k] for i, k in enumerate(order)
+            }
+        prepared.append(c)
+
+    random.Random(_seed_int(student_id, test_id)).shuffle(prepared)
+    return prepared
+
+
 def _attempt_response(
     submission: TestSubmission, test: Test, *, now: datetime
 ) -> TestAttemptResponse:
     deadline = submission.attempt_expires_at or test.expires_at or now
     remaining = max(0, int((deadline - now).total_seconds()))
+    questions = _personalize_questions(
+        test.questions or [],
+        student_id=submission.student_id,
+        test_id=test.id,
+    )
     return TestAttemptResponse(
         submission_id=submission.id,
         test_id=test.id,
@@ -544,7 +742,7 @@ def _attempt_response(
         subject=test.subject,
         total_marks=test.total_marks,
         time_limit_minutes=test.time_limit_minutes,
-        questions=test.questions or [],
+        questions=questions,
         saved_answers=submission.answers or {},
         started_at=submission.started_at or now,
         attempt_expires_at=deadline,
@@ -573,6 +771,9 @@ async def get_pending_tests(
 
     # Auto-grade anything whose deadline passed while the app was closed.
     await _sweep_expired_attempts_for_student(current_student.id, db)
+    # Zero-out any tests whose 48h window closed without this student (or
+    # classmates) taking them, so missed tests show up as graded 0.
+    await _sweep_missed_tests_for_grade(profile.grade, db)
 
     now = datetime.now(timezone.utc)
 
@@ -598,7 +799,7 @@ async def get_pending_tests(
     query = _apply_subject_filter(query, profile)
 
     result = await db.execute(query.order_by(Test.created_at.desc()))
-    return result.scalars().all()
+    return _tests_without_answers(result.scalars().all())
 
 
 @router.get("/tests/offline", response_model=List[TestResponse])
@@ -618,7 +819,7 @@ async def get_offline_tests(
     )
     query = _apply_subject_filter(query, profile)
     result = await db.execute(query.order_by(Test.created_at.desc()))
-    return result.scalars().all()
+    return _tests_without_answers(result.scalars().all())
 
 
 @router.get("/tests/completed", response_model=List[TestResponse])
@@ -632,6 +833,7 @@ async def get_completed_tests(
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
     await _sweep_expired_attempts_for_student(current_student.id, db)
+    await _sweep_missed_tests_for_grade(profile.grade, db)
 
     finalized_result = await db.execute(
         select(TestSubmission.test_id).where(
@@ -662,10 +864,11 @@ async def start_test_attempt(
 
     Strict single-attempt policy:
       - First call: creates a TestSubmission and stamps attempt_expires_at.
-      - Second call when an in-progress row exists: forfeits (score=0,
-        auto_submitted=True). The student left the test screen and came
-        back; under the policy that any exit ends the attempt, we do not
-        allow resume.
+      - Second call when an in-progress row exists: auto-submits the saved
+        answers (auto_submitted=True) and finalizes. The student left the
+        test screen and came back; under the policy that any exit ends the
+        attempt, we do not allow resume — but they keep credit for whatever
+        they had answered so far.
       - Submission already finalized: returns the finalized response so
         the client can show the result.
     """
@@ -718,8 +921,8 @@ async def start_test_attempt(
 
     # Submission exists. Per the strict single-attempt policy, the only
     # legitimate second call is to read a finalized result. Anything else
-    # means the student left the test screen and came back — that's a
-    # forfeit (score=0).
+    # means the student left the test screen and came back — auto-submit
+    # whatever answers were saved (graded normally, not zeroed).
     if not submission.is_finalized:
         await _finalize_submission(
             submission,
@@ -727,7 +930,6 @@ async def start_test_attempt(
             db,
             auto_submitted=True,
             finalized_at=now,
-            forfeit=True,
         )
 
     return _attempt_response(submission, test, now=now)
@@ -740,11 +942,13 @@ async def forfeit_test_attempt(
     current_student: User = Depends(get_current_student),
 ):
     """
-    Forfeit an in-progress attempt — score becomes 0 and the row is finalized.
+    Auto-submit an in-progress attempt — the saved answers are graded and the
+    row is finalized. (Kept under the /forfeit path for client compatibility.)
 
     Called by the client when the student presses Back, backgrounds the app,
-    or otherwise abandons the test mid-attempt. Idempotent: if the attempt
-    is already finalized, returns the finalized response unchanged.
+    or otherwise leaves the test mid-attempt. Per the single-attempt policy the
+    attempt ends here, but the student keeps credit for whatever they answered.
+    Idempotent: if the attempt is already finalized, returns it unchanged.
     """
     test_result = await db.execute(select(Test).where(Test.id == test_id))
     test = test_result.scalar_one_or_none()
@@ -761,7 +965,7 @@ async def forfeit_test_attempt(
     )
     submission = sub_result.scalar_one_or_none()
     if submission is None:
-        raise HTTPException(status_code=404, detail="No attempt to forfeit.")
+        raise HTTPException(status_code=404, detail="No attempt to submit.")
 
     if not submission.is_finalized:
         await _finalize_submission(
@@ -770,7 +974,6 @@ async def forfeit_test_attempt(
             db,
             auto_submitted=True,
             finalized_at=now,
-            forfeit=True,
         )
     return _attempt_response(submission, test, now=now)
 
@@ -948,6 +1151,7 @@ async def upload_profile_picture(
     current_student: User = Depends(get_current_student),
 ):
     """Upload or replace the student's profile picture."""
+    reject_if_oversize(file)
     raw = await file.read()
     file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"

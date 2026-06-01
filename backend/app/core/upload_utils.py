@@ -8,10 +8,33 @@ Utilities for validating and sanitising user-uploaded images.
 
 import io
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, UploadFile, status
 from PIL import Image
 
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+
+# Decompression-bomb guard: cap how many pixels Pillow will decode. A small
+# (< 5 MB) file can still expand to an enormous bitmap and exhaust memory in
+# img.load(); above this limit Pillow raises Image.DecompressionBombError,
+# which validate_and_strip_exif's except-block turns into a clean 400. 40 MP
+# (~ a 7300×5500 photo) is far more than any avatar needs.
+Image.MAX_IMAGE_PIXELS = 40_000_000
+
+
+def reject_if_oversize(file: UploadFile, max_bytes: int = _MAX_BYTES) -> None:
+    """Reject an upload by its *declared* size before buffering it.
+
+    UploadFile.size comes from the multipart part's Content-Length; when the
+    client sends it (browsers and the Flutter client do) this lets us 413 a
+    huge file without reading the whole body into memory first. It's a
+    best-effort gate — size can be None or understated — so the post-read
+    length check in validate_and_strip_exif remains the source of truth."""
+    if file.size is not None and file.size > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum allowed size is "
+                   f"{max_bytes // (1024 * 1024)} MB.",
+        )
 
 # (offset, magic_bytes, label, pil_format, output_ext)
 _SIGNATURES = [

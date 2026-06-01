@@ -920,7 +920,7 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
                 children: [
                   CircleAvatar(
                     backgroundColor: hasData
-                        ? AppColors.primary.withOpacity(0.15)
+                        ? AppColors.primary.withValues(alpha: 0.15)
                         : Colors.grey.shade200,
                     child: Text('${widget.slot}',
                         style: TextStyle(
@@ -952,7 +952,7 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                          color: AppColors.success.withOpacity(0.12),
+                          color: AppColors.success.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8)),
                       child: const Text('Set',
                           style: TextStyle(

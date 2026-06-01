@@ -480,7 +480,10 @@ class _TeacherAttendanceScreenState
       ref.invalidate(teacherHomeworkCompletionsProvider);
       ref.invalidate(teacherTodayWorkflowProvider);
 
-      if (mounted) {
+      // Guard the passed-in `context` (which shadows the State's context) with
+      // its own `.mounted` rather than the State's, so the check matches the
+      // BuildContext actually being used.
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(isUpdate
@@ -491,7 +494,7 @@ class _TeacherAttendanceScreenState
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
@@ -876,7 +879,7 @@ class _SummaryStrip extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: pct,
                     minHeight: 8,
-                    backgroundColor: AppColors.error.withOpacity(0.2),
+                    backgroundColor: AppColors.error.withValues(alpha: 0.2),
                     valueColor: const AlwaysStoppedAnimation(AppColors.success),
                   ),
                 ),
@@ -943,8 +946,8 @@ class _StudentTile extends StatelessWidget {
           CircleAvatar(
             radius: avatarRadius,
             backgroundColor: isPresent
-                ? AppColors.success.withOpacity(0.15)
-                : AppColors.error.withOpacity(0.15),
+                ? AppColors.success.withValues(alpha: 0.15)
+                : AppColors.error.withValues(alpha: 0.15),
             child: Icon(
               isPresent ? Icons.check_circle_outline : Icons.cancel_outlined,
               size: R.fluid(context, 20, min: 16, max: 24),
@@ -975,7 +978,7 @@ class _StudentTile extends StatelessWidget {
           Switch.adaptive(
             value: isPresent,
             activeColor: AppColors.success,
-            inactiveTrackColor: AppColors.error.withOpacity(0.3),
+            inactiveTrackColor: AppColors.error.withValues(alpha: 0.3),
             onChanged: onChanged,
           ),
         ],
@@ -1003,9 +1006,9 @@ class _SubmittedBanner extends StatelessWidget {
           horizontal: R.sp(context, 14, min: 10, max: 18),
           vertical: R.sp(context, 10, min: 8, max: 13)),
       decoration: BoxDecoration(
-        color: AppColors.accent.withOpacity(0.12),
+        color: AppColors.accent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.accent.withOpacity(0.5)),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [

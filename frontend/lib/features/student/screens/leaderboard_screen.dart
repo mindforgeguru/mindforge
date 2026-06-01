@@ -240,7 +240,7 @@ class _PointsTableTab extends ConsumerWidget {
                       'Show up. Do the work. Ace your tests.',
                       style: GoogleFonts.poppins(
                         fontSize: 11,
-                        color: Colors.white.withOpacity(0.75),
+                        color: Colors.white.withValues(alpha: 0.75),
                       ),
                     ),
                   ],

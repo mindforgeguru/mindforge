@@ -154,7 +154,7 @@ class MindForgeFooter extends StatelessWidget {
                 height: 70,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.primary.withOpacity(0.22),
+                  color: AppColors.primary.withValues(alpha: 0.22),
                 ),
               ),
             ),
@@ -166,7 +166,7 @@ class MindForgeFooter extends StatelessWidget {
                 height: 45,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.primary.withOpacity(0.22),
+                  color: AppColors.primary.withValues(alpha: 0.22),
                 ),
               ),
             ),
@@ -178,7 +178,7 @@ class MindForgeFooter extends StatelessWidget {
                 height: 55,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.primary.withOpacity(0.22),
+                  color: AppColors.primary.withValues(alpha: 0.22),
                 ),
               ),
             ),
@@ -226,7 +226,7 @@ class MindForgeFooter extends StatelessWidget {
                         Icon(
                           Icons.workspace_premium_rounded,
                           size: 13,
-                          color: AppColors.primary.withOpacity(0.7),
+                          color: AppColors.primary.withValues(alpha: 0.7),
                         ),
                         const SizedBox(width: 6),
                         Text(

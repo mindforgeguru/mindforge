@@ -245,8 +245,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     // Revoke the access + refresh tokens server-side before clearing local
     // state. The server also clears the stored FCM token on this call.
-    // Fire-and-forget: network failure must never block the user from logging out.
-    await _api.logoutOnServer();
+    // Bounded await: the call needs the cached token to still be present (so
+    // we can't unawait it and clear the cache underneath it), but a slow or
+    // down server must not hang the user on a logout spinner — cap it at 3s.
+    // The local token wipe below is what actually ends the session here.
+    try {
+      await _api.logoutOnServer().timeout(const Duration(seconds: 3));
+    } catch (_) {}
     _api.clearCachedTokens();
     _ws.disconnect();
     try {

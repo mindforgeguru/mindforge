@@ -2054,7 +2054,7 @@ class _WeekStrip extends StatelessWidget {
                           fontSize: 9,
                           fontWeight: FontWeight.w600,
                           color: isWeekend
-                              ? AppColors.error.withOpacity(0.7)
+                              ? AppColors.error.withValues(alpha: 0.7)
                               : AppColors.textMuted,
                         ),
                       ),
@@ -2067,7 +2067,7 @@ class _WeekStrip extends StatelessWidget {
                           color: isSelected
                               ? AppColors.primary
                               : isToday
-                                  ? AppColors.primary.withOpacity(0.12)
+                                  ? AppColors.primary.withValues(alpha: 0.12)
                                   : Colors.transparent,
                         ),
                         child: Center(

@@ -29,7 +29,7 @@ class LeaderboardTile extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isMe
-            ? palette.accent.withOpacity(0.10)
+            ? palette.accent.withValues(alpha: 0.10)
             : AppColors.cardBackground,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(

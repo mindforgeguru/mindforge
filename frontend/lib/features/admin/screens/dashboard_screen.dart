@@ -208,7 +208,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                             borderRadius: BorderRadius.circular(cardRadius),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
+                                color: Colors.black.withValues(alpha: 0.08),
                                 blurRadius: 24,
                                 offset: const Offset(0, 8),
                               ),
@@ -261,7 +261,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                 margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.warning.withOpacity(0.1),
+                  color: AppColors.warning.withValues(alpha: 0.1),
                   border: Border.all(color: AppColors.warning),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -328,7 +328,7 @@ class _ProfileAvatar extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -366,7 +366,7 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
-        color: c.withOpacity(0.1),
+        color: c.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -409,7 +409,7 @@ class _DashboardCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: card.color.withOpacity(0.14),
+              color: card.color.withValues(alpha: 0.14),
               blurRadius: 18,
               offset: const Offset(0, 6),
             ),
@@ -427,13 +427,13 @@ class _DashboardCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: card.color.withOpacity(0.12),
+                        color: card.color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(card.icon, size: 24, color: card.color),
                     ),
                     Icon(Icons.arrow_forward_rounded,
-                        size: 16, color: card.color.withOpacity(0.45)),
+                        size: 16, color: card.color.withValues(alpha: 0.45)),
                   ],
                 ),
                 const Spacer(),

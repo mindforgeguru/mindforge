@@ -81,6 +81,33 @@ class _RouterNotifier extends ChangeNotifier {
     _ref.listen<AuthState>(authProvider, (_, __) => notifyListeners());
   }
 
+  /// Each role's home/dashboard route, used both for the post-login redirect
+  /// and to bounce a user out of a section that doesn't belong to their role.
+  static String _homeFor(String? role) {
+    switch (role) {
+      case 'teacher':
+        return RouteNames.teacherDashboard;
+      case 'student':
+        return RouteNames.studentDashboard;
+      case 'parent':
+        return RouteNames.parentDashboard;
+      case 'admin':
+        return RouteNames.adminDashboard;
+      default:
+        return RouteNames.login;
+    }
+  }
+
+  /// Top-level path prefix owned by each role. Every authenticated route lives
+  /// under exactly one of these, so a prefix check is enough to enforce
+  /// role-based access for all nested routes.
+  static const Map<String, String> _sectionPrefixes = {
+    'teacher': RouteNames.teacherDashboard, // '/teacher'
+    'student': RouteNames.studentDashboard, // '/student'
+    'parent': RouteNames.parentDashboard, // '/parent'
+    'admin': RouteNames.adminDashboard, // '/admin'
+  };
+
   String? redirect(BuildContext context, GoRouterState state) {
     final authState = _ref.read(authProvider);
     final isLoggedIn = authState.token != null;
@@ -92,17 +119,22 @@ class _RouterNotifier extends ChangeNotifier {
 
     if (!isLoggedIn && !isLoginRoute) return RouteNames.login;
     if (isLoggedIn && isLoginRoute) {
-      switch (authState.role) {
-        case 'teacher':
-          return RouteNames.teacherDashboard;
-        case 'student':
-          return RouteNames.studentDashboard;
-        case 'parent':
-          return RouteNames.parentDashboard;
-        case 'admin':
-          return RouteNames.adminDashboard;
-        default:
-          return RouteNames.login;
+      return _homeFor(authState.role);
+    }
+
+    // Role-based section guard: each role owns one top-level prefix. A
+    // logged-in user who lands on another role's section (e.g. a student
+    // typing /admin/users into the web URL bar) is bounced to their own home.
+    // The trailing-slash check avoids matching a hypothetical sibling route
+    // like /studentportal against the /student prefix.
+    if (isLoggedIn) {
+      final loc = state.matchedLocation;
+      for (final entry in _sectionPrefixes.entries) {
+        final inThisSection =
+            loc == entry.value || loc.startsWith('${entry.value}/');
+        if (inThisSection && authState.role != entry.key) {
+          return _homeFor(authState.role);
+        }
       }
     }
     return null;
@@ -172,6 +204,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: ':hwId/completions',
+                // Guard against a non-numeric id in the URL (web): bounce to
+                // the teacher home instead of throwing in the page builder.
+                redirect: (_, state) =>
+                    int.tryParse(state.pathParameters['hwId'] ?? '') == null
+                        ? RouteNames.teacherDashboard
+                        : null,
                 pageBuilder: (_, state) {
                   final hwId = int.parse(state.pathParameters['hwId']!);
                   return _slidePage(
@@ -201,6 +239,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: ':presentationId',
+                redirect: (_, state) =>
+                    int.tryParse(
+                                state.pathParameters['presentationId'] ?? '') ==
+                            null
+                        ? RouteNames.teacherDashboard
+                        : null,
                 pageBuilder: (_, state) => _slidePage(
                   teacher.AutoPresentationViewScreen(
                     presentationId: int.parse(
@@ -237,6 +281,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: 'tests/:testId/attempt',
+            redirect: (_, state) =>
+                int.tryParse(state.pathParameters['testId'] ?? '') == null
+                    ? RouteNames.studentDashboard
+                    : null,
             pageBuilder: (_, state) {
               final testId = int.parse(state.pathParameters['testId']!);
               return _slidePage(student.TestAttemptScreen(testId: testId));
@@ -244,6 +292,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: 'tests/:testId/review',
+            redirect: (_, state) =>
+                int.tryParse(state.pathParameters['testId'] ?? '') == null
+                    ? RouteNames.studentDashboard
+                    : null,
             pageBuilder: (_, state) {
               final testId = int.parse(state.pathParameters['testId']!);
               return _slidePage(student.TestReviewScreen(testId: testId));

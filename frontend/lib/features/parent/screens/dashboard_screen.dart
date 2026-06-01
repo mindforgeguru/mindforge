@@ -19,6 +19,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/badge_dot.dart';
+import '../../../core/widgets/report_problem_dialog.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/parent_provider.dart';
@@ -325,7 +326,7 @@ class _ParentDashboardScreenState
                                   style: GoogleFonts.poppins(
                                     fontSize: _fs(context, 14, min: 13, max: 16),
                                     fontWeight: FontWeight.w400,
-                                    color: Colors.white.withOpacity(0.72),
+                                    color: Colors.white.withValues(alpha: 0.72),
                                     letterSpacing: 0.4,
                                   ),
                                 ),
@@ -361,7 +362,7 @@ class _ParentDashboardScreenState
                             borderRadius: BorderRadius.circular(cardRadius),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
+                                color: Colors.black.withValues(alpha: 0.08),
                                 blurRadius: 24,
                                 offset: const Offset(0, 8),
                               ),
@@ -693,6 +694,24 @@ class _ParentDashboardScreenState
             ),
           ),
 
+          // ── Report a problem — small button at the bottom of the page ──
+          SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: TextButton.icon(
+                  onPressed: () => showReportProblemDialog(context, ref),
+                  icon: const Icon(Icons.bug_report_outlined, size: 16),
+                  label: const Text('Report a problem'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    textStyle: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+          ),
           SliverToBoxAdapter(
               child: SizedBox(height: _s(context, 24, min: 16, max: 32))),
         ],
@@ -799,8 +818,8 @@ class _DashHomeworkTile extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 color: hw.isOnlineTest
-                    ? AppColors.accent.withOpacity(0.12)
-                    : AppColors.primary.withOpacity(0.08),
+                    ? AppColors.accent.withValues(alpha: 0.12)
+                    : AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -881,9 +900,9 @@ class _DashBroadcastTile extends StatelessWidget {
         padding: EdgeInsets.symmetric(
             horizontal: (w * 0.035).clamp(10.0, 14.0), vertical: vPad),
         decoration: BoxDecoration(
-          color: isNew ? AppColors.accent.withOpacity(0.07) : Colors.white,
+          color: isNew ? AppColors.accent.withValues(alpha: 0.07) : Colors.white,
           borderRadius: BorderRadius.circular((w * 0.025).clamp(8.0, 12.0)),
-          border: isNew ? Border.all(color: AppColors.accent.withOpacity(0.30), width: 1) : null,
+          border: isNew ? Border.all(color: AppColors.accent.withValues(alpha: 0.30), width: 1) : null,
           boxShadow: const [
             BoxShadow(
                 color: Color(0x0C1D3557), blurRadius: 6, offset: Offset(0, 2))
@@ -1020,7 +1039,7 @@ class _TimetableCard extends StatelessWidget {
     }
     final onDark = isNow ? Colors.white : AppColors.primary;
     final onMuted =
-        isNow ? Colors.white.withOpacity(0.72) : AppColors.textMuted;
+        isNow ? Colors.white.withValues(alpha: 0.72) : AppColors.textMuted;
 
     return Container(
       width: cardW,
@@ -1049,7 +1068,7 @@ class _TimetableCard extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: isNow
-                      ? Colors.white.withOpacity(0.18)
+                      ? Colors.white.withValues(alpha: 0.18)
                       : AppColors.iconContainer,
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -1151,7 +1170,7 @@ class _ProfileAvatar extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -1240,7 +1259,9 @@ class _RecentMarksChart extends StatelessWidget {
         ),
       );
     }
-    final window = grades.take(10).toList().reversed.toList();
+    final window = grades.take(20).toList().reversed.toList();
+    // With up to 20 bars, thin them so they don't overlap on narrow screens.
+    final barWidth = window.length > 10 ? 8.0 : 16.0;
     const yCeiling = 100.0;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -1310,7 +1331,7 @@ class _RecentMarksChart extends StatelessWidget {
                     BarChartRodData(
                       toY: window[i].percentage.clamp(0.0, 100.0),
                       color: _palette[i % _palette.length],
-                      width: 16,
+                      width: barWidth,
                       borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(4)),
                     ),

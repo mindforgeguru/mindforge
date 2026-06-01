@@ -183,7 +183,11 @@ async def get_child_grades(
     current_parent: User = Depends(get_current_parent),
 ):
     """Get the child's grades."""
+    from app.routers.student import _sweep_missed_tests_for_grade
+
     profile = await _get_child_profile(current_parent, db)
+    # Surface 0s for online tests the child missed within the 48h window.
+    await _sweep_missed_tests_for_grade(profile.grade, db)
     query = select(Grade).where(Grade.student_id == profile.user_id)
     if subject:
         query = query.where(Grade.subject == subject)
@@ -201,7 +205,10 @@ async def get_child_tests(
     current_parent: User = Depends(get_current_parent),
 ):
     """Get all tests (online + offline) for the child's grade."""
+    from app.routers.student import _sweep_missed_tests_for_grade
+
     profile = await _get_child_profile(current_parent, db)
+    await _sweep_missed_tests_for_grade(profile.grade, db)
     result = await db.execute(
         select(Test)
         .where(Test.grade == profile.grade, Test.is_published == True)

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_about_section.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../widgets/admin_scaffold.dart';
 
@@ -443,6 +444,8 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
               child: const Text('Clear all fields',
                   style: TextStyle(color: AppColors.textSecondary)),
             ),
+            const SizedBox(height: 12),
+            const AppAboutSection(),
           ],
         ),
       ),

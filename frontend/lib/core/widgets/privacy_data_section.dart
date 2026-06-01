@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api/api_client.dart';
 import '../utils/constants.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import 'app_about_section.dart';
 
 /// Drop-in "Privacy & Data" section for the Profile screens of every
 /// non-admin role. Provides:
@@ -69,6 +70,7 @@ class PrivacyDataSection extends ConsumerWidget {
                 style: TextStyle(color: Colors.red)),
             onTap: () => _confirmDelete(context, ref),
           ),
+        const AppAboutSection(),
       ],
     );
   }
@@ -140,9 +142,9 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
+                color: Colors.red.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.4)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

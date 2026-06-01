@@ -232,10 +232,10 @@ class _PendingUserTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: mindForgeCardDecoration(
-          color: AppColors.warning.withOpacity(0.04)),
+          color: AppColors.warning.withValues(alpha: 0.04)),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: _roleColor(user.role).withOpacity(0.15),
+          backgroundColor: _roleColor(user.role).withValues(alpha: 0.15),
           child: Text(
             user.username[0].toUpperCase(),
             style: TextStyle(
@@ -612,7 +612,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -717,7 +717,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                       if (v) _selectedTeachableSubjects.add(s);
                       else _selectedTeachableSubjects.remove(s);
                     }),
-                    selectedColor: AppColors.secondary.withOpacity(0.18),
+                    selectedColor: AppColors.secondary.withValues(alpha: 0.18),
                     checkmarkColor: AppColors.secondary,
                     labelStyle: TextStyle(
                       color: selected ? AppColors.secondary : AppColors.textPrimary,
@@ -760,7 +760,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                       if (v) _selectedAdditionalSubjects.add(s);
                       else _selectedAdditionalSubjects.remove(s);
                     }),
-                    selectedColor: AppColors.primary.withOpacity(0.2),
+                    selectedColor: AppColors.primary.withValues(alpha: 0.2),
                     checkmarkColor: AppColors.primary,
                   );
                 }).toList(),
@@ -842,7 +842,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: _showMpinReset
-                      ? AppColors.warning.withOpacity(0.08)
+                      ? AppColors.warning.withValues(alpha: 0.08)
                       : AppColors.surface,
                   border: Border.all(
                     color: _showMpinReset
@@ -904,7 +904,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                     height: 42,
                     decoration: BoxDecoration(
                       color: filled
-                          ? AppColors.primary.withOpacity(0.12)
+                          ? AppColors.primary.withValues(alpha: 0.12)
                           : AppColors.surface,
                       border: Border.all(
                         color: active ? AppColors.primary : AppColors.divider,
@@ -955,7 +955,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                           margin: const EdgeInsets.symmetric(horizontal: 4),
                           decoration: BoxDecoration(
                             color: isDel
-                                ? AppColors.error.withOpacity(0.08)
+                                ? AppColors.error.withValues(alpha: 0.08)
                                 : AppColors.surface,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: AppColors.divider),
