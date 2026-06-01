@@ -114,10 +114,20 @@ class RedisManager:
             await self._client.set(f"revoked_jti:{jti}", "1", ex=ttl_seconds)
 
     async def is_jti_revoked(self, jti: str) -> bool:
-        """Return True if this JTI has been blacklisted."""
+        """Return True if this JTI has been blacklisted.
+
+        Fails open (returns False) when Redis is unavailable or errors —
+        consistent with rate_limit() and the access-token check. A transient
+        Redis fault must not 500 every authenticated request; the trade-off is
+        that a revoked refresh token may be honoured until it expires during an
+        outage."""
         if self._client is None:
             return False
-        return await self._client.exists(f"revoked_jti:{jti}") == 1
+        try:
+            return await self._client.exists(f"revoked_jti:{jti}") == 1
+        except Exception as e:
+            logger.warning("Redis is_jti_revoked failed, failing open: %s", e)
+            return False
 
     # ── Access-token revocation (logout blacklist) ─────────────────────────
 
@@ -127,10 +137,19 @@ class RedisManager:
             await self._client.set(f"revoked_access:{jti}", "1", ex=ttl_seconds)
 
     async def is_access_jti_revoked(self, jti: str) -> bool:
-        """Return True if this access token has been revoked (user logged out)."""
+        """Return True if this access token has been revoked (user logged out).
+
+        Fails open (returns False) when Redis is unavailable or errors, so a
+        transient Redis fault doesn't 500 every authenticated request. Access
+        tokens are short-lived (≤ JWT_EXPIRE_MINUTES), so the window in which a
+        logged-out token could be honoured during an outage is bounded."""
         if self._client is None:
             return False
-        return await self._client.exists(f"revoked_access:{jti}") == 1
+        try:
+            return await self._client.exists(f"revoked_access:{jti}") == 1
+        except Exception as e:
+            logger.warning("Redis is_access_jti_revoked failed, failing open: %s", e)
+            return False
 
     # ── Idempotency keys (replay protection) ──────────────────────────────
 

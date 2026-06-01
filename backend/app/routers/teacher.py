@@ -17,7 +17,7 @@ from app.core.database import get_db
 from app.core.mask_utils import mask_phone, mask_email
 from app.core.redis_client import redis_manager
 from app.core.security import get_current_teacher
-from app.core.upload_utils import validate_and_strip_exif
+from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.models.attendance import Attendance, AttendanceStatus
 from app.models.grade import Grade, GradeType
 from app.models.test import Test, TestSubmission, TestType
@@ -104,6 +104,7 @@ async def upload_teacher_photo(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Upload or replace the teacher's profile picture."""
+    reject_if_oversize(file)
     raw = await file.read()
     file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"

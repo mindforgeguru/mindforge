@@ -664,7 +664,7 @@ class _Badge extends StatelessWidget {
         vertical: _s(context, 3, min: 2, max: 5),
       ),
       decoration: BoxDecoration(
-        color: bg ?? color.withOpacity(0.12),
+        color: bg ?? color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -730,7 +730,7 @@ class _EmptyState extends StatelessWidget {
             children: [
               Icon(icon,
                   size: iconSize,
-                  color: AppColors.textMuted.withOpacity(0.4)),
+                  color: AppColors.textMuted.withValues(alpha: 0.4)),
               SizedBox(height: _s(context, 14, min: 10, max: 20)),
               Text(
                 message,

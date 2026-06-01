@@ -166,9 +166,9 @@ class _OldTestsTabState extends ConsumerState<_OldTestsTab> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.06),
+                  color: AppColors.primary.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
                 ),
                 child: const Text(
                   'Upload old/past test papers. AI will automatically scan each file and classify it by Grade, Subject, and Chapter. These will be used as reference when generating new tests.',
@@ -257,7 +257,7 @@ class _PaperCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppColors.primary.withOpacity(0.12)),
+        side: BorderSide(color: AppColors.primary.withValues(alpha: 0.12)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -267,7 +267,7 @@ class _PaperCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
               ),
               child:       Icon(Icons.description_outlined,
@@ -428,9 +428,9 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.accent.withOpacity(0.06),
+              color: AppColors.accent.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.accent.withOpacity(0.2)),
+              border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
             ),
             child: const Text(
               'Upload chapter PDFs or images. These will be used by AI to generate questions strictly from chapter content.',
@@ -444,7 +444,7 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: AppColors.accent.withOpacity(0.2)),
+              side: BorderSide(color: AppColors.accent.withValues(alpha: 0.2)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -574,13 +574,13 @@ class _ChapterCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppColors.accent.withOpacity(0.15)),
+        side: BorderSide(color: AppColors.accent.withValues(alpha: 0.15)),
       ),
       child: ListTile(
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: AppColors.accent.withOpacity(0.08),
+            color: AppColors.accent.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
           ),
           child:       Icon(Icons.menu_book_outlined, size: 20, color: AppColors.accent),
@@ -704,9 +704,9 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.secondary.withOpacity(0.06),
+              color: AppColors.secondary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.secondary.withOpacity(0.2)),
+              border: Border.all(color: AppColors.secondary.withValues(alpha: 0.2)),
             ),
             child: const Text(
               'Upload your syllabus PDF. AI will automatically extract the chapter list for the selected grade and subject.',
@@ -719,7 +719,7 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: AppColors.secondary.withOpacity(0.2)),
+              side: BorderSide(color: AppColors.secondary.withValues(alpha: 0.2)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -852,7 +852,7 @@ class _SyllabusCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppColors.secondary.withOpacity(0.2)),
+        side: BorderSide(color: AppColors.secondary.withValues(alpha: 0.2)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -899,7 +899,7 @@ class _SyllabusCard extends StatelessWidget {
                     .map((c) => Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: AppColors.secondary.withOpacity(0.08),
+                            color: AppColors.secondary.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(c,
@@ -927,7 +927,7 @@ class _Tag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(label,
@@ -1304,7 +1304,7 @@ class _LibraryRow extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -1322,7 +1322,7 @@ class _LibraryRow extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.15),
+                  color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
@@ -1466,7 +1466,7 @@ class _StatePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -1518,7 +1518,7 @@ class _GroupHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -1533,7 +1533,7 @@ class _GroupHeader extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: Divider(color: color.withOpacity(0.25), thickness: 1),
+              child: Divider(color: color.withValues(alpha: 0.25), thickness: 1),
             ),
           ),
         ],

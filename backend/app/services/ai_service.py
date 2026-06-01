@@ -780,6 +780,80 @@ async def generate_test_questions(
     raise RuntimeError("AI question generation failed. " + " | ".join(errors))
 
 
+async def generate_mcqs_from_text(
+    chapter_text: str,
+    params: Any,
+) -> List[Dict[str, Any]]:
+    """Generate questions from raw text (e.g. presentation slide content)
+    rather than uploaded files.
+
+    Used by the auto-quiz pipeline: when a teacher logs the slides they
+    taught this period, the covered slides' text is the only source. Tries
+    Gemini first, then Groq; raises RuntimeError if both fail.
+    """
+    prompt = _build_prompt(params, chapter_text=chapter_text)
+    errors: List[str] = []
+    loop = asyncio.get_running_loop()
+
+    if settings.GEMINI_API_KEY:
+        try:
+            client = _get_gemini_client()
+            response = await loop.run_in_executor(
+                None,
+                lambda: client.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=[prompt],
+                    config=_GEMINI_GENERATION_CONFIG,
+                ),
+            )
+            try:
+                raw_text = response.text
+            except ValueError as ve:
+                finish = (
+                    response.candidates[0].finish_reason
+                    if response.candidates else "unknown"
+                )
+                raise ValueError(
+                    f"Gemini response blocked (finish_reason={finish}): {ve}"
+                ) from ve
+            if not raw_text:
+                raise ValueError("Gemini returned an empty response.")
+            questions = _parse_questions(raw_text, params)
+            logger.info(f"Gemini generated {len(questions)} questions from text")
+            return questions
+        except Exception as e:
+            msg = f"Gemini: {e}"
+            logger.warning(f"{msg}. Trying Groq...")
+            errors.append(msg)
+    else:
+        errors.append("Gemini: GEMINI_API_KEY not configured")
+
+    if settings.GROQ_API_KEY:
+        try:
+            client = _get_groq_client()
+            response = await loop.run_in_executor(
+                None,
+                lambda: client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.4,
+                    max_tokens=16384,
+                ),
+            )
+            raw = response.choices[0].message.content
+            questions = _parse_questions(raw, params)
+            logger.info(f"Groq generated {len(questions)} questions from text")
+            return questions
+        except Exception as e:
+            msg = f"Groq: {e}"
+            logger.error(msg)
+            errors.append(msg)
+    else:
+        errors.append("Groq: GROQ_API_KEY not configured")
+
+    raise RuntimeError("AI question generation failed. " + " | ".join(errors))
+
+
 def _generate_stub_questions(params: Any) -> List[Dict[str, Any]]:
     """Fallback stub questions when all AI providers are unavailable."""
     questions = []

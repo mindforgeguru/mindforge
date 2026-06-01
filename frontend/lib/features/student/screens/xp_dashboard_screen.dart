@@ -75,7 +75,7 @@ class _XpBody extends ConsumerWidget {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.10),
+                color: Colors.black.withValues(alpha: 0.10),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -94,7 +94,7 @@ class _XpBody extends ConsumerWidget {
                       'Total XP',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
-                        color: Colors.white.withOpacity(0.7),
+                        color: Colors.white.withValues(alpha: 0.7),
                         letterSpacing: 1,
                       ),
                     ),
@@ -118,7 +118,7 @@ class _XpBody extends ConsumerWidget {
                     'LEVEL',
                     style: GoogleFonts.poppins(
                       fontSize: 11,
-                      color: Colors.white.withOpacity(0.7),
+                      color: Colors.white.withValues(alpha: 0.7),
                       letterSpacing: 1.5,
                     ),
                   ),

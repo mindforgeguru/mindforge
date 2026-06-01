@@ -150,7 +150,7 @@ class _BroadcastCard extends StatelessWidget {
                   vertical: _s(context, 3, min: 2, max: 5),
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.accent.withOpacity(0.12),
+                  color: AppColors.accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -391,7 +391,7 @@ class _EmptyState extends StatelessWidget {
             children: [
               Icon(Icons.campaign_outlined,
                   size: iconSize,
-                  color: AppColors.textMuted.withOpacity(0.4)),
+                  color: AppColors.textMuted.withValues(alpha: 0.4)),
               SizedBox(height: _s(context, 14, min: 10, max: 20)),
               Text(
                 'No broadcasts sent yet',

@@ -202,7 +202,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: mindForgeCardDecoration(
-          color: AppColors.primary.withOpacity(0.04)),
+          color: AppColors.primary.withValues(alpha: 0.04)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -321,7 +321,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppColors.info.withOpacity(0.08),
+                  color: AppColors.info.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -372,9 +372,9 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -494,9 +494,9 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.accent.withOpacity(0.06),
+        color: AppColors.accent.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -507,7 +507,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
               label: const Text('Pick PDF / Image'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.accent,
-                side: BorderSide(color: AppColors.accent.withOpacity(0.5)),
+                side: BorderSide(color: AppColors.accent.withValues(alpha: 0.5)),
               ),
               onPressed: _pickChapterFile,
             )
@@ -562,9 +562,9 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.04),
+        color: AppColors.primary.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withOpacity(0.18)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -926,13 +926,13 @@ class _SourceOptionCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.primary.withOpacity(0.07)
-              : Colors.grey.withOpacity(0.04),
+              ? AppColors.primary.withValues(alpha: 0.07)
+              : Colors.grey.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: selected
-                ? AppColors.primary.withOpacity(0.4)
-                : Colors.grey.withOpacity(0.18),
+                ? AppColors.primary.withValues(alpha: 0.4)
+                : Colors.grey.withValues(alpha: 0.18),
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -1014,7 +1014,7 @@ class _SrcSlider extends StatelessWidget {
                   data: SliderThemeData(
                     trackHeight: 3,
                     activeTrackColor: color,
-                    inactiveTrackColor: color.withOpacity(0.18),
+                    inactiveTrackColor: color.withValues(alpha: 0.18),
                     thumbColor: color,
                   ),
                   child: Slider(
@@ -1156,7 +1156,7 @@ class _TestTileState extends ConsumerState<_TestTile> {
               MaterialPageRoute(builder: (_) => TestDetailScreen(test: test)),
             ),
             leading: CircleAvatar(
-              backgroundColor: accentColor.withOpacity(0.15),
+              backgroundColor: accentColor.withValues(alpha: 0.15),
               child: Icon(
                 isOnline ? Icons.computer : Icons.print_outlined,
                 color: accentColor,

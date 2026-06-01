@@ -14,9 +14,10 @@ teacher can read any presentation; only the period-log writer's own progress
 row is mutated by their period log.
 """
 
+import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import (
@@ -27,7 +28,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
+from app.core.redis_client import redis_manager
 from app.core.security import get_current_user
+from app.core.upload_utils import reject_if_oversize
 from app.models.database_models import ChapterDocument
 from app.models.presentation import (
     ChapterPresentation,
@@ -36,7 +39,9 @@ from app.models.presentation import (
     PresentationStatus,
     PresentationTeacherProgress,
 )
-from app.models.user import User, UserRole
+from app.models.test import Test, TestType
+from app.models.user import StudentProfile, User, UserRole
+from app.schemas.test import TestGenerationParams
 from app.schemas.presentation import (
     AvailableChapter,
     FromChapterRequest,
@@ -50,7 +55,9 @@ from app.schemas.presentation import (
     PresentationSlideOut,
     PresentationSlidePatch,
 )
-from app.services import presentation_service, storage_service
+from app.services import (
+    ai_service, notification_service, presentation_service, storage_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +67,39 @@ router = APIRouter()
 _VALID_GRADES = (8, 9, 10)
 _MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB — chapter PDFs are usually < 5 MB
 
+# ── Auto-quiz (period-log → online test) tuning ───────────────────────────────
+_AUTO_TEST_MCQ_COUNT = 10          # every auto-quiz has exactly 10 MCQs
+_AUTO_TEST_TIME_LIMIT_MIN = 7      # once started, finish within 7 minutes
+_AUTO_TEST_WINDOW_HOURS = 48       # take it within 48h or it's graded 0
+# Need at least this much slide text to bother asking the AI for a quiz.
+_AUTO_TEST_MIN_SOURCE_CHARS = 200
+
 
 def _require_teacher_or_admin(user: User) -> None:
     if user.role not in (UserRole.teacher, UserRole.admin):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only teachers and admins can use auto-presentations.",
+        )
+
+
+# Slide/quiz generation is the only paid-AI path in this router. Cap it
+# per-user so an accidental or abusive burst can't run up Gemini costs —
+# nginx's general 120 r/m limit is far too loose for a paid endpoint.
+_AI_GEN_MAX_PER_HOUR = 20
+
+
+async def _enforce_ai_generation_quota(user: User) -> None:
+    key = f"rate_limit:ai_gen:{user.id}"
+    if await redis_manager.rate_limit(
+        key, max_attempts=_AI_GEN_MAX_PER_HOUR, window_seconds=3600
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Generation limit reached ({_AI_GEN_MAX_PER_HOUR}/hour). "
+                "Please try again later."
+            ),
         )
 
 
@@ -77,6 +111,233 @@ async def _run_generation_job(presentation_id: int) -> None:
         except Exception:
             logger.exception("Background generation crashed for id=%s",
                              presentation_id)
+
+
+async def _notify_teacher(db: AsyncSession, teacher_id: int,
+                          title: str, body: str) -> None:
+    """Best-effort push to a single teacher (used for auto-quiz failures)."""
+    token = (await db.execute(
+        select(User.fcm_token).where(User.id == teacher_id)
+    )).scalar_one_or_none()
+    if token:
+        try:
+            await notification_service.send_to_token(
+                token=token, title=title, body=body,
+                data={"route": "/teacher/presentations"},
+            )
+        except Exception:
+            logger.warning("Auto-quiz teacher notification failed", exc_info=True)
+
+
+async def _broadcast_new_test(db: AsyncSession, test: Test) -> None:
+    """Mirror generate_test's broadcast + student/parent push for a new test."""
+    await redis_manager.publish({
+        "target_type": "grade",
+        "grade": test.grade,
+        "payload": {
+            "event": "new_test_available",
+            "test_id": test.id,
+            "title": test.title,
+            "subject": test.subject,
+            "test_type": "online",
+        },
+    })
+
+    profiles = (await db.execute(
+        select(StudentProfile)
+        .join(User, User.id == StudentProfile.user_id)
+        .where(
+            StudentProfile.grade == test.grade,
+            User.is_active == True,        # noqa: E712
+            User.is_approved == True,      # noqa: E712
+            User.deleted_at.is_(None),
+        )
+    )).scalars().all()
+
+    all_user_ids = {p.user_id for p in profiles}
+    all_user_ids.update(p.parent_user_id for p in profiles if p.parent_user_id)
+    token_map = {
+        row.id: row.fcm_token
+        for row in (await db.execute(
+            select(User.id, User.fcm_token)
+            .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
+        ))
+    }
+
+    student_tokens = [token_map[p.user_id] for p in profiles if p.user_id in token_map]
+    parent_tokens = [
+        token_map[p.parent_user_id] for p in profiles
+        if p.parent_user_id and p.parent_user_id in token_map
+    ]
+
+    if student_tokens:
+        asyncio.create_task(notification_service.send_to_tokens(
+            tokens=student_tokens,
+            title="New Quiz Available",
+            body=(f"A new quiz '{test.title}' is ready — Grade {test.grade} "
+                  f"{test.subject}. You have 48 hours to take it."),
+            data={"route": "/student/tests"},
+        ))
+    if parent_tokens:
+        asyncio.create_task(notification_service.send_to_tokens(
+            tokens=parent_tokens,
+            title="New Quiz Available",
+            body=(f"A new quiz '{test.title}' was added for your child "
+                  f"(Grade {test.grade} — {test.subject})."),
+            data={"route": "/parent/tests"},
+        ))
+
+
+async def _run_auto_test_job(
+    presentation_id: int, teacher_id: int, slides_from: int, slides_to: int,
+) -> None:
+    """Generate a 10-MCQ online quiz for the slides a teacher just logged.
+
+    Source is strictly the covered slides' text (title + body + speaker
+    notes). Publishes a 7-minute / 48-hour online test that reflects to
+    students and parents like any other test. If a clean 10-MCQ quiz can't
+    be produced, nothing is published and the teacher is notified.
+    """
+    async with AsyncSessionLocal() as db:
+        try:
+            pres = (await db.execute(
+                select(ChapterPresentation).where(
+                    ChapterPresentation.id == presentation_id
+                )
+            )).scalar_one_or_none()
+            if pres is None:
+                return
+
+            # Idempotency: don't re-quiz a range we've already quizzed.
+            existing = (await db.execute(
+                select(Test.id).where(
+                    Test.presentation_id == presentation_id,
+                    Test.auto_generated == True,   # noqa: E712
+                    Test.slides_from == slides_from,
+                    Test.slides_to == slides_to,
+                )
+            )).scalar_one_or_none()
+            if existing is not None:
+                logger.info("Auto-quiz already exists for pres=%s slides %s-%s",
+                            presentation_id, slides_from, slides_to)
+                return
+
+            # Covered slides are [slides_from, slides_to) — slides_to is the new
+            # current position (exclusive).
+            slides = (await db.execute(
+                select(PresentationSlide).where(
+                    PresentationSlide.presentation_id == presentation_id,
+                    PresentationSlide.slide_index >= slides_from,
+                    PresentationSlide.slide_index < slides_to,
+                ).order_by(PresentationSlide.slide_index)
+            )).scalars().all()
+
+            parts: List[str] = []
+            for s in slides:
+                block = s.title.strip()
+                if s.body_md.strip():
+                    block += "\n" + s.body_md.strip()
+                if s.speaker_notes.strip():
+                    block += "\n" + s.speaker_notes.strip()
+                parts.append(block)
+            chapter_text = "\n\n".join(p for p in parts if p)
+
+            if len(chapter_text) < _AUTO_TEST_MIN_SOURCE_CHARS:
+                logger.info(
+                    "Auto-quiz skipped (thin source: %d chars) for pres=%s slides %s-%s",
+                    len(chapter_text), presentation_id, slides_from, slides_to,
+                )
+                await _notify_teacher(
+                    db, teacher_id, "Quiz not created",
+                    f"Not enough slide content to build a quiz for "
+                    f"'{pres.chapter_name}' (slides {slides_from + 1}-{slides_to}).",
+                )
+                return
+
+            params = TestGenerationParams(
+                title=f"Auto Quiz — {pres.chapter_name}",
+                grade=pres.grade,
+                subject=pres.subject,
+                chapter=pres.chapter_name,
+                test_type=TestType.online,
+                mcq_count=_AUTO_TEST_MCQ_COUNT,
+                fill_blank_count=0,
+                true_false_count=0,
+                match_following_count=0,
+                vsa_count=0,
+                short_answer_count=0,
+                long_answer_count=0,
+                diagram_count=0,
+                include_numericals=False,
+                time_limit_minutes=_AUTO_TEST_TIME_LIMIT_MIN,
+            )
+
+            try:
+                questions = await ai_service.generate_mcqs_from_text(
+                    chapter_text, params
+                )
+            except Exception:
+                logger.exception("Auto-quiz AI generation failed for pres=%s",
+                                 presentation_id)
+                await _notify_teacher(
+                    db, teacher_id, "Quiz not created",
+                    f"Couldn't auto-generate a quiz for '{pres.chapter_name}' "
+                    f"(slides {slides_from + 1}-{slides_to}). Try again or make "
+                    f"one manually.",
+                )
+                return
+
+            # Keep only well-formed 4-option MCQs and require a full set of 10.
+            mcqs = [
+                q for q in questions
+                if q.get("type") == "mcq"
+                and isinstance(q.get("options"), dict)
+                and len(q["options"]) >= 2
+                and str(q.get("answer", "")).strip()
+            ][:_AUTO_TEST_MCQ_COUNT]
+
+            if len(mcqs) < _AUTO_TEST_MCQ_COUNT:
+                logger.info("Auto-quiz skipped (only %d/%d MCQs) for pres=%s",
+                            len(mcqs), _AUTO_TEST_MCQ_COUNT, presentation_id)
+                await _notify_teacher(
+                    db, teacher_id, "Quiz not created",
+                    f"Couldn't build a full {_AUTO_TEST_MCQ_COUNT}-question quiz "
+                    f"for '{pres.chapter_name}' (slides {slides_from + 1}-"
+                    f"{slides_to}). The covered portion may be too short.",
+                )
+                return
+
+            for i, q in enumerate(mcqs, start=1):
+                q["id"] = i
+                q["marks"] = 1
+
+            now = datetime.now(timezone.utc)
+            test = Test(
+                title=f"Auto Quiz — {pres.chapter_name} (slides "
+                      f"{slides_from + 1}-{slides_to})",
+                teacher_id=teacher_id,
+                grade=pres.grade,
+                subject=pres.subject,
+                test_type=TestType.online,
+                questions=mcqs,
+                total_marks=float(len(mcqs)),
+                time_limit_minutes=_AUTO_TEST_TIME_LIMIT_MIN,
+                is_published=True,
+                auto_generated=True,
+                presentation_id=presentation_id,
+                slides_from=slides_from,
+                slides_to=slides_to,
+                expires_at=now + timedelta(hours=_AUTO_TEST_WINDOW_HOURS),
+            )
+            db.add(test)
+            await db.commit()
+            await db.refresh(test)
+
+            await _broadcast_new_test(db, test)
+            logger.info("Auto-quiz published: test=%s pres=%s slides %s-%s",
+                        test.id, presentation_id, slides_from, slides_to)
+        except Exception:
+            logger.exception("Auto-quiz job crashed for pres=%s", presentation_id)
 
 
 # ── POST /upload ─────────────────────────────────────────────────────────────
@@ -98,6 +359,7 @@ async def upload_chapter(
     can poll GET /{id} or listen for the `presentation_ready` WebSocket
     event."""
     _require_teacher_or_admin(current_user)
+    await _enforce_ai_generation_quota(current_user)
 
     if grade not in _VALID_GRADES:
         raise HTTPException(status_code=422, detail="Grade must be 8, 9, or 10.")
@@ -113,6 +375,9 @@ async def upload_chapter(
         if not (file.filename or "").lower().endswith(".pdf"):
             raise HTTPException(status_code=415, detail="Only PDF uploads are supported.")
 
+    # Reject by declared size before buffering the whole PDF into memory; the
+    # post-read length check below stays as the source of truth.
+    reject_if_oversize(file, _MAX_PDF_BYTES)
     data = await file.read()
     if not data:
         raise HTTPException(status_code=422, detail="Uploaded file is empty.")
@@ -280,6 +545,11 @@ async def create_from_chapter(
         return PresentationCreateResponse(
             presentation_id=existing.id, status=existing.status.value
         )
+
+    # No existing deck → this path kicks off a paid Gemini generation, so
+    # enforce the per-user quota here (cache-hit adoptions above are free and
+    # intentionally not counted).
+    await _enforce_ai_generation_quota(current_user)
 
     # Create fresh. Reuse the chapter doc's file_key directly — no copy.
     row = ChapterPresentation(
@@ -735,12 +1005,17 @@ async def patch_slide(
 async def create_period_log(
     presentation_id: int,
     payload: PresentationPeriodLogCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PresentationPeriodLogOut:
     """Log a period taught. Updates the current teacher's progress row to
     point at `slides_covered_to` (clamped to total_slides) and bumps
-    periods_used."""
+    periods_used.
+
+    Side effect: schedules an auto-generated 10-MCQ online quiz covering the
+    slides taught this period (7-minute timer, 48-hour window) so students
+    get tested on exactly the portion just completed."""
     _require_teacher_or_admin(current_user)
 
     pres = (await db.execute(
@@ -782,12 +1057,13 @@ async def create_period_log(
         )
     to_idx = min(payload.slides_covered_to, pres.total_slides)
 
+    slides_from = progress.current_slide_index
     log = PresentationPeriodLog(
         presentation_id=presentation_id,
         teacher_id=current_user.id,
         period_date=payload.period_date,
         period_number=payload.period_number,
-        slides_covered_from=progress.current_slide_index,
+        slides_covered_from=slides_from,
         slides_covered_to=to_idx,
         notes=payload.notes,
     )
@@ -798,6 +1074,13 @@ async def create_period_log(
 
     await db.commit()
     await db.refresh(log)
+
+    # Auto-quiz the portion just taught (no-op if no new slides were covered).
+    if to_idx > slides_from:
+        background_tasks.add_task(
+            _run_auto_test_job,
+            presentation_id, current_user.id, slides_from, to_idx,
+        )
 
     return PresentationPeriodLogOut(
         id=log.id,

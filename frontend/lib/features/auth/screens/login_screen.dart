@@ -692,7 +692,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   height: 360,
                   decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white.withOpacity(0.025)))),
+                      color: Colors.white.withValues(alpha: 0.025)))),
           Positioned(
               bottom: -90,
               right: -70,
@@ -701,7 +701,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   height: 400,
                   decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppColors.accent.withOpacity(0.08)))),
+                      color: AppColors.accent.withValues(alpha: 0.08)))),
           // Accent vertical edge glow
           Positioned(
             left: 0,
@@ -715,7 +715,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.transparent,
-                    AppColors.accent.withOpacity(0.6),
+                    AppColors.accent.withValues(alpha: 0.6),
                     Colors.transparent,
                   ],
                 ),
@@ -741,7 +741,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           borderRadius: BorderRadius.circular(18),
                           boxShadow: [
                             BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 offset: const Offset(0, 6))
                           ],
@@ -755,7 +755,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         width: 1,
                         height: 52,
                         margin: const EdgeInsets.symmetric(horizontal: 18),
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                       ),
                       // MindForge logo + name
                       Container(
@@ -766,7 +766,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           borderRadius: BorderRadius.circular(18),
                           boxShadow: [
                             BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 offset: const Offset(0, 6))
                           ],
@@ -788,7 +788,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           Text('AI Assisted Learning',
                               style: GoogleFonts.poppins(
                                   fontSize: 12,
-                                  color: Colors.white.withOpacity(0.5))),
+                                  color: Colors.white.withValues(alpha: 0.5))),
                         ],
                       ),
                     ],
@@ -809,7 +809,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       'A complete platform for teachers,\nstudents, and parents.',
                       style: GoogleFonts.poppins(
                           fontSize: 14,
-                          color: Colors.white.withOpacity(0.55),
+                          color: Colors.white.withValues(alpha: 0.55),
                           height: 1.65)),
 
                   const SizedBox(height: 40),
@@ -834,7 +834,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               width: 34,
                               height: 34,
                               decoration: BoxDecoration(
-                                color: AppColors.accent.withOpacity(0.15),
+                                color: AppColors.accent.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(9),
                               ),
                               child: Icon(f.$1,
@@ -844,7 +844,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             Text(f.$2,
                                 style: GoogleFonts.poppins(
                                     fontSize: 13,
-                                    color: Colors.white.withOpacity(0.8),
+                                    color: Colors.white.withValues(alpha: 0.8),
                                     fontWeight: FontWeight.w500)),
                           ],
                         ),
@@ -859,14 +859,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(30),
                       border: Border.all(
-                          color: Colors.white.withOpacity(0.22), width: 1),
-                      color: Colors.white.withOpacity(0.07),
+                          color: Colors.white.withValues(alpha: 0.22), width: 1),
+                      color: Colors.white.withValues(alpha: 0.07),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.workspace_premium_rounded,
-                            size: 18, color: Colors.white.withOpacity(0.85)),
+                            size: 18, color: Colors.white.withValues(alpha: 0.85)),
                         const SizedBox(width: 10),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -881,7 +881,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             Text('Trusted education since 1997',
                                 style: GoogleFonts.poppins(
                                     fontSize: 10,
-                                    color: Colors.white.withOpacity(0.55),
+                                    color: Colors.white.withValues(alpha: 0.55),
                                     letterSpacing: 0.2)),
                           ],
                         ),
@@ -901,14 +901,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Container(
       color: const Color(0xFFF4F6FA),
       child: Center(
-        child: ConstrainedBox(
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 48),
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 48),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.max,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 // Heading
                 Text(_isRegister ? 'Request Access' : 'Welcome back',
@@ -1197,19 +1197,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       height: 46,
                       decoration: BoxDecoration(
                         color: filled
-                            ? AppColors.primary.withOpacity(0.1)
+                            ? AppColors.primary.withValues(alpha: 0.1)
                             : Colors.white,
                         border: Border.all(
                             color: active
                                 ? AppColors.primary
                                 : filled
-                                    ? AppColors.primary.withOpacity(0.5)
+                                    ? AppColors.primary.withValues(alpha: 0.5)
                                     : AppColors.divider,
                             width: active ? 2 : 1),
                         borderRadius: BorderRadius.circular(10),
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
+                              color: Colors.black.withValues(alpha: 0.04),
                               blurRadius: 4,
                               offset: const Offset(0, 2))
                         ],
@@ -1285,6 +1285,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

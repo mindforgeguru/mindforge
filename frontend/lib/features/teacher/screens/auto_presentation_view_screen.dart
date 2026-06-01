@@ -279,7 +279,7 @@ class _ReadyView extends ConsumerWidget {
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: gColor.withOpacity(0.25),
+                  color: gColor.withValues(alpha: 0.25),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -304,7 +304,7 @@ class _ReadyView extends ConsumerWidget {
                         'Grade ${data['grade']} · ${data['subject']}',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withValues(alpha: 0.85),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -337,7 +337,7 @@ class _ReadyView extends ConsumerWidget {
             decoration: BoxDecoration(
               color: AppColors.cardBackground,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: gColor.withOpacity(0.18)),
+              border: Border.all(color: gColor.withValues(alpha: 0.18)),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(11),
@@ -374,7 +374,7 @@ class _ReadyView extends ConsumerWidget {
                         child: LinearProgressIndicator(
                           value: progressPct,
                           minHeight: 10,
-                          backgroundColor: gColor.withOpacity(0.12),
+                          backgroundColor: gColor.withValues(alpha: 0.12),
                           valueColor: AlwaysStoppedAnimation(gColor),
                         ),
                       ),
@@ -512,7 +512,7 @@ class _BannerStat extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.22),
+        color: Colors.white.withValues(alpha: 0.22),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -880,10 +880,10 @@ class _SlideCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accentColor.withOpacity(0.25)),
+        border: Border.all(color: accentColor.withValues(alpha: 0.25)),
         boxShadow: [
           BoxShadow(
-            color: accentColor.withOpacity(0.12),
+            color: accentColor.withValues(alpha: 0.12),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -916,7 +916,7 @@ class _SlideCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: accentColor.withOpacity(0.12),
+                    color: accentColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -952,55 +952,50 @@ class _SlideCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
+          // Body + speaker notes share ONE scrollable region. The card can be
+          // squeezed very short (the viewer competes with the banner, progress
+          // bar and period-logs strip), so anything variable must live inside a
+          // single scroll view — otherwise the fixed chrome (title + divider +
+          // notes header) alone overflows the card. Notes scroll inline below
+          // the body rather than being pinned.
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _SlideBody(markdown: body, accentColor: accentColor),
-            ),
-          ),
-          if (notes.trim().isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Divider(color: accentColor.withOpacity(0.2)),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('🎤', style: const TextStyle(fontSize: 12)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'SPEAKER NOTES',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10, fontWeight: FontWeight.w800,
-                      color: accentColor,
-                      letterSpacing: 1.5,
+                  _SlideBody(markdown: body, accentColor: accentColor),
+                  if (notes.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Divider(color: accentColor.withValues(alpha: 0.2)),
+                    Row(
+                      children: [
+                        Text('🎤', style: const TextStyle(fontSize: 12)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'SPEAKER NOTES',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10, fontWeight: FontWeight.w800,
+                            color: accentColor,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      notes,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12, color: AppColors.textSecondary,
+                        fontStyle: FontStyle.italic,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 4),
-            // Cap the notes block so very long Gemini-generated notes don't
-            // blow past the card height (RenderFlex overflow). 120 px fits
-            // ~6 lines at fontSize=12 height=1.4; long notes scroll within.
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 120),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  notes,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12, color: AppColors.textSecondary,
-                    fontStyle: FontStyle.italic,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-          ] else
-            const SizedBox(height: 18),
+          ),
         ],
       ),
     );
@@ -1218,16 +1213,20 @@ Future<void> _showPeriodLogDialog(
                       final msg = body is Map && body['detail'] is String
                           ? body['detail'] as String
                           : 'Failed to log period.';
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text(msg),
-                            backgroundColor: AppColors.error),
-                      );
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text(msg),
+                              backgroundColor: AppColors.error),
+                        );
+                      }
                       setSt(() => submitting = false);
                     } catch (e) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text('Error: $e'),
-                            backgroundColor: AppColors.error),
-                      );
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Error: $e'),
+                              backgroundColor: AppColors.error),
+                        );
+                      }
                       setSt(() => submitting = false);
                     }
                   },
@@ -1319,10 +1318,12 @@ Future<void> _showEditSlideDialog(
                       ref.invalidate(presentationDetailProvider(presentationId));
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text('Save failed: $e'),
-                            backgroundColor: AppColors.error),
-                      );
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Save failed: $e'),
+                              backgroundColor: AppColors.error),
+                        );
+                      }
                       setSt(() => submitting = false);
                     }
                   },

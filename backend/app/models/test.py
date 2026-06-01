@@ -44,10 +44,21 @@ class Test(Base):
     time_limit_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_graded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # True when this quiz was auto-created from a presentation period log
+    # (teacher logging "I taught slides X..Y"). See migration 026.
+    auto_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    presentation_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("chapter_presentations.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    slides_from: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    slides_to: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    # Students can only submit within this 3-day window
+    # Students can only submit within this window (3 days for manual tests,
+    # 48 hours for auto-generated period quizzes)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     teacher = relationship("User", foreign_keys=[teacher_id])

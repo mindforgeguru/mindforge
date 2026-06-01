@@ -300,7 +300,7 @@ class _SummaryStrip extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: pct,
                     minHeight: 8,
-                    backgroundColor: AppColors.error.withOpacity(0.2),
+                    backgroundColor: AppColors.error.withValues(alpha: 0.2),
                     valueColor:
                         const AlwaysStoppedAnimation(AppColors.success),
                   ),
@@ -355,9 +355,9 @@ class _SubmittedBanner extends StatelessWidget {
           horizontal: R.sp(context, 14, min: 10, max: 18),
           vertical: R.sp(context, 10, min: 8, max: 13)),
       decoration: BoxDecoration(
-        color: AppColors.accent.withOpacity(0.12),
+        color: AppColors.accent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.accent.withOpacity(0.5)),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
@@ -420,8 +420,8 @@ class _StudentTile extends StatelessWidget {
             CircleAvatar(
               radius: avatarRadius,
               backgroundColor: completed && !isLocked
-                  ? AppColors.success.withOpacity(0.15)
-                  : AppColors.error.withOpacity(0.15),
+                  ? AppColors.success.withValues(alpha: 0.15)
+                  : AppColors.error.withValues(alpha: 0.15),
               child: Icon(
                 isLocked
                     ? Icons.block
@@ -458,7 +458,7 @@ class _StudentTile extends StatelessWidget {
             Switch.adaptive(
               value: completed && !isLocked,
               activeColor: AppColors.success,
-              inactiveTrackColor: AppColors.error.withOpacity(0.3),
+              inactiveTrackColor: AppColors.error.withValues(alpha: 0.3),
               // null disables the switch — Flutter renders it greyed out.
               onChanged: onChanged,
             ),
@@ -488,9 +488,9 @@ class _AttendanceMissingBanner extends StatelessWidget {
           horizontal: R.sp(context, 14, min: 10, max: 18),
           vertical: R.sp(context, 10, min: 8, max: 13)),
       decoration: BoxDecoration(
-        color: AppColors.warning.withOpacity(0.14),
+        color: AppColors.warning.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.warning.withOpacity(0.6)),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.6)),
       ),
       child: Row(
         children: [

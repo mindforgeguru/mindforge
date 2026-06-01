@@ -185,13 +185,13 @@ class _CurrentYearCard extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: mindForgeCardDecoration(
-            color: AppColors.warning.withOpacity(0.08)),
+            color: AppColors.warning.withValues(alpha: 0.08)),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.warning.withOpacity(0.15),
+                color: AppColors.warning.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.warning_amber,
@@ -225,13 +225,13 @@ class _CurrentYearCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: mindForgeCardDecoration(
-          color: AppColors.success.withOpacity(0.06)),
+          color: AppColors.success.withValues(alpha: 0.06)),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.15),
+              color: AppColors.success.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.school_outlined,
@@ -254,7 +254,7 @@ class _CurrentYearCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppColors.success.withOpacity(0.15),
+                        color: AppColors.success.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text('ACTIVE',
@@ -307,7 +307,7 @@ class _PreviousYearCard extends ConsumerWidget {
           leading: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child:       Icon(Icons.history_edu_outlined,
@@ -358,7 +358,7 @@ class _StatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -485,7 +485,7 @@ class _YearUserListState extends State<_YearUserList> {
                     CircleAvatar(
                       radius: 14,
                       backgroundColor:
-                          _roleColor(u.role).withOpacity(0.15),
+                          _roleColor(u.role).withValues(alpha: 0.15),
                       child: Text(
                         u.username[0].toUpperCase(),
                         style: TextStyle(
@@ -503,7 +503,7 @@ class _YearUserListState extends State<_YearUserList> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: _roleColor(u.role).withOpacity(0.1),
+                        color: _roleColor(u.role).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(

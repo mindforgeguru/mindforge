@@ -726,13 +726,6 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
-  /// Forfeit an in-progress online test attempt. Score becomes 0 and the
-  /// row is finalized. Idempotent — safe to call when already finalized.
-  Future<Map<String, dynamic>> forfeitTest(int testId) async {
-    final res = await _dio.post('/student/tests/$testId/forfeit');
-    return res.data as Map<String, dynamic>;
-  }
-
   // ── Parent ────────────────────────────────────────────────────────────────
 
   Future<List<dynamic>> getChildAttendance({int skip = 0, int limit = 50}) async {

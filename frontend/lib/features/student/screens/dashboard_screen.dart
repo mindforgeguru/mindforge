@@ -19,6 +19,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/widgets/badge_dot.dart';
+import '../../../core/widgets/report_problem_dialog.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
@@ -376,7 +377,7 @@ class _StudentDashboardScreenState
                                   style: GoogleFonts.poppins(
                                     fontSize: (screenWidth * 0.040).clamp(13.0, 16.0),
                                     fontWeight: FontWeight.w400,
-                                    color: Colors.white.withOpacity(0.72),
+                                    color: Colors.white.withValues(alpha: 0.72),
                                     letterSpacing: 0.4,
                                   ),
                                 ),
@@ -414,7 +415,7 @@ class _StudentDashboardScreenState
                             borderRadius: BorderRadius.circular(cardRadius),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
+                                color: Colors.black.withValues(alpha: 0.08),
                                 blurRadius: 24,
                                 offset: const Offset(0, 8),
                               ),
@@ -701,6 +702,24 @@ class _StudentDashboardScreenState
               },
             ),
           ),
+          // ── Report a problem — small button at the bottom of the page ──
+          SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: TextButton.icon(
+                  onPressed: () => showReportProblemDialog(context, ref),
+                  icon: const Icon(Icons.bug_report_outlined, size: 16),
+                  label: const Text('Report a problem'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    textStyle: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+          ),
           SliverToBoxAdapter(child: SizedBox(height: _s(context, 16, min: 12, max: 24))),
 
         ],
@@ -807,7 +826,7 @@ class _ProfileAvatar extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -991,7 +1010,7 @@ class _TimetableCard extends StatelessWidget {
       } catch (_) {}
     }
     final onDark  = isNow ? Colors.white : AppColors.primary;
-    final onMuted = isNow ? Colors.white.withOpacity(0.72) : AppColors.textMuted;
+    final onMuted = isNow ? Colors.white.withValues(alpha: 0.72) : AppColors.textMuted;
 
     return Container(
       width: cardW,
@@ -1020,7 +1039,7 @@ class _TimetableCard extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: isNow
-                      ? Colors.white.withOpacity(0.18)
+                      ? Colors.white.withValues(alpha: 0.18)
                       : AppColors.iconContainer,
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -1191,8 +1210,8 @@ class _DashHomeworkTile extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 color: hw.isOnlineTest
-                    ? AppColors.accent.withOpacity(0.12)
-                    : AppColors.primary.withOpacity(0.08),
+                    ? AppColors.accent.withValues(alpha: 0.12)
+                    : AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -1266,9 +1285,9 @@ class _DashBroadcastTile extends StatelessWidget {
         margin: EdgeInsets.fromLTRB(hPad, 0, hPad, (sw * 0.018).clamp(5.0, 8.0)),
         padding: EdgeInsets.symmetric(horizontal: (sw * 0.035).clamp(10.0, 14.0), vertical: vPad),
         decoration: BoxDecoration(
-          color: isNew ? AppColors.accent.withOpacity(0.07) : Colors.white,
+          color: isNew ? AppColors.accent.withValues(alpha: 0.07) : Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: isNew ? Border.all(color: AppColors.accent.withOpacity(0.30), width: 1) : null,
+          border: isNew ? Border.all(color: AppColors.accent.withValues(alpha: 0.30), width: 1) : null,
           boxShadow: const [BoxShadow(color: Color(0x0C1D3557), blurRadius: 6, offset: Offset(0, 2))],
         ),
         child: Row(
@@ -1367,7 +1386,7 @@ class _StudentWebHeroSection extends ConsumerWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.iconContainer,
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 6, offset: const Offset(0, 2))],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 6, offset: const Offset(0, 2))],
               ),
               child: ClipOval(
                 child: photoUrl != null
@@ -1464,7 +1483,7 @@ class _FeeCapsule extends StatelessWidget {
             borderRadius: BorderRadius.circular(50),
             border: border,
             boxShadow: style != _CapsuleStyle.outline
-                ? [BoxShadow(color: bgColor.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))]
+                ? [BoxShadow(color: bgColor.withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2))]
                 : null,
           ),
           child: Text(value,
@@ -1524,13 +1543,13 @@ class _DashCard extends StatelessWidget {
   }
 }
 
-// ─── Mobile dashboard: rolling 10-test marks chart ─────────────────────────────
+// ─── Mobile dashboard: rolling 20-test marks chart ─────────────────────────────
 //
 // Reads the `grades` list straight from the dashboard summary (already loaded —
-// no extra network call) and shows a bar chart of the latest 10 results. The
-// backend returns grades newest-first; we take(10) and reverse so the bars read
+// no extra network call) and shows a bar chart of the latest 20 results. The
+// backend returns grades newest-first; we take(20) and reverse so the bars read
 // left-to-right oldest → newest, matching how a timeline is normally read.
-// When an 11th result arrives, take(10) naturally drops the oldest of the
+// When a 21st result arrives, take(20) naturally drops the oldest of the
 // previous window — i.e. the leftmost bar shifts off as a new one appears
 // on the right.
 
@@ -1566,7 +1585,9 @@ class _RecentMarksChart extends StatelessWidget {
       );
     }
 
-    final window = grades.take(10).toList().reversed.toList();
+    final window = grades.take(20).toList().reversed.toList();
+    // With up to 20 bars, thin them so they don't overlap on narrow screens.
+    final barWidth = window.length > 10 ? 8.0 : 16.0;
     // Y-axis is percentage, fixed 0–100 so bars are comparable across tests
     // even when raw maxMarks differ (a 10/10 quiz vs a 70/100 exam render at
     // the same height of 100% rather than the small bar dominating the big
@@ -1643,7 +1664,7 @@ class _RecentMarksChart extends StatelessWidget {
                     BarChartRodData(
                       toY: window[i].percentage.clamp(0.0, 100.0),
                       color: _palette[i % _palette.length],
-                      width: 16,
+                      width: barWidth,
                       borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(4)),
                     ),
@@ -1967,7 +1988,8 @@ class _StudentWebTestChart extends ConsumerWidget {
                 child: Center(child: Text('No test results yet', style: TextStyle(color: AppColors.textMuted))),
               );
             }
-            final last5 = grades.take(5).toList().reversed.toList();
+            final window = grades.take(20).toList().reversed.toList();
+            final barWidth = window.length > 10 ? 12.0 : 28.0;
             return SizedBox(
               height: 160,
               child: BarChart(
@@ -1992,11 +2014,11 @@ class _StudentWebTestChart extends ConsumerWidget {
                       showTitles: true,
                       getTitlesWidget: (v, _) {
                         final i = v.toInt();
-                        if (i < 0 || i >= last5.length) return const SizedBox.shrink();
+                        if (i < 0 || i >= window.length) return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
-                            last5[i].subject.length > 4 ? last5[i].subject.substring(0, 4) : last5[i].subject,
+                            window[i].subject.length > 4 ? window[i].subject.substring(0, 4) : window[i].subject,
                             style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textMuted),
                           ),
                         );
@@ -2005,8 +2027,8 @@ class _StudentWebTestChart extends ConsumerWidget {
                     rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
-                  barGroups: List.generate(last5.length, (i) {
-                    final pct = last5[i].percentage.clamp(0.0, 100.0);
+                  barGroups: List.generate(window.length, (i) {
+                    final pct = window[i].percentage.clamp(0.0, 100.0);
                     final color = pct >= 75
                         ? const Color(0xFF10B981)
                         : pct >= 50
@@ -2016,7 +2038,7 @@ class _StudentWebTestChart extends ConsumerWidget {
                       BarChartRodData(
                         toY: pct,
                         color: color,
-                        width: 28,
+                        width: barWidth,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                       ),
                     ]);
@@ -2198,7 +2220,7 @@ class _StudentWebAttendanceBox extends ConsumerWidget {
                                   width: 34,
                                   height: 34,
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.1),
+                                    color: Colors.white.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Icon(
@@ -2237,10 +2259,10 @@ class _StudentWebAttendanceBox extends ConsumerWidget {
                                   height: 26,
                                   decoration: BoxDecoration(
                                     color: isPartial
-                                        ? const Color(0xFFFBBF24).withOpacity(0.2)
+                                        ? const Color(0xFFFBBF24).withValues(alpha: 0.2)
                                         : isPresent
-                                            ? const Color(0xFF34D399).withOpacity(0.2)
-                                            : const Color(0xFFF87171).withOpacity(0.2),
+                                            ? const Color(0xFF34D399).withValues(alpha: 0.2)
+                                            : const Color(0xFFF87171).withValues(alpha: 0.2),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
@@ -2395,9 +2417,9 @@ class _WebTimetableRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isNow ? AppColors.primary.withOpacity(0.06) : const Color(0xFFF8FAFC),
+        color: isNow ? AppColors.primary.withValues(alpha: 0.06) : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(10),
-        border: isNow ? Border.all(color: AppColors.primary.withOpacity(0.3)) : null,
+        border: isNow ? Border.all(color: AppColors.primary.withValues(alpha: 0.3)) : null,
       ),
       child: Row(
         children: [
@@ -2480,13 +2502,13 @@ class _WebCurrentTimeBadgeState extends State<_WebCurrentTimeBadge> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.05),
+        color: AppColors.primary.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withOpacity(0.12)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
-          Icon(Icons.access_time_rounded, size: 16, color: AppColors.primary.withOpacity(0.7)),
+          Icon(Icons.access_time_rounded, size: 16, color: AppColors.primary.withValues(alpha: 0.7)),
           const SizedBox(width: 8),
           Text(
             'Now  ',
@@ -2562,8 +2584,8 @@ class _StudentWebHomeworkBox extends ConsumerWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: isTest
-                              ? AppColors.accent.withOpacity(0.12)
-                              : AppColors.primary.withOpacity(0.08),
+                              ? AppColors.accent.withValues(alpha: 0.12)
+                              : AppColors.primary.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -2639,16 +2661,16 @@ class _StudentWebBroadcastsBox extends ConsumerWidget {
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: isNew ? AppColors.accent.withOpacity(0.06) : const Color(0xFFF8FAFC),
+                    color: isNew ? AppColors.accent.withValues(alpha: 0.06) : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(10),
-                    border: isNew ? Border.all(color: AppColors.accent.withOpacity(0.25)) : null,
+                    border: isNew ? Border.all(color: AppColors.accent.withValues(alpha: 0.25)) : null,
                   ),
                   child: Row(
                     children: [
                       Container(
                         width: 32, height: 32,
                         decoration: BoxDecoration(
-                          color: AppColors.accent.withOpacity(0.1),
+                          color: AppColors.accent.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child:       Icon(Icons.campaign_outlined, size: 16, color: AppColors.accent),

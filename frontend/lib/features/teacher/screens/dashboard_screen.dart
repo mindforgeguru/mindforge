@@ -175,8 +175,7 @@ class _TeacherDashboardScreenState
       // single auto-retry, and show a spinner instead of the error UI.
       if (!_autoRetryScheduled) {
         _autoRetryScheduled = true;
-        // ignore: avoid_print
-        print('[dashboard] first load failed, auto-retrying once. '
+        debugPrint('[dashboard] first load failed, auto-retrying once. '
             'Error: ${summaryAsync.error}');
         Future.delayed(const Duration(milliseconds: 900), () {
           if (!mounted) return;
@@ -189,8 +188,7 @@ class _TeacherDashboardScreenState
         );
       }
       // Second failure → surface to user.
-      // ignore: avoid_print
-      print('[dashboard] retry also failed: ${summaryAsync.error}');
+      debugPrint('[dashboard] retry also failed: ${summaryAsync.error}');
       return TeacherScaffold(
         backgroundColor: AppColors.background,
         body: Center(
@@ -327,11 +325,11 @@ class _TeacherDashboardScreenState
                   Positioned(top: -50, right: 180,
                     child: Container(width: 220, height: 220,
                       decoration: BoxDecoration(shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.04)))),
+                        color: Colors.white.withValues(alpha: 0.04)))),
                   Positioned(bottom: -70, right: -40,
                     child: Container(width: 260, height: 260,
                       decoration: BoxDecoration(shape: BoxShape.circle,
-                        color: AppColors.accent.withOpacity(0.08)))),
+                        color: AppColors.accent.withValues(alpha: 0.08)))),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(28, 22, 28, 24),
                     child: Column(
@@ -346,7 +344,7 @@ class _TeacherDashboardScreenState
                               child: Container(
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white.withOpacity(0.3), width: 2.5),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2.5),
                                 ),
                                 child: _ProfileAvatar(
                                   username: auth.username ?? 'T',
@@ -369,7 +367,7 @@ class _TeacherDashboardScreenState
                                     const SizedBox(height: 3),
                                     Text(
                                       subjects.join('  ·  '),
-                                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withOpacity(0.6)),
+                                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
                                     ),
                                   ],
                                 ],
@@ -379,7 +377,7 @@ class _TeacherDashboardScreenState
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(_fmtEEEE.format(DateTime.now()),
-                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withOpacity(0.5))),
+                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withValues(alpha: 0.5))),
                                 Text(_fmtDMonY.format(DateTime.now()),
                                   style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
                               ],
@@ -702,7 +700,7 @@ class _TeacherDashboardScreenState
                                   style: GoogleFonts.poppins(
                                     fontSize: (screenWidth * 0.040).clamp(13.0, 16.0),
                                     fontWeight: FontWeight.w400,
-                                    color: Colors.white.withOpacity(0.72),
+                                    color: Colors.white.withValues(alpha: 0.72),
                                     letterSpacing: 0.4,
                                   ),
                                 ),
@@ -714,23 +712,9 @@ class _TeacherDashboardScreenState
                     ),
                   ),
 
-                  // ── Report a problem ─────────────────────────────────
-                  Positioned(
-                    top: topPadding + _s(context, 10, min: 6, max: 14),
-                    right: _s(context, 52, min: 46, max: 60),
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: IconButton(
-                        tooltip: 'Report a problem',
-                        icon: Icon(Icons.bug_report_outlined,
-                            color: Colors.white,
-                            size: _s(context, 22, min: 18, max: 26)),
-                        onPressed: () => showReportProblemDialog(context, ref),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ),
+                  // Report a problem moved to a small button at the bottom of
+                  // the page (see the _ReportProblemButton below the content)
+                  // so it no longer crowds the centred MIND FORGE wordmark.
 
                   // ── Logout icon — min 48×48 tap target ───────────────
                   Positioned(
@@ -772,7 +756,7 @@ class _TeacherDashboardScreenState
                             borderRadius: BorderRadius.circular(cardRadius),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
+                                color: Colors.black.withValues(alpha: 0.08),
                                 blurRadius: 24,
                                 offset: const Offset(0, 8),
                               ),
@@ -1044,6 +1028,24 @@ class _TeacherDashboardScreenState
               },
             ),
           ),
+          // ── Report a problem — small button at the bottom of the page ──
+          SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: TextButton.icon(
+                  onPressed: () => showReportProblemDialog(context, ref),
+                  icon: const Icon(Icons.bug_report_outlined, size: 16),
+                  label: const Text('Report a problem'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    textStyle: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+          ),
           SliverToBoxAdapter(child: SizedBox(height: _s(context, 16, min: 12, max: 24))),
 
         ],
@@ -1132,8 +1134,8 @@ class _DashHomeworkTile extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 color: hw.isOnlineTest
-                    ? AppColors.accent.withOpacity(0.12)
-                    : AppColors.primary.withOpacity(0.08),
+                    ? AppColors.accent.withValues(alpha: 0.12)
+                    : AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -1207,9 +1209,9 @@ class _DashBroadcastTile extends StatelessWidget {
         margin: EdgeInsets.fromLTRB(hPad, 0, hPad, (sw * 0.018).clamp(5.0, 8.0)),
         padding: EdgeInsets.symmetric(horizontal: (sw * 0.035).clamp(10.0, 14.0), vertical: vPad),
         decoration: BoxDecoration(
-          color: isNew ? AppColors.accent.withOpacity(0.07) : Colors.white,
+          color: isNew ? AppColors.accent.withValues(alpha: 0.07) : Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: isNew ? Border.all(color: AppColors.accent.withOpacity(0.30), width: 1) : null,
+          border: isNew ? Border.all(color: AppColors.accent.withValues(alpha: 0.30), width: 1) : null,
           boxShadow: const [BoxShadow(color: Color(0x0C1D3557), blurRadius: 6, offset: Offset(0, 2))],
         ),
         child: Row(
@@ -1273,7 +1275,7 @@ class _ProfileAvatar extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -1340,9 +1342,9 @@ class _SubjectChip extends StatelessWidget {
         vertical: (sw * 0.008).clamp(2.0, 4.0),
       ),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.08),
+        color: AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular((sw * 0.028).clamp(8.0, 12.0)),
-        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
       ),
       child: Text(subject,
           style: GoogleFonts.poppins(
@@ -1434,7 +1436,7 @@ class _TimetableCard extends StatelessWidget {
     }
     final onDark = isNow ? Colors.white : AppColors.primary;
     final onMuted = isNow
-        ? Colors.white.withOpacity(0.72)
+        ? Colors.white.withValues(alpha: 0.72)
         : AppColors.textMuted;
 
     return Container(
@@ -1463,7 +1465,7 @@ class _TimetableCard extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: isNow
-                      ? Colors.white.withOpacity(0.18)
+                      ? Colors.white.withValues(alpha: 0.18)
                       : AppColors.iconContainer,
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -1627,9 +1629,9 @@ class _WebQuickAction extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
+          color: Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1718,9 +1720,9 @@ class _HeroStatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.10),
+          color: Colors.white.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withOpacity(0.15)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1728,7 +1730,7 @@ class _HeroStatCard extends StatelessWidget {
             Container(
               width: 38, height: 38,
               decoration: BoxDecoration(
-                color: accent.withOpacity(0.2),
+                color: accent.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(9),
               ),
               child: BadgeDot(
@@ -1748,7 +1750,7 @@ class _HeroStatCard extends StatelessWidget {
                 ),
                 Text(
                   label,
-                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.white.withOpacity(0.6)),
+                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.white.withValues(alpha: 0.6)),
                 ),
               ],
             ),
@@ -1832,13 +1834,13 @@ class _GradeAnalysisChartState extends State<_GradeAnalysisChart> {
         barRods: [
           BarChartRodData(
             toY: averages[i],
-            color: isTouched ? color : color.withOpacity(0.75),
+            color: isTouched ? color : color.withValues(alpha: 0.75),
             width: isTouched ? 22 : 18,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
             backDrawRodData: BackgroundBarChartRodData(
               show: true,
               toY: 100,
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
             ),
           ),
         ],
@@ -2026,7 +2028,7 @@ class _TodayWorkflowCard extends StatelessWidget {
           border: Border.all(color: AppColors.divider),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 6,
                 offset: const Offset(0, 2)),
           ],
@@ -2111,7 +2113,7 @@ class _GradePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -2453,7 +2455,7 @@ class _Milestone extends StatelessWidget {
           border: Border.all(color: Colors.white, width: 2),
           boxShadow: [
             BoxShadow(
-              color: fill.withOpacity(0.35),
+              color: fill.withValues(alpha: 0.35),
               blurRadius: 4,
               offset: const Offset(0, 1),
             ),
@@ -2595,10 +2597,10 @@ class _DashPresentationTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: tColor.withOpacity(0.18)),
+            border: Border.all(color: tColor.withValues(alpha: 0.18)),
             boxShadow: [
               BoxShadow(
-                color: tColor.withOpacity(0.10),
+                color: tColor.withValues(alpha: 0.10),
                 blurRadius: 8, offset: const Offset(0, 2),
               ),
             ],
@@ -2623,7 +2625,7 @@ class _DashPresentationTile extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.all(5),
                                 decoration: BoxDecoration(
-                                  color: tColor.withOpacity(0.10),
+                                  color: tColor.withValues(alpha: 0.10),
                                   borderRadius: BorderRadius.circular(7),
                                 ),
                                 child: Text(emoji,
@@ -2805,8 +2807,8 @@ class _ProgressBlock extends StatelessWidget {
       borderRadius: BorderRadius.circular(3),
       child: Container(
         decoration: BoxDecoration(
-          color: color.withOpacity(0.14),
-          border: Border.all(color: color.withOpacity(0.45), width: 1),
+          color: color.withValues(alpha: 0.14),
+          border: Border.all(color: color.withValues(alpha: 0.45), width: 1),
           borderRadius: BorderRadius.circular(3),
         ),
         // Fill from the left using a FractionallySizedBox so the partial
@@ -2912,10 +2914,10 @@ class _TeacherRingsCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: tColor.withOpacity(0.20)),
+          border: Border.all(color: tColor.withValues(alpha: 0.20)),
           boxShadow: [
             BoxShadow(
-              color: tColor.withOpacity(0.08),
+              color: tColor.withValues(alpha: 0.08),
               blurRadius: 8, offset: const Offset(0, 2),
             ),
           ],
@@ -2930,7 +2932,7 @@ class _TeacherRingsCard extends StatelessWidget {
                 Container(
                   width: 28, height: 28,
                   decoration: BoxDecoration(
-                    color: tColor.withOpacity(0.12),
+                    color: tColor.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -2960,7 +2962,7 @@ class _TeacherRingsCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: tColor.withOpacity(0.10),
+                    color: tColor.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -3124,7 +3126,7 @@ class _ConcentricRingsPainter extends CustomPainter {
       final spec = rings[i];
       // background ring
       final bg = Paint()
-        ..color = spec.color.withOpacity(0.18)
+        ..color = spec.color.withValues(alpha: 0.18)
         ..style = PaintingStyle.stroke
         ..strokeWidth = _strokeWidth;
       canvas.drawCircle(center, r, bg);

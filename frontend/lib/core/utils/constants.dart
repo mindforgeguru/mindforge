@@ -5,8 +5,20 @@ class AppConstants {
   static const String appName = 'MIND FORGE';
   static const String tagline = 'AI Assisted Learning';
 
-  // ⚠️  LOCAL DEV MODE — change back to false before building a release APK
-  static const bool _local = false;
+  /// App version shown on the About/Licenses page. Keep in sync with the
+  /// `version:` field in pubspec.yaml (without the build number).
+  static const String appVersion = '1.0.0';
+
+  /// Copyright line shown in the app's About section. Update the year range
+  /// as needed.
+  static const String copyright = '© 2026 MIND FORGE. All rights reserved.';
+
+  // Local-dev backend toggle. Defaults to FALSE so any plain `flutter build`
+  // (web/apk/ipa) targets production — it's impossible to ship a build that
+  // points at 127.0.0.1 by accident. For local development, run against the
+  // Docker backend with:  flutter run --dart-define=LOCAL_DEV=true
+  static const bool _local =
+      bool.fromEnvironment('LOCAL_DEV', defaultValue: false);
 
   static const String apiBaseUrl =
       _local ? 'http://127.0.0.1:8000/api' : 'https://api.mindforge.guru/api';

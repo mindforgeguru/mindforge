@@ -258,10 +258,10 @@ class _ChapterRow extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     color: isReady
-                        ? AppColors.success.withOpacity(0.15)
+                        ? AppColors.success.withValues(alpha: 0.15)
                         : isProcessing
-                            ? AppColors.warning.withOpacity(0.15)
-                            : AppColors.error.withOpacity(0.15),
+                            ? AppColors.warning.withValues(alpha: 0.15)
+                            : AppColors.error.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -529,7 +529,7 @@ class _UploadNewTabState extends ConsumerState<_UploadNewTab> {
             decoration: BoxDecoration(
               color: _picked == null
                   ? AppColors.iconContainer
-                  : AppColors.primary.withOpacity(0.08),
+                  : AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: _picked == null ? AppColors.divider : AppColors.primary,

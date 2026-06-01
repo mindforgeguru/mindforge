@@ -215,7 +215,7 @@ Widget _scrollableEmpty(BuildContext ctx,
             children: [
               Icon(icon,
                   size: iconSize,
-                  color: AppColors.textMuted.withOpacity(0.4)),
+                  color: AppColors.textMuted.withValues(alpha: 0.4)),
               SizedBox(height: _s(ctx, 14, min: 10, max: 20)),
               Text(
                 message,
@@ -260,7 +260,7 @@ class _HomeworkCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: isDueSoon
               ? Border.all(
-                  color: AppColors.warning.withOpacity(0.5), width: 1)
+                  color: AppColors.warning.withValues(alpha: 0.5), width: 1)
               : null,
           boxShadow: const [
             BoxShadow(
@@ -385,9 +385,9 @@ class _CompletionPill extends StatelessWidget {
         vertical: _s(context, 3, min: 2, max: 5),
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4), width: 0.8),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 0.8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -519,7 +519,7 @@ class _Badge extends StatelessWidget {
         vertical: _s(context, 3, min: 2, max: 5),
       ),
       decoration: BoxDecoration(
-        color: bg ?? color.withOpacity(0.12),
+        color: bg ?? color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(

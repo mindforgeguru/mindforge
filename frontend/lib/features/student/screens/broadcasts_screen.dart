@@ -119,7 +119,7 @@ Widget _scrollableEmpty(BuildContext ctx,
             children: [
               Icon(icon,
                   size: iconSize,
-                  color: AppColors.textMuted.withOpacity(0.4)),
+                  color: AppColors.textMuted.withValues(alpha: 0.4)),
               SizedBox(height: _s(ctx, 14, min: 10, max: 20)),
               Text(
                 message,

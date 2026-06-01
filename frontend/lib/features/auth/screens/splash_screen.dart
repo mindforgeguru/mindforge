@@ -133,16 +133,16 @@ class _SplashScreenState extends State<SplashScreen>
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(
-                        color: const Color(0xFF606060).withOpacity(0.3),
+                        color: const Color(0xFF606060).withValues(alpha: 0.3),
                         width: 1),
-                    color: const Color(0xFFB8B8B8).withOpacity(0.25),
+                    color: const Color(0xFFB8B8B8).withValues(alpha: 0.25),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.workspace_premium_rounded,
                           size: 17,
-                          color: const Color(0xFF404040).withOpacity(0.8)),
+                          color: const Color(0xFF404040).withValues(alpha: 0.8)),
                       const SizedBox(width: 9),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
