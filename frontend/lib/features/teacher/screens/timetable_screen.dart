@@ -777,9 +777,24 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
           child: Row(children: [
                   Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.primary),
             const SizedBox(width: 6),
-            Text(
-              DateFormat('EEE, d MMMM yyyy').format(_selectedDate),
-              style:       TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+            Expanded(
+              child: Text(
+                DateFormat('EEE, d MMMM yyyy').format(_selectedDate),
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w600,
+                    color: AppColors.primary),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _saving ? null : () => _markHoliday(context, periodsPerDay),
+              icon: const Icon(Icons.beach_access, size: 15),
+              label: const Text('Mark Holiday', style: TextStyle(fontSize: 11)),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.accent,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ]),
         ),
@@ -787,6 +802,97 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
         Expanded(child: periodEditor),
       ],
     );
+  }
+
+  Future<void> _markHoliday(BuildContext context, int periodsPerDay) async {
+    final dateLabel = DateFormat('d MMM yyyy').format(_selectedDate);
+    final reasonCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Mark as Holiday'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Mark Grade $_selectedGrade as a holiday on $dateLabel? '
+              'Any periods already entered for this day will be replaced.',
+              style: const TextStyle(fontSize: 13, height: 1.35),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              maxLength: 100,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+                hintText: 'e.g. Diwali, Sports Day',
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.beach_access, size: 16),
+            label: const Text('Mark Holiday'),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final reason = reasonCtrl.text.trim();
+    setState(() => _saving = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      // Replace whatever was there with a single full-day holiday marker.
+      await api.deleteTimetable(_selectedGrade, _dateString);
+      await api.createTimetableSlot({
+        'grade': _selectedGrade,
+        'slot_date': _dateString,
+        'period_number': 1,
+        'subject': '',
+        'is_holiday': true,
+        if (reason.isNotEmpty) 'comment': reason,
+      });
+      ref.invalidate(teacherTimetableProvider((_selectedGrade, _dateString)));
+      ref.invalidate(myTimetableProvider);
+      ref.invalidate(teacherTodayWorkflowProvider);
+      ref.invalidate(teacherDashboardSummaryProvider);
+      // Clear the in-memory editor so it doesn't re-save old periods.
+      setState(() {
+        _teacherIds.clear();
+        _subjects.clear();
+        _comments.clear();
+        _populatedGrade = null;
+        _populatedDate = null;
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Holiday set — Grade $_selectedGrade · $dateLabel'),
+          backgroundColor: AppColors.success,
+          duration: const Duration(seconds: 3),
+        ));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _confirmDelete(BuildContext context) async {

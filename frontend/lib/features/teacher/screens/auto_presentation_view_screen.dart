@@ -490,6 +490,29 @@ class _ReadyView extends ConsumerWidget {
                           minimumSize: const Size(double.infinity, 42),
                         ),
                       ),
+                      const SizedBox(height: 2),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => _unadoptThisDeck(
+                            context, ref, presentationId,
+                          ),
+                          icon: const Icon(Icons.remove_circle_outline,
+                              size: 15),
+                          label: Text(
+                            'Remove from my dashboard',
+                            style: GoogleFonts.poppins(
+                                fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 0),
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ),
                     ],
                   )
                 : Column(
@@ -1171,6 +1194,65 @@ Future<void> _adoptThisDeck(
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Adopt failed: $e'),
+          backgroundColor: AppColors.error),
+    );
+  }
+}
+
+Future<void> _unadoptThisDeck(
+  BuildContext context, WidgetRef ref, int presentationId,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(
+        'Remove from dashboard?',
+        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+      content: Text(
+        'This deck will be taken off your dashboard and your period logs '
+        'for it will be cleared. The presentation itself stays in the '
+        'library, and you can adopt it again later.',
+        style: GoogleFonts.poppins(fontSize: 12, height: 1.35),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          child: const Text('Remove'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+
+  try {
+    final api = ref.read(apiClientProvider);
+    await api.unadoptPresentation(presentationId);
+    ref.invalidate(presentationDetailProvider(presentationId));
+    try { ref.invalidate(presentationListProvider); } catch (_) {}
+    try { ref.invalidate(presentationLibraryProvider); } catch (_) {}
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Removed from your dashboard.')),
+    );
+  } on DioException catch (e) {
+    final body = e.response?.data;
+    final msg = body is Map && body['detail'] is String
+        ? body['detail'] as String
+        : 'Remove failed: ${e.response?.statusCode ?? '?'}';
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Remove failed: $e'),
           backgroundColor: AppColors.error),
     );
   }

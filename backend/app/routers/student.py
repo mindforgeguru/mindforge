@@ -1216,7 +1216,10 @@ async def get_student_homework(
 
     hw_result = await db.execute(
         select(Homework)
-        .where(Homework.grade == profile.grade)
+        .where(
+            Homework.grade == profile.grade,
+            Homework.is_no_homework == False,  # noqa: E712
+        )
         .order_by(Homework.created_at.desc())
     )
     return hw_result.scalars().all()
@@ -1444,9 +1447,12 @@ async def get_student_dashboard_summary(
         for b, u in bc_rows
     ]
 
-    # Homework
+    # Homework ("no homework" markers are workflow-only)
     homework = (await db.execute(
-        select(Homework).where(Homework.grade == profile.grade).order_by(Homework.created_at.desc())
+        select(Homework).where(
+            Homework.grade == profile.grade,
+            Homework.is_no_homework == False,  # noqa: E712
+        ).order_by(Homework.created_at.desc())
     )).scalars().all()
 
     # Attendance summary

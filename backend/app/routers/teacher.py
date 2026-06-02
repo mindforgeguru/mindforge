@@ -30,6 +30,7 @@ from app.schemas.timetable import TimetableConfigResponse, TimetableSlotCreate, 
 from app.schemas.user import AdminMpinUpdate, UserResponse, TeacherWithSubjectsResponse
 from app.schemas.homework import (
     HomeworkCreate,
+    NoHomeworkCreate,
     HomeworkResponse,
     HomeworkCompletionBulkUpdate,
     HomeworkCompletionDetail,
@@ -37,7 +38,7 @@ from app.schemas.homework import (
     BroadcastCreate,
     BroadcastResponse,
 )
-from app.models.homework import Homework, HomeworkCompletion, Broadcast
+from app.models.homework import Homework, HomeworkCompletion, HomeworkType, Broadcast
 from app.models.xp import XPReason
 from app.services import ai_service, notification_service, pdf_service, storage_service, xp_service
 
@@ -1385,6 +1386,8 @@ async def _pending_hw_review_ids(
         .where(
             Homework.grade == grade,
             Homework.created_at < today_start,
+            # "No homework" markers carry no roster to review.
+            Homework.is_no_homework == False,  # noqa: E712
         )
         .order_by(Homework.created_at.desc())
         .limit(1)
@@ -1473,14 +1476,62 @@ async def create_homework(
     return hw
 
 
+@router.post("/homework/none", response_model=HomeworkResponse,
+             status_code=status.HTTP_201_CREATED)
+async def mark_no_homework(
+    payload: NoHomeworkCreate,
+    db: AsyncSession = Depends(get_db),
+    current_teacher: User = Depends(get_current_teacher),
+):
+    """Record a grade-wide 'no homework today' marker.
+
+    Satisfies the daily 'assign homework' workflow step without creating a
+    student-facing assignment. Subject to the same review gate as a real
+    assignment — yesterday's review must be closed out first.
+    """
+    today = datetime.now(timezone.utc).date()
+    pending = await _pending_hw_review_ids(payload.grade, today, db)
+    if pending:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "homework_review_pending",
+                "message": (
+                    "Record yesterday's homework completion before marking "
+                    "no homework for this grade."
+                ),
+                "pending_homework_ids": pending,
+            },
+        )
+
+    hw = Homework(
+        teacher_id=current_teacher.id,
+        grade=payload.grade,
+        subject="—",
+        title="No homework",
+        description=None,
+        homework_type=HomeworkType.written,
+        is_no_homework=True,
+    )
+    db.add(hw)
+    await db.commit()
+    await db.refresh(hw)
+    return hw
+
+
 @router.get("/homework", response_model=List[HomeworkResponse])
 async def list_teacher_homework(
     grade: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """List all homework created by this teacher, optionally filtered by grade."""
-    q = select(Homework).where(Homework.teacher_id == current_teacher.id)
+    """List all homework created by this teacher, optionally filtered by grade.
+
+    "No homework" markers are workflow-only and excluded from the list."""
+    q = select(Homework).where(
+        Homework.teacher_id == current_teacher.id,
+        Homework.is_no_homework == False,  # noqa: E712
+    )
     if grade is not None:
         q = q.where(Homework.grade == grade)
     q = q.order_by(Homework.created_at.desc())
@@ -1843,10 +1894,13 @@ async def get_today_workflow(
         # teacher has no class. Compute them unconditionally so the car
         # can advance even when attendance is N/A.
         pending = await _pending_hw_review_ids(grade, today, db)
+        # Only real assignments are reviewable — "no homework" markers carry
+        # no roster, so they don't make the review step applicable.
         prior_hw_count = (await db.execute(
             select(func.count()).select_from(Homework).where(
                 Homework.grade == grade,
                 Homework.created_at < today_start,
+                Homework.is_no_homework == False,  # noqa: E712
             )
         )).scalar_one()
         review_applicable = prior_hw_count > 0
@@ -2067,10 +2121,14 @@ async def get_teacher_dashboard_summary(
         for b in broadcasts_raw
     ]
 
-    # Homework created by this teacher (30 most recent)
+    # Homework created by this teacher (30 most recent). "No homework"
+    # markers are workflow-only, so they're excluded here.
     homework = (await db.execute(
         select(Homework)
-        .where(Homework.teacher_id == current_teacher.id)
+        .where(
+            Homework.teacher_id == current_teacher.id,
+            Homework.is_no_homework == False,  # noqa: E712
+        )
         .order_by(Homework.created_at.desc())
         .limit(30)
     )).scalars().all()

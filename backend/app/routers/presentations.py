@@ -23,7 +23,7 @@ from typing import List, Optional
 from fastapi import (
     APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status,
 )
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -933,6 +933,49 @@ async def adopt_presentation(
         "teacher_id": current_user.id,
         "current_slide_index": progress.current_slide_index,
     }
+
+
+# ── DELETE /{id}/adopt ───────────────────────────────────────────────────────
+
+
+@router.delete("/{presentation_id}/adopt",
+               status_code=status.HTTP_204_NO_CONTENT)
+async def unadopt_presentation(
+    presentation_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Remove the current teacher's deck from their dashboard.
+
+    Deletes the caller's progress row plus their own period logs for this
+    presentation, so the card disappears from the dashboard and a later
+    re-adoption starts fresh. The shared deck, its slides, other teachers'
+    progress, and any auto-quizzes already published to students are left
+    untouched. Idempotent: 404 only if the caller never adopted it.
+    """
+    _require_teacher_or_admin(current_user)
+
+    progress = (await db.execute(
+        select(PresentationTeacherProgress).where(
+            PresentationTeacherProgress.presentation_id == presentation_id,
+            PresentationTeacherProgress.teacher_id == current_user.id,
+        )
+    )).scalar_one_or_none()
+    if progress is None:
+        raise HTTPException(
+            status_code=404,
+            detail="You haven't adopted this presentation.",
+        )
+
+    # Drop this teacher's own period logs so a re-adoption starts clean.
+    await db.execute(
+        delete(PresentationPeriodLog).where(
+            PresentationPeriodLog.presentation_id == presentation_id,
+            PresentationPeriodLog.teacher_id == current_user.id,
+        )
+    )
+    await db.delete(progress)
+    await db.commit()
 
 
 # ── PATCH /{id}/slides/{slide_id} ────────────────────────────────────────────

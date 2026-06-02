@@ -20,6 +20,11 @@ class HomeworkCreate(BaseModel):
     due_date: Optional[date] = None
 
 
+class NoHomeworkCreate(BaseModel):
+    """Record a grade-wide 'no homework today' marker."""
+    grade: int
+
+
 class HomeworkResponse(BaseModel):
     id: int
     teacher_id: int

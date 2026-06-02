@@ -134,28 +134,52 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
           ),
         ),
 
-        // ── Add Homework button — full width, separate row ────────────────
+        // ── Action buttons — Assign + No homework ─────────────────────────
         Padding(
           padding: EdgeInsets.fromLTRB(hPad, 0, hPad,
               _s(context, 8, min: 6, max: 12)),
-          child: FractionallySizedBox(
-            widthFactor: 1.0,
-            child: FilledButton.icon(
-              onPressed: () => _showCreateDialog(context),
-              icon: Icon(Icons.add,
-                  size: _s(context, 16, min: 14, max: 20)),
-              label: Text(
-                'Assign Homework',
-                style: GoogleFonts.poppins(
-                  fontSize: _fs(context, 13, min: 11, max: 15),
-                  fontWeight: FontWeight.w600,
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _showCreateDialog(context),
+                  icon: Icon(Icons.add,
+                      size: _s(context, 16, min: 14, max: 20)),
+                  label: Text(
+                    'Assign Homework',
+                    style: GoogleFonts.poppins(
+                      fontSize: _fs(context, 13, min: 11, max: 15),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    minimumSize: const Size(double.infinity, 46),
+                  ),
                 ),
               ),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                minimumSize: const Size(double.infinity, 46),
+              SizedBox(width: _s(context, 8, min: 6, max: 12)),
+              OutlinedButton.icon(
+                onPressed: () => _markNoHomework(context),
+                icon: Icon(Icons.event_busy_outlined,
+                    size: _s(context, 16, min: 14, max: 20)),
+                label: Text(
+                  'No homework',
+                  style: GoogleFonts.poppins(
+                    fontSize: _fs(context, 12, min: 10, max: 14),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(
+                      color: AppColors.primary.withValues(alpha: 0.4)),
+                  minimumSize: const Size(0, 46),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: _s(context, 12, min: 8, max: 16)),
+                ),
               ),
-            ),
+            ],
           ),
         ),
 
@@ -212,6 +236,79 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
             ref.invalidate(teacherHomeworkProvider(_selectedGrade)),
       ),
     );
+  }
+
+  Future<void> _markNoHomework(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'No homework today?',
+          style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: _fs(context, 16, min: 14, max: 18),
+              color: AppColors.primary),
+        ),
+        content: Text(
+          'Mark Grade $_selectedGrade as having no homework today. This '
+          'completes the daily homework step — students and parents won\'t '
+          'see an assignment.',
+          style: GoogleFonts.poppins(fontSize: 13, height: 1.35),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.markNoHomework(_selectedGrade);
+      ref.invalidate(teacherHomeworkProvider(_selectedGrade));
+      ref.invalidate(teacherTodayWorkflowProvider);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Marked no homework for Grade $_selectedGrade today.'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } on DioException catch (e) {
+      if (!context.mounted) return;
+      final detail = e.response?.data is Map
+          ? (e.response!.data as Map)['detail']
+          : null;
+      final code = detail is Map ? detail['code'] : null;
+      if (e.response?.statusCode == 409 && code == 'homework_review_pending') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: AppColors.warning,
+            content: Text(
+              "Mark yesterday's homework completion before marking no homework.",
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e')),
+      );
+    }
   }
 }
 

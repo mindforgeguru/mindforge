@@ -41,6 +41,13 @@ class Homework(Base):
         Integer, ForeignKey("tests.id", ondelete="SET NULL"), nullable=True
     )
     due_date: Mapped[Optional[datetime]] = mapped_column(Date, nullable=True)
+    # True for a "no homework today" marker — a grade-wide signal that the
+    # teacher deliberately assigned nothing. It satisfies the daily "assign
+    # homework" workflow step but is never shown to students/parents and
+    # never needs a completion review.
+    is_no_homework: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

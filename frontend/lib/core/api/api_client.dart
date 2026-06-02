@@ -996,6 +996,13 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
+  /// Record a grade-wide "no homework today" marker — satisfies the daily
+  /// assign-homework workflow step without creating a student-facing task.
+  Future<Map<String, dynamic>> markNoHomework(int grade) async {
+    final res = await _dio.post('/teacher/homework/none', data: {'grade': grade});
+    return res.data as Map<String, dynamic>;
+  }
+
   Future<void> deleteHomework(int homeworkId) async {
     await _dio.delete('/teacher/homework/$homeworkId');
   }
@@ -1281,6 +1288,12 @@ class ApiClient {
   Future<Map<String, dynamic>> adoptPresentation(int id) async {
     final res = await _dio.post('/presentations/$id/adopt');
     return res.data as Map<String, dynamic>;
+  }
+
+  /// Remove the current teacher's deck from their dashboard (un-adopt).
+  /// Deletes their progress row + their own period logs for this deck.
+  Future<void> unadoptPresentation(int id) async {
+    await _dio.delete('/presentations/$id/adopt');
   }
 
   Future<Map<String, dynamic>> patchPresentationSlide(
