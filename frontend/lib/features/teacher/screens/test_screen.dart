@@ -1077,6 +1077,25 @@ class _TestTile extends ConsumerStatefulWidget {
 class _TestTileState extends ConsumerState<_TestTile> {
   bool _publishing = false;
   bool _deleting = false;
+  bool _retrying = false;
+
+  Future<void> _retryGeneration() async {
+    setState(() => _retrying = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.retryAutoQuiz(widget.test.id);
+      // The row flips back to "generating"; invalidating swaps this tile out
+      // and the tab's poll resumes — so don't setState after this point.
+      if (mounted) ref.invalidate(teacherTestsProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+        );
+        setState(() => _retrying = false);
+      }
+    }
+  }
 
   Future<void> _togglePublish() async {
     if (widget.test.isPublished) {
@@ -1321,6 +1340,31 @@ class _TestTileState extends ConsumerState<_TestTile> {
                         ),
 
                     const SizedBox(width: 8),
+
+                    // Retry — only the creator, only for a failed auto-quiz
+                    if (isFailed &&
+                        ref.watch(authProvider).userId == test.teacherId) ...[
+                      if (_retrying)
+                        const SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                      else
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.refresh, size: 14),
+                          label: const Text('Retry',
+                              style: TextStyle(fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            foregroundColor: AppColors.primary,
+                            side: BorderSide(color: AppColors.primary),
+                          ),
+                          onPressed: _retryGeneration,
+                        ),
+                      const SizedBox(width: 8),
+                    ],
 
                     // Delete button
                     if (_deleting)

@@ -1338,4 +1338,9 @@ class ApiClient {
   Future<void> deletePresentation(int id) async {
     await _dio.delete('/presentations/$id');
   }
+
+  /// Re-run generation for a failed auto-quiz (reuses its slide range).
+  Future<void> retryAutoQuiz(int testId) async {
+    await _dio.post('/presentations/auto-quiz/$testId/retry');
+  }
 }

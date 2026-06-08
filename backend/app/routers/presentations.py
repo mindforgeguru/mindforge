@@ -1206,6 +1206,60 @@ async def create_period_log(
     )
 
 
+# ── POST /auto-quiz/{test_id}/retry ──────────────────────────────────────────
+
+
+@router.post("/auto-quiz/{test_id}/retry",
+             status_code=status.HTTP_202_ACCEPTED)
+async def retry_auto_quiz(
+    test_id: int,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Re-run generation for a failed auto-quiz, reusing its original slide
+    range. Flips the row back to `generating`; the Tests tab picks the change
+    up via its normal polling."""
+    _require_teacher_or_admin(current_user)
+
+    test = (await db.execute(
+        select(Test).where(Test.id == test_id)
+    )).scalar_one_or_none()
+    if test is None or not test.auto_generated:
+        raise HTTPException(status_code=404, detail="Auto-quiz not found.")
+    if current_user.role != UserRole.admin and test.teacher_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="You can only retry quizzes you created.",
+        )
+    if test.generation_status != "failed":
+        raise HTTPException(
+            status_code=409, detail="Only a failed quiz can be retried.",
+        )
+    if (test.presentation_id is None or test.slides_from is None
+            or test.slides_to is None):
+        raise HTTPException(
+            status_code=409,
+            detail="This quiz is missing its source slides and can't be retried.",
+        )
+
+    # Retry is a fresh paid-AI call — hold it to the same per-teacher quota.
+    await _enforce_ai_generation_quota(current_user)
+
+    await db.execute(
+        update(Test).where(Test.id == test_id).values(
+            generation_status="generating", generation_error=None,
+        )
+    )
+    await db.commit()
+
+    background_tasks.add_task(
+        _run_auto_test_job,
+        test.id, test.presentation_id, test.teacher_id,
+        test.slides_from, test.slides_to,
+    )
+    return {"status": "generating"}
+
+
 # ── DELETE /{id} ─────────────────────────────────────────────────────────────
 
 
