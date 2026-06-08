@@ -68,7 +68,10 @@ _VALID_GRADES = (8, 9, 10)
 _MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB — chapter PDFs are usually < 5 MB
 
 # ── Auto-quiz (period-log → online test) tuning ───────────────────────────────
-_AUTO_TEST_MCQ_COUNT = 10          # every auto-quiz has exactly 10 MCQs
+# Auto-quizzes target 5 MCQs — a single taught period rarely has enough slide
+# content to reliably yield a full 10, so 5 keeps generation succeeding.
+# (Manually-generated tests are unaffected and can be any length.)
+_AUTO_TEST_MCQ_COUNT = 5
 _AUTO_TEST_TIME_LIMIT_MIN = 7      # once started, finish within 7 minutes
 _AUTO_TEST_WINDOW_HOURS = 48       # take it within 48h or it's graded 0
 # Need at least this much slide text to bother asking the AI for a quiz.
@@ -207,9 +210,13 @@ async def _run_auto_test_job(
     async with AsyncSessionLocal() as db:
         async def _mark_failed(title: str, body: str, log_msg: str) -> None:
             logger.info(log_msg)
+            # Store the human-readable reason on the row so the teacher sees it
+            # in-app on the failed card — a push notification isn't reliable
+            # (web/Safari rarely delivers FCM).
             await db.execute(
                 update(Test).where(Test.id == test_id).values(
                     generation_status="failed", is_published=False,
+                    generation_error=body,
                 )
             )
             await db.commit()
@@ -334,6 +341,7 @@ async def _run_auto_test_job(
                     total_marks=float(len(mcqs)),
                     is_published=True,
                     generation_status="ready",
+                    generation_error=None,
                     expires_at=now + timedelta(hours=_AUTO_TEST_WINDOW_HOURS),
                 )
             )

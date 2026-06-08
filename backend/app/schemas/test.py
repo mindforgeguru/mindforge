@@ -73,6 +73,7 @@ class TestResponse(BaseModel):
     # 'generating' (auto-quiz placeholder, being built), or 'failed'.
     auto_generated: bool = False
     generation_status: str = "ready"
+    generation_error: Optional[str] = None
     created_at: datetime
     expires_at: Optional[datetime] = None
 

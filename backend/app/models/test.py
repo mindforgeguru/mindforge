@@ -54,6 +54,11 @@ class Test(Base):
     generation_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="ready", server_default="ready"
     )
+    # Human-readable reason shown on the teacher's failed-quiz card when
+    # generation_status == 'failed'. NULL otherwise. See migration 029.
+    generation_error: Mapped[Optional[str]] = mapped_column(
+        String(300), nullable=True
+    )
     presentation_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("chapter_presentations.id", ondelete="SET NULL"),

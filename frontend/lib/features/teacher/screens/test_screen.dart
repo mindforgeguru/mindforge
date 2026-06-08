@@ -1207,10 +1207,11 @@ class _TestTileState extends ConsumerState<_TestTile> {
                 isGenerating
                     ? 'Generating quiz from your slides…'
                     : isFailed
-                        ? "Couldn't generate a quiz — tap Delete to dismiss."
+                        ? (test.generationError ??
+                            "Couldn't generate a quiz — tap Delete to dismiss.")
                         : '${test.subject} • Grade ${test.grade} • ${test.questionCount} Qs • ${test.totalMarks.toInt()} marks',
                 overflow: TextOverflow.ellipsis,
-                maxLines: 2,
+                maxLines: 3,
             ),
             trailing: isLocked
                 ? null
