@@ -23,7 +23,7 @@ from typing import List, Optional
 from fastapi import (
     APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -114,8 +114,9 @@ async def _run_generation_job(presentation_id: int) -> None:
 
 
 async def _notify_teacher(db: AsyncSession, teacher_id: int,
-                          title: str, body: str) -> None:
-    """Best-effort push to a single teacher (used for auto-quiz failures)."""
+                          title: str, body: str,
+                          route: str = "/teacher/presentations") -> None:
+    """Best-effort push to a single teacher (auto-quiz ready / failed)."""
     token = (await db.execute(
         select(User.fcm_token).where(User.id == teacher_id)
     )).scalar_one_or_none()
@@ -123,7 +124,7 @@ async def _notify_teacher(db: AsyncSession, teacher_id: int,
         try:
             await notification_service.send_to_token(
                 token=token, title=title, body=body,
-                data={"route": "/teacher/presentations"},
+                data={"route": route},
             )
         except Exception:
             logger.warning("Auto-quiz teacher notification failed", exc_info=True)
@@ -189,37 +190,53 @@ async def _broadcast_new_test(db: AsyncSession, test: Test) -> None:
 
 
 async def _run_auto_test_job(
-    presentation_id: int, teacher_id: int, slides_from: int, slides_to: int,
+    test_id: int, presentation_id: int, teacher_id: int,
+    slides_from: int, slides_to: int,
 ) -> None:
-    """Generate a 10-MCQ online quiz for the slides a teacher just logged.
+    """Fill in the auto-quiz placeholder for the slides a teacher just logged.
 
-    Source is strictly the covered slides' text (title + body + speaker
-    notes). Publishes a 7-minute / 48-hour online test that reflects to
-    students and parents like any other test. If a clean 10-MCQ quiz can't
-    be produced, nothing is published and the teacher is notified.
+    `create_period_log` creates the Test row up front in `generating` state so
+    the teacher's Tests tab shows progress immediately. This job sources the
+    covered slides' text (title + body + speaker notes), asks the AI for a
+    10-MCQ quiz, and on success fills the row in and publishes it (7-minute
+    timer, 48-hour window) so it reflects to students and parents. If a clean
+    10-MCQ quiz can't be produced, the row is flipped to `failed` and the
+    teacher is notified — the row stays visible so the teacher knows what
+    happened.
     """
     async with AsyncSessionLocal() as db:
+        async def _mark_failed(title: str, body: str, log_msg: str) -> None:
+            logger.info(log_msg)
+            await db.execute(
+                update(Test).where(Test.id == test_id).values(
+                    generation_status="failed", is_published=False,
+                )
+            )
+            await db.commit()
+            await _notify_teacher(db, teacher_id, title, body,
+                                  route="/teacher/tests")
+
         try:
+            # The placeholder may have been deleted by the teacher before the
+            # job ran — if so there's nothing to fill in.
+            test = (await db.execute(
+                select(Test).where(Test.id == test_id)
+            )).scalar_one_or_none()
+            if test is None:
+                logger.info("Auto-quiz placeholder %s gone before job ran", test_id)
+                return
+
             pres = (await db.execute(
                 select(ChapterPresentation).where(
                     ChapterPresentation.id == presentation_id
                 )
             )).scalar_one_or_none()
             if pres is None:
-                return
-
-            # Idempotency: don't re-quiz a range we've already quizzed.
-            existing = (await db.execute(
-                select(Test.id).where(
-                    Test.presentation_id == presentation_id,
-                    Test.auto_generated == True,   # noqa: E712
-                    Test.slides_from == slides_from,
-                    Test.slides_to == slides_to,
+                await _mark_failed(
+                    "Quiz not created",
+                    "The presentation this quiz was based on no longer exists.",
+                    f"Auto-quiz pres={presentation_id} gone for test={test_id}",
                 )
-            )).scalar_one_or_none()
-            if existing is not None:
-                logger.info("Auto-quiz already exists for pres=%s slides %s-%s",
-                            presentation_id, slides_from, slides_to)
                 return
 
             # Covered slides are [slides_from, slides_to) — slides_to is the new
@@ -243,14 +260,12 @@ async def _run_auto_test_job(
             chapter_text = "\n\n".join(p for p in parts if p)
 
             if len(chapter_text) < _AUTO_TEST_MIN_SOURCE_CHARS:
-                logger.info(
-                    "Auto-quiz skipped (thin source: %d chars) for pres=%s slides %s-%s",
-                    len(chapter_text), presentation_id, slides_from, slides_to,
-                )
-                await _notify_teacher(
-                    db, teacher_id, "Quiz not created",
+                await _mark_failed(
+                    "Quiz not created",
                     f"Not enough slide content to build a quiz for "
                     f"'{pres.chapter_name}' (slides {slides_from + 1}-{slides_to}).",
+                    f"Auto-quiz failed (thin source: {len(chapter_text)} chars) "
+                    f"for pres={presentation_id} slides {slides_from}-{slides_to}",
                 )
                 return
 
@@ -279,11 +294,12 @@ async def _run_auto_test_job(
             except Exception:
                 logger.exception("Auto-quiz AI generation failed for pres=%s",
                                  presentation_id)
-                await _notify_teacher(
-                    db, teacher_id, "Quiz not created",
+                await _mark_failed(
+                    "Quiz not created",
                     f"Couldn't auto-generate a quiz for '{pres.chapter_name}' "
                     f"(slides {slides_from + 1}-{slides_to}). Try again or make "
                     f"one manually.",
+                    f"Auto-quiz AI error for test={test_id}",
                 )
                 return
 
@@ -297,13 +313,13 @@ async def _run_auto_test_job(
             ][:_AUTO_TEST_MCQ_COUNT]
 
             if len(mcqs) < _AUTO_TEST_MCQ_COUNT:
-                logger.info("Auto-quiz skipped (only %d/%d MCQs) for pres=%s",
-                            len(mcqs), _AUTO_TEST_MCQ_COUNT, presentation_id)
-                await _notify_teacher(
-                    db, teacher_id, "Quiz not created",
+                await _mark_failed(
+                    "Quiz not created",
                     f"Couldn't build a full {_AUTO_TEST_MCQ_COUNT}-question quiz "
                     f"for '{pres.chapter_name}' (slides {slides_from + 1}-"
                     f"{slides_to}). The covered portion may be too short.",
+                    f"Auto-quiz failed (only {len(mcqs)}/{_AUTO_TEST_MCQ_COUNT} "
+                    f"MCQs) for test={test_id}",
                 )
                 return
 
@@ -312,32 +328,41 @@ async def _run_auto_test_job(
                 q["marks"] = 1
 
             now = datetime.now(timezone.utc)
-            test = Test(
-                title=f"Auto Quiz — {pres.chapter_name} (slides "
-                      f"{slides_from + 1}-{slides_to})",
-                teacher_id=teacher_id,
-                grade=pres.grade,
-                subject=pres.subject,
-                test_type=TestType.online,
-                questions=mcqs,
-                total_marks=float(len(mcqs)),
-                time_limit_minutes=_AUTO_TEST_TIME_LIMIT_MIN,
-                is_published=True,
-                auto_generated=True,
-                presentation_id=presentation_id,
-                slides_from=slides_from,
-                slides_to=slides_to,
-                expires_at=now + timedelta(hours=_AUTO_TEST_WINDOW_HOURS),
+            await db.execute(
+                update(Test).where(Test.id == test_id).values(
+                    questions=mcqs,
+                    total_marks=float(len(mcqs)),
+                    is_published=True,
+                    generation_status="ready",
+                    expires_at=now + timedelta(hours=_AUTO_TEST_WINDOW_HOURS),
+                )
             )
-            db.add(test)
             await db.commit()
-            await db.refresh(test)
 
+            test = (await db.execute(
+                select(Test).where(Test.id == test_id)
+            )).scalar_one()
             await _broadcast_new_test(db, test)
+            await _notify_teacher(
+                db, teacher_id, "Quiz ready",
+                f"Your auto-quiz for '{pres.chapter_name}' (slides "
+                f"{slides_from + 1}-{slides_to}) is live — {len(mcqs)} questions, "
+                f"48-hour window.",
+                route="/teacher/tests",
+            )
             logger.info("Auto-quiz published: test=%s pres=%s slides %s-%s",
-                        test.id, presentation_id, slides_from, slides_to)
+                        test_id, presentation_id, slides_from, slides_to)
         except Exception:
-            logger.exception("Auto-quiz job crashed for pres=%s", presentation_id)
+            logger.exception("Auto-quiz job crashed for test=%s", test_id)
+            try:
+                await db.execute(
+                    update(Test).where(Test.id == test_id).values(
+                        generation_status="failed", is_published=False,
+                    )
+                )
+                await db.commit()
+            except Exception:
+                logger.exception("Failed to mark auto-quiz %s failed", test_id)
 
 
 # ── POST /upload ─────────────────────────────────────────────────────────────
@@ -1119,11 +1144,46 @@ async def create_period_log(
     await db.refresh(log)
 
     # Auto-quiz the portion just taught (no-op if no new slides were covered).
+    # The Test row is created here, synchronously, in a `generating` state so
+    # the teacher's Tests tab shows progress immediately; the background job
+    # fills it in (→ ready/published) or flips it to `failed`.
     if to_idx > slides_from:
-        background_tasks.add_task(
-            _run_auto_test_job,
-            presentation_id, current_user.id, slides_from, to_idx,
-        )
+        # Idempotency: don't create a second placeholder for a range we've
+        # already quizzed (e.g. a retried request).
+        already = (await db.execute(
+            select(Test.id).where(
+                Test.presentation_id == presentation_id,
+                Test.auto_generated == True,   # noqa: E712
+                Test.slides_from == slides_from,
+                Test.slides_to == to_idx,
+            )
+        )).scalar_one_or_none()
+        if already is None:
+            placeholder = Test(
+                title=f"Auto Quiz — {pres.chapter_name} (slides "
+                      f"{slides_from + 1}-{to_idx})",
+                teacher_id=current_user.id,
+                grade=pres.grade,
+                subject=pres.subject,
+                test_type=TestType.online,
+                questions=[],
+                total_marks=0.0,
+                time_limit_minutes=_AUTO_TEST_TIME_LIMIT_MIN,
+                is_published=False,
+                auto_generated=True,
+                generation_status="generating",
+                presentation_id=presentation_id,
+                slides_from=slides_from,
+                slides_to=to_idx,
+            )
+            db.add(placeholder)
+            await db.commit()
+            await db.refresh(placeholder)
+            background_tasks.add_task(
+                _run_auto_test_job,
+                placeholder.id, presentation_id, current_user.id,
+                slides_from, to_idx,
+            )
 
     return PresentationPeriodLogOut(
         id=log.id,

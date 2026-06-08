@@ -1367,6 +1367,17 @@ Future<void> _showPeriodLogDialog(
                       ref.invalidate(presentationDetailProvider(id));
                       ref.invalidate(presentationListProvider);
                       if (ctx.mounted) Navigator.pop(ctx);
+                      // A quiz is auto-generated for any newly-covered slides;
+                      // point the teacher at the Tests tab to watch progress.
+                      if (slidesCoveredTo > myCurrent && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Quiz is generating from your slides — '
+                                'check the Tests tab.'),
+                          ),
+                        );
+                      }
                     } on DioException catch (e) {
                       final body = e.response?.data;
                       final msg = body is Map && body['detail'] is String

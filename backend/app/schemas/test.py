@@ -69,6 +69,10 @@ class TestResponse(BaseModel):
     time_limit_minutes: Optional[int] = None
     is_published: bool
     is_graded: bool = False
+    # Auto-quiz progress: 'ready' (normal/manual + finished auto-quiz),
+    # 'generating' (auto-quiz placeholder, being built), or 'failed'.
+    auto_generated: bool = False
+    generation_status: str = "ready"
     created_at: datetime
     expires_at: Optional[datetime] = None
 

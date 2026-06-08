@@ -47,6 +47,13 @@ class Test(Base):
     # True when this quiz was auto-created from a presentation period log
     # (teacher logging "I taught slides X..Y"). See migration 026.
     auto_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Lifecycle of an auto-generated quiz so the teacher's Tests tab can show
+    # progress: 'generating' (placeholder created on period-log) → 'ready'
+    # (questions filled + published) or 'failed'. Manual tests are 'ready'.
+    # See migration 028.
+    generation_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="ready", server_default="ready"
+    )
     presentation_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("chapter_presentations.id", ondelete="SET NULL"),

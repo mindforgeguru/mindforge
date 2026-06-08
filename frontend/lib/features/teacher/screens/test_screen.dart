@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -116,10 +118,27 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
   int _timeLimitMinutes = 0;
   bool _isGenerating = false;
 
+  // While any auto-quiz is still being generated, poll the list so its tile
+  // flips from "Generating…" to ready/failed without a manual pull-to-refresh.
+  Timer? _pollTimer;
+
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _titleCtrl.dispose();
     super.dispose();
+  }
+
+  /// Start polling when something is generating; stop once nothing is.
+  void _syncPolling(bool anyGenerating) {
+    if (anyGenerating) {
+      _pollTimer ??= Timer.periodic(const Duration(seconds: 4), (_) {
+        if (mounted) ref.invalidate(teacherTestsProvider((null, _limit)));
+      });
+    } else {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    }
   }
 
   @override
@@ -169,6 +188,10 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
               final filtered = tests
                   .where((t) => t.testType == widget.testType)
                   .toList();
+              // Keep polling alive while any quiz is still generating.
+              final anyGenerating = filtered.any((t) => t.isGenerating);
+              WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _syncPolling(anyGenerating));
               if (filtered.isEmpty) {
                 return const Padding(
                   padding: EdgeInsets.all(32),
@@ -1144,6 +1167,10 @@ class _TestTileState extends ConsumerState<_TestTile> {
     final test = widget.test;
     final isOnline = test.testType == 'online';
     final accentColor = isOnline ? AppColors.secondary : AppColors.accent;
+    final isGenerating = test.isGenerating;
+    final isFailed = test.generationFailed;
+    // A generating/failed placeholder has no questions to open yet.
+    final isLocked = isGenerating || isFailed;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1151,25 +1178,44 @@ class _TestTileState extends ConsumerState<_TestTile> {
       child: Column(
         children: [
           ListTile(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => TestDetailScreen(test: test)),
-            ),
+            onTap: isLocked
+                ? null
+                : () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => TestDetailScreen(test: test)),
+                    ),
             leading: CircleAvatar(
-              backgroundColor: accentColor.withValues(alpha: 0.15),
-              child: Icon(
-                isOnline ? Icons.computer : Icons.print_outlined,
-                color: accentColor,
-              ),
+              backgroundColor:
+                  (isFailed ? AppColors.error : accentColor).withValues(alpha: 0.15),
+              child: isGenerating
+                  ? SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: accentColor),
+                    )
+                  : Icon(
+                      isFailed
+                          ? Icons.error_outline
+                          : (isOnline ? Icons.computer : Icons.print_outlined),
+                      color: isFailed ? AppColors.error : accentColor,
+                    ),
             ),
             title: Text(test.title,
                 style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Text(
-                '${test.subject} • Grade ${test.grade} • ${test.questionCount} Qs • ${test.totalMarks.toInt()} marks',
+                isGenerating
+                    ? 'Generating quiz from your slides…'
+                    : isFailed
+                        ? "Couldn't generate a quiz — tap Delete to dismiss."
+                        : '${test.subject} • Grade ${test.grade} • ${test.questionCount} Qs • ${test.totalMarks.toInt()} marks',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 2,
             ),
-            trailing: const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
+            trailing: isLocked
+                ? null
+                : const Icon(Icons.chevron_right,
+                    size: 16, color: AppColors.textMuted),
           ),
 
           // ── Action bar (status + publish + delete) ────────────────────────
@@ -1179,7 +1225,24 @@ class _TestTileState extends ConsumerState<_TestTile> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Status label
-                if (isOnline && test.expiresAt != null)
+                if (isGenerating)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 11, height: 11,
+                        child: CircularProgressIndicator(strokeWidth: 1.6),
+                      ),
+                      const SizedBox(width: 6),
+                      Text('Generating quiz…',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.warning)),
+                    ],
+                  )
+                else if (isFailed)
+                  Text('Generation failed',
+                      style: TextStyle(fontSize: 11, color: AppColors.error))
+                else if (isOnline && test.expiresAt != null)
                   Text(
                     (test.isGraded || test.isExpired)
                         ? 'Completed'
@@ -1218,8 +1281,10 @@ class _TestTileState extends ConsumerState<_TestTile> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    // Publish / Unpublish — only for the creator, hidden once completed
+                    // Publish / Unpublish — only for the creator, hidden once
+                    // completed and while an auto-quiz is generating/failed.
                     if (ref.watch(authProvider).userId == test.teacherId &&
+                        !isLocked &&
                         !(test.isGraded || test.isExpired))
                       if (_publishing)
                         const SizedBox(
