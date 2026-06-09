@@ -1297,9 +1297,13 @@ class _TestTileState extends ConsumerState<_TestTile> {
 
                 const SizedBox(height: 6),
 
-                // Buttons — right-aligned, always on their own row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                // Buttons — right-aligned; wrap to a new line on narrow
+                // (phone) screens so the Delete button is never pushed off
+                // the right edge and clipped.
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     // Publish / Unpublish — only for the creator, hidden once
                     // completed and while an auto-quiz is generating/failed.
@@ -1339,8 +1343,6 @@ class _TestTileState extends ConsumerState<_TestTile> {
                           onPressed: _togglePublish,
                         ),
 
-                    const SizedBox(width: 8),
-
                     // Retry — only the creator, only for a failed auto-quiz
                     if (isFailed &&
                         ref.watch(authProvider).userId == test.teacherId) ...[
@@ -1363,7 +1365,6 @@ class _TestTileState extends ConsumerState<_TestTile> {
                           ),
                           onPressed: _retryGeneration,
                         ),
-                      const SizedBox(width: 8),
                     ],
 
                     // Delete button
