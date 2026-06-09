@@ -12,6 +12,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/widgets/error_view.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../providers/presentation_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 
@@ -340,7 +341,14 @@ class _ReadyView extends ConsumerWidget {
     final gColorLight = _gradeColorLight(grade);
     final emoji = _subjectEmoji(subject);
 
-    return Padding(
+    // Give the slide a generous, screen-proportional height and let the WHOLE
+    // page scroll, so a full slide is visible instead of being squeezed into
+    // whatever space is left between the banner, progress card and the
+    // period-logs strip.
+    final slideViewerHeight =
+        (MediaQuery.of(context).size.height * 0.72).clamp(420.0, 760.0);
+
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       child: Column(
         children: [
@@ -570,7 +578,8 @@ class _ReadyView extends ConsumerWidget {
           ),
           const SizedBox(height: 10),
           // ── Slide viewer ───────────────────────────────────────────────
-          Expanded(
+          SizedBox(
+            height: slideViewerHeight,
             child: slides.isEmpty
                 ? Center(
                     child: Text(
@@ -595,6 +604,10 @@ class _ReadyView extends ConsumerWidget {
           _PeriodLogsStrip(
             logs: (data['period_logs'] as List<dynamic>? ?? <dynamic>[])
                 .cast<Map<String, dynamic>>(),
+            currentTeacherId: ref.watch(authProvider).userId,
+            onEdit: (log) => _showEditPeriodLogDialog(
+              context, ref, presentationId, log, total,
+            ),
           ),
         ],
       ),
@@ -1104,7 +1117,14 @@ class _SlideCard extends StatelessWidget {
 
 class _PeriodLogsStrip extends StatelessWidget {
   final List<Map<String, dynamic>> logs;
-  const _PeriodLogsStrip({required this.logs});
+  // The viewing teacher — only their own logs get an edit affordance.
+  final int? currentTeacherId;
+  final void Function(Map<String, dynamic> log) onEdit;
+  const _PeriodLogsStrip({
+    required this.logs,
+    required this.currentTeacherId,
+    required this.onEdit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1124,38 +1144,53 @@ class _PeriodLogsStrip extends StatelessWidget {
         itemBuilder: (_, i) {
           final l = logs[i];
           final date = DateTime.tryParse(l['period_date']?.toString() ?? '');
-          return Container(
-            width: 150,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.iconContainer,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  date != null ? DateFormat('MMM d').format(date) : '—',
-                  style: GoogleFonts.poppins(
-                    fontSize: 11, fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
+          final canEdit = currentTeacherId != null &&
+              l['teacher_id'] == currentTeacherId;
+          return InkWell(
+            onTap: canEdit ? () => onEdit(l) : null,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 150,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.iconContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        date != null ? DateFormat('MMM d').format(date) : '—',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11, fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      if (canEdit) ...[
+                        const Spacer(),
+                        Icon(Icons.edit_outlined,
+                            size: 13, color: AppColors.textMuted),
+                      ],
+                    ],
                   ),
-                ),
-                Text(
-                  l['teacher_username']?.toString() ?? '—',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10, color: AppColors.textSecondary,
+                  Text(
+                    l['teacher_username']?.toString() ?? '—',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10, color: AppColors.textSecondary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'slides ${l['slides_covered_from']}–${l['slides_covered_to']}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10, color: AppColors.textPrimary,
+                  const SizedBox(height: 2),
+                  Text(
+                    'slides ${l['slides_covered_from']}–${l['slides_covered_to']}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10, color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
@@ -1408,6 +1443,166 @@ Future<void> _showPeriodLogDialog(
                     ),
                   )
                 : const Text('Save'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Edit a previously-logged period. Corrects the record only — unlike logging
+/// a new period this never generates an online test.
+Future<void> _showEditPeriodLogDialog(
+  BuildContext context,
+  WidgetRef ref,
+  int presentationId,
+  Map<String, dynamic> log,
+  int total,
+) async {
+  final logId = log['id'] as int;
+  // The period's starting slide is fixed; only its end is editable, and it
+  // can't drop below where the period began.
+  final slidesFrom = log['slides_covered_from'] as int? ?? 0;
+  int slidesCoveredTo = (log['slides_covered_to'] as int? ?? slidesFrom)
+      .clamp(slidesFrom, total > 0 ? total : slidesFrom);
+  final notesCtrl =
+      TextEditingController(text: log['notes']?.toString() ?? '');
+  bool submitting = false;
+
+  await showDialog<void>(
+    context: context,
+    builder: (_) => StatefulBuilder(
+      builder: (ctx, setSt) => AlertDialog(
+        title: Text(
+          'Edit period log',
+          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'How many slides did this period cover?',
+              style: GoogleFonts.poppins(fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.remove),
+                  onPressed: slidesCoveredTo <= slidesFrom
+                      ? null
+                      : () => setSt(() => slidesCoveredTo--),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      'Cover up to slide $slidesCoveredTo of $total',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14, fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: slidesCoveredTo >= total
+                      ? null
+                      : () => setSt(() => slidesCoveredTo++),
+                ),
+              ],
+            ),
+            Text(
+              'This period started at slide $slidesFrom.',
+              style: GoogleFonts.poppins(
+                fontSize: 11, color: AppColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesCtrl,
+              maxLines: 3,
+              maxLength: 500,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.info_outline, size: 13, color: AppColors.textMuted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Editing updates this log only — it won\'t generate a new quiz.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10.5, color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: submitting ? null : () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: submitting
+                ? null
+                : () async {
+                    setSt(() => submitting = true);
+                    try {
+                      final api = ref.read(apiClientProvider);
+                      await api.updatePresentationPeriodLog(
+                        presentationId,
+                        logId,
+                        slidesCoveredTo: slidesCoveredTo,
+                        // Always sent (even empty) so notes can be cleared.
+                        notes: notesCtrl.text.trim(),
+                      );
+                      ref.invalidate(
+                          presentationDetailProvider(presentationId));
+                      ref.invalidate(presentationListProvider);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Period log updated.')),
+                        );
+                      }
+                    } on DioException catch (e) {
+                      final body = e.response?.data;
+                      final msg = body is Map && body['detail'] is String
+                          ? body['detail'] as String
+                          : 'Failed to update period log.';
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text(msg),
+                              backgroundColor: AppColors.error),
+                        );
+                      }
+                      setSt(() => submitting = false);
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Error: $e'),
+                              backgroundColor: AppColors.error),
+                        );
+                      }
+                      setSt(() => submitting = false);
+                    }
+                  },
+            child: submitting
+                ? const SizedBox(
+                    height: 16, width: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white,
+                    ),
+                  )
+                : const Text('Save changes'),
           ),
         ],
       ),

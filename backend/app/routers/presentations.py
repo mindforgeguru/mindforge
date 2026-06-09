@@ -7,6 +7,7 @@ Auto-presentation HTTP endpoints.
   POST   /api/presentations/{id}/adopt             — current teacher joins this deck
   PATCH  /api/presentations/{id}/slides/{slide_id} — any teacher edits a slide
   POST   /api/presentations/{id}/period-log        — log a period taught
+  PATCH  /api/presentations/{id}/period-log/{log_id}— edit a log (no new quiz)
   DELETE /api/presentations/{id}                   — uploader (or admin) deletes
 
 All endpoints require teacher or admin role. Visibility is school-wide so any
@@ -23,7 +24,7 @@ from typing import List, Optional
 from fastapi import (
     APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status,
 )
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -51,6 +52,7 @@ from app.schemas.presentation import (
     PresentationListItem,
     PresentationPeriodLogCreate,
     PresentationPeriodLogOut,
+    PresentationPeriodLogPatch,
     PresentationProgressOut,
     PresentationSlideOut,
     PresentationSlidePatch,
@@ -1197,6 +1199,106 @@ async def create_period_log(
         id=log.id,
         teacher_id=log.teacher_id,
         teacher_username=current_user.username,
+        period_date=log.period_date,
+        period_number=log.period_number,
+        slides_covered_from=log.slides_covered_from,
+        slides_covered_to=log.slides_covered_to,
+        notes=log.notes,
+        created_at=log.created_at,
+    )
+
+
+# ── PATCH /{id}/period-log/{log_id} ──────────────────────────────────────────
+
+
+@router.patch("/{presentation_id}/period-log/{log_id}",
+              response_model=PresentationPeriodLogOut)
+async def update_period_log(
+    presentation_id: int,
+    log_id: int,
+    payload: PresentationPeriodLogPatch,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PresentationPeriodLogOut:
+    """Edit a previously-logged period (date / period number / slides covered /
+    notes).
+
+    Unlike creating a log, editing NEVER schedules an auto-quiz — it only
+    corrects the record. The author's progress pointer is recomputed from
+    their logs so the dashboard stays consistent, but `periods_used` is left
+    untouched (an edit is not a new period). Any quiz already generated for
+    this period is left as-is."""
+    _require_teacher_or_admin(current_user)
+
+    log = (await db.execute(
+        select(PresentationPeriodLog).where(
+            PresentationPeriodLog.id == log_id,
+            PresentationPeriodLog.presentation_id == presentation_id,
+        )
+    )).scalar_one_or_none()
+    if log is None:
+        raise HTTPException(status_code=404, detail="Period log not found.")
+    if (current_user.role != UserRole.admin
+            and log.teacher_id != current_user.id):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only edit period logs you created.",
+        )
+
+    pres = (await db.execute(
+        select(ChapterPresentation).where(
+            ChapterPresentation.id == presentation_id)
+    )).scalar_one_or_none()
+    if pres is None:
+        raise HTTPException(status_code=404, detail="Presentation not found.")
+
+    if payload.period_date is not None:
+        log.period_date = payload.period_date
+    if payload.period_number is not None:
+        log.period_number = payload.period_number
+    if payload.notes is not None:
+        log.notes = payload.notes or None
+    if payload.slides_covered_to is not None:
+        to_idx = min(payload.slides_covered_to, pres.total_slides)
+        if to_idx < log.slides_covered_from:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"slides_covered_to ({to_idx}) cannot be less than where "
+                    f"this period started (slide {log.slides_covered_from})."
+                ),
+            )
+        log.slides_covered_to = to_idx
+
+    await db.commit()
+    await db.refresh(log)
+
+    # Keep the author's progress pointer in sync with their furthest-covered
+    # slide across all their logs. periods_used is intentionally unchanged.
+    progress = (await db.execute(
+        select(PresentationTeacherProgress).where(
+            PresentationTeacherProgress.presentation_id == presentation_id,
+            PresentationTeacherProgress.teacher_id == log.teacher_id,
+        )
+    )).scalar_one_or_none()
+    if progress is not None:
+        furthest = (await db.execute(
+            select(func.max(PresentationPeriodLog.slides_covered_to)).where(
+                PresentationPeriodLog.presentation_id == presentation_id,
+                PresentationPeriodLog.teacher_id == log.teacher_id,
+            )
+        )).scalar_one()
+        progress.current_slide_index = furthest or 0
+        await db.commit()
+
+    author_username = (await db.execute(
+        select(User.username).where(User.id == log.teacher_id)
+    )).scalar_one_or_none() or "?"
+
+    return PresentationPeriodLogOut(
+        id=log.id,
+        teacher_id=log.teacher_id,
+        teacher_username=author_username,
         period_date=log.period_date,
         period_number=log.period_number,
         slides_covered_from=log.slides_covered_from,

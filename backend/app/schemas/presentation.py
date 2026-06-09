@@ -140,6 +140,15 @@ class PresentationPeriodLogCreate(BaseModel):
     notes: Optional[str] = Field(None, max_length=1000)
 
 
+class PresentationPeriodLogPatch(BaseModel):
+    """Edit an existing period log. All fields optional — only the ones sent
+    are changed. Editing never schedules an auto-quiz."""
+    period_date: Optional[date] = None
+    period_number: Optional[int] = Field(None, ge=1, le=12)
+    slides_covered_to: Optional[int] = Field(None, ge=0)
+    notes: Optional[str] = Field(None, max_length=1000)
+
+
 # ── Pick-from-database flow ──────────────────────────────────────────────────
 
 

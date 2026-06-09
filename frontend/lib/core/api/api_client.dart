@@ -1335,6 +1335,29 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
+  /// Edit an existing period log. Unlike [logPresentationPeriod] this never
+  /// triggers an auto-quiz — it only corrects the record. Pass `notes: ''`
+  /// to clear the notes. Only the fields you pass are changed.
+  Future<Map<String, dynamic>> updatePresentationPeriodLog(
+    int presentationId,
+    int logId, {
+    String? periodDate, // ISO yyyy-MM-dd
+    int? periodNumber,
+    int? slidesCoveredTo,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{};
+    if (periodDate != null) body['period_date'] = periodDate;
+    if (periodNumber != null) body['period_number'] = periodNumber;
+    if (slidesCoveredTo != null) body['slides_covered_to'] = slidesCoveredTo;
+    if (notes != null) body['notes'] = notes;
+    final res = await _dio.patch(
+      '/presentations/$presentationId/period-log/$logId',
+      data: body,
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
   Future<void> deletePresentation(int id) async {
     await _dio.delete('/presentations/$id');
   }
