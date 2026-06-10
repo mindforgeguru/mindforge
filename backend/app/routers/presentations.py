@@ -58,7 +58,8 @@ from app.schemas.presentation import (
     PresentationSlidePatch,
 )
 from app.services import (
-    ai_service, notification_service, presentation_service, storage_service,
+    ai_service, notification_service, presentation_service, pptx_service,
+    storage_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,11 @@ router = APIRouter()
 
 _VALID_GRADES = (8, 9, 10)
 _MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB — chapter PDFs are usually < 5 MB
+# Uploaded .pptx decks carry images/media so they run larger than chapter PDFs.
+_MAX_DECK_BYTES = 50 * 1024 * 1024  # 50 MB
+# Teacher-uploaded decks are paced at a fixed 8 slides per teaching period;
+# recommended_periods is then ceil(total_slides / 8).
+_UPLOADED_SLIDES_PER_PERIOD = 8
 
 # ── Auto-quiz (period-log → online test) tuning ───────────────────────────────
 # Auto-quizzes target 5 MCQs — a single taught period rarely has enough slide
@@ -448,6 +454,131 @@ async def upload_chapter(
     # to the school-wide library.
 
     background_tasks.add_task(_run_generation_job, row.id)
+
+    return PresentationCreateResponse(
+        presentation_id=row.id, status=row.status.value
+    )
+
+
+# ── POST /upload-deck ────────────────────────────────────────────────────────
+
+
+@router.post("/upload-deck", response_model=PresentationCreateResponse,
+             status_code=status.HTTP_201_CREATED)
+async def upload_deck(
+    grade: int = Form(...),
+    subject: str = Form(...),
+    chapter_name: str = Form(...),
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PresentationCreateResponse:
+    """Upload an existing PowerPoint (.pptx) deck to teach as-is.
+
+    Unlike /upload (chapter PDF → Gemini writes the slides), this reads the
+    slides the teacher already authored and stores them verbatim — no AI, so
+    it returns status=READY synchronously. The deck is paced at a fixed 8
+    slides per period and recommended_periods is computed as
+    ceil(total_slides / 8). Google Slides are supported by downloading them as
+    PowerPoint (.pptx) first.
+    """
+    _require_teacher_or_admin(current_user)
+
+    if grade not in _VALID_GRADES:
+        raise HTTPException(status_code=422, detail="Grade must be 8, 9, or 10.")
+    subject = subject.strip()
+    chapter_name = chapter_name.strip()
+    if not subject:
+        raise HTTPException(status_code=422, detail="Subject is required.")
+    if not chapter_name:
+        raise HTTPException(status_code=422, detail="Chapter name is required.")
+
+    filename = (file.filename or "").lower()
+    if filename.endswith(".ppt") and not filename.endswith(".pptx"):
+        raise HTTPException(
+            status_code=415,
+            detail=("Legacy .ppt files aren't supported. Open it in PowerPoint "
+                    "or Google Slides and save/download as .pptx."),
+        )
+    _PPTX_CONTENT_TYPES = (
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/octet-stream",
+        "application/zip",
+        "",
+    )
+    if (file.content_type or "") not in _PPTX_CONTENT_TYPES \
+            and not filename.endswith(".pptx"):
+        raise HTTPException(
+            status_code=415,
+            detail="Only PowerPoint (.pptx) uploads are supported.",
+        )
+
+    reject_if_oversize(file, _MAX_DECK_BYTES)
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Uploaded file is empty.")
+    if len(data) > _MAX_DECK_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Deck too large (max {_MAX_DECK_BYTES // (1024 * 1024)} MB).",
+        )
+    # .pptx is a ZIP/OOXML container — guard against a mislabelled upload.
+    if data[:4] != b"PK\x03\x04":
+        raise HTTPException(
+            status_code=415,
+            detail=("That doesn't look like a .pptx file. In Google Slides use "
+                    "File → Download → Microsoft PowerPoint (.pptx)."),
+        )
+
+    # Parse first so a bad deck fails fast without leaving an orphan upload.
+    try:
+        slides_payload = pptx_service.parse_pptx(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Store the original deck (informational / for re-download); failure here
+    # is non-fatal to the parse but we surface it like the PDF path does.
+    deck_key = f"presentations/{current_user.id}/{uuid.uuid4().hex}.pptx"
+    bucket = settings.MINIO_BUCKET_PDFS
+    try:
+        await storage_service.upload_file(
+            bucket, deck_key, data,
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+    except Exception as exc:
+        logger.exception("Storage upload failed for uploaded presentation deck.")
+        raise HTTPException(status_code=502, detail="Storage upload failed.") from exc
+
+    total_slides = len(slides_payload)
+    periods = pptx_service.recommended_periods(
+        total_slides, _UPLOADED_SLIDES_PER_PERIOD
+    )
+
+    row = ChapterPresentation(
+        created_by_teacher_id=current_user.id,
+        grade=grade,
+        subject=subject,
+        chapter_name=chapter_name,
+        source_pdf_key=f"{bucket}/{deck_key}",
+        total_slides=total_slides,
+        recommended_periods=periods,
+        default_slides_per_period=_UPLOADED_SLIDES_PER_PERIOD,
+        status=PresentationStatus.READY,
+    )
+    db.add(row)
+    await db.flush()  # assign row.id before adding slides
+
+    for i, s in enumerate(slides_payload):
+        db.add(PresentationSlide(
+            presentation_id=row.id,
+            slide_index=i,
+            title=s["title"],
+            body_md=s["body_md"],
+            speaker_notes=s["speaker_notes"],
+        ))
+    await db.commit()
+    # Like /upload, no auto-adoption — the teacher hits "Adopt for my class"
+    # to put it on their dashboard.
 
     return PresentationCreateResponse(
         presentation_id=row.id, status=row.status.value

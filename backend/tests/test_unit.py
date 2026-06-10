@@ -192,3 +192,57 @@ class TestUserRegisterRequest:
     def test_valid_email_accepted(self):
         req = self._valid(email="test@example.com")
         assert req.email == "test@example.com"
+
+
+# ── Uploaded-deck (.pptx) parsing ─────────────────────────────────────────────
+
+import io as _io
+from pptx import Presentation as _Presentation
+
+from app.services.pptx_service import parse_pptx, recommended_periods
+
+
+def _make_pptx(slides) -> bytes:
+    """Build a minimal .pptx in memory. `slides` is a list of (title, [bullets]).
+    Uses the "Title and Content" layout (index 1) so a title placeholder exists.
+    """
+    prs = _Presentation()
+    layout = prs.slide_layouts[1]
+    for title, bullets in slides:
+        s = prs.slides.add_slide(layout)
+        s.shapes.title.text = title
+        body = s.placeholders[1].text_frame
+        body.text = bullets[0]
+        for b in bullets[1:]:
+            body.add_paragraph().text = b
+    buf = _io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+class TestPptxParsing:
+    def test_parses_titles_and_bullets(self):
+        data = _make_pptx([
+            ("Photosynthesis", ["Light reaction", "Calvin cycle"]),
+            ("Respiration", ["Glycolysis"]),
+        ])
+        slides = parse_pptx(data)
+        assert len(slides) == 2
+        assert slides[0]["title"] == "Photosynthesis"
+        assert "- Light reaction" in slides[0]["body_md"]
+        assert "- Calvin cycle" in slides[0]["body_md"]
+        assert slides[1]["title"] == "Respiration"
+
+    def test_rejects_non_pptx_bytes(self):
+        with pytest.raises(ValueError):
+            parse_pptx(b"this is not a pptx file")
+
+    def test_recommended_periods_ceils_at_eight_per_period(self):
+        assert recommended_periods(8, 8) == 1
+        assert recommended_periods(9, 8) == 2
+        assert recommended_periods(16, 8) == 2
+        assert recommended_periods(17, 8) == 3
+
+    def test_recommended_periods_never_below_one(self):
+        assert recommended_periods(0, 8) == 1
+        assert recommended_periods(3, 8) == 1
