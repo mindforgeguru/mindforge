@@ -22,7 +22,7 @@ from app.models.attendance import Attendance, AttendanceStatus
 from app.models.grade import Grade, GradeType
 from app.models.test import Test, TestSubmission, TestType
 from app.models.timetable import TimetableConfig, TimetableSlot
-from app.models.user import User, StudentProfile, TeacherProfile
+from app.models.user import User, StudentProfile, TeacherProfile, UserRole
 from app.schemas.attendance import AttendanceBulkCreate, AttendanceResponse
 from app.schemas.grade import GradeCreate, GradeResponse
 from app.schemas.test import TestGenerationParams, TestResponse, OfflineGradesBulk
@@ -2001,49 +2001,61 @@ async def send_broadcast(
         })
 
     # ── Push notifications for broadcast ─────────────────────────────────────
+    # Every broadcast reaches all teachers (so staff stay in the loop and see
+    # it in their shared broadcast list) plus the targeted students/parents.
+    # Each role gets a route into its own broadcast screen.
     notif_title = payload.title
     notif_body  = payload.message[:200]  # cap body length for display
 
+    # Students + parents: the whole school for an "all" broadcast, or just the
+    # target grade's roster for a grade broadcast.
+    sp_query = (
+        select(StudentProfile)
+        .join(User, User.id == StudentProfile.user_id)
+        .where(
+            User.is_active == True,  # noqa: E712
+            User.is_approved == True,  # noqa: E712
+            User.deleted_at.is_(None),
+        )
+    )
     if payload.target_type == "grade" and payload.target_grade is not None:
-        # Notify students + parents of the target grade only
-        sp_result = await db.execute(
-            select(StudentProfile)
-            .join(User, User.id == StudentProfile.user_id)
-            .where(
-                StudentProfile.grade == payload.target_grade,
-                User.is_active == True,
-                User.is_approved == True,
-                User.deleted_at.is_(None),
-            )
-        )
-        profiles = sp_result.scalars().all()
-        all_user_ids = {p.user_id for p in profiles}
-        all_user_ids.update(p.parent_user_id for p in profiles if p.parent_user_id)
-    else:
-        # Notify all active approved users
-        all_users_result = await db.execute(
-            select(User.id)
-            .where(
-                User.is_active == True,
-                User.is_approved == True,
-                User.deleted_at.is_(None),
-            )
-        )
-        all_user_ids = {row.id for row in all_users_result}
+        sp_query = sp_query.where(StudentProfile.grade == payload.target_grade)
+    profiles = (await db.execute(sp_query)).scalars().all()
+    student_parent_ids = {p.user_id for p in profiles}
+    student_parent_ids.update(p.parent_user_id for p in profiles if p.parent_user_id)
 
-    if all_user_ids:
-        token_result = await db.execute(
-            select(User.fcm_token)
-            .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
-        )
-        tokens = [row.fcm_token for row in token_result]
+    # Every active teacher except the sender — regardless of the target grade.
+    teacher_ids = {
+        row.id for row in (await db.execute(
+            select(User.id).where(
+                User.role == UserRole.teacher,
+                User.id != current_teacher.id,
+                User.is_active == True,  # noqa: E712
+                User.is_approved == True,  # noqa: E712
+                User.deleted_at.is_(None),
+            )
+        ))
+    }
+
+    async def _push(user_ids: set[int], route: str):
+        if not user_ids:
+            return
+        tokens = [
+            row.fcm_token for row in (await db.execute(
+                select(User.fcm_token)
+                .where(User.id.in_(user_ids), User.fcm_token.isnot(None))
+            ))
+        ]
         if tokens:
             asyncio.create_task(notification_service.send_to_tokens(
                 tokens=tokens,
                 title=notif_title,
                 body=notif_body,
-                data={"route": "/student/broadcasts"},
+                data={"route": route},
             ))
+
+    await _push(student_parent_ids, "/student/broadcasts")
+    await _push(teacher_ids, "/teacher/broadcasts")
 
     return BroadcastResponse(
         id=bc.id,
@@ -2062,25 +2074,28 @@ async def list_teacher_broadcasts(
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """List all broadcasts sent by this teacher."""
+    """List all broadcasts school-wide.
+
+    Broadcasts are shared: every teacher sees every teacher's broadcasts,
+    each labelled with its actual sender.
+    """
     result = await db.execute(
-        select(Broadcast)
-        .where(Broadcast.sender_id == current_teacher.id)
+        select(Broadcast, User.username)
+        .join(User, User.id == Broadcast.sender_id)
         .order_by(Broadcast.created_at.desc())
     )
-    broadcasts = result.scalars().all()
     return [
         BroadcastResponse(
             id=b.id,
             sender_id=b.sender_id,
-            sender_username=current_teacher.username,
+            sender_username=sender_username,
             title=b.title,
             message=b.message,
             target_type=b.target_type,
             target_grade=b.target_grade,
             created_at=b.created_at,
         )
-        for b in broadcasts
+        for b, sender_username in result.all()
     ]
 
 
@@ -2103,20 +2118,21 @@ async def get_teacher_dashboard_summary(
         .order_by(TimetableSlot.slot_date, TimetableSlot.period_number)
     )).scalars().all()
 
-    # Broadcasts sent by this teacher (50 most recent)
+    # Broadcasts are shared school-wide: every teacher sees every teacher's
+    # broadcasts (50 most recent), each labelled with its actual sender.
     broadcasts_raw = (await db.execute(
-        select(Broadcast)
-        .where(Broadcast.sender_id == current_teacher.id)
+        select(Broadcast, User.username)
+        .join(User, User.id == Broadcast.sender_id)
         .order_by(Broadcast.created_at.desc())
         .limit(50)
-    )).scalars().all()
+    )).all()
     broadcasts = [
         BroadcastResponse(
-            id=b.id, sender_id=b.sender_id, sender_username=current_teacher.username,
+            id=b.id, sender_id=b.sender_id, sender_username=sender_username,
             title=b.title, message=b.message, target_type=b.target_type,
             target_grade=b.target_grade, created_at=b.created_at,
         )
-        for b in broadcasts_raw
+        for b, sender_username in broadcasts_raw
     ]
 
     # Homework school-wide (30 most recent) — shared across all teachers.

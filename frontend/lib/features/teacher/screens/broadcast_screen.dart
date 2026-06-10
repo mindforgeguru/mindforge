@@ -190,6 +190,26 @@ class _BroadcastCard extends StatelessWidget {
               height: 1.4,
             ),
           ),
+          SizedBox(height: _s(context, 6, min: 4, max: 10)),
+          Row(
+            children: [
+              Icon(Icons.person_outline,
+                  size: _s(context, 13, min: 11, max: 15),
+                  color: AppColors.textMuted),
+              SizedBox(width: _s(context, 4, min: 3, max: 6)),
+              Flexible(
+                child: Text(
+                  'Sent by ${bc.senderUsername}',
+                  style: GoogleFonts.poppins(
+                    fontSize: _fs(context, 11, min: 10, max: 13),
+                    color: AppColors.textMuted,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -394,7 +414,7 @@ class _EmptyState extends StatelessWidget {
                   color: AppColors.textMuted.withValues(alpha: 0.4)),
               SizedBox(height: _s(context, 14, min: 10, max: 20)),
               Text(
-                'No broadcasts sent yet',
+                'No broadcasts yet',
                 style: GoogleFonts.poppins(
                   fontSize: _fs(context, 14, min: 12, max: 16),
                   color: AppColors.textMuted,
