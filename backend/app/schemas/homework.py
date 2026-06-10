@@ -36,6 +36,11 @@ class HomeworkResponse(BaseModel):
     test_id: Optional[int] = None
     due_date: Optional[date] = None
     created_at: datetime
+    # True once every current roster student for the grade has a recorded
+    # completion status — i.e. the teacher review is finished. False means the
+    # assignment still needs reviewing. Only computed by the teacher list
+    # endpoint; defaults False elsewhere.
+    review_complete: bool = False
 
     model_config = {"from_attributes": True}
 

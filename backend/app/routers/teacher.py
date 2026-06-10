@@ -1536,8 +1536,48 @@ async def list_teacher_homework(
     if grade is not None:
         q = q.where(Homework.grade == grade)
     q = q.order_by(Homework.created_at.desc())
-    result = await db.execute(q)
-    return result.scalars().all()
+    homeworks = (await db.execute(q)).scalars().all()
+    if not homeworks:
+        return []
+
+    # Current roster (active, approved students) for each grade in the list.
+    roster_by_grade: dict[int, set[int]] = {}
+    for g in {h.grade for h in homeworks}:
+        roster_by_grade[g] = {
+            row[0] for row in (await db.execute(
+                select(User.id)
+                .join(StudentProfile, User.id == StudentProfile.user_id)
+                .where(
+                    StudentProfile.grade == g,
+                    User.is_active == True,  # noqa: E712
+                    User.is_approved == True,  # noqa: E712
+                )
+            )).all()
+        }
+
+    # Students with a recorded completion status, per homework.
+    marked_by_hw: dict[int, set[int]] = {}
+    for hw_id, student_id in (await db.execute(
+        select(HomeworkCompletion.homework_id, HomeworkCompletion.student_id)
+        .where(HomeworkCompletion.homework_id.in_([h.id for h in homeworks]))
+    )).all():
+        marked_by_hw.setdefault(hw_id, set()).add(student_id)
+
+    # Review is complete when every current roster student has a status —
+    # the same rule the daily workflow gate uses (see _pending_hw_review_ids).
+    def _reviewed(h: Homework) -> bool:
+        roster = roster_by_grade.get(h.grade, set())
+        return bool(roster) and roster.issubset(marked_by_hw.get(h.id, set()))
+
+    return [
+        HomeworkResponse(
+            id=h.id, teacher_id=h.teacher_id, grade=h.grade, subject=h.subject,
+            title=h.title, description=h.description, homework_type=h.homework_type,
+            test_id=h.test_id, due_date=h.due_date, created_at=h.created_at,
+            review_complete=_reviewed(h),
+        )
+        for h in homeworks
+    ]
 
 
 @router.delete("/homework/{homework_id}", status_code=status.HTTP_204_NO_CONTENT)
