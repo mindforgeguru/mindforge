@@ -608,6 +608,11 @@ class _HomeworkCard extends StatelessWidget {
     final isOnline = hw.isOnlineTest;
     final pad = _s(context, 14, min: 10, max: 20);
 
+    // Status-coded border so teachers can see at a glance what still needs
+    // reviewing: orange = review pending, green = review complete.
+    final borderColor =
+        hw.reviewComplete ? const Color(0xFF2E7D52) : const Color(0xFFE8821E);
+
     return LayoutBuilder(builder: (context, constraints) {
       return Material(
         color: Colors.white,
@@ -624,6 +629,7 @@ class _HomeworkCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: borderColor, width: 1.5),
               boxShadow: const [
                 BoxShadow(
                     color: Color(0x0C1D3557),

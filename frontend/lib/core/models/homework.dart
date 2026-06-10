@@ -9,6 +9,9 @@ class HomeworkModel {
   final int? testId;
   final DateTime? dueDate;
   final DateTime createdAt;
+  // True once every roster student has a recorded completion status — i.e. the
+  // teacher review is finished. False means it still needs reviewing.
+  final bool reviewComplete;
 
   const HomeworkModel({
     required this.id,
@@ -21,6 +24,7 @@ class HomeworkModel {
     this.testId,
     this.dueDate,
     required this.createdAt,
+    this.reviewComplete = false,
   });
 
   bool get isOnlineTest => homeworkType == 'online_test';
@@ -38,6 +42,7 @@ class HomeworkModel {
             ? DateTime.parse(json['due_date'] as String)
             : null,
         createdAt: DateTime.parse(json['created_at'] as String),
+        reviewComplete: json['review_complete'] as bool? ?? false,
       );
 }
 
