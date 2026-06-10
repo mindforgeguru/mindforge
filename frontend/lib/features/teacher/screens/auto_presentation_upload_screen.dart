@@ -20,7 +20,7 @@ class AutoPresentationUploadScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: TeacherScaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
@@ -32,12 +32,14 @@ class AutoPresentationUploadScreen extends ConsumerWidget {
           ),
           backgroundColor: AppColors.primary,
           bottom: TabBar(
+            isScrollable: true,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
             indicatorColor: AppColors.accent,
             tabs: const [
               Tab(text: 'Pick from Database'),
-              Tab(text: 'Upload New PDF'),
+              Tab(text: 'AI from PDF'),
+              Tab(text: 'Upload Slides'),
             ],
           ),
         ),
@@ -45,6 +47,7 @@ class AutoPresentationUploadScreen extends ConsumerWidget {
           children: [
             _PickFromDatabaseTab(),
             _UploadNewTab(),
+            _UploadDeckTab(),
           ],
         ),
       ),
@@ -593,6 +596,254 @@ class _UploadNewTabState extends ConsumerState<_UploadNewTab> {
         Text(
           'Tip: if another teacher has already uploaded this chapter, '
           'use the "Pick from Database" tab to avoid duplicate generations.',
+          style: GoogleFonts.poppins(
+            fontSize: 11, color: AppColors.textMuted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Upload existing slides (.pptx / Google Slides) ───────────────────────────
+
+class _UploadDeckTab extends ConsumerStatefulWidget {
+  const _UploadDeckTab();
+
+  @override
+  ConsumerState<_UploadDeckTab> createState() => _UploadDeckTabState();
+}
+
+class _UploadDeckTabState extends ConsumerState<_UploadDeckTab> {
+  // 8 slides/day is fixed on the backend for uploaded decks — surfaced here
+  // so teachers understand how periods are estimated.
+  static const int _slidesPerPeriod = 8;
+
+  int _grade = 9;
+  final _subjectCtrl = TextEditingController();
+  final _chapterCtrl = TextEditingController();
+  PlatformFile? _picked;
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _subjectCtrl.dispose();
+    _chapterCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDeck() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pptx'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    setState(() => _picked = result.files.first);
+  }
+
+  Future<void> _submit() async {
+    final subject = _subjectCtrl.text.trim();
+    final chapter = _chapterCtrl.text.trim();
+    if (subject.isEmpty || chapter.isEmpty || _picked == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Fill subject, chapter, and pick a .pptx file.')),
+      );
+      return;
+    }
+    final bytes = _picked!.bytes;
+    if (bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not read the file — pick again.')),
+      );
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      final result = await api.uploadPresentationDeck(
+        grade: _grade,
+        subject: subject,
+        chapterName: chapter,
+        fileBytes: bytes,
+        filename: _picked!.name,
+      );
+      final id = result['presentation_id'] as int;
+      ref.invalidate(presentationListProvider);
+      ref.invalidate(presentationLibraryProvider);
+      if (!mounted) return;
+      context.go('${RouteNames.teacherDashboard}/presentations/$id');
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      String msg;
+      if (body is Map && body['detail'] is String) {
+        msg = body['detail'] as String;
+      } else if (body is Map && body['detail'] is List) {
+        msg = (body['detail'] as List)
+            .map((it) => (it is Map && it['msg'] is String) ? it['msg'] : '')
+            .where((s) => (s as String).isNotEmpty)
+            .join('\n');
+        if (msg.isEmpty) {
+          msg = 'Upload failed (status ${e.response?.statusCode ?? '?'}).';
+        }
+      } else {
+        msg = 'Upload failed (status ${e.response?.statusCode ?? '?'}).';
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Upload failed: $e'),
+            backgroundColor: AppColors.error),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pickedLabel = _picked?.name ?? 'Tap to pick a .pptx file';
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.divider),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.slideshow_outlined,
+                  color: AppColors.primary, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Teach your own slides as-is. We split the deck into periods '
+                  'of $_slidesPerPeriod slides each — no AI rewriting.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11.5, color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<int>(
+          initialValue: _grade,
+          decoration: const InputDecoration(
+            labelText: 'Grade',
+            prefixIcon: Icon(Icons.school_outlined),
+          ),
+          items: const [
+            DropdownMenuItem(value: 8, child: Text('Grade 8')),
+            DropdownMenuItem(value: 9, child: Text('Grade 9')),
+            DropdownMenuItem(value: 10, child: Text('Grade 10')),
+          ],
+          onChanged: _submitting
+              ? null
+              : (v) => setState(() => _grade = v ?? _grade),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _subjectCtrl,
+          enabled: !_submitting,
+          decoration: const InputDecoration(
+            labelText: 'Subject',
+            hintText: 'e.g. Biology',
+            prefixIcon: Icon(Icons.menu_book_outlined),
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _chapterCtrl,
+          enabled: !_submitting,
+          decoration: const InputDecoration(
+            labelText: 'Chapter / topic name',
+            hintText: 'e.g. Photosynthesis',
+            prefixIcon: Icon(Icons.bookmark_border),
+          ),
+        ),
+        const SizedBox(height: 20),
+        InkWell(
+          onTap: _submitting ? null : _pickDeck,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+            decoration: BoxDecoration(
+              color: _picked == null
+                  ? AppColors.iconContainer
+                  : AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _picked == null ? AppColors.divider : AppColors.primary,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _picked == null
+                      ? Icons.upload_file_outlined
+                      : Icons.check_circle_outline,
+                  color:
+                      _picked == null ? AppColors.textMuted : AppColors.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    pickedLabel,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: _picked == null
+                          ? AppColors.textSecondary
+                          : AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_picked != null)
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: _submitting
+                        ? null
+                        : () => setState(() => _picked = null),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            minimumSize: const Size(double.infinity, 50),
+          ),
+          child: _submitting
+              ? const SizedBox(
+                  height: 20, width: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : Text(
+                  'Upload & Use',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14, fontWeight: FontWeight.w700,
+                  ),
+                ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Using Google Slides? Open it, then File → Download → '
+          'Microsoft PowerPoint (.pptx) and upload that file here.',
           style: GoogleFonts.poppins(
             fontSize: 11, color: AppColors.textMuted,
           ),

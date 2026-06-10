@@ -1222,6 +1222,30 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
+  /// Upload an existing PowerPoint (.pptx) deck to teach as-is. No AI — the
+  /// backend parses the slides and returns immediately with status=READY.
+  /// Paced at 8 slides/period; recommended_periods = ceil(slides / 8).
+  Future<Map<String, dynamic>> uploadPresentationDeck({
+    required int grade,
+    required String subject,
+    required String chapterName,
+    required List<int> fileBytes,
+    required String filename,
+  }) async {
+    final formData = dio_pkg.FormData.fromMap({
+      'grade': grade,
+      'subject': subject,
+      'chapter_name': chapterName,
+      'file': dio_pkg.MultipartFile.fromBytes(fileBytes, filename: filename),
+    });
+    final res = await _dio.post(
+      '/presentations/upload-deck',
+      data: formData,
+      options: Options(receiveTimeout: const Duration(seconds: 180)),
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
   /// School-wide list. One item per (teacher, presentation).
   Future<List<dynamic>> listPresentations() async {
     final res = await _dio.get('/presentations/');

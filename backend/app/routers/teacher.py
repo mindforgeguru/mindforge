@@ -1525,11 +1525,12 @@ async def list_teacher_homework(
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """List all homework created by this teacher, optionally filtered by grade.
+    """List all homework, optionally filtered by grade.
 
-    "No homework" markers are workflow-only and excluded from the list."""
+    Homework is shared school-wide: every teacher sees every teacher's
+    assignments so any of them can review completion. "No homework" markers
+    are workflow-only and excluded from the list."""
     q = select(Homework).where(
-        Homework.teacher_id == current_teacher.id,
         Homework.is_no_homework == False,  # noqa: E712
     )
     if grade is not None:
@@ -1545,15 +1546,16 @@ async def delete_homework(
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """Delete a homework assignment (only the creator can delete)."""
+    """Delete a homework assignment.
+
+    Homework is shared school-wide, so any teacher may delete any assignment.
+    """
     result = await db.execute(
-        select(Homework).where(
-            Homework.id == homework_id, Homework.teacher_id == current_teacher.id
-        )
+        select(Homework).where(Homework.id == homework_id)
     )
     hw = result.scalar_one_or_none()
     if not hw:
-        raise HTTPException(status_code=404, detail="Homework not found or not yours")
+        raise HTTPException(status_code=404, detail="Homework not found")
     await db.delete(hw)
     await db.commit()
 
@@ -1570,12 +1572,10 @@ async def _build_completions_response(
     lock absent rows from a single fetch.
     """
     hw = (await db.execute(
-        select(Homework).where(
-            Homework.id == homework_id, Homework.teacher_id == teacher.id
-        )
+        select(Homework).where(Homework.id == homework_id)
     )).scalar_one_or_none()
     if not hw:
-        raise HTTPException(status_code=404, detail="Homework not found or not yours")
+        raise HTTPException(status_code=404, detail="Homework not found")
 
     students = (await db.execute(
         select(User)
@@ -1674,12 +1674,10 @@ async def upsert_homework_completions(
          regardless of payload. They couldn't have done the homework.
     """
     hw = (await db.execute(
-        select(Homework).where(
-            Homework.id == homework_id, Homework.teacher_id == current_teacher.id
-        )
+        select(Homework).where(Homework.id == homework_id)
     )).scalar_one_or_none()
     if not hw:
-        raise HTTPException(status_code=404, detail="Homework not found or not yours")
+        raise HTTPException(status_code=404, detail="Homework not found")
 
     attendance_date = datetime.now(timezone.utc).date()
     att_rows = (await db.execute(
@@ -2121,12 +2119,11 @@ async def get_teacher_dashboard_summary(
         for b in broadcasts_raw
     ]
 
-    # Homework created by this teacher (30 most recent). "No homework"
-    # markers are workflow-only, so they're excluded here.
+    # Homework school-wide (30 most recent) — shared across all teachers.
+    # "No homework" markers are workflow-only, so they're excluded here.
     homework = (await db.execute(
         select(Homework)
         .where(
-            Homework.teacher_id == current_teacher.id,
             Homework.is_no_homework == False,  # noqa: E712
         )
         .order_by(Homework.created_at.desc())

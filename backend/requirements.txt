@@ -6,6 +6,7 @@ alembic==1.13.1
 redis==5.0.4
 minio==7.2.7
 pymupdf==1.24.3
+python-pptx==1.0.2
 pytesseract==0.3.10
 reportlab==4.2.0
 python-multipart==0.0.27
