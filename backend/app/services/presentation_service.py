@@ -238,6 +238,31 @@ async def _gemini_call(file_bytes: Optional[bytes], ext: Optional[str],
                 logger.warning("Gemini file cleanup failed: %s", exc)
 
 
+async def _generate_text(
+    file_bytes: Optional[bytes],
+    ext: Optional[str],
+    prompt: str,
+    *,
+    max_tokens: int = 32000,
+    use_thinking: bool = True,
+) -> str:
+    """Run one generation pass: Claude first, Gemini fallback.
+
+    Claude reads the chapter PDF natively (same as Gemini), so no OCR. If
+    ANTHROPIC_API_KEY is unset or the Claude call fails, falls back to the
+    existing Gemini path so deck generation keeps working.
+    """
+    if settings.ANTHROPIC_API_KEY:
+        try:
+            files = [(file_bytes, ext)] if (file_bytes and ext) else None
+            return await ai_service.claude_generate(
+                prompt, files=files, max_tokens=max_tokens, use_thinking=use_thinking,
+            )
+        except Exception as exc:
+            logger.warning("Claude presentation gen failed: %s. Falling back to Gemini.", exc)
+    return await _gemini_call(file_bytes, ext, prompt)
+
+
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
@@ -255,7 +280,7 @@ async def analyze_chapter(
     caller can mark the presentation FAILED.
     """
     prompt = _build_outline_prompt(grade, subject, chapter)
-    raw = await _gemini_call(file_bytes, ext, prompt)
+    raw = await _generate_text(file_bytes, ext, prompt)
     parsed = _parse_lenient_json(raw)
 
     periods = _clamp(int(parsed.get("recommended_periods", 3)),
@@ -295,7 +320,9 @@ async def generate_slides(grade: int, subject: str, chapter: str,
     for start in range(0, len(outline), CHUNK):
         chunk = outline[start:start + CHUNK]
         prompt = _build_slide_fill_prompt(grade, subject, chapter, chunk)
-        raw = await _gemini_call(None, None, prompt)
+        # Slide expansion is straightforward fill-in work — skip thinking to
+        # keep this fast/cheap (it runs once per 8-slide chunk).
+        raw = await _generate_text(None, None, prompt, use_thinking=False)
         parsed = _parse_lenient_json(raw)
         if not isinstance(parsed, list):
             raise ValueError("Gemini slide-fill returned non-array.")

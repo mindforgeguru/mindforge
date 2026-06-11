@@ -2,9 +2,10 @@
 AI Pipeline Service for MIND FORGE.
 
 Pipeline:
-1. Try Gemini first (native PDF/image reading via Files API)
-2. Fall back to Groq (text extracted from files via PyMuPDF/Pillow + pytesseract)
-3. If both fail, return stub questions
+1. Try Claude first (native PDF/image reading via the Files API)
+2. Fall back to Gemini (native PDF/image reading via its Files API)
+3. Fall back to Groq (text extracted from files via PyMuPDF/Pillow + pytesseract)
+4. If all fail, the caller surfaces the error (stubs only on explicit request)
 """
 
 import asyncio
@@ -15,6 +16,7 @@ import re
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
+import anthropic
 from google import genai
 from google.genai import types as genai_types
 from groq import Groq
@@ -34,6 +36,11 @@ _GEMINI_GENERATION_CONFIG = genai_types.GenerateContentConfig(
 )
 
 _groq_client = None
+
+_anthropic_client: Optional["anthropic.Anthropic"] = None
+
+# Beta header required to reference uploaded files by file_id in a message.
+_CLAUDE_FILES_BETA = "files-api-2025-04-14"
 
 # MIME types Gemini Files API accepts
 _MIME_MAP = {
@@ -61,6 +68,99 @@ def _get_groq_client():
     if _groq_client is None:
         _groq_client = Groq(api_key=settings.GROQ_API_KEY)
     return _groq_client
+
+
+def _get_anthropic_client() -> "anthropic.Anthropic":
+    global _anthropic_client
+    if _anthropic_client is None:
+        _anthropic_client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    return _anthropic_client
+
+
+# ─── Claude (Anthropic) low-level helpers ─────────────────────────────────────
+
+def _upload_file_to_claude(file_bytes: bytes, ext: str) -> Tuple[str, Dict[str, Any]]:
+    """Upload a PDF/image to Claude's Files API.
+
+    Returns (file_id, content_block) where the block references the file by id.
+    PDFs become a `document` block; images become an `image` block — both read
+    natively by Claude (vision + text), so there's no client-side OCR.
+    """
+    import io
+    client = _get_anthropic_client()
+    mime = _MIME_MAP.get(ext.lower(), "application/octet-stream")
+    uploaded = client.beta.files.upload(
+        file=(f"source.{ext.lower()}", io.BytesIO(file_bytes), mime),
+    )
+    block_type = "document" if ext.lower() == "pdf" else "image"
+    block = {"type": block_type, "source": {"type": "file", "file_id": uploaded.id}}
+    logger.info(f"Uploaded file to Claude: {uploaded.id}, size={len(file_bytes)} bytes")
+    return uploaded.id, block
+
+
+def _claude_stream_text(
+    content_blocks: List[Any],
+    max_tokens: int,
+    use_thinking: bool,
+) -> str:
+    """Synchronous streaming Messages call → concatenated text.
+
+    Streaming is required for the large max_tokens we use (the SDK refuses
+    long non-streaming requests). Thinking blocks, if any, are skipped — we
+    only want the final text (the JSON the prompt asks for).
+    """
+    client = _get_anthropic_client()
+    kwargs: Dict[str, Any] = dict(
+        model=settings.ANTHROPIC_MODEL,
+        max_tokens=max_tokens,
+        betas=[_CLAUDE_FILES_BETA],
+        messages=[{"role": "user", "content": content_blocks}],
+    )
+    if use_thinking:
+        kwargs["thinking"] = {"type": "adaptive"}
+    with client.beta.messages.stream(**kwargs) as stream:
+        msg = stream.get_final_message()
+    return "".join(b.text for b in msg.content if b.type == "text")
+
+
+async def claude_generate(
+    prompt: str,
+    files: Optional[List[Tuple[bytes, str]]] = None,
+    max_tokens: int = 16000,
+    use_thinking: bool = True,
+) -> str:
+    """One Claude call: upload any files, append the prompt, stream, return text.
+
+    Generic entry point reused by the presentation pipeline. Uploaded files are
+    deleted afterward. Raises if ANTHROPIC_API_KEY is unset.
+    """
+    if not settings.ANTHROPIC_API_KEY:
+        raise RuntimeError("ANTHROPIC_API_KEY not configured")
+    loop = asyncio.get_running_loop()
+    client = _get_anthropic_client()
+    uploaded_ids: List[str] = []
+    content: List[Any] = []
+    try:
+        for fb, ext in (files or []):
+            if not fb:
+                continue
+            fid, block = await loop.run_in_executor(
+                None, lambda fb=fb, ext=ext: _upload_file_to_claude(fb, ext)
+            )
+            uploaded_ids.append(fid)
+            content.append(block)
+        content.append({"type": "text", "text": prompt})
+        return await loop.run_in_executor(
+            None, lambda: _claude_stream_text(content, max_tokens, use_thinking)
+        )
+    finally:
+        for fid in uploaded_ids:
+            try:
+                await loop.run_in_executor(
+                    None, lambda fid=fid: client.beta.files.delete(fid)
+                )
+            except Exception:
+                pass
 
 
 # ─── Text extraction from files (for Groq) ───────────────────────────────────
@@ -560,6 +660,102 @@ def _parse_questions(raw: str, params: Any = None) -> List[Dict[str, Any]]:
     return validated
 
 
+# ─── Claude generation ────────────────────────────────────────────────────────
+
+async def _generate_with_claude(
+    chapter_files: List[Tuple[bytes, str]],
+    old_paper_files: List[Tuple[bytes, str]],
+    syllabus_chapters: List[str],
+    params: Any,
+) -> List[Dict[str, Any]]:
+    """Generate test questions with Claude.
+
+    Mirrors the Gemini path: uploads chapter + old-paper files and interleaves
+    them with role-labelling text blocks so Claude knows which source is which,
+    then appends the same `_build_prompt` instructions and parses the JSON array
+    via the shared `_parse_questions`.
+    """
+    loop = asyncio.get_running_loop()
+    client = _get_anthropic_client()
+    uploaded_ids: List[str] = []
+    content: List[Any] = []
+    try:
+        if any(fb for fb, _ in chapter_files):
+            content.append({"type": "text", "text": (
+                f"━━━ CHAPTER PDF ━━━\n"
+                f"Document(s) for chapter '{params.chapter}' "
+                f"({params.subject}, Grade {params.grade} ICSE).\n"
+                f"Read the ENTIRE document. You need TWO things from it:\n"
+                f"  [BACK EXERCISES] Sections near the END labelled 'Exercises', "
+                f"'Questions', 'Review Questions', 'Self Assessment', "
+                f"'Think and Answer', 'Practice Questions', or any numbered "
+                f"Q.1, Q.2... list. 20% of test questions must be exact copies "
+                f"from here; another 20% must be AI-written in the same style.\n"
+                f"  [THEORY] Definitions, laws, concepts from the main chapter "
+                f"body — used for the fully AI-generated 20%."
+            )})
+            for fb, ext in chapter_files:
+                if not fb:
+                    continue
+                fid, block = await loop.run_in_executor(
+                    None, lambda fb=fb, ext=ext: _upload_file_to_claude(fb, ext)
+                )
+                uploaded_ids.append(fid)
+                content.append(block)
+
+        if any(fb for fb, _ in old_paper_files):
+            content.append({"type": "text", "text": (
+                f"━━━ OLD TEST PAPERS ━━━\n"
+                f"Old/past test papers for {params.subject} Grade {params.grade}.\n"
+                f"⚠️  These contain questions from MULTIPLE chapters.\n"
+                f"    ONLY use questions specifically about '{params.chapter}' — "
+                f"ignore all others.\n"
+                f"20% of test questions must be exact copies of old-paper "
+                f"questions about '{params.chapter}'; another 20% must be "
+                f"AI-written in the same style as those old-paper questions."
+            )})
+            for fb, ext in old_paper_files:
+                if not fb:
+                    continue
+                fid, block = await loop.run_in_executor(
+                    None, lambda fb=fb, ext=ext: _upload_file_to_claude(fb, ext)
+                )
+                uploaded_ids.append(fid)
+                content.append(block)
+
+        if syllabus_chapters:
+            content.append({"type": "text", "text": (
+                f"━━━ SYLLABUS SCOPE (reference only) ━━━\n"
+                f"All chapters in {params.subject} Grade {params.grade}: "
+                f"{', '.join(syllabus_chapters)}\n"
+                f"The test is for: '{params.chapter}' ONLY."
+            )})
+
+        content.append({"type": "text",
+                        "text": _build_prompt(params, syllabus_chapters=syllabus_chapters)})
+
+        raw_text = await loop.run_in_executor(
+            None, lambda: _claude_stream_text(content, 16000, True)
+        )
+        if not raw_text:
+            raise ValueError("Claude returned an empty response.")
+        questions = _parse_questions(raw_text, params)
+        logger.info(
+            f"Claude generated {len(questions)} questions "
+            f"(chapter files: {sum(1 for fb, _ in chapter_files if fb)}, "
+            f"old papers: {sum(1 for fb, _ in old_paper_files if fb)})"
+        )
+        return questions
+    finally:
+        for fid in uploaded_ids:
+            try:
+                await loop.run_in_executor(
+                    None, lambda fid=fid: client.beta.files.delete(fid)
+                )
+            except Exception:
+                pass
+
+
 # ─── Gemini generation ────────────────────────────────────────────────────────
 
 def _upload_file_to_gemini(file_bytes: bytes, ext: str):
@@ -750,12 +946,22 @@ async def generate_test_questions(
     params: Any,
 ) -> List[Dict[str, Any]]:
     """
-    Generate test questions. Tries Gemini first, falls back to Groq.
-    Raises RuntimeError with the actual error message if both fail — the
+    Generate test questions. Tries Claude first, then Gemini, then Groq.
+    Raises RuntimeError with the actual error message if all fail — the
     router surfaces this as a 500 so the teacher sees what went wrong instead
     of silently receiving stub questions.
     """
     errors: List[str] = []
+
+    if settings.ANTHROPIC_API_KEY:
+        try:
+            return await _generate_with_claude(chapter_files, old_paper_files, syllabus_chapters, params)
+        except Exception as e:
+            msg = f"Claude: {e}"
+            logger.warning(f"{msg}. Trying Gemini...")
+            errors.append(msg)
+    else:
+        errors.append("Claude: ANTHROPIC_API_KEY not configured")
 
     if settings.GEMINI_API_KEY:
         try:
@@ -794,6 +1000,21 @@ async def generate_mcqs_from_text(
     prompt = _build_prompt(params, chapter_text=chapter_text)
     errors: List[str] = []
     loop = asyncio.get_running_loop()
+
+    if settings.ANTHROPIC_API_KEY:
+        try:
+            raw_text = await claude_generate(prompt, max_tokens=16000)
+            if not raw_text:
+                raise ValueError("Claude returned an empty response.")
+            questions = _parse_questions(raw_text, params)
+            logger.info(f"Claude generated {len(questions)} questions from text")
+            return questions
+        except Exception as e:
+            msg = f"Claude: {e}"
+            logger.warning(f"{msg}. Trying Gemini...")
+            errors.append(msg)
+    else:
+        errors.append("Claude: ANTHROPIC_API_KEY not configured")
 
     if settings.GEMINI_API_KEY:
         try:

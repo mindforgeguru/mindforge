@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 60           # 1 hour access token
     JWT_REFRESH_EXPIRE_DAYS: int = 30      # 30 day refresh token
 
+    # ── Anthropic Claude AI ───────────────────────────────────────────────────
+    # Primary provider for test + presentation generation. Falls back to
+    # Gemini, then Groq, if unset or if a call fails.
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-opus-4-8"
+
     # ── Google Gemini AI ──────────────────────────────────────────────────────
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
