@@ -243,7 +243,7 @@ class _OnlineTestCard extends StatelessWidget {
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: const Text('Start Test'),
-                    onPressed: () => context.go(
+                    onPressed: () => context.push(
                       '${RouteNames.studentDashboard}/tests/${test.id}/attempt',
                     ),
                   ),

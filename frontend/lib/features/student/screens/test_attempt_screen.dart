@@ -184,7 +184,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
       // list will still reflect the real server-side score.
     }
     await _showResultDialog(score: score, autoSubmitted: true);
-    if (mounted) context.pop();
+    _leaveTest();
   }
 
   Future<void> _startAttempt() async {
@@ -200,7 +200,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
           score: (data['score'] as num?)?.toDouble() ?? 0,
           autoSubmitted: data['auto_submitted'] == true,
         );
-        if (mounted) context.pop();
+        _leaveTest();
         return;
       }
       _autosaveTimer = Timer.periodic(
@@ -314,7 +314,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
           score: (data['score'] as num?)?.toDouble() ?? 0,
           autoSubmitted: data['auto_submitted'] == true,
         );
-        if (mounted) context.pop();
+        _leaveTest();
         return;
       }
       // Resync remaining time so the on-screen timer reflects real time spent
@@ -337,7 +337,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     ref.invalidate(studentGradesProvider);
     if (!mounted) return;
     await _showResultDialog(score: 0, autoSubmitted: true, fromTimeout: true);
-    if (mounted) context.pop();
+    _leaveTest();
   }
 
   void _goTo(int index) {
@@ -375,6 +375,18 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     );
   }
 
+  /// Leave the test screen once the attempt is over. Pops back to the tests
+  /// list when there's a route to return to; otherwise navigates there
+  /// explicitly so the screen never lingers behind a remaining timer.
+  void _leaveTest() {
+    if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/student/tests');
+    }
+  }
+
   Future<void> _submitTest({bool autoSubmitted = false}) async {
     if (_submitted) return;
     _flushAnswers();
@@ -395,7 +407,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
       final score = (result['score'] as num?)?.toDouble() ?? 0;
       final wasAuto = (result['auto_submitted'] as bool?) ?? autoSubmitted;
       await _showResultDialog(score: score, autoSubmitted: wasAuto);
-      if (mounted) context.pop();
+      _leaveTest();
     } on DioException catch (e) {
       // 409 = already submitted (server finalized while we were away).
       // 410 = window expired. Either way, the attempt is done.
@@ -406,7 +418,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
         ref.invalidate(studentGradesProvider);
         await _showResultDialog(
             score: 0, autoSubmitted: true, fromTimeout: code == 410);
-        if (mounted) context.pop();
+        _leaveTest();
         return;
       }
       if (mounted) {

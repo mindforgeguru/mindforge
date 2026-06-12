@@ -80,10 +80,18 @@ _UPLOADED_SLIDES_PER_PERIOD = 8
 # content to reliably yield a full 10, so 5 keeps generation succeeding.
 # (Manually-generated tests are unaffected and can be any length.)
 _AUTO_TEST_MCQ_COUNT = 5
-_AUTO_TEST_TIME_LIMIT_MIN = 7      # once started, finish within 7 minutes
+_AUTO_TEST_TIME_BUFFER_MIN = 2     # reading/settling time on top of 1 min/question
 _AUTO_TEST_WINDOW_HOURS = 48       # take it within 48h or it's graded 0
 # Need at least this much slide text to bother asking the AI for a quiz.
 _AUTO_TEST_MIN_SOURCE_CHARS = 200
+
+
+def _auto_test_time_limit(num_questions: int) -> int:
+    """Per-attempt time for an auto-quiz: 1 minute per question plus a small
+    buffer, so the limit scales with however many questions actually got
+    generated (thin slides may yield fewer than the target). e.g. 5 → 7 min,
+    8 → 10, 10 → 12."""
+    return num_questions + _AUTO_TEST_TIME_BUFFER_MIN
 
 
 def _require_teacher_or_admin(user: User) -> None:
@@ -299,7 +307,7 @@ async def _run_auto_test_job(
                 long_answer_count=0,
                 diagram_count=0,
                 include_numericals=False,
-                time_limit_minutes=_AUTO_TEST_TIME_LIMIT_MIN,
+                time_limit_minutes=_auto_test_time_limit(_AUTO_TEST_MCQ_COUNT),
             )
 
             try:
@@ -347,6 +355,9 @@ async def _run_auto_test_job(
                 update(Test).where(Test.id == test_id).values(
                     questions=mcqs,
                     total_marks=float(len(mcqs)),
+                    # Recompute from the actual count: slides may yield fewer
+                    # questions than the target, and the time must match.
+                    time_limit_minutes=_auto_test_time_limit(len(mcqs)),
                     is_published=True,
                     generation_status="ready",
                     generation_error=None,
@@ -1309,7 +1320,7 @@ async def create_period_log(
                 test_type=TestType.online,
                 questions=[],
                 total_marks=0.0,
-                time_limit_minutes=_AUTO_TEST_TIME_LIMIT_MIN,
+                time_limit_minutes=_auto_test_time_limit(_AUTO_TEST_MCQ_COUNT),
                 is_published=False,
                 auto_generated=True,
                 generation_status="generating",
