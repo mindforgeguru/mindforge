@@ -54,7 +54,10 @@ class TestReviewScreen extends ConsumerWidget {
                   ? AppColors.warning
                   : AppColors.error;
 
-          return ListView.separated(
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(testReviewProvider(testId)),
+            child: ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             itemCount: questions.length + 1,
             separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -122,6 +125,7 @@ class TestReviewScreen extends ConsumerWidget {
                 isCorrect: isCorrect,
               );
             },
+          ),
           );
         },
       ),

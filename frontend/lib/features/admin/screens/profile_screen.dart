@@ -252,6 +252,8 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
       body: SafeArea(
         top: false,
         bottom: true,
+        child: RefreshIndicator(
+        onRefresh: () => ref.read(authProvider.notifier).refreshProfile(),
         child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 48),
@@ -448,6 +450,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
             const AppAboutSection(),
           ],
         ),
+      ),
       ),
       ),
     );

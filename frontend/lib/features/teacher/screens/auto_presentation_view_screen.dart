@@ -190,11 +190,15 @@ class _AutoPresentationViewScreenState
                   _deletePresentation(data['chapter_name']?.toString()),
             );
           }
-          return _ReadyView(
-            data: data,
-            pageCtrl: _pageCtrl,
-            viewerIndex: _viewerIndex,
-            onPage: (i) => setState(() => _viewerIndex = i),
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(
+                presentationDetailProvider(widget.presentationId)),
+            child: _ReadyView(
+              data: data,
+              pageCtrl: _pageCtrl,
+              viewerIndex: _viewerIndex,
+              onPage: (i) => setState(() => _viewerIndex = i),
+            ),
           );
         },
       ),
@@ -349,6 +353,7 @@ class _ReadyView extends ConsumerWidget {
         (MediaQuery.of(context).size.height * 0.72).clamp(420.0, 760.0);
 
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       child: Column(
         children: [

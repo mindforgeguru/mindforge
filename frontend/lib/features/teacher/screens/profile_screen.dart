@@ -109,7 +109,10 @@ class _TeacherProfileScreenState extends ConsumerState<TeacherProfileScreen> {
 
     return TeacherScaffold(
       appBar: AppBar(title: const Text('My Profile')),
-      body: SingleChildScrollView(
+      body: RefreshIndicator(
+        onRefresh: () => ref.read(authProvider.notifier).refreshProfile(),
+        child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
             R.sp(context, 16), 12, R.sp(context, 16), 12),
         child: Column(
@@ -277,6 +280,7 @@ class _TeacherProfileScreenState extends ConsumerState<TeacherProfileScreen> {
             const SizedBox(height: 12),
           ],
         ),
+      ),
       ),
     );
   }

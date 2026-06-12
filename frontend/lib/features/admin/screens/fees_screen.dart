@@ -157,7 +157,11 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
     final structuresAsync = ref.watch(feeStructuresProvider(widget.selectedYear));
     final fmt = NumberFormat.currency(symbol: '₹', decimalDigits: 0);
 
-    return SingleChildScrollView(
+    return RefreshIndicator(
+      onRefresh: () async =>
+          ref.invalidate(feeStructuresProvider(widget.selectedYear)),
+      child: SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -220,6 +224,7 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -280,13 +285,24 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
       ),
       data: (summaries) {
         if (summaries.isEmpty) {
-          return const Center(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.people_outline, size: 56, color: AppColors.textMuted),
-              SizedBox(height: 12),
-              Text('No approved students yet.',
-                  style: TextStyle(color: AppColors.textSecondary)),
-            ]),
+          return RefreshIndicator(
+            onRefresh: () async =>
+                ref.invalidate(feeSummariesProvider(widget.selectedYear)),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                Padding(
+                  padding: EdgeInsets.only(top: 80),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.people_outline,
+                        size: 56, color: AppColors.textMuted),
+                    SizedBox(height: 12),
+                    Text('No approved students yet.',
+                        style: TextStyle(color: AppColors.textSecondary)),
+                  ]),
+                ),
+              ],
+            ),
           );
         }
 
@@ -311,7 +327,11 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
         }
         final balanceAll = totalFeeAll - totalPaidAll;
 
-        return ListView(
+        return RefreshIndicator(
+          onRefresh: () async =>
+              ref.invalidate(feeSummariesProvider(widget.selectedYear)),
+          child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
             // ── Grade + Student filter dropdowns ──────────────────────────
@@ -412,6 +432,7 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
                   },
                 )),
           ],
+          ),
         );
       },
     );
@@ -777,7 +798,10 @@ class _PaymentInfoTab extends ConsumerWidget {
       data: (options) {
         // Build a map slot→info for quick lookup
         final bySlot = {for (final o in options) o.slot: o};
-        return ListView(
+        return RefreshIndicator(
+          onRefresh: () async => ref.invalidate(paymentInfoProvider),
+          child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
             Text('Payment Options',
@@ -793,6 +817,7 @@ class _PaymentInfoTab extends ConsumerWidget {
               const SizedBox(height: 16),
             ],
           ],
+          ),
         );
       },
     );

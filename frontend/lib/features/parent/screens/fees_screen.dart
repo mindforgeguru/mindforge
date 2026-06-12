@@ -49,8 +49,14 @@ class ParentFeesScreen extends ConsumerWidget {
           error: (e, _) => parentErrorWidget(e, onRetry: () => ref.invalidate(parentChildFeesProvider)),
           data: (fees) => TabBarView(
             children: [
-              _SummaryTab(fees: fees),
-              _PayTab(fees: fees),
+              _SummaryTab(
+                  fees: fees,
+                  onRefresh: () async =>
+                      ref.invalidate(parentChildFeesProvider)),
+              _PayTab(
+                  fees: fees,
+                  onRefresh: () async =>
+                      ref.invalidate(parentChildFeesProvider)),
             ],
           ),
         ),
@@ -63,11 +69,15 @@ class ParentFeesScreen extends ConsumerWidget {
 
 class _SummaryTab extends StatelessWidget {
   final StudentFeeSummaryModel fees;
-  const _SummaryTab({required this.fees});
+  final Future<void> Function() onRefresh;
+  const _SummaryTab({required this.fees, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,6 +100,7 @@ class _SummaryTab extends StatelessWidget {
             ...fees.payments.map((p) => _PaymentTile(payment: p)),
         ],
       ),
+      ),
     );
   }
 }
@@ -98,34 +109,44 @@ class _SummaryTab extends StatelessWidget {
 
 class _PayTab extends StatelessWidget {
   final StudentFeeSummaryModel fees;
-  const _PayTab({required this.fees});
+  final Future<void> Function() onRefresh;
+  const _PayTab({required this.fees, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
     final options = fees.paymentOptions;
 
     if (options.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.account_balance_outlined,
-                  size: 64, color: AppColors.textSecondary),
-              SizedBox(height: 16),
-              Text(
-                'Payment details not set up yet.\nPlease contact the admin.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary),
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            Padding(
+              padding: EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.account_balance_outlined,
+                      size: 64, color: AppColors.textSecondary),
+                  SizedBox(height: 16),
+                  Text(
+                    'Payment details not set up yet.\nPlease contact the admin.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
 
-    return SingleChildScrollView(
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -163,6 +184,7 @@ class _PayTab extends StatelessWidget {
             if (i < options.length - 1) const SizedBox(height: 16),
           ],
         ],
+      ),
       ),
     );
   }

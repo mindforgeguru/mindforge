@@ -76,7 +76,10 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
       body: SafeArea(
         top: false,
         bottom: true,
+        child: RefreshIndicator(
+        onRefresh: () => ref.read(authProvider.notifier).refreshProfile(),
         child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.all(R.sp(context, 16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -223,6 +226,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
             const SizedBox(height: 24),
           ],
         ),
+      ),
       ),
       ),
     );
