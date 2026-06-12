@@ -158,21 +158,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
       _api.setCachedTokens(token: token, refreshToken: refreshToken);
 
-      // Fetch profile pic for admin and teacher
+      // Fetch the saved profile pic for every role. The backend /me returns it
+      // for any user, so a fresh login on a new device restores the avatar that
+      // was uploaded elsewhere (students/parents were previously skipped here,
+      // which is why their pic was missing after logging in on a new phone).
       String? profilePicUrl;
-      if (role == 'admin' || role == 'teacher') {
-        try {
-          final me = await _api.getMe();
-          profilePicUrl = me['profile_pic_url'] as String?;
-          if (profilePicUrl != null) {
-            try {
-              await _storage.write(
-                  key: AppConstants.profilePicUrlStorageKey,
-                  value: profilePicUrl);
-            } catch (_) {}
-          }
-        } catch (_) {}
-      }
+      try {
+        final me = await _api.getMe();
+        profilePicUrl = me['profile_pic_url'] as String?;
+        if (profilePicUrl != null) {
+          try {
+            await _storage.write(
+                key: AppConstants.profilePicUrlStorageKey,
+                value: profilePicUrl);
+          } catch (_) {}
+        }
+      } catch (_) {}
 
       state = AuthState(
         token: token,
