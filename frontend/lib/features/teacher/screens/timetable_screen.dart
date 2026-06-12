@@ -208,7 +208,10 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
 
         // ── Period list for selected day ──────────────────────────────────
         final periodList = selectedSlots.isEmpty
-                  ? Center(
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(top: 60),
+                      children: [Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -231,8 +234,9 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
                           ),
                         ],
                       ),
-                    )
+                    )])
                   : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                       itemCount: selectedSlots.length,
                       itemBuilder: (ctx, i) {
@@ -390,7 +394,15 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
             const SizedBox(height: 4),
             dayHeader,
             const SizedBox(height: 4),
-            Expanded(child: periodList),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(myTimetableProvider);
+                  ref.invalidate(teacherTimetableConfigProvider);
+                },
+                child: periodList,
+              ),
+            ),
           ],
         );
       },
@@ -799,7 +811,16 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
           ]),
         ),
         // Period rows
-        Expanded(child: periodEditor),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(
+                  teacherTimetableProvider((_selectedGrade, _dateString)));
+              ref.invalidate(teachersListProvider);
+            },
+            child: periodEditor,
+          ),
+        ),
       ],
     );
   }
@@ -1183,6 +1204,7 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
     const isWide = false; // Mobile layout on all form factors; web caps at 600 px.
 
     final gradeList = ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
       children: AppConstants.grades
           .map((grade) => _GradeSection(
@@ -1296,7 +1318,18 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
             ],
           ]),
         ),
-        Expanded(child: gradeList),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(teacherTimetableConfigProvider);
+              for (final grade in AppConstants.grades) {
+                ref.invalidate(
+                    teacherTimetableProvider((grade, _dateString)));
+              }
+            },
+            child: gradeList,
+          ),
+        ),
       ],
     );
   }
@@ -1866,6 +1899,7 @@ class _PeriodList extends StatelessWidget {
     final hasFooter = footer != null;
 
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: periods.length + (hasFooter ? 1 : 0),
       itemBuilder: (ctx, index) {

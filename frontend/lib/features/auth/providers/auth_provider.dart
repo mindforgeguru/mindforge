@@ -203,6 +203,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(profilePicUrl: url);
   }
 
+  /// Re-fetch the current user's profile from /me (e.g. on pull-to-refresh of
+  /// a profile screen) so a photo uploaded on another device shows up here.
+  Future<void> refreshProfile() async {
+    try {
+      final me = await _api.getMe();
+      final url = me['profile_pic_url'] as String?;
+      if (url != null && url != state.profilePicUrl) {
+        try {
+          await _storage.write(
+              key: AppConstants.profilePicUrlStorageKey, value: url);
+        } catch (_) {}
+        state = state.copyWith(profilePicUrl: url);
+      }
+    } catch (_) {
+      // Best-effort; pull-to-refresh should never surface an error here.
+    }
+  }
+
   Future<void> updateUsername(String newUsername) async {
     try {
       await _storage.write(key: AppConstants.usernameStorageKey, value: newUsername);

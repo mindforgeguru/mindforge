@@ -140,7 +140,11 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: RefreshIndicator(
+        onRefresh: () async =>
+            ref.invalidate(feeSummariesProvider(_selectedYear)),
+        child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(pad, pad, pad, pad + 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -381,6 +385,7 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

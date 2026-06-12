@@ -45,7 +45,13 @@ class AdminAcademicYearScreen extends ConsumerWidget {
           final current = currentAsync.valueOrNull;
           final previous = years.where((y) => y['is_current'] == false).toList();
 
-          return ListView(
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(academicYearsProvider);
+              ref.invalidate(currentAcademicYearProvider);
+            },
+            child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             children: [
               // ── Current year banner ──────────────────────────────────
@@ -99,6 +105,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
                 ...previous.map((y) => _PreviousYearCard(year: y)),
               ],
             ],
+          ),
           );
         },
       ),

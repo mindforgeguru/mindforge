@@ -114,7 +114,13 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
 
     return StudentScaffold(
       appBar: AppBar(title: const Text('My Profile')),
-      body: SingleChildScrollView(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(studentGradeProvider);
+          ref.invalidate(studentProfileProvider);
+        },
+        child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
             R.sp(context, 16), 12, R.sp(context, 16), 12),
         child: Column(
@@ -353,6 +359,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
             const SizedBox(height: 12),
           ],
         ),
+      ),
       ),
     );
   }

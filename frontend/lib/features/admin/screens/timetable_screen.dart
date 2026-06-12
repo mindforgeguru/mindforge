@@ -218,7 +218,10 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
         data: (config) {
           _initFromConfig(config);
 
-          return SingleChildScrollView(
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(timetableConfigProvider),
+            child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -398,6 +401,7 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
                 const SizedBox(height: 20),
               ],
             ),
+          ),
           );
         },
       ),
