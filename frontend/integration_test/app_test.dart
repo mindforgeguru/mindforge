@@ -18,8 +18,12 @@ void main() {
   // land off-screen (the widget tree still uses the real size for layout,
   // but tester.tap's hit-test uses the overridden frame).
   const _phoneSize = Size(390.0, 844.0); // iPhone 14 logical points
-  final bool _isUnitTestBinding =
-      binding is! LiveTestWidgetsFlutterBinding;
+  // Runtime binding-type guard: under `flutter test` the binding is not a
+  // LiveTestWidgetsFlutterBinding, but its static type makes the analyzer
+  // think this check is always false. Keep it — it governs the phone-size
+  // override below.
+  // ignore: unnecessary_type_check
+  final bool _isUnitTestBinding = binding is! LiveTestWidgetsFlutterBinding;
 
   setUp(() async {
     // Clear saved auth token before every test so each one starts from

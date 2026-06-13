@@ -54,20 +54,17 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final bool isActive;
 
   const _NavItem({
-    super.key, 
-    required this.icon, 
-    required this.label, 
+    required this.icon,
+    required this.label,
     required this.onTap,
-    this.isActive = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final currentPath = GoRouterState.of(context).uri.toString();
-    final active = isActive || _isActivePath(currentPath);
+    final active = _isActivePath(currentPath);
     final color = active ? AppColors.accent : AppColors.primary;
     return GestureDetector(
       onTap: () { HapticFeedback.lightImpact(); onTap(); },
