@@ -7,7 +7,6 @@ import '../../../core/providers/badge_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
-import '../../../core/widgets/badge_dot.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
