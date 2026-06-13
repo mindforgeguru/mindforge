@@ -211,14 +211,19 @@ void main() {
       verify(() => api.getMe()).called(1);
     });
 
-    test('student login — does NOT call getMe', () async {
+    test('student login — calls getMe to restore profile pic', () async {
+      // The avatar is restored for every role on a fresh login (e.g. a new
+      // device), so student logins fetch /me just like admin/teacher.
       when(() => api.login('alice', '123456'))
           .thenAnswer((_) async => _loginResponse(role: 'student'));
+      when(() => api.getMe()).thenAnswer((_) async =>
+          {'profile_pic_url': 'https://cdn.example.com/alice.jpg'});
 
       final n = _make();
       await n.login('alice', '123456');
 
-      verifyNever(() => api.getMe());
+      expect(n.state.profilePicUrl, 'https://cdn.example.com/alice.jpg');
+      verify(() => api.getMe()).called(1);
     });
 
     test('401 error — sets "Invalid username or MPIN" message', () async {
