@@ -104,7 +104,7 @@ void main() {
     });
 
     test('isExpired is true when expiresAt is in past', () {
-      final past = '2020-01-01T00:00:00';
+      const past = '2020-01-01T00:00:00';
       final m = TestModel.fromJson(_testJson(expiresAt: past));
       expect(m.isExpired, isTrue);
     });

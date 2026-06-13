@@ -242,7 +242,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
           Row(children: [
             Expanded(
               child: DropdownButtonFormField<int>(
-                value: _selectedGrade,
+                initialValue: _selectedGrade,
                 decoration: const InputDecoration(labelText: 'Grade'),
                 hint: const Text('Select Grade'),
                 items: AppConstants.grades
@@ -260,7 +260,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: _selectedSubject,
+                initialValue: _selectedSubject,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Subject'),
                 hint: const Text('Select Subject'),
@@ -289,8 +289,8 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
                 onChanged: (v) => setState(() => _selectedChapter = v),
               )
             else
-              InputDecorator(
-                decoration: const InputDecoration(
+              const InputDecorator(
+                decoration: InputDecoration(
                   labelText: 'Chapter',
                   border: OutlineInputBorder(),
                 ),
@@ -565,8 +565,8 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
               ],
             ),
           if (_uploadedChapter == null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
               child: Text(
                 'Supported: PDF, JPG, PNG',
                 style: TextStyle(fontSize: 11, color: AppColors.textMuted),
@@ -606,8 +606,8 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
               ),
               const Spacer(),
               if (overLimit)
-                Text('Over 100%!',
-                    style: const TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.w600))
+                const Text('Over 100%!',
+                    style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.w600))
               else
                 Text('Total: 100%',
                     style: TextStyle(color: Colors.green.shade700, fontSize: 11, fontWeight: FontWeight.w600)),
@@ -650,16 +650,16 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
                 Container(
                   width: 36,
                   alignment: Alignment.center,
-                  child: Text(
+                  child: const Text(
                     '[AI]',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 11,
                         color: Color(0xFF6A1B9A)),
                   ),
                 ),
                 const SizedBox(width: 6),
-                Expanded(
+                const Expanded(
                   child: Text(
                     'Fully AI-generated',
                     style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
@@ -813,9 +813,9 @@ class _ChapterPicker extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               InputDecorator(
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Chapter',
-                  border: const OutlineInputBorder(),
+                  border: OutlineInputBorder(),
                   suffixIcon: Icon(Icons.warning_amber_rounded,
                       color: AppColors.warning, size: 20),
                 ),
@@ -825,7 +825,7 @@ class _ChapterPicker extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
+              const Text(
                 'Upload chapter PDFs or a syllabus PDF in the Database tab first.',
                 style: TextStyle(fontSize: 11, color: AppColors.warning),
               ),
@@ -840,7 +840,7 @@ class _ChapterPicker extends ConsumerWidget {
         }
 
         return DropdownButtonFormField<String>(
-          value: validValue,
+          initialValue: validValue,
           isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Chapter',
@@ -978,13 +978,15 @@ class _SourceOptionCard extends StatelessWidget {
                 ],
               ),
             ),
-            Radio<String>(
-              value: value,
-              groupValue: groupValue,
-              onChanged: (_) => onTap(),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              activeColor: AppColors.primary,
-              visualDensity: VisualDensity.compact,
+            // Visual-only indicator — the whole card is the tap target
+            // (GestureDetector above), so a plain icon avoids the deprecated
+            // Radio.groupValue/onChanged API.
+            Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              size: 20,
+              color: selected ? AppColors.primary : AppColors.textMuted,
             ),
           ],
         ),
@@ -1246,21 +1248,21 @@ class _TestTileState extends ConsumerState<_TestTile> {
               children: [
                 // Status label
                 if (isGenerating)
-                  Row(
+                  const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(
+                      SizedBox(
                         width: 11, height: 11,
                         child: CircularProgressIndicator(strokeWidth: 1.6),
                       ),
-                      const SizedBox(width: 6),
+                      SizedBox(width: 6),
                       Text('Generating quiz…',
                           style: TextStyle(
                               fontSize: 11, color: AppColors.warning)),
                     ],
                   )
                 else if (isFailed)
-                  Text('Generation failed',
+                  const Text('Generation failed',
                       style: TextStyle(fontSize: 11, color: AppColors.error))
                 else if (isOnline && test.expiresAt != null)
                   Text(

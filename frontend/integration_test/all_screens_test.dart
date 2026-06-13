@@ -61,7 +61,9 @@ void main() {
   }
 
   Future<void> enterMpin(WidgetTester t, String mpin) async {
-    for (final d in mpin.split('')) await tapDigit(t, d);
+    for (final d in mpin.split('')) {
+      await tapDigit(t, d);
+    }
   }
 
   /// Login and wait up to 8 s for the network + navigation to settle.

@@ -1396,7 +1396,7 @@ class _RecentMarksChart extends StatelessWidget {
                 drawVerticalLine: false,
                 horizontalInterval: yCeiling / 4,
                 getDrawingHorizontalLine: (_) =>
-                    FlLine(color: const Color(0xFFE5E7EB), strokeWidth: 1),
+                    const FlLine(color: Color(0xFFE5E7EB), strokeWidth: 1),
               ),
               borderData: FlBorderData(show: false),
               titlesData: FlTitlesData(

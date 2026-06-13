@@ -129,7 +129,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                       height: navyH,
                       decoration:       BoxDecoration(
                         color: AppColors.primary,
-                        borderRadius: BorderRadius.only(
+                        borderRadius: const BorderRadius.only(
                           bottomLeft: Radius.circular(44),
                           bottomRight: Radius.circular(44),
                         ),

@@ -31,12 +31,12 @@ class StudentGradeScreen extends StatelessWidget {
     final isWide = MediaQuery.of(context).size.width >= 900;
 
     if (isWide) {
-      return StudentScaffold(
+      return const StudentScaffold(
         // Three-column layout needs the full browser width — opt out of the
         // scaffold's default 600 px phone-shaped centre column.
         wideContent: true,
         body: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -44,31 +44,31 @@ class StudentGradeScreen extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: const [
+                  children: [
                     _SectionHeader(title: 'Online Tests', icon: Icons.computer_outlined),
                     SizedBox(height: 12),
                     Expanded(child: _OnlineGradesTab()),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               // Column 2 — Offline Tests
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: const [
+                  children: [
                     _SectionHeader(title: 'Offline Tests', icon: Icons.print_outlined),
                     SizedBox(height: 12),
                     Expanded(child: _OfflineGradesTab()),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               // Column 3 — Analysis
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: const [
+                  children: [
                     _SectionHeader(title: 'Analysis', icon: Icons.bar_chart_outlined),
                     SizedBox(height: 12),
                     Expanded(child: _AnalysisTab()),
@@ -101,7 +101,7 @@ class StudentGradeScreen extends StatelessWidget {
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
             indicatorColor: AppColors.accent,
-            tabs: [
+            tabs: const [
               Tab(text: 'Online Tests'),
               Tab(text: 'Offline Tests'),
               Tab(text: 'Analysis'),
@@ -423,7 +423,7 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
 
                 // Subject dropdown
                 DropdownButtonFormField<String?>(
-                  value: _subject,
+                  initialValue: _subject,
                   decoration: const InputDecoration(
                     labelText: 'Subject',
                     isDense: true,
@@ -1086,7 +1086,7 @@ class _GradesTabBody extends StatelessWidget {
           ? const EdgeInsets.only(bottom: 16)
           : const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: DropdownButtonFormField<String?>(
-        value: filterSubject,
+        initialValue: filterSubject,
         decoration: const InputDecoration(
           labelText: 'Filter by Subject',
           isDense: true,
@@ -1222,7 +1222,7 @@ class _GradeCard extends StatelessWidget {
                 children: [
                   Icon(Icons.visibility_outlined,
                       size: 13, color: AppColors.primary),
-                  SizedBox(width: 4),
+                  const SizedBox(width: 4),
                   Text('Tap to review test',
                       style: TextStyle(
                           fontSize: 11,

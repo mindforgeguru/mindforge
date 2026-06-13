@@ -87,7 +87,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.slideshow_outlined,
+            const Icon(Icons.slideshow_outlined,
                 size: 48, color: AppColors.textMuted),
             const SizedBox(height: 12),
             Text(

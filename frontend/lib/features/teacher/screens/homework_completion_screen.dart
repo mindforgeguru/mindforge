@@ -457,7 +457,7 @@ class _StudentTile extends StatelessWidget {
             SizedBox(width: R.sp(context, 4, min: 2, max: 8)),
             Switch.adaptive(
               value: completed && !isLocked,
-              activeColor: AppColors.success,
+              activeThumbColor: AppColors.success,
               inactiveTrackColor: AppColors.error.withValues(alpha: 0.3),
               // null disables the switch — Flutter renders it greyed out.
               onChanged: onChanged,

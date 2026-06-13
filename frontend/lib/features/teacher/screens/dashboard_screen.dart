@@ -1530,7 +1530,7 @@ class _GradeAnalysisChartState extends State<_GradeAnalysisChart> {
                 gridData: FlGridData(
                   show: true,
                   horizontalInterval: 25,
-                  getDrawingHorizontalLine: (_) => FlLine(color: AppColors.divider, strokeWidth: 1),
+                  getDrawingHorizontalLine: (_) => const FlLine(color: AppColors.divider, strokeWidth: 1),
                   drawVerticalLine: false,
                 ),
                 borderData: FlBorderData(show: false),
@@ -1666,10 +1666,10 @@ class _TodayWorkflowCard extends StatelessWidget {
               const SizedBox(height: 6),
               const Divider(height: 1, color: AppColors.divider),
               const SizedBox(height: 10),
-              Row(
+              const Row(
                 children: [
                   _LegendDot(color: _doneColor, label: 'Done'),
-                  const SizedBox(width: 16),
+                  SizedBox(width: 16),
                   _LegendDot(color: _pendingColor, label: 'Pending'),
                 ],
               ),

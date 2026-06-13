@@ -39,7 +39,7 @@ class ParentGradeScreen extends StatelessWidget {
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
             indicatorColor: AppColors.accent,
-            tabs: [
+            tabs: const [
               Tab(text: 'Online Tests'),
               Tab(text: 'Offline Tests'),
               Tab(text: 'Analysis'),
@@ -285,7 +285,7 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String?>(
-                  value: _subject,
+                  initialValue: _subject,
                   decoration: const InputDecoration(
                     labelText: 'Subject',
                     isDense: true,
@@ -845,7 +845,7 @@ class _GradesTabBody extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: DropdownButtonFormField<String?>(
-            value: filterSubject,
+            initialValue: filterSubject,
             decoration: const InputDecoration(
               labelText: 'Filter by Subject',
               isDense: true,

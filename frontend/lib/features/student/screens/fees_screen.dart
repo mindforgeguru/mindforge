@@ -38,7 +38,7 @@ class StudentFeesScreen extends ConsumerWidget {
                       labelColor: Colors.white,
                       unselectedLabelColor: Colors.white60,
                       indicatorColor: AppColors.accent,
-                      tabs: [
+                      tabs: const [
                         Tab(
                             icon: Icon(Icons.receipt_long_outlined),
                             text: 'Summary'),

@@ -114,7 +114,7 @@ class _AdminFeedbackScreenState extends ConsumerState<AdminFeedbackScreen> {
                           '${_formatTime(r['created_at'] as String)}'
                           '${r['route'] != null ? ' · ${r['route']}' : ''}'
                           '${r['app_version'] != null ? ' · v${r['app_version']}' : ''}',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,
                           ),

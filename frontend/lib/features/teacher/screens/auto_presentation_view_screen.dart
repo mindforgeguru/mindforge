@@ -261,7 +261,7 @@ class _FailedView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, color: AppColors.error, size: 40),
+            const Icon(Icons.error_outline, color: AppColors.error, size: 40),
             const SizedBox(height: 14),
             Text(
               'Generation failed.',
@@ -295,7 +295,7 @@ class _FailedView extends StatelessWidget {
                   label: const Text('Delete'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.error,
-                    side: BorderSide(color: AppColors.error),
+                    side: const BorderSide(color: AppColors.error),
                   ),
                   onPressed: onDelete,
                 ),
@@ -445,8 +445,8 @@ class _ReadyView extends ConsumerWidget {
                     children: [
                       Row(
                         children: [
-                          Text('📈',
-                              style: const TextStyle(fontSize: 14)),
+                          const Text('📈',
+                              style: TextStyle(fontSize: 14)),
                           const SizedBox(width: 6),
                           Text(
                             'YOUR PROGRESS',
@@ -533,8 +533,8 @@ class _ReadyView extends ConsumerWidget {
                     children: [
                       Row(
                         children: [
-                          Text('🪧',
-                              style: const TextStyle(fontSize: 14)),
+                          const Text('🪧',
+                              style: TextStyle(fontSize: 14)),
                           const SizedBox(width: 6),
                           Text(
                             'NOT ON YOUR DASHBOARD',
@@ -1088,7 +1088,7 @@ class _SlideCard extends StatelessWidget {
                     Divider(color: accentColor.withValues(alpha: 0.2)),
                     Row(
                       children: [
-                        Text('🎤', style: const TextStyle(fontSize: 12)),
+                        const Text('🎤', style: TextStyle(fontSize: 12)),
                         const SizedBox(width: 6),
                         Text(
                           'SPEAKER NOTES',
@@ -1175,7 +1175,7 @@ class _PeriodLogsStrip extends StatelessWidget {
                       ),
                       if (canEdit) ...[
                         const Spacer(),
-                        Icon(Icons.edit_outlined,
+                        const Icon(Icons.edit_outlined,
                             size: 13, color: AppColors.textMuted),
                       ],
                     ],
@@ -1536,7 +1536,7 @@ Future<void> _showEditPeriodLogDialog(
             const SizedBox(height: 4),
             Row(
               children: [
-                Icon(Icons.info_outline, size: 13, color: AppColors.textMuted),
+                const Icon(Icons.info_outline, size: 13, color: AppColors.textMuted),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(

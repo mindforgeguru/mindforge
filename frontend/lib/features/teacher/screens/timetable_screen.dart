@@ -566,7 +566,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: DropdownButtonFormField<int>(
-            value: _selectedGrade,
+            initialValue: _selectedGrade,
             decoration: const InputDecoration(
               labelText: 'Grade',
               prefixIcon: Icon(Icons.school_outlined, size: 18),
@@ -1418,7 +1418,7 @@ class _PeriodRowState extends State<_PeriodRow> {
               if (timeRange != null) ...[
                 const SizedBox(width: 10),
                 Text(
-                  '${timeRange!.$1}  –  ${timeRange!.$2}',
+                  '${timeRange.$1}  –  ${timeRange.$2}',
                   style: const TextStyle(
                       fontSize: 13, color: AppColors.textMuted),
                 ),
@@ -1429,7 +1429,7 @@ class _PeriodRowState extends State<_PeriodRow> {
 
           // Teacher dropdown — full width
           DropdownButtonFormField<int?>(
-            value: selectedTeacherId,
+            initialValue: selectedTeacherId,
             decoration: const InputDecoration(
               labelText: 'Teacher',
               isDense: true,
@@ -1462,7 +1462,7 @@ class _PeriodRowState extends State<_PeriodRow> {
 
           // Subject dropdown — full width
           DropdownButtonFormField<String?>(
-            value: selectedSubject != null &&
+            initialValue: selectedSubject != null &&
                     allowedSubjects.contains(selectedSubject)
                 ? selectedSubject
                 : null,

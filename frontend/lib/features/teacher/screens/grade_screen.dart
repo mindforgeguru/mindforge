@@ -160,7 +160,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<int?>(
-                      value: _filterGrade,
+                      initialValue: _filterGrade,
                       decoration: const InputDecoration(
                           labelText: 'Grade', isDense: true),
                       items: [
@@ -182,7 +182,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      value: _filterSubject,
+                      initialValue: _filterSubject,
                       isExpanded: true,
                       decoration: const InputDecoration(
                           labelText: 'Subject', isDense: true),
@@ -212,7 +212,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                   loading: () => const LinearProgressIndicator(),
                   error: (e, _) => const SizedBox.shrink(),
                   data: (studs) => DropdownButtonFormField<int?>(
-                    value: _filterStudentId,
+                    initialValue: _filterStudentId,
                     decoration: const InputDecoration(
                         labelText: 'Student', isDense: true),
                     items: [
@@ -433,7 +433,7 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: DropdownButtonFormField<int>(
-            value: _selectedGrade,
+            initialValue: _selectedGrade,
             decoration: const InputDecoration(labelText: 'Grade', isDense: true),
             items: [8, 9, 10]
                 .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))
@@ -782,7 +782,7 @@ class _GradeEntrySheetState extends ConsumerState<_GradeEntrySheet> {
             child: studentsAsync.when(
               loading: () =>
                   const ShimmerList(itemCount: 4, itemHeight: 56),
-              error: (e, _) => Center(
+              error: (e, _) => const Center(
                 child: Text(
                   'Could not load students.',
                   style: TextStyle(color: AppColors.textMuted),

@@ -144,8 +144,8 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                       children: [
                         Icon(Icons.lock_outline,
                             size: 18, color: AppColors.accent),
-                        SizedBox(width: 8),
-                        Text('Change MPIN',
+                        const SizedBox(width: 8),
+                        const Text('Change MPIN',
                             style: TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 15)),
                       ],
