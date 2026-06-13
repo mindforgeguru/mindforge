@@ -19,6 +19,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/widgets/badge_dot.dart';
+import '../../../core/widgets/holiday_banner.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -548,7 +549,7 @@ class _StudentDashboardScreenState
                 child: slots.isEmpty
                     ? _TimetableEmpty()
                     : isHoliday
-                        ? _TimetableHoliday(reason: holidayReason)
+                        ? HolidayBanner(reason: holidayReason)
                         : _TimetableHScroll(slots: slots),
               );
             },
@@ -891,110 +892,6 @@ class _TimetableEmpty extends StatelessWidget {
     });
   }
 }
-
-/// Festive holiday banner shown in the dashboard timetable box when today
-/// is marked as a holiday in the timetable.
-class _TimetableHoliday extends StatelessWidget {
-  final String reason;
-  const _TimetableHoliday({this.reason = ''});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final sw = constraints.maxWidth;
-      final hPad = (sw * 0.04).clamp(12.0, 20.0);
-      final emojiSize = (sw * 0.085).clamp(30.0, 40.0);
-      final titleSize = (sw * 0.05).clamp(16.0, 22.0);
-      final subSize = (sw * 0.032).clamp(11.0, 14.0);
-      final hasReason = reason.trim().isNotEmpty;
-
-      return Container(
-        margin: EdgeInsets.fromLTRB(hPad, 0, hPad, 16),
-        padding: EdgeInsets.symmetric(
-          horizontal: (sw * 0.05).clamp(16.0, 24.0),
-          vertical: (sw * 0.055).clamp(18.0, 26.0),
-        ),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF38BDF8), Color(0xFF6366F1)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF6366F1).withValues(alpha: 0.30),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // Faint oversized emoji watermark in the corner for a playful feel.
-            Positioned(
-              right: -6,
-              top: -10,
-              child: Opacity(
-                opacity: 0.18,
-                child: Text('☀️',
-                    style: TextStyle(fontSize: emojiSize * 1.8)),
-              ),
-            ),
-            Row(
-              children: [
-                Container(
-                  width: emojiSize * 1.7,
-                  height: emojiSize * 1.7,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.22),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text('🏖️', style: TextStyle(fontSize: emojiSize)),
-                ),
-                SizedBox(width: (sw * 0.04).clamp(12.0, 18.0)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Holiday! 🎉',
-                        style: GoogleFonts.poppins(
-                          fontSize: titleSize,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.05,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        hasReason
-                            ? reason.trim()
-                            : 'No classes today — enjoy your day off!',
-                        style: GoogleFonts.poppins(
-                          fontSize: subSize,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withValues(alpha: 0.92),
-                          height: 1.25,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    });
-  }
-}
-
 class _TimetableHScroll extends StatelessWidget {
   final List<TimetableSlotModel> slots;
   const _TimetableHScroll({required this.slots});
