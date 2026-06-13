@@ -269,6 +269,24 @@ class _TeacherDashboardScreenState
       orElse: () => <TimetableSlotModel>[],
     );
 
+    // Whole-school holiday flag, derived from the grade-wide workflow data.
+    // The summary's my_timetable is filtered by teacher_id and a holiday
+    // marker carries none, so it never reaches the teacher — the workflow
+    // endpoint is the reliable source. True when every grade with today's
+    // timetable filled in is a holiday.
+    final isSchoolHoliday =
+        ref.watch(teacherTodayWorkflowProvider).maybeWhen(
+      data: (data) {
+        final grades =
+            (data['grades'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+        final withTimetable =
+            grades.where((g) => g['timetable_created'] == true).toList();
+        return withTimetable.isNotEmpty &&
+            withTimetable.every((g) => g['is_holiday'] == true);
+      },
+      orElse: () => false,
+    );
+
     final subjects = summaryAsync.maybeWhen(
       data: (summary) {
         final raw = (summary['my_timetable'] as List<dynamic>? ?? []);
@@ -949,20 +967,22 @@ class _TeacherDashboardScreenState
             ),
             error: (e, _) => const SliverToBoxAdapter(child: SizedBox.shrink()),
             data: (_) {
-              // A holiday day has slots, all flagged as holiday — show the
-              // festive banner instead of per-period holiday cards.
-              final isHoliday = todaySlots.isNotEmpty &&
+              // A local holiday day has slots, all flagged as holiday. A
+              // whole-school holiday won't reach my_timetable at all (the
+              // holiday marker has no teacher_id), so fall back to the
+              // grade-wide flag — otherwise the teacher just sees an empty box.
+              final localHoliday = todaySlots.isNotEmpty &&
                   todaySlots.every((s) => s.isHoliday);
-              final holidayReason = isHoliday
+              final holidayReason = localHoliday
                   ? todaySlots
                       .map((s) => (s.comment ?? '').trim())
                       .firstWhere((c) => c.isNotEmpty, orElse: () => '')
                   : '';
               return SliverToBoxAdapter(
-                child: todaySlots.isEmpty
-                    ? _TimetableEmpty()
-                    : isHoliday
-                        ? _TimetableHoliday(reason: holidayReason)
+                child: (localHoliday || isSchoolHoliday)
+                    ? _TimetableHoliday(reason: holidayReason)
+                    : todaySlots.isEmpty
+                        ? _TimetableEmpty()
                         : _TimetableHScroll(slots: todaySlots),
               );
             },
@@ -2134,8 +2154,17 @@ class _TodayWorkflowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isHoliday = data['is_holiday_for_teacher'] == true;
     final grades = (data['grades'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    // Whole-school holiday: among the grades that have today's timetable
+    // filled in, every one is a holiday. (Grades with no timetable yet are
+    // "not created", not a contradiction.) Marking a holiday strips the
+    // teacher_id off slots, so the dashboard summary's my_timetable can't see
+    // it — this grade-wide workflow data is the reliable holiday signal.
+    final gradesWithTimetable =
+        grades.where((g) => g['timetable_created'] == true).toList();
+    final isHoliday = data['is_holiday_for_teacher'] == true ||
+        (gradesWithTimetable.isNotEmpty &&
+            gradesWithTimetable.every((g) => g['is_holiday'] == true));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
