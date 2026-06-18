@@ -725,6 +725,52 @@ def _personalize_questions(
     return prepared
 
 
+def _resolve_correct_key(options: Dict[str, Any], answer: str) -> Optional[str]:
+    """Map an MCQ answer key (given as a letter or as the option text) back to
+    the original option key it refers to. Returns None if it matches neither."""
+    ans = (answer or "").strip().lower()
+    if not ans:
+        return None
+    for k in options:
+        if str(k).strip().lower() == ans:
+            return k
+    for k, v in options.items():
+        if str(v).strip().lower() == ans:
+            return k
+    return None
+
+
+def _personalize_questions_for_review(
+    questions: List[Dict[str, Any]], *, student_id: int, test_id: int
+) -> List[Dict[str, Any]]:
+    """Build the per-student review payload. Applies the SAME per-question MCQ
+    option shuffle the student saw during the attempt, and remaps the answer key
+    onto the displayed A/B/C/... labels so it lines up with the stored answers
+    (which are the displayed letters the student tapped).
+
+    Unlike `_personalize_questions`, the answer is kept (review is only served
+    after the attempt is finalized) and question order is preserved — answers are
+    keyed by question id, so order is irrelevant to the review display."""
+    prepared: List[Dict[str, Any]] = []
+    for q in questions or []:
+        c = dict(q)
+        if (c.get("type") == "mcq"
+                and isinstance(c.get("options"), dict) and c["options"]):
+            original = c["options"]
+            order = _mcq_display_order(
+                c.get("id"), list(original.keys()),
+                student_id=student_id, test_id=test_id,
+            )
+            c["options"] = {
+                chr(65 + i): original[k] for i, k in enumerate(order)
+            }
+            correct_key = _resolve_correct_key(original, str(c.get("answer", "")))
+            if correct_key is not None and correct_key in order:
+                c["answer"] = chr(65 + order.index(correct_key))
+        prepared.append(c)
+    return prepared
+
+
 def _attempt_response(
     submission: TestSubmission, test: Test, *, now: datetime
 ) -> TestAttemptResponse:
@@ -1139,7 +1185,11 @@ async def get_test_review(
         "subject": test.subject,
         "total_marks": test.total_marks,
         "score": submission.score,
-        "questions": test.questions or [],
+        "questions": _personalize_questions_for_review(
+            test.questions or [],
+            student_id=current_student.id,
+            test_id=test.id,
+        ),
         "student_answers": submission.answers or {},
     }
 
