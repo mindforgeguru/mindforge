@@ -293,6 +293,9 @@ class _TeacherDashboardScreenState
             .map((e) =>
                 TimetableSlotModel.fromJson(e as Map<String, dynamic>).subject)
             .whereType<String>()
+            .map((s) => s.trim())
+            // Drop blank subjects (e.g. holiday markers carry subject: '').
+            .where((s) => s.isNotEmpty)
             .toSet()
             .toList()
           ..sort();
@@ -305,11 +308,26 @@ class _TeacherDashboardScreenState
     final double cardRadius = (screenWidth * 0.062).clamp(20.0, 28.0);
     final double cardHMargin = (screenWidth * 0.04).clamp(12.0, 20.0);
     final double cardIntoNavy = (screenHeight * 0.066).clamp(44.0, 60.0);
-    final double navyH = topPadding + (screenHeight * 0.165).clamp(95.0, 142.0);
-    // Smaller fonts → less height needed
+
+    // Responsive logo / text sizes for header (logoH governs how far the
+    // MIND FORGE wordmark extends down, so it's needed before navyH).
+    final double logoH = (screenWidth * 0.142).clamp(42.0, 58.0);
+    final double titleFs = (screenWidth * 0.062).clamp(18.0, 25.0);
+
+    // Navy hero height. On a wide-but-short web viewport the proportional
+    // value collapses to its minimum while the wordmark stays tall, which let
+    // the overlapping avatar ride up into the branding. Floor navyH so the
+    // avatar's top (navyH − cardIntoNavy) always clears the wordmark.
+    final double brandingBottom = topPadding + 16 + logoH;
+    final double navyH = topPadding +
+        math.max((screenHeight * 0.165).clamp(95.0, 142.0),
+            brandingBottom + cardIntoNavy + 10 - topPadding);
+    // Smaller fonts → less height needed. The extra buffer keeps a 2–3 row
+    // subject list from overflowing the fixed header height onto the workflow
+    // card below.
     final double cardInternalH = subjects.isEmpty
         ? (avatarRadius + 90).clamp(128.0, 155.0)
-        : (avatarRadius + 116).clamp(152.0, 185.0);
+        : (avatarRadius + 132).clamp(168.0, 215.0);
     final double headerH = navyH + cardInternalH - cardIntoNavy + avatarRadius;
 
     // Web + mobile use the same sliver-based layout below — same navy hero
@@ -318,10 +336,6 @@ class _TeacherDashboardScreenState
     // 600 px on web, so it reads as a phone-shaped centred column.
     // (The earlier custom web hero with stat tiles is intentionally retired
     // so all three roles look the same on web.)
-
-    // Responsive logo / text sizes for header
-    final double logoH = (screenWidth * 0.142).clamp(42.0, 58.0);
-    final double titleFs = (screenWidth * 0.062).clamp(18.0, 25.0);
 
     return TeacherScaffold(
       backgroundColor: AppColors.background,
@@ -524,6 +538,14 @@ class _TeacherDashboardScreenState
           ),
 
           // ── Today's workflow card ─────────────────────────────────────
+          SliverToBoxAdapter(
+              child: SizedBox(height: _s(context, 12, min: 8, max: 16))),
+          const SliverToBoxAdapter(
+            child: _DashSectionHeader(
+              icon: Icons.map_outlined,
+              title: "Today's Workflow",
+            ),
+          ),
           SliverToBoxAdapter(
             child: Consumer(
               builder: (context, ref, _) {
@@ -777,9 +799,9 @@ class _TeacherDashboardScreenState
 class _DashSectionHeader extends StatelessWidget {
   final IconData icon;
   final String title;
-  final VoidCallback onSeeAll;
+  final VoidCallback? onSeeAll;
   final bool showBadge;
-  const _DashSectionHeader({required this.icon, required this.title, required this.onSeeAll, this.showBadge = false});
+  const _DashSectionHeader({required this.icon, required this.title, this.onSeeAll, this.showBadge = false});
 
   @override
   Widget build(BuildContext context) {
@@ -803,18 +825,19 @@ class _DashSectionHeader extends StatelessWidget {
               color: AppColors.primary,
             )),
             const Spacer(),
-            TextButton(
-              onPressed: onSeeAll,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: const Size(48, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            if (onSeeAll != null)
+              TextButton(
+                onPressed: onSeeAll,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: const Size(48, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text('See all →', style: GoogleFonts.poppins(
+                  fontSize: (sw * 0.028).clamp(10.0, 12.0),
+                  color: AppColors.accent,
+                )),
               ),
-              child: Text('See all →', style: GoogleFonts.poppins(
-                fontSize: (sw * 0.028).clamp(10.0, 12.0),
-                color: AppColors.accent,
-              )),
-            ),
           ],
         ),
       );
@@ -1505,7 +1528,7 @@ class _TodayWorkflowCard extends StatelessWidget {
             gradesWithTimetable.every((g) => g['is_holiday'] == true));
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         decoration: BoxDecoration(
@@ -1522,18 +1545,6 @@ class _TodayWorkflowCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Text('🗺️', style: TextStyle(fontSize: 18)),
-                const SizedBox(width: 8),
-                Text("Today's Workflow",
-                    style: GoogleFonts.poppins(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary)),
-              ],
-            ),
-            const SizedBox(height: 10),
             if (grades.isNotEmpty)
               Wrap(
                 spacing: 8,

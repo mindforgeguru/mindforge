@@ -7,7 +7,6 @@ import '../../../core/providers/badge_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
-import '../../../core/widgets/report_problem_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
 import 'teacher_bottom_nav.dart';
@@ -195,14 +194,6 @@ class TeacherTopNav extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Tooltip(
-              message: 'Report a problem',
-              child: IconButton(
-                onPressed: () => showReportProblemDialog(context, ref),
-                icon: Icon(Icons.bug_report_outlined, size: 18, color: Colors.white.withValues(alpha: 0.65)),
-                splashRadius: 18,
-              ),
-            ),
             Tooltip(
               message: 'Logout',
               child: IconButton(
