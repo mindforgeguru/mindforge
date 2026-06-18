@@ -23,7 +23,7 @@ class StudentTestScreen extends ConsumerWidget {
       labelColor: Colors.white,
       unselectedLabelColor: Colors.white60,
       indicatorColor: AppColors.accent,
-      tabs: [
+      tabs: const [
         Tab(text: 'Online'),
         Tab(text: 'Offline'),
         Tab(text: 'Completed'),

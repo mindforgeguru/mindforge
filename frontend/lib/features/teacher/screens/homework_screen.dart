@@ -16,10 +16,12 @@ import '../widgets/teacher_scaffold.dart';
 
 // ─── Responsive helpers (local) ───────────────────────────────────────────────
 // Scale a base value linearly with screen width (reference = 390 px).
-double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
+double _s(BuildContext ctx, double base,
+    {double min = 0, double max = double.infinity}) {
   final w = MediaQuery.of(ctx).size.width;
   final scaled = base * (w / 390.0);
-  return scaled.clamp(min == 0 ? base * 0.75 : min, max == double.infinity ? base * 1.4 : max);
+  return scaled.clamp(
+      min == 0 ? base * 0.75 : min, max == double.infinity ? base * 1.4 : max);
 }
 
 double _fs(BuildContext ctx, double base, {double min = 10, double max = 22}) =>
@@ -35,8 +37,7 @@ class TeacherHomeworkScreen extends ConsumerStatefulWidget {
       _TeacherHomeworkScreenState();
 }
 
-class _TeacherHomeworkScreenState
-    extends ConsumerState<TeacherHomeworkScreen> {
+class _TeacherHomeworkScreenState extends ConsumerState<TeacherHomeworkScreen> {
   @override
   Widget build(BuildContext context) {
     return TeacherScaffold(
@@ -45,7 +46,7 @@ class _TeacherHomeworkScreenState
         title: FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
-            'Homework',
+            'Homework Review',
             style: GoogleFonts.poppins(
               fontSize: _fs(context, 16, min: 14, max: 20),
               fontWeight: FontWeight.w700,
@@ -62,6 +63,9 @@ class _TeacherHomeworkScreenState
 
 // ─── Homework Tab ─────────────────────────────────────────────────────────────
 
+// Review-status filter for the homework list.
+enum _HwFilter { all, pending, done }
+
 class _HomeworkTab extends ConsumerStatefulWidget {
   const _HomeworkTab();
 
@@ -71,6 +75,7 @@ class _HomeworkTab extends ConsumerStatefulWidget {
 
 class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
   int _selectedGrade = 8;
+  _HwFilter _filter = _HwFilter.all;
 
   @override
   Widget build(BuildContext context) {
@@ -82,69 +87,37 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Grade filter row ──────────────────────────────────────────────
+        // ── Grade selector — full-width segmented ─────────────────────────
         Padding(
           padding: EdgeInsets.fromLTRB(hPad, _s(context, 12, min: 8, max: 16),
-              hPad, _s(context, 4, min: 2, max: 6)),
-          child: Row(
-            children: [
-              Text(
-                'Grade:',
-                style: GoogleFonts.poppins(
-                  fontSize: _fs(context, 13, min: 11, max: 15),
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
-                ),
-              ),
-              SizedBox(width: _s(context, 8, min: 6, max: 12)),
-              // Chips in their own scrollable row — no Add button competing
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: AppConstants.grades.map((g) {
-                      final selected = _selectedGrade == g;
-                      return Padding(
-                        padding: EdgeInsets.only(
-                            right: _s(context, 6, min: 4, max: 10)),
-                        child: ChoiceChip(
-                          label: Text(
-                            'Grade $g',
-                            style: GoogleFonts.poppins(
-                              fontSize: _fs(context, 12, min: 10, max: 14),
-                              fontWeight: FontWeight.w600,
-                              color: selected
-                                  ? Colors.white
-                                  : AppColors.primary,
-                            ),
-                          ),
-                          selected: selected,
-                          selectedColor: AppColors.primary,
-                          onSelected: (_) =>
-                              setState(() => _selectedGrade = g),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.padded,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ],
+              hPad, _s(context, 8, min: 6, max: 12)),
+          child: _GradeSelector(
+            selected: _selectedGrade,
+            onChanged: (g) => setState(() => _selectedGrade = g),
+          ),
+        ),
+
+        // ── Status filter — All / Pending / Done ──────────────────────────
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              hPad, 0, hPad, _s(context, 8, min: 6, max: 12)),
+          child: _SegmentedFilter(
+            selected: _filter,
+            onChanged: (f) => setState(() => _filter = f),
           ),
         ),
 
         // ── Action buttons — Assign + No homework ─────────────────────────
         Padding(
-          padding: EdgeInsets.fromLTRB(hPad, 0, hPad,
-              _s(context, 8, min: 6, max: 12)),
+          padding: EdgeInsets.fromLTRB(
+              hPad, 0, hPad, _s(context, 8, min: 6, max: 12)),
           child: Row(
             children: [
               Expanded(
                 child: FilledButton.icon(
                   onPressed: () => _showCreateDialog(context),
-                  icon: Icon(Icons.add,
-                      size: _s(context, 16, min: 14, max: 20)),
+                  icon:
+                      Icon(Icons.add, size: _s(context, 16, min: 14, max: 20)),
                   label: Text(
                     'Assign Homework',
                     style: GoogleFonts.poppins(
@@ -189,37 +162,52 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
             loading: () => const ShimmerList(),
             error: (e, _) => ErrorView(
               error: e,
-              onRetry: () => ref.invalidate(teacherHomeworkProvider(_selectedGrade)),
+              onRetry: () =>
+                  ref.invalidate(teacherHomeworkProvider(_selectedGrade)),
             ),
-            data: (list) => list.isEmpty
-                ? const _EmptyState(
-                    icon: Icons.assignment_outlined,
-                    message: 'No homework assigned yet',
-                  )
-                : RefreshIndicator(
-                    onRefresh: () async =>
-                        ref.invalidate(teacherHomeworkProvider(_selectedGrade)),
-                    child: ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: EdgeInsets.fromLTRB(
-                        hPad, _s(context, 4, min: 2, max: 8),
-                        hPad, _s(context, 24, min: 16, max: 32),
-                      ),
-                      itemCount: list.length,
-                      separatorBuilder: (_, __) =>
-                          SizedBox(height: _s(context, 8, min: 6, max: 12)),
-                      itemBuilder: (ctx, i) => _HomeworkCard(
-                        hw: list[i],
-                        screenWidth: sw,
-                        onDelete: () async {
-                          final api = ref.read(apiClientProvider);
-                          await api.deleteHomework(list[i].id);
-                          ref.invalidate(
-                              teacherHomeworkProvider(_selectedGrade));
-                        },
-                      ),
-                    ),
+            data: (list) {
+              final filtered = switch (_filter) {
+                _HwFilter.all => list,
+                _HwFilter.pending =>
+                  list.where((h) => !h.reviewComplete).toList(),
+                _HwFilter.done => list.where((h) => h.reviewComplete).toList(),
+              };
+              if (filtered.isEmpty) {
+                return _EmptyState(
+                  icon: Icons.assignment_outlined,
+                  message: switch (_filter) {
+                    _HwFilter.all => 'No homework assigned yet',
+                    _HwFilter.pending => 'Nothing pending review',
+                    _HwFilter.done => 'Nothing reviewed yet',
+                  },
+                );
+              }
+              return RefreshIndicator(
+                onRefresh: () async =>
+                    ref.invalidate(teacherHomeworkProvider(_selectedGrade)),
+                child: ListView.separated(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    hPad,
+                    _s(context, 4, min: 2, max: 8),
+                    hPad,
+                    _s(context, 24, min: 16, max: 32),
                   ),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, __) =>
+                      SizedBox(height: _s(context, 8, min: 6, max: 12)),
+                  itemBuilder: (ctx, i) => _HomeworkCard(
+                    hw: filtered[i],
+                    screenWidth: sw,
+                    onDelete: () async {
+                      final api = ref.read(apiClientProvider);
+                      await api.deleteHomework(filtered[i].id);
+                      ref.invalidate(teacherHomeworkProvider(_selectedGrade));
+                    },
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],
@@ -285,9 +273,8 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
       );
     } on DioException catch (e) {
       if (!context.mounted) return;
-      final detail = e.response?.data is Map
-          ? (e.response!.data as Map)['detail']
-          : null;
+      final detail =
+          e.response?.data is Map ? (e.response!.data as Map)['detail'] : null;
       final code = detail is Map ? detail['code'] : null;
       if (e.response?.statusCode == 409 && code == 'homework_review_pending') {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -328,8 +315,7 @@ class _CreateHomeworkDialog extends ConsumerStatefulWidget {
       _CreateHomeworkDialogState();
 }
 
-class _CreateHomeworkDialogState
-    extends ConsumerState<_CreateHomeworkDialog> {
+class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
   final _formKey = GlobalKey<FormState>();
   late int _grade;
   String _subject = AppConstants.subjects.first;
@@ -364,11 +350,8 @@ class _CreateHomeworkDialogState
           ),
         ),
       ),
-      contentPadding: EdgeInsets.fromLTRB(
-          _s(context, 20, min: 14, max: 24),
-          12,
-          _s(context, 20, min: 14, max: 24),
-          0),
+      contentPadding: EdgeInsets.fromLTRB(_s(context, 20, min: 14, max: 24), 12,
+          _s(context, 20, min: 14, max: 24), 0),
       content: SizedBox(
         width: dialogWidth,
         child: Form(
@@ -380,7 +363,7 @@ class _CreateHomeworkDialogState
               children: [
                 // Grade
                 DropdownButtonFormField<int>(
-                  value: _grade,
+                  initialValue: _grade,
                   decoration: const InputDecoration(labelText: 'Grade'),
                   items: AppConstants.grades
                       .map((g) => DropdownMenuItem(
@@ -393,14 +376,13 @@ class _CreateHomeworkDialogState
                 SizedBox(height: _s(context, 10, min: 8, max: 14)),
                 // Subject
                 DropdownButtonFormField<String>(
-                  value: _subject,
+                  initialValue: _subject,
                   decoration: const InputDecoration(labelText: 'Subject'),
                   isExpanded: true,
                   items: AppConstants.subjects
                       .map((s) => DropdownMenuItem(
                             value: s,
-                            child: Text(s,
-                                overflow: TextOverflow.ellipsis),
+                            child: Text(s, overflow: TextOverflow.ellipsis),
                           ))
                       .toList(),
                   onChanged: (v) => setState(() => _subject = v!),
@@ -410,8 +392,7 @@ class _CreateHomeworkDialogState
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Title'),
                   onChanged: (v) => _title = v,
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Required' : null,
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                 ),
                 SizedBox(height: _s(context, 10, min: 8, max: 14)),
                 // Type — use Wrap so chips never overflow dialog
@@ -432,20 +413,16 @@ class _CreateHomeworkDialogState
                           style: GoogleFonts.poppins(
                               fontSize: _fs(context, 12, min: 10, max: 14))),
                       selected: _type == 'written',
-                      onSelected: (_) =>
-                          setState(() => _type = 'written'),
-                      materialTapTargetSize:
-                          MaterialTapTargetSize.padded,
+                      onSelected: (_) => setState(() => _type = 'written'),
+                      materialTapTargetSize: MaterialTapTargetSize.padded,
                     ),
                     ChoiceChip(
                       label: Text('Online Test',
                           style: GoogleFonts.poppins(
                               fontSize: _fs(context, 12, min: 10, max: 14))),
                       selected: _type == 'online_test',
-                      onSelected: (_) =>
-                          setState(() => _type = 'online_test'),
-                      materialTapTargetSize:
-                          MaterialTapTargetSize.padded,
+                      onSelected: (_) => setState(() => _type = 'online_test'),
+                      materialTapTargetSize: MaterialTapTargetSize.padded,
                     ),
                   ],
                 ),
@@ -468,11 +445,10 @@ class _CreateHomeworkDialogState
                     onTap: () async {
                       final picked = await showDatePicker(
                         context: context,
-                        initialDate: DateTime.now()
-                            .add(const Duration(days: 1)),
+                        initialDate:
+                            DateTime.now().add(const Duration(days: 1)),
                         firstDate: DateTime.now(),
-                        lastDate: DateTime.now()
-                            .add(const Duration(days: 365)),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
                       if (picked != null) {
                         setState(() => _dueDate = picked);
@@ -563,7 +539,8 @@ class _CreateHomeworkDialogState
             ? (e.response!.data as Map)['detail']
             : null;
         final code = detail is Map ? detail['code'] : null;
-        if (e.response?.statusCode == 409 && code == 'homework_review_pending') {
+        if (e.response?.statusCode == 409 &&
+            code == 'homework_review_pending') {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               backgroundColor: AppColors.warning,
@@ -608,10 +585,9 @@ class _HomeworkCard extends StatelessWidget {
     final isOnline = hw.isOnlineTest;
     final pad = _s(context, 14, min: 10, max: 20);
 
-    // Status-coded border so teachers can see at a glance what still needs
-    // reviewing: orange = review pending, green = review complete.
-    final borderColor =
-        hw.reviewComplete ? const Color(0xFF2E7D52) : const Color(0xFFE8821E);
+    // Review status shown as a pill in the top-right corner:
+    // orange = review pending, green = review complete.
+    final done = hw.reviewComplete;
 
     return LayoutBuilder(builder: (context, constraints) {
       return Material(
@@ -629,7 +605,7 @@ class _HomeworkCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderColor, width: 1.5),
+              border: Border.all(color: AppColors.divider, width: 1),
               boxShadow: const [
                 BoxShadow(
                     color: Color(0x0C1D3557),
@@ -640,14 +616,13 @@ class _HomeworkCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Badge row ─────────────────────────────────────────────
+                // ── Badge row — type, subject, status all same shape ──────
                 Row(
                   children: [
                     // Type badge
                     _Badge(
                       label: isOnline ? 'Online Test' : 'Written',
-                      color:
-                          isOnline ? AppColors.accent : AppColors.primary,
+                      color: isOnline ? AppColors.accent : AppColors.primary,
                     ),
                     SizedBox(width: _s(context, 6, min: 4, max: 10)),
                     // Subject — flexible, won't overflow
@@ -659,83 +634,90 @@ class _HomeworkCard extends StatelessWidget {
                         maxLines: 1,
                       ),
                     ),
-                    const Spacer(),
-                    // "Track" hint — visual cue that the card is tappable
-                    Icon(Icons.checklist_rounded,
-                        size: _s(context, 18, min: 16, max: 22),
-                        color: AppColors.accent),
-                    SizedBox(width: _s(context, 4, min: 2, max: 8)),
-                    // Delete — guaranteed 48x48 tap area
-                    SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: AppColors.error,
-                          size: _s(context, 20, min: 18, max: 24),
-                        ),
-                        onPressed: onDelete,
-                        tooltip: 'Delete',
-                      ),
+                    SizedBox(width: _s(context, 6, min: 4, max: 10)),
+                    // Status badge — same shape/size, sits next to the subject
+                    _Badge(
+                      label: done ? 'Done' : 'Pending',
+                      color: Colors.white,
+                      bg: done
+                          ? const Color(0xFF2E7D52)
+                          : const Color(0xFFE8821E),
                     ),
                   ],
                 ),
 
-            SizedBox(height: _s(context, 6, min: 4, max: 10)),
+                SizedBox(height: _s(context, 8, min: 6, max: 12)),
 
-            // ── Title ─────────────────────────────────────────────────────
-            Text(
-              hw.title,
-              style: GoogleFonts.poppins(
-                fontSize: _fs(context, 14, min: 12, max: 17),
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
-
-            // ── Description ───────────────────────────────────────────────
-            if (hw.description != null &&
-                hw.description!.isNotEmpty) ...[
-              SizedBox(height: _s(context, 4, min: 3, max: 8)),
-              Text(
-                hw.description!,
-                style: GoogleFonts.poppins(
-                  fontSize: _fs(context, 12, min: 11, max: 14),
-                  color: AppColors.textSecondary,
-                  height: 1.4,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-
-            SizedBox(height: _s(context, 8, min: 6, max: 12)),
-
-            // ── Footer row ────────────────────────────────────────────────
-            Wrap(
-              spacing: _s(context, 12, min: 8, max: 16),
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _MetaChip(
-                  icon: Icons.school_outlined,
-                  label: 'Grade ${hw.grade}',
-                ),
-                if (hw.dueDate != null)
-                  _MetaChip(
-                    icon: Icons.calendar_today_outlined,
-                    label:
-                        'Due ${DateFormat('dd MMM').format(hw.dueDate!)}',
+                // ── Title ─────────────────────────────────────────────────
+                Text(
+                  hw.title,
+                  style: GoogleFonts.poppins(
+                    fontSize: _fs(context, 14, min: 12, max: 17),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
                   ),
-                _MetaChip(
-                  icon: Icons.access_time_outlined,
-                  label: DateFormat('dd MMM').format(hw.createdAt),
+                ),
+
+                // ── Description ───────────────────────────────────────────
+                if (hw.description != null && hw.description!.isNotEmpty) ...[
+                  SizedBox(height: _s(context, 4, min: 3, max: 8)),
+                  Text(
+                    hw.description!,
+                    style: GoogleFonts.poppins(
+                      fontSize: _fs(context, 12, min: 11, max: 14),
+                      color: AppColors.textSecondary,
+                      height: 1.4,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+
+                SizedBox(height: _s(context, 8, min: 6, max: 12)),
+
+                // ── Footer row + delete ───────────────────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: _s(context, 12, min: 8, max: 16),
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _MetaChip(
+                            icon: Icons.school_outlined,
+                            label: 'Grade ${hw.grade}',
+                          ),
+                          if (hw.dueDate != null)
+                            _MetaChip(
+                              icon: Icons.calendar_today_outlined,
+                              label:
+                                  'Due ${DateFormat('dd MMM').format(hw.dueDate!)}',
+                            ),
+                          _MetaChip(
+                            icon: Icons.access_time_outlined,
+                            label: DateFormat('dd MMM').format(hw.createdAt),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Delete — compact tap target aligned with the footer
+                    InkWell(
+                      onTap: onDelete,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          Icons.delete_outline,
+                          color: AppColors.error,
+                          size: _s(context, 20, min: 18, max: 24),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
           ),
         ),
       );
@@ -743,6 +725,116 @@ class _HomeworkCard extends StatelessWidget {
   }
 }
 
+// Full-width grade selector — equal-width pills, selected one filled navy.
+class _GradeSelector extends StatelessWidget {
+  final int selected;
+  final ValueChanged<int> onChanged;
+  const _GradeSelector({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final grades = AppConstants.grades;
+    return Row(
+      children: [
+        for (int i = 0; i < grades.length; i++) ...[
+          if (i > 0) SizedBox(width: _s(context, 8, min: 6, max: 12)),
+          Expanded(child: _seg(context, grades[i])),
+        ],
+      ],
+    );
+  }
+
+  Widget _seg(BuildContext context, int g) {
+    final isSel = selected == g;
+    return GestureDetector(
+      onTap: () => onChanged(g),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding:
+            EdgeInsets.symmetric(vertical: _s(context, 9, min: 7, max: 12)),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSel ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSel ? AppColors.primary : AppColors.divider,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          'Grade $g',
+          style: GoogleFonts.poppins(
+            fontSize: _fs(context, 13, min: 11, max: 15),
+            fontWeight: FontWeight.w600,
+            color: isSel ? Colors.white : AppColors.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Segmented All / Pending / Done filter (matches the iOS-style control).
+class _SegmentedFilter extends StatelessWidget {
+  final _HwFilter selected;
+  final ValueChanged<_HwFilter> onChanged;
+  const _SegmentedFilter({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppColors.iconContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          _seg(context, 'All', _HwFilter.all),
+          _seg(context, 'Pending', _HwFilter.pending),
+          _seg(context, 'Done', _HwFilter.done),
+        ],
+      ),
+    );
+  }
+
+  Widget _seg(BuildContext context, String label, _HwFilter value) {
+    final isSel = selected == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onChanged(value),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding:
+              EdgeInsets.symmetric(vertical: _s(context, 8, min: 6, max: 11)),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSel ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: isSel
+                ? const [
+                    BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1)),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: _fs(context, 12, min: 10, max: 14),
+              fontWeight: FontWeight.w600,
+              color: isSel ? AppColors.primary : AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 // ─── Shared micro-widgets ─────────────────────────────────────────────────────
 
@@ -822,8 +914,7 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
-      final iconSize =
-          (constraints.maxWidth * 0.16).clamp(40.0, 64.0);
+      final iconSize = (constraints.maxWidth * 0.16).clamp(40.0, 64.0);
       return Center(
         child: Padding(
           padding: EdgeInsets.symmetric(

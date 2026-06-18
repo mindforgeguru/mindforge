@@ -283,7 +283,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         if (_isRegister) ...[
                           const SizedBox(height: 10),
                           DropdownButtonFormField<String>(
-                            value: _selectedRole,
+                            initialValue: _selectedRole,
                             decoration: const InputDecoration(
                               labelText: 'Register as',
                               prefixIcon: Icon(Icons.badge_outlined),
@@ -403,7 +403,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           if (_selectedRole == 'student') ...[
                             const SizedBox(height: 10),
                             DropdownButtonFormField<int>(
-                              value: _selectedGrade,
+                              initialValue: _selectedGrade,
                               decoration: const InputDecoration(
                                 labelText: 'Grade',
                                 prefixIcon: Icon(Icons.school_outlined),
@@ -964,7 +964,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 if (_isRegister) ...[
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
-                    value: _selectedRole,
+                    initialValue: _selectedRole,
                     decoration: InputDecoration(
                       labelText: 'Register as',
                       prefixIcon: const Icon(Icons.badge_outlined),
@@ -998,7 +998,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   if (_selectedRole == 'student') ...[
                     const SizedBox(height: 14),
                     DropdownButtonFormField<int>(
-                      value: _selectedGrade,
+                      initialValue: _selectedGrade,
                       decoration: InputDecoration(
                         labelText: 'Grade',
                         prefixIcon: const Icon(Icons.school_outlined),

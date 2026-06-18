@@ -278,8 +278,8 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                       children: [
                         Icon(Icons.lock_outline,
                             size: 16, color: AppColors.primary),
-                        SizedBox(width: 8),
-                        Text('Change MPIN',
+                        const SizedBox(width: 8),
+                        const Text('Change MPIN',
                             style: TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 14)),
                       ],

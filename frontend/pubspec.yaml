@@ -72,6 +72,13 @@ dependencies:
   # External link launcher (privacy policy, etc.)
   url_launcher: ^6.3.0
 
+  # Annotations (@immutable, @visibleForTesting). SDK-pinned, so unconstrained.
+  meta: any
+
+  # Web URL strategy / plugin registrant, used from main.dart on web.
+  flutter_web_plugins:
+    sdk: flutter
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -61,12 +61,12 @@ class _ShimmerRow extends StatelessWidget {
               const _Bone(width: 40, height: 40, radius: 20),
               const SizedBox(width: 12),
             ],
-            Expanded(
+            const Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   _Bone(width: double.infinity, height: 13),
                   SizedBox(height: 6),
                   _Bone(width: 160, height: 11),

@@ -672,7 +672,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
 
             // Role
             DropdownButtonFormField<String>(
-              value: _selectedRole,
+              initialValue: _selectedRole,
               decoration: const InputDecoration(
                 labelText: 'Role',
                 prefixIcon: Icon(Icons.badge_outlined),
@@ -714,8 +714,11 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                     label: Text(s, style: const TextStyle(fontSize: 12)),
                     selected: selected,
                     onSelected: (v) => setState(() {
-                      if (v) _selectedTeachableSubjects.add(s);
-                      else _selectedTeachableSubjects.remove(s);
+                      if (v) {
+                        _selectedTeachableSubjects.add(s);
+                      } else {
+                        _selectedTeachableSubjects.remove(s);
+                      }
                     }),
                     selectedColor: AppColors.secondary.withValues(alpha: 0.18),
                     checkmarkColor: AppColors.secondary,
@@ -732,7 +735,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
             if (_selectedRole == 'student') ...[
               const SizedBox(height: 14),
               DropdownButtonFormField<int>(
-                value: _selectedGrade,
+                initialValue: _selectedGrade,
                 decoration: const InputDecoration(
                   labelText: 'Grade',
                   prefixIcon: Icon(Icons.school_outlined),
@@ -757,8 +760,11 @@ class _EditUserSheetState extends State<_EditUserSheet> {
                     label: Text(s[0].toUpperCase() + s.substring(1)),
                     selected: selected,
                     onSelected: (v) => setState(() {
-                      if (v) _selectedAdditionalSubjects.add(s);
-                      else _selectedAdditionalSubjects.remove(s);
+                      if (v) {
+                        _selectedAdditionalSubjects.add(s);
+                      } else {
+                        _selectedAdditionalSubjects.remove(s);
+                      }
                     }),
                     selectedColor: AppColors.primary.withValues(alpha: 0.2),
                     checkmarkColor: AppColors.primary,
@@ -1035,7 +1041,7 @@ class _ActiveUsersTabState extends ConsumerState<_ActiveUsersTab> {
           child: Column(
             children: [
               DropdownButtonFormField<String>(
-                value: _selectedRole,
+                initialValue: _selectedRole,
                 decoration: const InputDecoration(
                   labelText: 'User Type',
                   prefixIcon: Icon(Icons.badge_outlined),
@@ -1054,7 +1060,7 @@ class _ActiveUsersTabState extends ConsumerState<_ActiveUsersTab> {
               if (_needsGrade) ...[
                 const SizedBox(height: 10),
                 DropdownButtonFormField<int?>(
-                  value: _selectedGrade,
+                  initialValue: _selectedGrade,
                   decoration: const InputDecoration(
                     labelText: 'Grade',
                     prefixIcon: Icon(Icons.school_outlined),
@@ -1436,7 +1442,7 @@ class _ActiveUserTileState extends ConsumerState<_ActiveUserTile> {
           // ── Actions ─────────────────────────────────────────────────
           if (isAdmin)
                   Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Icon(Icons.shield, color: AppColors.primaryDark, size: 22),
             )
           else
@@ -1456,7 +1462,7 @@ class _ActiveUserTileState extends ConsumerState<_ActiveUserTile> {
                     scale: 0.85,
                     child: Switch.adaptive(
                       value: _isActive,
-                      activeColor: AppColors.success,
+                      activeThumbColor: AppColors.success,
                       inactiveTrackColor:
                           AppColors.error.withValues(alpha: 0.3),
                       onChanged: _toggling ? null : _toggleActive,

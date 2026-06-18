@@ -122,8 +122,8 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
       useRootNavigator: false,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.warning_amber_rounded, color: AppColors.warning),
             SizedBox(width: 8),
             Expanded(child: Text('Before you begin')),

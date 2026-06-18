@@ -355,7 +355,7 @@ class _EmptyChapterState extends StatelessWidget {
       // ListView so it works with RefreshIndicator
       children: [
         const SizedBox(height: 60),
-        Center(
+        const Center(
           child: Icon(Icons.library_books_outlined,
               size: 48, color: AppColors.textMuted),
         ),

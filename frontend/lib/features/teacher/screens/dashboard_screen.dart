@@ -19,6 +19,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
+import '../../../core/widgets/holiday_banner.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/widgets/badge_dot.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -30,8 +31,6 @@ import '../widgets/teacher_scaffold.dart';
 final _fmtYMD   = DateFormat('yyyy-MM-dd');
 final _fmtEDMon = DateFormat('EEE, d MMM');
 final _fmtDMon  = DateFormat('d MMM');
-final _fmtEEEE  = DateFormat('EEEE');
-final _fmtDMonY = DateFormat('d MMMM yyyy');
 
 // Responsive scale helper — base ref width 390 px
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
@@ -294,6 +293,9 @@ class _TeacherDashboardScreenState
             .map((e) =>
                 TimetableSlotModel.fromJson(e as Map<String, dynamic>).subject)
             .whereType<String>()
+            .map((s) => s.trim())
+            // Drop blank subjects (e.g. holiday markers carry subject: '').
+            .where((s) => s.isNotEmpty)
             .toSet()
             .toList()
           ..sort();
@@ -306,11 +308,26 @@ class _TeacherDashboardScreenState
     final double cardRadius = (screenWidth * 0.062).clamp(20.0, 28.0);
     final double cardHMargin = (screenWidth * 0.04).clamp(12.0, 20.0);
     final double cardIntoNavy = (screenHeight * 0.066).clamp(44.0, 60.0);
-    final double navyH = topPadding + (screenHeight * 0.165).clamp(95.0, 142.0);
-    // Smaller fonts → less height needed
+
+    // Responsive logo / text sizes for header (logoH governs how far the
+    // MIND FORGE wordmark extends down, so it's needed before navyH).
+    final double logoH = (screenWidth * 0.142).clamp(42.0, 58.0);
+    final double titleFs = (screenWidth * 0.062).clamp(18.0, 25.0);
+
+    // Navy hero height. On a wide-but-short web viewport the proportional
+    // value collapses to its minimum while the wordmark stays tall, which let
+    // the overlapping avatar ride up into the branding. Floor navyH so the
+    // avatar's top (navyH − cardIntoNavy) always clears the wordmark.
+    final double brandingBottom = topPadding + 16 + logoH;
+    final double navyH = topPadding +
+        math.max((screenHeight * 0.165).clamp(95.0, 142.0),
+            brandingBottom + cardIntoNavy + 10 - topPadding);
+    // Smaller fonts → less height needed. The extra buffer keeps a 2–3 row
+    // subject list from overflowing the fixed header height onto the workflow
+    // card below.
     final double cardInternalH = subjects.isEmpty
         ? (avatarRadius + 90).clamp(128.0, 155.0)
-        : (avatarRadius + 116).clamp(152.0, 185.0);
+        : (avatarRadius + 132).clamp(168.0, 215.0);
     final double headerH = navyH + cardInternalH - cardIntoNavy + avatarRadius;
 
     // Web + mobile use the same sliver-based layout below — same navy hero
@@ -319,326 +336,6 @@ class _TeacherDashboardScreenState
     // 600 px on web, so it reads as a phone-shaped centred column.
     // (The earlier custom web hero with stat tiles is intentionally retired
     // so all three roles look the same on web.)
-    // ignore: dead_code
-    if (false) {
-      final hour = DateTime.now().hour;
-      final greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-      return TeacherScaffold(
-        backgroundColor: const Color(0xFFF0F4F8),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // ── Hero section ───────────────────────────────────────────
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF0A1628), Color(0xFF1D3557), Color(0xFF1A4A6E)],
-                  stops: [0.0, 0.55, 1.0],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Positioned(top: -50, right: 180,
-                    child: Container(width: 220, height: 220,
-                      decoration: BoxDecoration(shape: BoxShape.circle,
-                        color: Colors.white.withValues(alpha: 0.04)))),
-                  Positioned(bottom: -70, right: -40,
-                    child: Container(width: 260, height: 260,
-                      decoration: BoxDecoration(shape: BoxShape.circle,
-                        color: AppColors.accent.withValues(alpha: 0.08)))),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(28, 22, 28, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Row 1: avatar + greeting + date
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            GestureDetector(
-                              onTap: () => context.go('${RouteNames.teacherDashboard}/profile'),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2.5),
-                                ),
-                                child: _ProfileAvatar(
-                                  username: auth.username ?? 'T',
-                                  photoUrl: auth.profilePicUrl,
-                                  radius: 26,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '$greeting, ${auth.username ?? 'Teacher'}!',
-                                    style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700,
-                                      color: Colors.white, letterSpacing: -0.3),
-                                  ),
-                                  if (subjects.isNotEmpty) ...[
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      subjects.join('  ·  '),
-                                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(_fmtEEEE.format(DateTime.now()),
-                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withValues(alpha: 0.5))),
-                                Text(_fmtDMonY.format(DateTime.now()),
-                                  style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
-                              ],
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // Row 2: stat cards + quick actions
-                        // Wrap is used so the quick-action chips fall to a
-                        // second line on narrower web widths instead of
-                        // overflowing past the hero card.
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                _HeroStatCard(
-                                  value: '${todaySlots.length}',
-                                  label: 'Classes Today',
-                                  icon: Icons.today_rounded,
-                                  accent: const Color(0xFF64B5F6),
-                                  onTap: () => context.go('${RouteNames.teacherDashboard}/timetable'),
-                                ),
-                                Builder(builder: (ctx) {
-                                  final count = summaryAsync.maybeWhen(
-                                    data: (s) => ((s['grades'] as List<dynamic>?)?.length ?? 0),
-                                    orElse: () => 0,
-                                  );
-                                  return _HeroStatCard(
-                                    value: '$count',
-                                    label: 'Grade Records',
-                                    icon: Icons.grade_rounded,
-                                    accent: const Color(0xFFFFB74D),
-                                    onTap: () => context.go('${RouteNames.teacherDashboard}/grades'),
-                                  );
-                                }),
-                                Builder(builder: (ctx) {
-                                  final count = summaryAsync.maybeWhen(
-                                    data: (s) => (s['test_count'] as int? ?? 0),
-                                    orElse: () => 0,
-                                  );
-                                  return _HeroStatCard(
-                                    value: '$count',
-                                    label: 'Tests',
-                                    icon: Icons.quiz_rounded,
-                                    accent: AppColors.secondary,
-                                    onTap: () => context.go('${RouteNames.teacherDashboard}/tests'),
-                                  );
-                                }),
-                                Builder(builder: (ctx) {
-                                  final count = summaryAsync.maybeWhen(
-                                    data: (s) => ((s['broadcasts'] as List<dynamic>?)?.length ?? 0),
-                                    orElse: () => 0,
-                                  );
-                                  return _HeroStatCard(
-                                    value: '$count',
-                                    label: 'Broadcasts',
-                                    icon: Icons.campaign_rounded,
-                                    accent: const Color(0xFFCE93D8),
-                                    showBadge: hasBroadcastBadge,
-                                    onTap: () {
-                                      ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen();
-                                      context.go('${RouteNames.teacherDashboard}/broadcasts');
-                                    },
-                                  );
-                                }),
-                              ],
-                            ),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                _WebQuickAction(
-                                  icon: Icons.how_to_reg_outlined,
-                                  label: 'Attendance',
-                                  onTap: () => context.go('${RouteNames.teacherDashboard}/attendance'),
-                                ),
-                                _WebQuickAction(
-                                  icon: Icons.assignment_outlined,
-                                  label: 'Add Homework',
-                                  onTap: () => context.go('${RouteNames.teacherDashboard}/homework'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Content ────────────────────────────────────────────────
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Grade Analysis Chart
-                    summaryAsync.maybeWhen(
-                      data: (summary) {
-                        final rawGrades = (summary['grades'] as List<dynamic>? ?? []);
-                        final grades = rawGrades
-                            .map((e) => GradeModel.fromJson(e as Map<String, dynamic>))
-                            .toList();
-                        if (grades.isEmpty) return const SizedBox.shrink();
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 20),
-                          child: _GradeAnalysisChart(grades: grades),
-                        );
-                      },
-                      orElse: () => const SizedBox.shrink(),
-                    ),
-
-                    // Today's workflow card — same widget the mobile dashboard
-                    // uses. Sits above Today's Timetable so the teacher's eye
-                    // lands on the grade-wide workflow first, matching mobile.
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final workflowAsync = ref.watch(teacherTodayWorkflowProvider);
-                        return workflowAsync.when(
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
-                          data: (data) => Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: _TodayWorkflowCard(data: data),
-                          ),
-                        );
-                      },
-                    ),
-                    _WebSection(
-                      icon: Icons.slideshow_outlined,
-                      title: 'Presentation progress',
-                      onSeeAll: () =>
-                          context.go('${RouteNames.teacherDashboard}/presentations'),
-                      child: Consumer(
-                        builder: (context, ref, _) {
-                          final presAsync = ref.watch(presentationListProvider);
-                          return presAsync.when(
-                            loading: () => const LinearProgressIndicator(),
-                            error: (_, __) => const SizedBox.shrink(),
-                            data: (rows) {
-                              if (rows.isEmpty) {
-                                return _WebEmptyState(
-                                  icon: Icons.slideshow_outlined,
-                                  message: 'No presentations yet',
-                                );
-                              }
-                              final cards = _buildTeacherRingsCards(
-                                rows.cast<Map<String, dynamic>>(),
-                              );
-                              return Column(children: cards);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Single column — one section per row so the dashboard
-                    // reads top-to-bottom like the parent / student layouts.
-                    _WebSection(
-                      icon: Icons.calendar_today_rounded,
-                      title: "Today's Timetable",
-                      trailing: Text(
-                        _fmtEDMon.format(DateTime.now()),
-                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textMuted),
-                      ),
-                      onSeeAll: () => context.go('${RouteNames.teacherDashboard}/timetable'),
-                      child: summaryAsync.when(
-                        loading: () => const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()),
-                        error: (_, __) => const SizedBox.shrink(),
-                        data: (_) => todaySlots.isEmpty
-                            ? _WebEmptyState(icon: Icons.event_busy_rounded, message: 'No classes scheduled for today')
-                            : Wrap(
-                                spacing: 12,
-                                runSpacing: 12,
-                                children: todaySlots.map((slot) => SizedBox(
-                                  width: 180,
-                                  child: _WebTimetableCard(slot: slot),
-                                )).toList(),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _WebSection(
-                      icon: Icons.assignment_outlined,
-                      title: 'Recent Homework',
-                      onSeeAll: () => context.go('${RouteNames.teacherDashboard}/homework'),
-                      child: summaryAsync.when(
-                        loading: () => const LinearProgressIndicator(),
-                        error: (_, __) => const SizedBox.shrink(),
-                        data: (summary) {
-                          final rawHw = (summary['homework'] as List<dynamic>? ?? []);
-                          final list = rawHw.map((e) => HomeworkModel.fromJson(e as Map<String, dynamic>)).toList();
-                          return list.isEmpty
-                              ? _WebEmptyState(icon: Icons.assignment_outlined, message: 'No homework assigned yet')
-                              : Column(children: list.take(3).map((h) => _DashHomeworkTile(hw: h)).toList());
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _WebSection(
-                      icon: Icons.campaign_outlined,
-                      title: 'Announcements',
-                      showBadge: hasBroadcastBadge,
-                      onSeeAll: () {
-                        ref.read(teacherBroadcastBadgeNotifier.notifier).markSeen();
-                        context.go('${RouteNames.teacherDashboard}/broadcasts');
-                      },
-                      child: summaryAsync.when(
-                        loading: () => const LinearProgressIndicator(),
-                        error: (_, __) => const SizedBox.shrink(),
-                        data: (summary) {
-                          final rawBc = (summary['broadcasts'] as List<dynamic>? ?? []);
-                          final list = rawBc.map((e) => BroadcastModel.fromJson(e as Map<String, dynamic>)).toList();
-                          return list.isEmpty
-                              ? _WebEmptyState(icon: Icons.campaign_outlined, message: 'No announcements yet')
-                              : Column(children: list.take(3).map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast)).toList());
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Responsive logo / text sizes for header
-    final double logoH = (screenWidth * 0.142).clamp(42.0, 58.0);
-    final double titleFs = (screenWidth * 0.062).clamp(18.0, 25.0);
 
     return TeacherScaffold(
       backgroundColor: AppColors.background,
@@ -842,6 +539,14 @@ class _TeacherDashboardScreenState
 
           // ── Today's workflow card ─────────────────────────────────────
           SliverToBoxAdapter(
+              child: SizedBox(height: _s(context, 12, min: 8, max: 16))),
+          const SliverToBoxAdapter(
+            child: _DashSectionHeader(
+              icon: Icons.map_outlined,
+              title: "Today's Workflow",
+            ),
+          ),
+          SliverToBoxAdapter(
             child: Consumer(
               builder: (context, ref, _) {
                 final workflowAsync = ref.watch(teacherTodayWorkflowProvider);
@@ -980,7 +685,7 @@ class _TeacherDashboardScreenState
                   : '';
               return SliverToBoxAdapter(
                 child: (localHoliday || isSchoolHoliday)
-                    ? _TimetableHoliday(reason: holidayReason)
+                    ? HolidayBanner(reason: holidayReason)
                     : todaySlots.isEmpty
                         ? _TimetableEmpty()
                         : _TimetableHScroll(slots: todaySlots),
@@ -1094,9 +799,9 @@ class _TeacherDashboardScreenState
 class _DashSectionHeader extends StatelessWidget {
   final IconData icon;
   final String title;
-  final VoidCallback onSeeAll;
+  final VoidCallback? onSeeAll;
   final bool showBadge;
-  const _DashSectionHeader({required this.icon, required this.title, required this.onSeeAll, this.showBadge = false});
+  const _DashSectionHeader({required this.icon, required this.title, this.onSeeAll, this.showBadge = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1120,18 +825,19 @@ class _DashSectionHeader extends StatelessWidget {
               color: AppColors.primary,
             )),
             const Spacer(),
-            TextButton(
-              onPressed: onSeeAll,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: const Size(48, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            if (onSeeAll != null)
+              TextButton(
+                onPressed: onSeeAll,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: const Size(48, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text('See all →', style: GoogleFonts.poppins(
+                  fontSize: (sw * 0.028).clamp(10.0, 12.0),
+                  color: AppColors.accent,
+                )),
               ),
-              child: Text('See all →', style: GoogleFonts.poppins(
-                fontSize: (sw * 0.028).clamp(10.0, 12.0),
-                color: AppColors.accent,
-              )),
-            ),
           ],
         ),
       );
@@ -1418,113 +1124,6 @@ class _TimetableEmpty extends StatelessWidget {
     });
   }
 }
-
-/// Festive holiday banner shown in the dashboard timetable box when today
-/// is marked as a holiday in the timetable.
-class _TimetableHoliday extends StatelessWidget {
-  final String reason;
-  /// Outer margin. Defaults to the full-width timetable-box spacing; the
-  /// workflow card passes a tighter margin since it sits inside a padded card.
-  final EdgeInsetsGeometry? margin;
-  const _TimetableHoliday({this.reason = '', this.margin});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final sw = constraints.maxWidth;
-      final hPad = (sw * 0.04).clamp(12.0, 20.0);
-      final emojiSize = (sw * 0.085).clamp(30.0, 40.0);
-      final titleSize = (sw * 0.05).clamp(16.0, 22.0);
-      final subSize = (sw * 0.032).clamp(11.0, 14.0);
-      final hasReason = reason.trim().isNotEmpty;
-
-      return Container(
-        margin: margin ?? EdgeInsets.fromLTRB(hPad, 0, hPad, 16),
-        padding: EdgeInsets.symmetric(
-          horizontal: (sw * 0.05).clamp(16.0, 24.0),
-          vertical: (sw * 0.055).clamp(18.0, 26.0),
-        ),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF38BDF8), Color(0xFF6366F1)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF6366F1).withValues(alpha: 0.30),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // Faint oversized emoji watermark in the corner for a playful feel.
-            Positioned(
-              right: -6,
-              top: -10,
-              child: Opacity(
-                opacity: 0.18,
-                child: Text('☀️',
-                    style: TextStyle(fontSize: emojiSize * 1.8)),
-              ),
-            ),
-            Row(
-              children: [
-                Container(
-                  width: emojiSize * 1.7,
-                  height: emojiSize * 1.7,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.22),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text('🏖️', style: TextStyle(fontSize: emojiSize)),
-                ),
-                SizedBox(width: (sw * 0.04).clamp(12.0, 18.0)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Holiday! 🎉',
-                        style: GoogleFonts.poppins(
-                          fontSize: titleSize,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.05,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        hasReason
-                            ? reason.trim()
-                            : 'No classes today — enjoy your day off!',
-                        style: GoogleFonts.poppins(
-                          fontSize: subSize,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withValues(alpha: 0.92),
-                          height: 1.25,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    });
-  }
-}
-
 class _TimetableHScroll extends StatelessWidget {
   final List<TimetableSlotModel> slots;
   const _TimetableHScroll({required this.slots});
@@ -1684,244 +1283,6 @@ class _TimetableCard extends StatelessWidget {
     final parts = t.split(':');
     return DateTime(base.year, base.month, base.day,
         int.parse(parts[0]), int.parse(parts[1]));
-  }
-}
-
-// ─── Timetable Tile ──────────────────────────────────────────────────────────
-
-// ─── Web-only widgets ─────────────────────────────────────────────────────────
-
-class _WebSection extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback onSeeAll;
-  final Widget child;
-  final Widget? trailing;
-  final bool showBadge;
-
-  const _WebSection({
-    required this.icon,
-    required this.title,
-    required this.onSeeAll,
-    required this.child,
-    this.trailing,
-    this.showBadge = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: mindForgeCardDecoration(),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              BadgeDot(
-                show: showBadge,
-                child: Icon(icon, size: 16, color: AppColors.primary),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const Spacer(),
-              if (trailing != null) ...[trailing!, const SizedBox(width: 8)],
-              TextButton(
-                onPressed: onSeeAll,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: const Size(48, 32),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  'See all →',
-                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.accent),
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 16),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _WebQuickAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _WebQuickAction({required this.icon, required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 15, color: Colors.white),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.poppins(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _WebTimetableCard extends StatelessWidget {
-  final TimetableSlotModel slot;
-  const _WebTimetableCard({required this.slot});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.iconContainer,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              'P${slot.periodNumber}',
-              style: GoogleFonts.poppins(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            slot.subject?.isNotEmpty == true ? slot.subject! : slot.teacherUsername ?? 'Period ${slot.periodNumber}',
-            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-          ),
-          Text(
-            'Grade ${slot.grade}',
-            style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
-          ),
-          if (slot.startTime != null)
-            Text(
-              '${slot.startTime} – ${slot.endTime ?? ''}',
-              style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textMuted, fontStyle: FontStyle.italic),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeroStatCard extends StatelessWidget {
-  final String value;
-  final String label;
-  final IconData icon;
-  final Color accent;
-  final VoidCallback onTap;
-  final bool showBadge;
-
-  const _HeroStatCard({
-    required this.value,
-    required this.label,
-    required this.icon,
-    required this.accent,
-    required this.onTap,
-    this.showBadge = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 38, height: 38,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: BadgeDot(
-                show: showBadge,
-                child: Icon(icon, size: 19, color: accent),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  value,
-                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w800,
-                    color: Colors.white, height: 1.1),
-                ),
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.white.withValues(alpha: 0.6)),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _WebEmptyState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-  const _WebEmptyState({required this.icon, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 36, color: AppColors.divider),
-          const SizedBox(height: 10),
-          Text(
-            message,
-            style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textMuted),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -2086,7 +1447,7 @@ class _GradeAnalysisChartState extends State<_GradeAnalysisChart> {
                 gridData: FlGridData(
                   show: true,
                   horizontalInterval: 25,
-                  getDrawingHorizontalLine: (_) => FlLine(color: AppColors.divider, strokeWidth: 1),
+                  getDrawingHorizontalLine: (_) => const FlLine(color: AppColors.divider, strokeWidth: 1),
                   drawVerticalLine: false,
                 ),
                 borderData: FlBorderData(show: false),
@@ -2167,7 +1528,7 @@ class _TodayWorkflowCard extends StatelessWidget {
             gradesWithTimetable.every((g) => g['is_holiday'] == true));
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         decoration: BoxDecoration(
@@ -2184,18 +1545,6 @@ class _TodayWorkflowCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Text('🗺️', style: TextStyle(fontSize: 18)),
-                const SizedBox(width: 8),
-                Text("Today's Workflow",
-                    style: GoogleFonts.poppins(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary)),
-              ],
-            ),
-            const SizedBox(height: 10),
             if (grades.isNotEmpty)
               Wrap(
                 spacing: 8,
@@ -2210,7 +1559,7 @@ class _TodayWorkflowCard extends StatelessWidget {
               ),
             const SizedBox(height: 4),
             if (isHoliday || grades.isEmpty)
-              const _TimetableHoliday(margin: EdgeInsets.only(top: 4))
+              const HolidayBanner(margin: EdgeInsets.only(top: 4))
             else
               ...grades.map((g) => _GradeRoadRow(
                     grade: g,
@@ -2222,10 +1571,10 @@ class _TodayWorkflowCard extends StatelessWidget {
               const SizedBox(height: 6),
               const Divider(height: 1, color: AppColors.divider),
               const SizedBox(height: 10),
-              Row(
+              const Row(
                 children: [
                   _LegendDot(color: _doneColor, label: 'Done'),
-                  const SizedBox(width: 16),
+                  SizedBox(width: 16),
                   _LegendDot(color: _pendingColor, label: 'Pending'),
                 ],
               ),

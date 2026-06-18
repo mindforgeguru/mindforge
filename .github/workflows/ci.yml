@@ -61,9 +61,11 @@ jobs:
         working-directory: frontend
         run: flutter pub get
 
+      # Warnings are fatal (catches dead code, unused declarations, undefined
+      # names, etc. before they land); style infos stay non-fatal.
       - name: Analyze
         working-directory: frontend
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: flutter analyze --no-fatal-infos
 
       - name: Unit tests
         working-directory: frontend

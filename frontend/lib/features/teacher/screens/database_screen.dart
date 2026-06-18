@@ -460,7 +460,7 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
                   Row(children: [
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        value: _selectedGrade,
+                        initialValue: _selectedGrade,
                         decoration: const InputDecoration(labelText: 'Grade', isDense: true),
                         hint: const Text('Grade'),
                         items: AppConstants.grades
@@ -472,7 +472,7 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _selectedSubject,
+                        initialValue: _selectedSubject,
                         isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Subject', isDense: true),
                         hint: const Text('Subject'),
@@ -735,7 +735,7 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
                   Row(children: [
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        value: _selectedGrade,
+                        initialValue: _selectedGrade,
                         decoration: const InputDecoration(labelText: 'Grade', isDense: true),
                         hint: const Text('Grade'),
                         items: AppConstants.grades
@@ -747,7 +747,7 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _selectedSubject,
+                        initialValue: _selectedSubject,
                         isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Subject', isDense: true),
                         hint: const Text('Subject'),
@@ -1029,7 +1029,7 @@ class _PresentationsTabState extends ConsumerState<_PresentationsTab> {
                 if (filtered.isEmpty) {
                   return ListView(children: [
                     const SizedBox(height: 60),
-                    Center(
+                    const Center(
                       child: Icon(Icons.slideshow_outlined,
                           size: 48, color: AppColors.textMuted),
                     ),
@@ -1351,7 +1351,7 @@ class _LibraryRow extends StatelessWidget {
               const Spacer(),
               // Per-teacher state pill — completed / in progress / nothing.
               if (myIsCompleted)
-                _StatePill(
+                const _StatePill(
                   label: '✓ You completed',
                   color: AppColors.success,
                 )

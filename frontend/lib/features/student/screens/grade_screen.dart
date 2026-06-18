@@ -31,12 +31,12 @@ class StudentGradeScreen extends StatelessWidget {
     final isWide = MediaQuery.of(context).size.width >= 900;
 
     if (isWide) {
-      return StudentScaffold(
+      return const StudentScaffold(
         // Three-column layout needs the full browser width — opt out of the
         // scaffold's default 600 px phone-shaped centre column.
         wideContent: true,
         body: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -44,31 +44,31 @@ class StudentGradeScreen extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: const [
+                  children: [
                     _SectionHeader(title: 'Online Tests', icon: Icons.computer_outlined),
                     SizedBox(height: 12),
                     Expanded(child: _OnlineGradesTab()),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               // Column 2 — Offline Tests
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: const [
+                  children: [
                     _SectionHeader(title: 'Offline Tests', icon: Icons.print_outlined),
                     SizedBox(height: 12),
                     Expanded(child: _OfflineGradesTab()),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               // Column 3 — Analysis
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: const [
+                  children: [
                     _SectionHeader(title: 'Analysis', icon: Icons.bar_chart_outlined),
                     SizedBox(height: 12),
                     Expanded(child: _AnalysisTab()),
@@ -101,7 +101,7 @@ class StudentGradeScreen extends StatelessWidget {
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
             indicatorColor: AppColors.accent,
-            tabs: [
+            tabs: const [
               Tab(text: 'Online Tests'),
               Tab(text: 'Offline Tests'),
               Tab(text: 'Analysis'),
@@ -158,8 +158,7 @@ class _SectionHeader extends StatelessWidget {
 // ─── Online Grades Tab ────────────────────────────────────────────────────────
 
 class _OnlineGradesTab extends ConsumerStatefulWidget {
-  final bool stacked;
-  const _OnlineGradesTab({this.stacked = false});
+  const _OnlineGradesTab();
 
   @override
   ConsumerState<_OnlineGradesTab> createState() => _OnlineGradesTabState();
@@ -226,7 +225,6 @@ class _OnlineGradesTabState extends ConsumerState<_OnlineGradesTab> {
       hasMore: _hasMore,
       isLoadingMore: _isLoadingMore,
       onLoadMore: _loadMore,
-      stacked: widget.stacked,
       buildCard: (g, high, low) => _GradeCard(
         grade: g,
         classHigh: high,
@@ -243,8 +241,7 @@ class _OnlineGradesTabState extends ConsumerState<_OnlineGradesTab> {
 // ─── Offline Grades Tab ───────────────────────────────────────────────────────
 
 class _OfflineGradesTab extends ConsumerStatefulWidget {
-  final bool stacked;
-  const _OfflineGradesTab({this.stacked = false});
+  const _OfflineGradesTab();
 
   @override
   ConsumerState<_OfflineGradesTab> createState() => _OfflineGradesTabState();
@@ -342,7 +339,6 @@ class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
       hasMore: _hasMore,
       isLoadingMore: _isLoadingMore,
       onLoadMore: _loadMore,
-      stacked: widget.stacked,
       buildCard: (g, high, low) =>
           _GradeCard(grade: g, classHigh: high, classLow: low),
     );
@@ -352,8 +348,7 @@ class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
 // ─── Analysis Tab ─────────────────────────────────────────────────────────────
 
 class _AnalysisTab extends ConsumerStatefulWidget {
-  final bool stacked;
-  const _AnalysisTab({this.stacked = false});
+  const _AnalysisTab();
 
   @override
   ConsumerState<_AnalysisTab> createState() => _AnalysisTabState();
@@ -423,7 +418,7 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
 
                 // Subject dropdown
                 DropdownButtonFormField<String?>(
-                  value: _subject,
+                  initialValue: _subject,
                   decoration: const InputDecoration(
                     labelText: 'Subject',
                     isDense: true,
@@ -518,8 +513,6 @@ class _AnalysisTabState extends ConsumerState<_AnalysisTab> {
             ),
         ],
     );
-
-    if (widget.stacked) return content;
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(R.sp(context, 16, min: 12, max: 20), R.sp(context, 16, min: 12, max: 20), R.sp(context, 16, min: 12, max: 20), R.sp(context, 24, min: 16, max: 28)),
@@ -985,7 +978,6 @@ class _GradesTabBody extends StatelessWidget {
   final bool hasMore;
   final bool isLoadingMore;
   final VoidCallback? onLoadMore;
-  final bool stacked;
 
   const _GradesTabBody({
     required this.gradesAsync,
@@ -998,7 +990,6 @@ class _GradesTabBody extends StatelessWidget {
     this.hasMore = false,
     this.isLoadingMore = false,
     this.onLoadMore,
-    this.stacked = false,
   });
 
   Widget _buildList(BuildContext context, List<GradeModel> grades) {
@@ -1017,9 +1008,6 @@ class _GradesTabBody extends StatelessWidget {
           ),
         ],
       );
-      if (stacked) {
-        return Padding(padding: const EdgeInsets.symmetric(vertical: 32), child: emptyContent);
-      }
       return Center(child: emptyContent);
     }
 
@@ -1032,29 +1020,6 @@ class _GradesTabBody extends StatelessWidget {
       final p = g.percentage;
       if (!subjectMax.containsKey(s) || p > subjectMax[s]!) subjectMax[s] = p;
       if (!subjectMin.containsKey(s) || p < subjectMin[s]!) subjectMin[s] = p;
-    }
-
-    if (stacked) {
-      // Web stacked mode: shrinkWrap list, no RefreshIndicator
-      return Column(
-        children: [
-          ...List.generate(grades.length + (hasMore ? 1 : 0), (i) {
-            if (i == grades.length) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: isLoadingMore
-                    ? const Center(child: CircularProgressIndicator())
-                    : OutlinedButton(onPressed: onLoadMore, child: const Text('Load More')),
-              );
-            }
-            final g = grades[i];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: buildCard(g, subjectMax[g.subject]!, subjectMin[g.subject]!),
-            );
-          }),
-        ],
-      );
     }
 
     return RefreshIndicator(
@@ -1082,11 +1047,9 @@ class _GradesTabBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dropdown = Padding(
-      padding: stacked
-          ? const EdgeInsets.only(bottom: 16)
-          : const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: DropdownButtonFormField<String?>(
-        value: filterSubject,
+        initialValue: filterSubject,
         decoration: const InputDecoration(
           labelText: 'Filter by Subject',
           isDense: true,
@@ -1105,13 +1068,6 @@ class _GradesTabBody extends StatelessWidget {
       error: (e, _) => ErrorView(error: e, onRetry: () => onRefresh()),
       data: (grades) => _buildList(context, grades),
     );
-
-    if (stacked) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [dropdown, listContent],
-      );
-    }
 
     return Column(
       children: [
@@ -1222,7 +1178,7 @@ class _GradeCard extends StatelessWidget {
                 children: [
                   Icon(Icons.visibility_outlined,
                       size: 13, color: AppColors.primary),
-                  SizedBox(width: 4),
+                  const SizedBox(width: 4),
                   Text('Tap to review test',
                       style: TextStyle(
                           fontSize: 11,
