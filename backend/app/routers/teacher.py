@@ -710,6 +710,24 @@ async def generate_test(
     from sqlalchemy import select as _select
     from app.models.database_models import OldTestPaper, ChapterDocument
 
+    # Per-teacher quota on this expensive endpoint (AI generation + uploads +
+    # OCR + PDF build). Throttles low-rate resource-exhaustion abuse that the
+    # generic per-IP nginx limit is too coarse to catch. Mirrors the
+    # presentations auto-gen quota for consistency.
+    _AI_GEN_MAX_PER_HOUR = 20
+    if await redis_manager.rate_limit(
+        f"rate_limit:ai_gen:test:{current_teacher.id}",
+        max_attempts=_AI_GEN_MAX_PER_HOUR,
+        window_seconds=3600,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Generation limit reached ({_AI_GEN_MAX_PER_HOUR}/hour). "
+                "Please try again later."
+            ),
+        )
+
     params = TestGenerationParams(
         title=title,
         grade=grade,
