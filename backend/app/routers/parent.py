@@ -48,7 +48,10 @@ async def change_parent_mpin(
     current_mpin = payload.get("current_mpin", "")
     new_mpin = payload.get("new_mpin", "")
 
-    if not verify_mpin(current_mpin, current_parent.mpin_hash):
+    # Shape-check current_mpin before bcrypt: a non-6-digit value can't be
+    # correct anyway, and passing >72 bytes to verify_mpin would raise (HTTP
+    # 500) instead of returning a clean 400.
+    if not re.fullmatch(r"\d{6}", current_mpin) or not verify_mpin(current_mpin, current_parent.mpin_hash):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
 
     if not re.fullmatch(r"\d{6}", new_mpin):
