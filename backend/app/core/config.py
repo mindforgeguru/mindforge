@@ -92,10 +92,22 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             import json
             try:
-                return json.loads(v)
+                origins = json.loads(v)
             except Exception:
-                return [i.strip() for i in v.split(",")]
-        return v
+                origins = [i.strip() for i in v.split(",")]
+        else:
+            origins = v
+        # The app runs CORSMiddleware with allow_credentials=True. A wildcard
+        # origin in that mode makes Starlette reflect ANY origin with
+        # Access-Control-Allow-Credentials: true — the classic dangerous
+        # misconfiguration. Refuse to start rather than ship it; list explicit
+        # origins instead.
+        if any(str(o).strip() == "*" for o in (origins or [])):
+            raise ValueError(
+                "BACKEND_CORS_ORIGINS must not contain '*' — credentialed CORS "
+                "requires an explicit origin allowlist."
+            )
+        return origins
 
 
 settings = Settings()
