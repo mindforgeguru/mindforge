@@ -99,7 +99,10 @@ class UserRegisterRequest(BaseModel):
     def validate_email(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             v = v.strip()
-            if v and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", v):
+            # Bound length BEFORE the regex: caps input so the validator can
+            # never be fed an oversized blob (ReDoS / CPU hygiene). 254 is the
+            # RFC 5321 maximum length of an email address.
+            if v and (len(v) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", v)):
                 raise ValueError("Invalid email address.")
             return v or None
         return v
