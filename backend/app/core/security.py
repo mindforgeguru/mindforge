@@ -5,6 +5,7 @@ Security utilities:
 - Role-based FastAPI dependency functions
 """
 
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -20,6 +21,10 @@ from app.core.config import settings
 from app.core.database import get_db
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+# Shared security audit log (see app.routers.auth) — records authorization
+# failures so privilege-escalation probing is visible in logs/Sentry.
+_security_log = logging.getLogger("mindforge.security")
 
 
 # ─── MPIN hashing ─────────────────────────────────────────────────────────────
@@ -134,6 +139,10 @@ def _require_role(role: str):
     """Factory that returns a FastAPI dependency enforcing a specific role."""
     async def role_dependency(current_user=Depends(_get_current_user)):
         if current_user.role != role:
+            _security_log.warning(
+                "Permission denied: user_id=%s role=%s attempted %s-only endpoint",
+                current_user.id, current_user.role, role,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access restricted to {role} accounts.",

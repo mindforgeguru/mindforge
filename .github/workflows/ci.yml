@@ -42,6 +42,29 @@ jobs:
         working-directory: backend
         run: python -m pytest tests/test_websocket_auth.py -v
 
+  # ── Dependency vulnerability audit ────────────────────────────────────────────
+  dependency-audit:
+    name: Python dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      # Audits the pinned requirements against the Python advisory DB and fails
+      # the build on any known-vulnerable package. If a CVE has no fix yet, add
+      # `--ignore-vuln <ID>` here with a comment + tracking link.
+      - name: Audit backend dependencies
+        run: pip-audit -r backend/requirements.txt --strict
+
   # ── Flutter unit + widget tests ───────────────────────────────────────────────
   flutter:
     name: Flutter unit & widget tests

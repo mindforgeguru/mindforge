@@ -6,6 +6,7 @@ Authentication router:
 - GET  /auth/me        — return current user info
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -30,6 +31,11 @@ from app.core.redis_client import redis_manager
 from app.services import storage_service
 
 router = APIRouter()
+
+# Security audit log. Failed logins, lockouts and rejected accounts are emitted
+# here (WARNING) so brute-force / abuse is visible in logs and Sentry breadcrumbs
+# rather than silently absorbed by the Redis lockout counter.
+logger = logging.getLogger("mindforge.security")
 
 # ── Cookie helpers ────────────────────────────────────────────────────────────
 
@@ -271,6 +277,10 @@ async def login(
 
     # Check per-user lockout before touching the DB password check
     if user and await redis_manager.is_user_locked_out(user.id):
+        logger.warning(
+            "Login blocked: account locked out user_id=%s username=%r ip=%s",
+            user.id, payload.username, ip,
+        )
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Account temporarily locked due to too many failed attempts. Try again in 15 minutes.",
@@ -280,19 +290,34 @@ async def login(
     if not user or not verify_mpin(payload.mpin, user.mpin_hash):
         # Record the failure against the user (if the username exists)
         if user:
-            await redis_manager.record_failed_login(user.id)
+            locked = await redis_manager.record_failed_login(user.id)
+            logger.warning(
+                "Failed login user_id=%s username=%r ip=%s%s",
+                user.id, payload.username, ip,
+                " — account now locked" if locked else "",
+            )
+        else:
+            logger.warning(
+                "Failed login for unknown username=%r ip=%s", payload.username, ip,
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or MPIN.",
         )
 
     if not user.is_approved:
+        logger.warning(
+            "Login rejected: unapproved account user_id=%s ip=%s", user.id, ip,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account is pending admin approval. Please wait.",
         )
 
     if not user.is_active:
+        logger.warning(
+            "Login rejected: deactivated account user_id=%s ip=%s", user.id, ip,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account has been deactivated.",
