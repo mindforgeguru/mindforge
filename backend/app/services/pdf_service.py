@@ -7,6 +7,7 @@ import io
 import logging
 from datetime import date
 from typing import Any, Dict, List
+from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -17,6 +18,19 @@ from reportlab.platypus import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _safe(value: Any) -> str:
+    """Escape user/AI-supplied text before it goes into a ReportLab Paragraph.
+
+    Paragraph parses an intra-paragraph XML/HTML markup (``<b>``, ``<font>``,
+    ``<img>`` …). Question text, options, titles and names originate from
+    AI generation or teacher/student input, so a stray ``<`` / ``&`` would
+    break PDF rendering and a tag such as ``<img src=...>`` could be injected.
+    Escaping neutralises that while leaving the intentional literal markup
+    elsewhere in this module untouched.
+    """
+    return _xml_escape("" if value is None else str(value))
 
 # ─── Brand colors ─────────────────────────────────────────────────────────────
 NAVY = colors.HexColor("#1D3557")
@@ -211,12 +225,12 @@ async def generate_offline_test_pdf(
     story.append(HRFlowable(width="100%", thickness=2, color=BRAND_PURPLE, spaceAfter=6))
 
     # ── Test meta ─────────────────────────────────────────────────────────────
-    story.append(Paragraph(test_title.upper(), styles["test_title"]))
+    story.append(Paragraph(_safe(test_title.upper()), styles["test_title"]))
     meta_items = []
     if grade:
         meta_items.append(f"Grade: {grade}")
     if subject:
-        meta_items.append(f"Subject: {subject}")
+        meta_items.append(f"Subject: {_safe(subject)}")
     if total_marks:
         meta_items.append(f"Total Marks: {int(total_marks)}")
     if time_limit_minutes:
@@ -302,14 +316,14 @@ async def generate_offline_test_pdf(
         for q in section_qs:
             marks = q.get("marks", 1)
             marks_label = f"{marks} mark{'s' if marks > 1 else ''}"
-            q_text = f"Q{q_counter}. {q.get('question', '')}  [{marks_label}]{_source_tag(q)}"
+            q_text = f"Q{q_counter}. {_safe(q.get('question', ''))}  [{marks_label}]{_source_tag(q)}"
             story.append(Paragraph(q_text, styles["question"]))
 
             if q_type == "mcq" and q.get("options"):
                 opts = q["options"]
                 for key in ("A", "B", "C", "D"):
                     if key in opts:
-                        story.append(Paragraph(f"({key}) {opts[key]}", styles["option"]))
+                        story.append(Paragraph(f"({key}) {_safe(opts[key])}", styles["option"]))
                 story.append(Paragraph("Answer: ( __ )", styles["answer_line"]))
 
             elif q_type == "true_false":
@@ -330,8 +344,8 @@ async def generate_offline_test_pdf(
                 ]
                 letters = [chr(65 + i) for i in range(n)]
                 for i in range(n):
-                    a_val = f"({letters[i]})  {col_a[i]}" if i < len(col_a) else ""
-                    b_val = f"({i+1})  {col_b[i]}" if i < len(col_b) else ""
+                    a_val = f"({letters[i]})  {_safe(col_a[i])}" if i < len(col_a) else ""
+                    b_val = f"({i+1})  {_safe(col_b[i])}" if i < len(col_b) else ""
                     table_data.append([
                         Paragraph(a_val, styles["option"]),
                         Paragraph(b_val, styles["option"]),
@@ -439,12 +453,12 @@ async def generate_answer_key_pdf(
     story.append(HRFlowable(width="100%", thickness=2, color=colors.red, spaceAfter=8))
 
     # ── Test meta ─────────────────────────────────────────────────────────────
-    story.append(Paragraph(test_title.upper(), styles["test_title"]))
+    story.append(Paragraph(_safe(test_title.upper()), styles["test_title"]))
     meta_items = []
     if grade:
         meta_items.append(f"Grade: {grade}")
     if subject:
-        meta_items.append(f"Subject: {subject}")
+        meta_items.append(f"Subject: {_safe(subject)}")
     if total_marks:
         meta_items.append(f"Total Marks: {int(total_marks)}")
     if meta_items:
@@ -465,7 +479,7 @@ async def generate_answer_key_pdf(
 
         for q in section_qs:
             marks = q.get("marks", 1)
-            q_text = f"Q{q_counter}. {q.get('question', '')}  [{marks} mark{'s' if marks > 1 else ''}]"
+            q_text = f"Q{q_counter}. {_safe(q.get('question', ''))}  [{marks} mark{'s' if marks > 1 else ''}]"
             story.append(Paragraph(q_text, styles["question"]))
 
             # Show options for MCQ
@@ -473,7 +487,7 @@ async def generate_answer_key_pdf(
                 opts = q["options"]
                 for key in ("A", "B", "C", "D"):
                     if key in opts:
-                        story.append(Paragraph(f"({key}) {opts[key]}", styles["option"]))
+                        story.append(Paragraph(f"({key}) {_safe(opts[key])}", styles["option"]))
 
             # Match the following — show columns and correct answer
             if q_type == "match_following":
@@ -486,8 +500,8 @@ async def generate_answer_key_pdf(
                      Paragraph("<b>Column B</b>", styles["option"])],
                 ]
                 for i in range(n):
-                    a_val = f"({letters[i]})  {col_a[i]}" if i < len(col_a) else ""
-                    b_val = f"({i+1})  {col_b[i]}" if i < len(col_b) else ""
+                    a_val = f"({letters[i]})  {_safe(col_a[i])}" if i < len(col_a) else ""
+                    b_val = f"({i+1})  {_safe(col_b[i])}" if i < len(col_b) else ""
                     table_data.append([
                         Paragraph(a_val, styles["option"]),
                         Paragraph(b_val, styles["option"]),
@@ -505,11 +519,11 @@ async def generate_answer_key_pdf(
 
             # Correct answer (highlighted)
             answer = q.get("answer", "")
-            story.append(Paragraph(f"✓ Answer: {answer}", answer_style))
+            story.append(Paragraph(f"✓ Answer: {_safe(answer)}", answer_style))
 
             # Explanation if available
             if q.get("explanation"):
-                story.append(Paragraph(f"Explanation: {q['explanation']}", explanation_style))
+                story.append(Paragraph(f"Explanation: {_safe(q['explanation'])}", explanation_style))
 
             q_counter += 1
 
@@ -539,8 +553,8 @@ def _report_header(story: list, styles: dict, title: str, subtitle: str) -> None
     story.append(Paragraph("MIND FORGE", styles["brand_title"]))
     story.append(Paragraph("AI Assisted Learning", styles["tagline"]))
     story.append(HRFlowable(width="100%", thickness=2, color=BRAND_PURPLE, spaceAfter=6))
-    story.append(Paragraph(title, styles["test_title"]))
-    story.append(Paragraph(subtitle, styles["meta"]))
+    story.append(Paragraph(_safe(title), styles["test_title"]))
+    story.append(Paragraph(_safe(subtitle), styles["meta"]))
     story.append(Spacer(1, 4 * mm))
 
 
