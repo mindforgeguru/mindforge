@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_teacher
+from app.core.upload_utils import reject_if_oversize
 from app.models.user import User
 from app.models.database_models import OldTestPaper, ChapterDocument, SyllabusEntry
 from app.services import ai_service, storage_service
@@ -26,6 +27,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 BUCKET = settings.MINIO_BUCKET_DATABASE
+
+# Per-file size cap for knowledge-base uploads (PDFs/images). Without this an
+# authenticated teacher could stream an arbitrarily large body — `file.read()`
+# buffers the whole thing into memory → OOM/DoS. nginx caps the request at 50M
+# but that protection vanishes if the backend is ever reached directly.
+_MAX_DOC_BYTES = 25 * 1024 * 1024  # 25 MB
+# Cap the batch size on the multi-file old-tests endpoint so the per-file cap
+# can't be multiplied into a huge aggregate upload.
+_MAX_FILES_PER_UPLOAD = 20
+
+
+def _enforce_size(file: UploadFile, data: bytes) -> None:
+    """Reject an upload whose buffered body exceeds the per-file cap."""
+    if len(data) > _MAX_DOC_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large (max {_MAX_DOC_BYTES // (1024 * 1024)} MB).",
+        )
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
@@ -48,9 +67,17 @@ async def upload_old_test_paper(
     Upload one or more old test paper files.
     AI scans each file to extract grade/subject/chapter metadata.
     """
+    if len(files) > _MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Too many files (max {_MAX_FILES_PER_UPLOAD} per upload).",
+        )
+
     results = []
     for file in files:
+        reject_if_oversize(file, _MAX_DOC_BYTES)
         data = await file.read()
+        _enforce_size(file, data)
         ext = _ext(file.filename or "doc.pdf")
 
         # AI scan
@@ -153,7 +180,9 @@ async def upload_chapter_document(
     current_user: User = Depends(get_current_teacher),
 ):
     """Upload a chapter PDF/image for a specific grade, subject, and chapter."""
+    reject_if_oversize(file, _MAX_DOC_BYTES)
     data = await file.read()
+    _enforce_size(file, data)
     ext = _ext(file.filename or "chapter.pdf")
 
     key = f"chapters/{current_user.id}/{uuid.uuid4()}.{ext}"
@@ -283,7 +312,9 @@ async def upload_syllabus(
     Upload a syllabus PDF. AI scans it to extract the chapter list for
     the given grade+subject, then stores both the file and extracted chapters.
     """
+    reject_if_oversize(file, _MAX_DOC_BYTES)
     data = await file.read()
+    _enforce_size(file, data)
     ext = _ext(file.filename or "syllabus.pdf")
 
     # Store file in MinIO

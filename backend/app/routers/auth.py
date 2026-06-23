@@ -62,9 +62,20 @@ def _clear_session_cookie(response: Response) -> None:
 
 
 def _get_client_ip(request: Request) -> str:
+    """Best-effort real client IP for rate limiting / audit logging.
+
+    We read the *rightmost* X-Forwarded-For entry, not the leftmost. The
+    leftmost value is client-controlled and trivially spoofable; the rightmost
+    is the one appended by the closest trusted hop (our nginx). nginx itself
+    overwrites XFF with the real peer IP, so in practice the header carries a
+    single value — but taking the last entry keeps this safe even if an
+    upstream is ever reconfigured to append rather than overwrite.
+    """
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
     return request.client.host if request.client else "unknown"
 
 
