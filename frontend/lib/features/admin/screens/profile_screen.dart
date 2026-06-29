@@ -269,19 +269,28 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                     radius: 56,
                     backgroundColor:
                         AppColors.primaryDark.withValues(alpha: 0.15),
-                    backgroundImage:
-                        photoUrl != null
-                            ? CachedNetworkImageProvider(photoUrl)
-                            : null,
-                    child: photoUrl == null
-                        ? Text(
-                            username[0].toUpperCase(),
-                            style:       TextStyle(
-                                fontSize: 42,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primaryDark),
-                          )
-                        : null,
+                    child: Builder(
+                      builder: (_) {
+                        final initials = Text(
+                          username[0].toUpperCase(),
+                          style: TextStyle(
+                              fontSize: 42,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryDark),
+                        );
+                        if (photoUrl == null) return initials;
+                        return ClipOval(
+                          child: CachedNetworkImage(
+                            imageUrl: photoUrl,
+                            width: 112,
+                            height: 112,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) =>
+                                Center(child: initials),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                   GestureDetector(
                     onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,

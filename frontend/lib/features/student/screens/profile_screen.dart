@@ -142,22 +142,32 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                           radius: avatarR,
                           backgroundColor:
                               AppColors.secondary.withValues(alpha: 0.15),
-                          backgroundImage: auth.profilePicUrl != null
-                              ? CachedNetworkImageProvider(auth.profilePicUrl!)
-                              : null,
-                          child: auth.profilePicUrl == null
-                              ? Text(
-                                  username.isNotEmpty
-                                      ? username[0].toUpperCase()
-                                      : 'S',
-                                  style: TextStyle(
-                                    fontSize: R.fs(context, 26,
-                                        min: 20, max: 30),
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.secondary,
-                                  ),
-                                )
-                              : null,
+                          child: Builder(
+                            builder: (_) {
+                              final initials = Text(
+                                username.isNotEmpty
+                                    ? username[0].toUpperCase()
+                                    : 'S',
+                                style: TextStyle(
+                                  fontSize: R.fs(context, 26,
+                                      min: 20, max: 30),
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.secondary,
+                                ),
+                              );
+                              if (auth.profilePicUrl == null) return initials;
+                              return ClipOval(
+                                child: CachedNetworkImage(
+                                  imageUrl: auth.profilePicUrl!,
+                                  width: avatarR * 2,
+                                  height: avatarR * 2,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (_, __, ___) =>
+                                      Center(child: initials),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                         Container(
                           padding: const EdgeInsets.all(4),

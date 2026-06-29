@@ -489,16 +489,25 @@ class _ProfileColumn extends ConsumerWidget {
           CircleAvatar(
             radius: 42,
             backgroundColor: AppColors.secondary.withValues(alpha: 0.15),
-            backgroundImage: auth.profilePicUrl != null
-                ? CachedNetworkImageProvider(auth.profilePicUrl!) as ImageProvider
-                : null,
-            child: auth.profilePicUrl == null
-                ? Text(
-                    username.isNotEmpty ? username[0].toUpperCase() : 'S',
-                    style: GoogleFonts.poppins(
-                        fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.secondary),
-                  )
-                : null,
+            child: Builder(
+              builder: (_) {
+                final initials = Text(
+                  username.isNotEmpty ? username[0].toUpperCase() : 'S',
+                  style: GoogleFonts.poppins(
+                      fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.secondary),
+                );
+                if (auth.profilePicUrl == null) return initials;
+                return ClipOval(
+                  child: CachedNetworkImage(
+                    imageUrl: auth.profilePicUrl!,
+                    width: 84,
+                    height: 84,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => Center(child: initials),
+                  ),
+                );
+              },
+            ),
           ),
           const SizedBox(height: 12),
           // Name
@@ -793,11 +802,22 @@ class _DonutLeaderboardColumn extends ConsumerWidget {
                             CircleAvatar(
                               radius: 18,
                               backgroundColor: AppColors.secondary.withValues(alpha: 0.15),
-                              backgroundImage: picUrl != null ? CachedNetworkImageProvider(picUrl) as ImageProvider : null,
-                              child: picUrl == null
-                                  ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.secondary))
-                                  : null,
+                              child: Builder(
+                                builder: (_) {
+                                  final initials = Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.secondary));
+                                  if (picUrl == null) return initials;
+                                  return ClipOval(
+                                    child: CachedNetworkImage(
+                                      imageUrl: picUrl,
+                                      width: 36,
+                                      height: 36,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (_, __, ___) => Center(child: initials),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                             const SizedBox(width: 10),
                             // Name

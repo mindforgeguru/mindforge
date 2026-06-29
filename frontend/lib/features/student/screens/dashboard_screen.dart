@@ -765,21 +765,30 @@ class _ProfileAvatar extends StatelessWidget {
         ],
       ),
       child: ClipOval(
-        child: photoUrl != null
-            ? CachedNetworkImage(imageUrl: photoUrl!, fit: BoxFit.cover)
-            : Container(
-                color: AppColors.iconContainer,
-                child: Center(
-                  child: Text(
-                    username.isNotEmpty ? username[0].toUpperCase() : 'S',
-                    style: GoogleFonts.poppins(
-                      fontSize: radius * 0.75,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
+        child: Builder(
+          builder: (_) {
+            final fallback = Container(
+              color: AppColors.iconContainer,
+              child: Center(
+                child: Text(
+                  username.isNotEmpty ? username[0].toUpperCase() : 'S',
+                  style: GoogleFonts.poppins(
+                    fontSize: radius * 0.75,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
                   ),
                 ),
               ),
+            );
+            return photoUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: photoUrl!,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => fallback,
+                  )
+                : fallback;
+          },
+        ),
       ),
     );
   }
