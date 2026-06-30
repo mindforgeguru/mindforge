@@ -9,6 +9,7 @@ import '../../../core/models/fees.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/image_pick.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 
@@ -904,11 +905,11 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
 
   Future<void> _uploadQr() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+    final picked = await pickImageBytes(picker, imageQuality: 90);
     if (picked == null) return;
     setState(() => _uploadingQr = true);
     try {
-      final bytes = await picked.readAsBytes();
+      final bytes = picked.bytes;
       final api = ref.read(apiClientProvider);
       final result = await api.uploadQrCode(bytes, picked.name, widget.slot);
       setState(() => _qrUrl = result['qr_code_url'] as String?);

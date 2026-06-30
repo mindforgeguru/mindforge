@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/image_pick.dart';
 import '../../../core/widgets/privacy_data_section.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
@@ -41,13 +42,12 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
 
   Future<void> _changeProfilePic() async {
     final picker = ImagePicker();
-    final xFile = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 80);
-    if (xFile == null) return;
-    final bytes = await xFile.readAsBytes();
+    final picked = await pickImageBytes(picker, imageQuality: 80);
+    if (picked == null) return;
+    final bytes = picked.bytes;
     try {
       final api = ref.read(apiClientProvider);
-      final res = await api.uploadStudentPhoto(bytes, xFile.name);
+      final res = await api.uploadStudentPhoto(bytes, picked.name);
       final url = res['profile_pic_url'] as String?;
       if (url != null) {
         await ref.read(authProvider.notifier).updateProfilePicUrl(url);

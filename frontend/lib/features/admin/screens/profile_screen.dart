@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/image_pick.dart';
 import '../../../core/widgets/app_about_section.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../widgets/admin_scaffold.dart';
@@ -154,13 +155,12 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
 
   Future<void> _pickAndUploadPhoto() async {
     final picker = ImagePicker();
-    final picked =
-        await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await pickImageBytes(picker, imageQuality: 85);
     if (picked == null) return;
 
     setState(() => _uploadingPhoto = true);
     try {
-      final bytes = await picked.readAsBytes();
+      final bytes = picked.bytes;
       final api = ref.read(apiClientProvider);
       final result = await api.uploadAdminPhoto(bytes, picked.name);
       final url = result['profile_pic_url'] as String;
