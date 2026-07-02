@@ -96,21 +96,19 @@ class SideNav extends StatelessWidget {
   Widget _header() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
+      child: Column(
         children: [
-          _logoBox('assets/images/hansal_logo.png', 3),
-          const SizedBox(width: 8),
-          _logoBox('assets/images/logo.png', 4),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'MIND FORGE',
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 1,
-              ),
+          _logoBox('assets/images/hansal_logo.png', 8, 84),
+          const SizedBox(height: 12),
+          _logoBox('assets/images/logo.png', 10, 84),
+          const SizedBox(height: 14),
+          Text(
+            'MIND FORGE',
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              letterSpacing: 1.5,
             ),
           ),
         ],
@@ -118,10 +116,10 @@ class SideNav extends StatelessWidget {
     );
   }
 
-  Widget _logoBox(String asset, double pad) {
+  Widget _logoBox(String asset, double pad, double size) {
     return Container(
-      width: 34,
-      height: 34,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
