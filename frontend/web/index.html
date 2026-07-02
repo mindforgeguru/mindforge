@@ -25,9 +25,12 @@
     'unsafe-inline' + 'unsafe-eval' + blob: are required by Flutter web's
     bootstrap (canvaskit, dart2js, service-worker registration).
     connect-src lists every API origin the app may talk to across dev and prod;
-    the dev entries are harmless in prod and vice-versa.
+    the dev entries are harmless in prod and vice-versa. It also needs blob:
+    because on web XFile.readAsBytes() reads the image-picker's picked file by
+    XHR-fetching its blob: URL — without it the profile-photo upload is
+    (blocked:csp).
   -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://api.mindforge.guru data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 ws://localhost:8000 ws://127.0.0.1:8000 https://api.mindforge.guru wss://api.mindforge.guru https://www.gstatic.com https://fonts.gstatic.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://api.mindforge.guru data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' blob: http://localhost:8000 http://127.0.0.1:8000 ws://localhost:8000 ws://127.0.0.1:8000 https://api.mindforge.guru wss://api.mindforge.guru https://www.gstatic.com https://fonts.gstatic.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
