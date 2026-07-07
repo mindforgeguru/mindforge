@@ -142,6 +142,14 @@ class _StudentDashboardScreenState
           ref.invalidate(pendingTestsProvider);
           ref.invalidate(offlineTestsProvider);
         }
+        // New homework or a teacher marking completion → refresh the homework
+        // screen so its list and Pending/Complete pills update live instead of
+        // waiting for a manual pull-to-refresh.
+        if (eventType == 'homework_added' ||
+            eventType == 'homework_completion_updated') {
+          ref.invalidate(studentHomeworkProvider);
+          ref.invalidate(studentHomeworkCompletionsProvider);
+        }
       }
     });
   }
