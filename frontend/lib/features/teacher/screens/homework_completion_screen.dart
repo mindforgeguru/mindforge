@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
@@ -78,6 +79,13 @@ class _TeacherHomeworkCompletionScreenState
       ref.invalidate(
           teacherHomeworkCompletionsProvider(widget.homeworkId));
       ref.invalidate(teacherTodayWorkflowProvider);
+      // Refresh the homework list so the "Pending" pill flips to "Done"
+      // immediately once every student has a recorded status. The completions
+      // response doesn't carry the grade, so invalidate every grade's list —
+      // only the one the teacher is viewing actually refetches.
+      for (final g in AppConstants.grades) {
+        ref.invalidate(teacherHomeworkProvider(g));
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

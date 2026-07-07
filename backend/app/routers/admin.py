@@ -81,14 +81,16 @@ async def upload_admin_photo(
     raw = await file.read()
     file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"
-    key = f"profiles/admin/{current_admin.id}/avatar.{ext}"
+    key = storage_service.profile_object_key(f"profiles/admin/{current_admin.id}", ext)
     await storage_service.upload_file(bucket, key, file_bytes)
     public_url = storage_service.get_public_url(bucket, key)
 
     result = await db.execute(select(User).where(User.id == current_admin.id))
     admin_user = result.scalar_one()
+    old_url = admin_user.profile_pic_url
     admin_user.profile_pic_url = public_url
     await db.commit()
+    await storage_service.delete_by_media_url(old_url)
     return {"profile_pic_url": public_url}
 
 
@@ -776,14 +778,16 @@ async def admin_upload_teacher_photo(
     raw = await file.read()
     file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"
-    key = f"profiles/teacher/{teacher_id}/avatar.{ext}"
+    key = storage_service.profile_object_key(f"profiles/teacher/{teacher_id}", ext)
     await storage_service.upload_file(bucket, key, file_bytes)
     public_url = storage_service.get_public_url(bucket, key)
 
+    old_url = teacher.profile_pic_url
     teacher.profile_pic_url = public_url
     await _audit(db, current_admin.id, "update_teacher_photo", "user", teacher_id,
                  {"username": teacher.username})
     await db.commit()
+    await storage_service.delete_by_media_url(old_url)
     return {"id": teacher_id, "profile_pic_url": public_url}
 
 

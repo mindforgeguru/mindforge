@@ -19,6 +19,7 @@ from app.models.timetable import TimetableConfig, TimetableSlot
 from app.models.user import StudentProfile, User
 from sqlalchemy.orm import aliased
 from app.schemas.attendance import AttendanceResponse, AttendanceSummary
+from app.schemas.user import AdminMpinUpdate
 from app.schemas.fees import FeePaymentResponse, PaymentInfoResponse, StudentFeeSummary
 from app.schemas.grade import GradeResponse
 from app.schemas.test import TestResponse
@@ -37,29 +38,25 @@ router = APIRouter()
 
 @router.put("/profile/mpin", status_code=status.HTTP_200_OK)
 async def change_parent_mpin(
-    payload: dict,
+    payload: AdminMpinUpdate,
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
 ):
-    """Change the parent's MPIN after verifying the current one."""
+    """Change the parent's MPIN after verifying the current one.
+
+    ``AdminMpinUpdate`` validates the shape of ``current_mpin`` and enforces the
+    weak-MPIN blocklist on ``new_mpin`` (422 on a predictable PIN) — the same
+    strength gate registration and admin resets use."""
     from app.core.security import hash_mpin, verify_mpin
-    import re
 
-    current_mpin = payload.get("current_mpin", "")
-    new_mpin = payload.get("new_mpin", "")
-
-    # Shape-check current_mpin before bcrypt: a non-6-digit value can't be
-    # correct anyway, and passing >72 bytes to verify_mpin would raise (HTTP
-    # 500) instead of returning a clean 400.
-    if not re.fullmatch(r"\d{6}", current_mpin) or not verify_mpin(current_mpin, current_parent.mpin_hash):
+    # current_mpin is already shape-validated (6 digits) by the schema, so the
+    # bcrypt call can't overflow.
+    if not verify_mpin(payload.current_mpin, current_parent.mpin_hash):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
-
-    if not re.fullmatch(r"\d{6}", new_mpin):
-        raise HTTPException(status_code=422, detail="New MPIN must be exactly 6 digits.")
 
     result = await db.execute(select(User).where(User.id == current_parent.id))
     parent_user = result.scalar_one()
-    parent_user.mpin_hash = hash_mpin(new_mpin)
+    parent_user.mpin_hash = hash_mpin(payload.new_mpin)
     await db.commit()
     return {"message": "MPIN updated successfully."}
 

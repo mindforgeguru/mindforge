@@ -109,14 +109,16 @@ async def upload_teacher_photo(
     raw = await file.read()
     file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"
-    key = f"profiles/teacher/{current_teacher.id}/avatar.{ext}"
+    key = storage_service.profile_object_key(f"profiles/teacher/{current_teacher.id}", ext)
     await storage_service.upload_file(bucket, key, file_bytes)
     public_url = storage_service.get_public_url(bucket, key)
 
     result = await db.execute(select(User).where(User.id == current_teacher.id))
     teacher_user = result.scalar_one()
+    old_url = teacher_user.profile_pic_url
     teacher_user.profile_pic_url = public_url
     await db.commit()
+    await storage_service.delete_by_media_url(old_url)
     return {"profile_pic_url": public_url}
 
 

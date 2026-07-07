@@ -22,6 +22,7 @@ from app.models.test import Test, TestSubmission, TestType
 from app.models.timetable import TimetableSlot
 from app.models.user import StudentProfile, User
 from app.schemas.attendance import AttendanceResponse, AttendanceSummary
+from app.schemas.user import AdminMpinUpdate
 from app.schemas.grade import GradeResponse
 from app.schemas.test import (
     TestAnswersSave,
@@ -1205,7 +1206,7 @@ async def upload_profile_picture(
     raw = await file.read()
     file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
     bucket = "mindforge-profiles"
-    key = f"profiles/{current_student.id}/avatar.{ext}"
+    key = storage_service.profile_object_key(f"profiles/{current_student.id}", ext)
     await storage_service.upload_file(bucket, key, file_bytes)
     public_url = storage_service.get_public_url(bucket, key)
 
@@ -1213,6 +1214,7 @@ async def upload_profile_picture(
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
+    old_url = profile.profile_pic_url
     profile.profile_pic_url = public_url
 
     user_result = await db.execute(select(User).where(User.id == current_student.id))
@@ -1220,34 +1222,33 @@ async def upload_profile_picture(
     student_user.profile_pic_url = public_url
 
     await db.commit()
+    # Drop the previous object so replaced (and legacy predictable-key) photos
+    # don't linger in the bucket where they'd stay harvestable.
+    await storage_service.delete_by_media_url(old_url)
     return {"profile_pic_url": public_url}
 
 
 @router.put("/profile/mpin", status_code=status.HTTP_200_OK)
 async def change_student_mpin(
-    payload: dict,
+    payload: AdminMpinUpdate,
     db: AsyncSession = Depends(get_db),
     current_student: User = Depends(get_current_student),
 ):
-    """Change the student's MPIN after verifying the current one."""
+    """Change the student's MPIN after verifying the current one.
+
+    ``AdminMpinUpdate`` validates the shape of ``current_mpin`` and enforces the
+    weak-MPIN blocklist on ``new_mpin`` (422 on a predictable PIN) — the same
+    strength gate registration and admin resets use."""
     from app.core.security import hash_mpin, verify_mpin
-    import re
 
-    current_mpin = payload.get("current_mpin", "")
-    new_mpin = payload.get("new_mpin", "")
-
-    # Shape-check current_mpin before bcrypt: a non-6-digit value can't be
-    # correct anyway, and passing >72 bytes to verify_mpin would raise (HTTP
-    # 500) instead of returning a clean 400.
-    if not re.fullmatch(r"\d{6}", current_mpin) or not verify_mpin(current_mpin, current_student.mpin_hash):
+    # current_mpin is already shape-validated (6 digits) by the schema, so the
+    # bcrypt call can't overflow.
+    if not verify_mpin(payload.current_mpin, current_student.mpin_hash):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
-
-    if not re.fullmatch(r"\d{6}", new_mpin):
-        raise HTTPException(status_code=422, detail="New MPIN must be exactly 6 digits.")
 
     result = await db.execute(select(User).where(User.id == current_student.id))
     student_user = result.scalar_one()
-    student_user.mpin_hash = hash_mpin(new_mpin)
+    student_user.mpin_hash = hash_mpin(payload.new_mpin)
     await db.commit()
     return {"message": "MPIN updated successfully."}
 

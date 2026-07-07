@@ -165,36 +165,67 @@ class RedisManager:
         result = await self._client.set(f"idem:{key}", "1", ex=ttl_seconds, nx=True)
         return result is True  # None means key already existed
 
-    # ── Per-user MPIN brute-force lockout ──────────────────────────────────
+    # ── MPIN brute-force lockout ────────────────────────────────────────────
+    # Two layers so throttling brute force doesn't hand attackers a way to lock
+    # a victim out of their own account (account-lockout DoS):
+    #   • Per-(user, IP): 5 fails from one IP locks *that IP* against the account
+    #     for 15 min. Stops single-source brute force without touching the real
+    #     user, who logs in from a different IP.
+    #   • Per-user global backstop: 50 fails from *any* source in the window
+    #     locks the account outright — a much higher bar, reserved for a
+    #     distributed attack that the per-IP limit alone wouldn't stop.
+    _LOCKOUT_MAX          = 5          # per-IP failed attempts before that IP is locked
+    _GLOBAL_LOCKOUT_MAX   = 50         # account-wide failed attempts before a full lock
+    _LOCKOUT_TTL          = 15 * 60    # 15 minutes in seconds
 
-    _LOCKOUT_MAX   = 5          # failed attempts before lockout
-    _LOCKOUT_TTL   = 15 * 60   # 15 minutes in seconds
-
-    async def record_failed_login(self, user_id: int) -> bool:
-        """Increment the failed-login counter for user_id.
-        Returns True if the account should now be locked out."""
+    async def record_failed_login(self, user_id: int, ip: str) -> bool:
+        """Increment the failed-login counters for (user_id, ip).
+        Returns True if the account is now locked for this caller."""
         if self._client is None:
             return False
-        key = f"failed_logins:{user_id}"
-        count = await self._client.incr(key)
-        if count == 1:
-            await self._client.expire(key, self._LOCKOUT_TTL)
-        if count >= self._LOCKOUT_MAX:
-            await self._client.set(f"lockout:user:{user_id}", "1", ex=self._LOCKOUT_TTL)
+
+        # Layer 1 — per-(user, IP) lock.
+        ip_key = f"failed_logins:{user_id}:{ip}"
+        ip_count = await self._client.incr(ip_key)
+        if ip_count == 1:
+            await self._client.expire(ip_key, self._LOCKOUT_TTL)
+        locked = False
+        if ip_count >= self._LOCKOUT_MAX:
+            await self._client.set(
+                f"lockout:user:{user_id}:{ip}", "1", ex=self._LOCKOUT_TTL)
+            locked = True
+
+        # Layer 2 — per-user global backstop against distributed attacks.
+        g_key = f"failed_logins_global:{user_id}"
+        g_count = await self._client.incr(g_key)
+        if g_count == 1:
+            await self._client.expire(g_key, self._LOCKOUT_TTL)
+        if g_count >= self._GLOBAL_LOCKOUT_MAX:
+            await self._client.set(
+                f"lockout:user:{user_id}", "1", ex=self._LOCKOUT_TTL)
+            locked = True
+
+        return locked
+
+    async def is_user_locked_out(self, user_id: int, ip: str) -> bool:
+        """True if this caller is locked out — either their IP is locked against
+        the account, or the account is under a global (distributed-attack) lock."""
+        if self._client is None:
+            return False
+        if await self._client.exists(f"lockout:user:{user_id}:{ip}") == 1:
             return True
-        return False
-
-    async def is_user_locked_out(self, user_id: int) -> bool:
-        """Return True if this user is currently locked out."""
-        if self._client is None:
-            return False
         return await self._client.exists(f"lockout:user:{user_id}") == 1
 
-    async def clear_failed_logins(self, user_id: int) -> None:
-        """Clear the failed-login counter after a successful login."""
+    async def clear_failed_logins(self, user_id: int, ip: str) -> None:
+        """Clear failure counters and locks after a successful login. Success
+        requires the correct MPIN, so it's safe to lift the global lock too."""
         if self._client:
-            await self._client.delete(f"failed_logins:{user_id}")
-            await self._client.delete(f"lockout:user:{user_id}")
+            await self._client.delete(
+                f"failed_logins:{user_id}:{ip}",
+                f"lockout:user:{user_id}:{ip}",
+                f"failed_logins_global:{user_id}",
+                f"lockout:user:{user_id}",
+            )
 
 
 redis_manager = RedisManager()

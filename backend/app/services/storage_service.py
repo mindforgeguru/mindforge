@@ -5,6 +5,7 @@ Handles file uploads and pre-signed URL generation.
 
 import io
 import logging
+import secrets
 from typing import Optional
 
 from minio import Minio
@@ -25,9 +26,11 @@ REQUIRED_BUCKETS = [
 ]
 
 # All buckets are private. External access to profile pics goes through the
-# authenticated /api/media/{bucket}/{key} proxy in main.py — never directly.
-# Keeping the bucket private is defence-in-depth in case MinIO is ever exposed
-# publicly (Railway domain, port forward, etc.).
+# /api/media/{bucket}/{key} proxy in main.py — never directly. The proxy is
+# unauthenticated (so <img>/CachedNetworkImage can load without a token), so
+# object keys MUST be unguessable — see profile_object_key(). Keeping the
+# bucket private is defence-in-depth in case MinIO is ever exposed publicly
+# (Railway domain, port forward, etc.).
 
 
 def _get_client() -> Minio:
@@ -160,3 +163,50 @@ async def delete_file(bucket: str, key: str):
     except S3Error as e:
         logger.error(f"MinIO delete error: {e}")
         raise
+
+
+def profile_object_key(prefix: str, ext: str) -> str:
+    """Build an *unguessable* object key for a profile picture.
+
+    The old scheme used a predictable path (``profiles/{user_id}/avatar.jpg``),
+    which let anyone enumerate every user's photo through the media proxy just
+    by iterating sequential user ids. Embedding a random 128-bit token in the
+    filename makes enumeration infeasible while keeping the per-user folder for
+    housekeeping. ``prefix`` is the folder (e.g. ``profiles/teacher/7``).
+    """
+    token = secrets.token_urlsafe(16)  # 128 bits of entropy
+    return f"{prefix.rstrip('/')}/{token}.{ext}"
+
+
+def parse_media_url(url: Optional[str]) -> Optional[tuple[str, str]]:
+    """Extract ``(bucket, key)`` from a backend media-proxy URL, or None.
+
+    Handles the canonical ``.../api/media/{bucket}/{key}`` form regardless of
+    host so old objects can be located for deletion during a re-upload."""
+    if not url:
+        return None
+    marker = "/api/media/"
+    idx = url.find(marker)
+    if idx == -1:
+        return None
+    rest = url[idx + len(marker):]
+    bucket, sep, key = rest.partition("/")
+    if not sep or not bucket or not key:
+        return None
+    return bucket, key
+
+
+async def delete_by_media_url(url: Optional[str]) -> None:
+    """Best-effort delete of the object referenced by a media-proxy URL.
+
+    Used when a user replaces their profile picture so the previous (and, for
+    legacy accounts, predictably-named) object doesn't linger and stay
+    harvestable. Never raises — a missing/at-rest object must not fail the
+    upload it's cleaning up after."""
+    parsed = parse_media_url(url)
+    if not parsed:
+        return
+    try:
+        await delete_file(*parsed)
+    except Exception as e:  # noqa: BLE001 — cleanup must not break the caller
+        logger.warning(f"Old profile object cleanup skipped: {e}")
