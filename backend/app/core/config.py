@@ -4,7 +4,7 @@ All values are loaded from environment variables / .env file.
 """
 
 from typing import List, Union
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -108,6 +108,35 @@ class Settings(BaseSettings):
                 "requires an explicit origin allowlist."
             )
         return origins
+
+    @model_validator(mode="after")
+    def _reject_insecure_production_defaults(self):
+        """Fail fast if a production deploy is still using the built-in default
+        credentials. These defaults exist only for local dev (APP_ENV set to
+        something other than 'production'); shipping them to prod would leave
+        the object store / datastores reachable with publicly-known secrets.
+        Same philosophy as JWT_SECRET having no default at all."""
+        if self.APP_ENV != "production":
+            return self
+
+        insecure: List[str] = []
+        if self.MINIO_ACCESS_KEY == "minioadmin":
+            insecure.append("MINIO_ACCESS_KEY")
+        if self.MINIO_SECRET_KEY == "minio_secret":
+            insecure.append("MINIO_SECRET_KEY")
+        if "mindforge_secret" in self.DB_URL:
+            insecure.append("DB_URL (default password)")
+        if "redis_secret" in self.REDIS_URL:
+            insecure.append("REDIS_URL (default password)")
+
+        if insecure:
+            raise ValueError(
+                "Refusing to start in production (APP_ENV=production) with "
+                "default credentials still set: " + ", ".join(insecure) + ". "
+                "Set strong values in the environment, or set APP_ENV to a "
+                "non-production value for local development."
+            )
+        return self
 
 
 settings = Settings()

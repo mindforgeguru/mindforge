@@ -287,7 +287,7 @@ async def login(
     user = result.scalar_one_or_none()
 
     # Check per-user lockout before touching the DB password check
-    if user and await redis_manager.is_user_locked_out(user.id):
+    if user and await redis_manager.is_user_locked_out(user.id, ip):
         logger.warning(
             "Login blocked: account locked out user_id=%s username=%r ip=%s",
             user.id, payload.username, ip,
@@ -301,7 +301,7 @@ async def login(
     if not user or not verify_mpin(payload.mpin, user.mpin_hash):
         # Record the failure against the user (if the username exists)
         if user:
-            locked = await redis_manager.record_failed_login(user.id)
+            locked = await redis_manager.record_failed_login(user.id, ip)
             logger.warning(
                 "Failed login user_id=%s username=%r ip=%s%s",
                 user.id, payload.username, ip,
@@ -334,8 +334,8 @@ async def login(
             detail="Your account has been deactivated.",
         )
 
-    # Successful login — clear any prior failure counter
-    await redis_manager.clear_failed_logins(user.id)
+    # Successful login — clear any prior failure counters for this caller
+    await redis_manager.clear_failed_logins(user.id, ip)
 
     token_data = {"sub": str(user.id), "role": user.role}
     access_token = create_access_token(data=token_data)
