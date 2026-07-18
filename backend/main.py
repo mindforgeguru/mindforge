@@ -8,7 +8,7 @@ from fastapi import (
     HTTPException, Query, Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import logging
@@ -203,6 +203,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ─── CORS-aware 500 handler ───────────────────────────────────────────────────
+# An unhandled exception is turned into a 500 by Starlette's ServerErrorMiddleware,
+# which sits *outside* CORSMiddleware — so that 500 ships without any
+# Access-Control-Allow-Origin header. A browser then can't read the response and
+# surfaces a generic "XMLHttpRequest onError" / connection error, hiding the real
+# server fault (this is exactly what masked a failing upload). Handling Exception
+# here lets us attach the CORS headers ourselves so the web client sees a real
+# 500 with a JSON body instead of an opaque network error. HTTPExceptions are
+# unaffected — they're handled inside CORSMiddleware and already get the headers.
+@app.exception_handler(Exception)
+async def cors_aware_internal_error(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception(
+        "Unhandled error on %s %s", request.method, request.url.path,
+    )
+    headers: dict[str, str] = {}
+    origin = request.headers.get("origin")
+    if origin and origin in settings.BACKEND_CORS_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Vary"] = "Origin"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error."},
+        headers=headers,
+    )
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
