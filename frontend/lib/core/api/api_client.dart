@@ -97,7 +97,8 @@ class ApiClient {
               // Exponential backoff: 1 s, 2 s, 4 s
               await Future.delayed(Duration(seconds: 1 << attempt));
               try {
-                final response = await _dio.fetch(error.requestOptions);
+                final response =
+                    await _dio.fetch(_withFreshBody(error.requestOptions));
                 return handler.resolve(response);
               } on DioException catch (e) {
                 return handler.next(e);
@@ -149,7 +150,8 @@ class ApiClient {
               final retryOptions = error.requestOptions;
               retryOptions.headers['Authorization'] = 'Bearer $newToken';
               try {
-                final response = await _dio.fetch(retryOptions);
+                final response =
+                    await _dio.fetch(_withFreshBody(retryOptions));
                 return handler.resolve(response);
               } on DioException catch (e) {
                 return handler.next(e);
@@ -168,6 +170,20 @@ class ApiClient {
     if (!kIsWeb) {
       applySSLPinning(_dio.httpClientAdapter as IOHttpClientAdapter);
     }
+  }
+
+  /// Returns [options] ready to be re-sent, replacing a spent multipart body
+  /// with a fresh clone. A [FormData] is finalized the first time it's sent;
+  /// on web a finalized FormData throws "The FormData has already been
+  /// finalized" (or silently transmits an empty body the server rejects) when
+  /// reused. Our retry paths re-fetch `error.requestOptions`, so any upload
+  /// that gets retried after a 401-refresh or a connection error must swap in
+  /// an unspent copy of the body first.
+  RequestOptions _withFreshBody(RequestOptions options) {
+    if (options.data is FormData) {
+      options.data = (options.data as FormData).clone();
+    }
+    return options;
   }
 
   // ── Internal refresh helper ───────────────────────────────────────────────
