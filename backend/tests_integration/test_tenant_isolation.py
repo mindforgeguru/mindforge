@@ -366,8 +366,8 @@ class TestRegistrationScoping:
         assert username not in pending_for("b")
 
 
-# Module level: the class above carries a class-wide asyncio mark, and this
-# check needs no database round trip.
+# Module level: the class above carries a class-wide asyncio mark, and these
+# checks need no database round trip.
 def test_registration_into_unknown_school_is_refused(api):
     r = register(
         api,
@@ -378,3 +378,61 @@ def test_registration_into_unknown_school_is_refused(api):
         phone=_phone(13),
     )
     assert r.status_code == 400
+
+
+class TestPhoneScoping:
+    """Phone uniqueness is per school, like usernames.
+
+    The index was global (from 014, before multi-tenancy) while both code
+    paths filtered by school_id. So the app found no conflict, inserted, and
+    the database raised UniqueViolation with nothing catching it — a 500 when
+    two unrelated schools happened to share a number. Migration 033 aligned
+    the index with the code.
+    """
+
+    def test_same_phone_allowed_in_two_schools(self, api, two_schools):
+        phone = _phone(21)
+        for tag, n in (("a", 21), ("b", 22)):
+            r = register(
+                api,
+                username=f"{PREFIX}_ph_{tag}",
+                mpin=TEST_MPIN,
+                role="teacher",
+                school_id=two_schools[tag]["id"],
+                phone=phone,
+            )
+            assert r.status_code == 201, (
+                f"school {tag} rejected a phone already used by another "
+                f"school: {r.status_code} {r.text}"
+            )
+
+    def test_duplicate_phone_within_a_school_is_a_clean_conflict(
+        self, api, two_schools
+    ):
+        phone = _phone(23)
+        sid = two_schools["a"]["id"]
+        first = register(
+            api,
+            username=f"{PREFIX}_ph_dup1",
+            mpin=TEST_MPIN,
+            role="teacher",
+            school_id=sid,
+            phone=phone,
+        )
+        assert first.status_code == 201, first.text
+
+        second = register(
+            api,
+            username=f"{PREFIX}_ph_dup2",
+            mpin=TEST_MPIN,
+            role="teacher",
+            school_id=sid,
+            phone=phone,
+        )
+        # 409, never 500 — a raw IntegrityError reaching the client is the
+        # regression this guards.
+        assert second.status_code == 409, second.text
+        # And the message must not confirm which detail collided; phone
+        # numbers are PII and a precise error would let someone probe for
+        # registered numbers.
+        assert phone not in second.text

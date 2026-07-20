@@ -14,6 +14,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, 
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -315,7 +316,24 @@ async def register_user(
         )
         db.add(profile)
 
-    await db.commit()
+    # The username/phone checks above are read-then-write, so two concurrent
+    # registrations can both pass them and collide at the index. Translate that
+    # into the same conflict the checks would have raised rather than letting a
+    # raw IntegrityError surface as a 500. The message stays deliberately vague:
+    # phone numbers are PII and a precise error would let someone probe which
+    # numbers are registered.
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Registration could not be completed with the details "
+                "provided. Please contact the school admin if this is "
+                "unexpected."
+            ),
+        )
     await db.refresh(user)
     return user
 

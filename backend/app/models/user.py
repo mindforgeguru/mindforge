@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import (
-    Boolean, DateTime, Enum, ForeignKey, Integer, JSON, String, UniqueConstraint, func
+    Boolean, DateTime, Enum, ForeignKey, Index, Integer, JSON, String,
+    UniqueConstraint, func, text
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,8 +34,19 @@ class User(Base):
     # Usernames are unique *per school*, not globally — two schools can each
     # have an "admin". The platform owner has school_id NULL; Postgres treats
     # NULLs as distinct, so this constraint doesn't box the owner in.
+    # Phone is likewise unique per school, not globally (migration 033) — the
+    # registration and admin-edit conflict checks both filter by school_id, and
+    # a global index made them disagree with the database. Declared as a partial
+    # Index rather than a UniqueConstraint because it must exclude NULLs.
     __table_args__ = (
         UniqueConstraint("school_id", "username", name="uq_users_school_username"),
+        Index(
+            "ix_users_school_phone_unique",
+            "school_id",
+            "phone",
+            unique=True,
+            postgresql_where=text("phone IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
