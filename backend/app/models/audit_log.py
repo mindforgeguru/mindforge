@@ -18,9 +18,12 @@ class AuditLog(TenantMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
-    # The admin who performed the action
-    admin_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=False, index=True
+    # The admin who performed the action. Nullable so the ON DELETE SET NULL
+    # above can actually fire (migration 034): an audit entry has to outlive
+    # the account that wrote it, or the trail disappears precisely when someone
+    # is removed. A NULL here means "actor since deleted", not "unknown action".
+    admin_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # Short action name, e.g. "approve_user", "revoke_user", "edit_user"
