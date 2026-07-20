@@ -119,6 +119,11 @@ async def _get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is pending admin approval.",
         )
+    # Suspension has to be enforced here, not just at login: the JWT carries a
+    # school_id fixed at sign-in, and rotating refresh tokens would otherwise
+    # keep a suspended school's sessions alive indefinitely.
+    from app.core.tenancy import assert_school_active
+    await assert_school_active(user, db)
 
     # Tag the Sentry scope so any error raised downstream is attributed to
     # this user. No-op when Sentry isn't initialized (no DSN configured).
@@ -154,6 +159,7 @@ def _require_role(role: str):
 # ─── Public role-based dependencies ───────────────────────────────────────────
 
 get_current_user = _get_current_user
+get_current_owner = _require_role("owner")
 get_current_teacher = _require_role("teacher")
 get_current_student = _require_role("student")
 get_current_parent = _require_role("parent")

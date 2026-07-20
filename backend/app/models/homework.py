@@ -10,6 +10,7 @@ from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Strin
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
 class HomeworkType(str, enum.Enum):
@@ -17,7 +18,7 @@ class HomeworkType(str, enum.Enum):
     written = "written"
 
 
-class Homework(Base):
+class Homework(TenantMixin, Base):
     """
     Homework assigned by a teacher to a grade.
     - If homework_type == 'online_test', test_id links to an existing Test.
@@ -59,7 +60,7 @@ class Homework(Base):
         return f"<Homework id={self.id} grade={self.grade} subject={self.subject}>"
 
 
-class HomeworkCompletion(Base):
+class HomeworkCompletion(TenantMixin, Base):
     """
     Per-student record of whether a piece of homework was completed.
     One row per (homework_id, student_id). Created the first time the teacher
@@ -97,7 +98,7 @@ class HomeworkCompletion(Base):
         )
 
 
-class Broadcast(Base):
+class Broadcast(TenantMixin, Base):
     """
     Message broadcast sent by a teacher to all users or a specific grade.
     """

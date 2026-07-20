@@ -12,9 +12,10 @@ from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
-class OldTestPaper(Base):
+class OldTestPaper(TenantMixin, Base):
     __tablename__ = "old_test_papers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -34,7 +35,7 @@ class OldTestPaper(Base):
     teacher = relationship("User", foreign_keys=[teacher_id])
 
 
-class ChapterDocument(Base):
+class ChapterDocument(TenantMixin, Base):
     __tablename__ = "chapter_documents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -52,7 +53,7 @@ class ChapterDocument(Base):
     teacher = relationship("User", foreign_keys=[teacher_id])
 
 
-class SyllabusEntry(Base):
+class SyllabusEntry(TenantMixin, Base):
     __tablename__ = "syllabus_entries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

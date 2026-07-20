@@ -249,10 +249,62 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> login(String username, String mpin) async {
+  /// Public, unauthenticated list of active schools for the login/registration
+  /// picker. Returns each as {id, name, slug, logo_url}.
+  Future<List<Map<String, dynamic>>> getSchools() async {
+    final res = await _dio.get('/schools');
+    return (res.data as List).cast<Map<String, dynamic>>();
+  }
+
+  // ── Owner console ──────────────────────────────────────────────────────────
+
+  /// Every school on the platform with per-role user counts (owner only).
+  Future<List<Map<String, dynamic>>> getOwnerSchools() async {
+    final res = await _dio.get('/owner/schools');
+    return (res.data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createSchool({
+    required String name,
+    String? slug,
+    String? contactEmail,
+    String? contactPhone,
+    String? address,
+  }) async {
+    final res = await _dio.post('/owner/schools', data: {
+      'name': name,
+      if (slug != null && slug.isNotEmpty) 'slug': slug,
+      if (contactEmail != null && contactEmail.isNotEmpty) 'contact_email': contactEmail,
+      if (contactPhone != null && contactPhone.isNotEmpty) 'contact_phone': contactPhone,
+      if (address != null && address.isNotEmpty) 'address': address,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateSchool(int schoolId,
+      {bool? isActive, String? name}) async {
+    final res = await _dio.patch('/owner/schools/$schoolId', data: {
+      if (isActive != null) 'is_active': isActive,
+      if (name != null) 'name': name,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createSchoolAdmin(
+      int schoolId, String username, String mpin) async {
+    final res = await _dio.post('/owner/schools/$schoolId/admins', data: {
+      'username': username,
+      'mpin': mpin,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> login(String username, String mpin,
+      {int? schoolId}) async {
     final res = await _dio.post('/auth/login', data: {
       'username': username,
       'mpin': mpin,
+      if (schoolId != null) 'school_id': schoolId,
     });
     return res.data as Map<String, dynamic>;
   }
@@ -312,7 +364,8 @@ class ApiClient {
 
   Future<Map<String, dynamic>> register(
       String username, String mpin, String role,
-      {String? phone,
+      {int? schoolId,
+      String? phone,
       String? email,
       String? parentUsername,
       String? parentMpin,
@@ -323,6 +376,7 @@ class ApiClient {
       'username': username,
       'mpin': mpin,
       'role': role,
+      if (schoolId != null) 'school_id': schoolId,
       if (phone != null && phone.isNotEmpty) 'phone': phone,
       if (email != null && email.isNotEmpty) 'email': email,
       if (parentUsername != null && parentUsername.isNotEmpty)

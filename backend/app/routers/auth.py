@@ -22,12 +22,14 @@ from app.core.security import (
     decode_access_token, get_current_user
 )
 from app.models.academic_year import AcademicYear
-from app.models.user import User, StudentProfile, TeacherProfile
+from app.models.school import School
+from app.models.user import User, StudentProfile, TeacherProfile, UserRole
 from app.schemas.user import (
     UserRegisterRequest, UserLoginRequest, TokenResponse,
     RefreshRequest, RefreshResponse, UserResponse,
 )
 from app.core.redis_client import redis_manager
+from app.core.cache import is_school_active_cached
 from app.services import storage_service
 
 router = APIRouter()
@@ -36,6 +38,44 @@ router = APIRouter()
 # here (WARNING) so brute-force / abuse is visible in logs and Sentry breadcrumbs
 # rather than silently absorbed by the Redis lockout counter.
 logger = logging.getLogger("mindforge.security")
+
+
+# ── School resolution ─────────────────────────────────────────────────────────
+
+async def _resolve_school(
+    db: AsyncSession, school_id: Optional[int]
+) -> School:
+    """Resolve the active school a login/registration is scoped to.
+
+    - If ``school_id`` is given, it must be an existing *active* school.
+    - If omitted, we fall back to the sole active school when exactly one
+      exists (keeps single-school deployments working before the picker ships);
+      otherwise the caller must choose one (400).
+
+    Returns the School row so callers can use both its id and name.
+    """
+    if school_id is not None:
+        result = await db.execute(
+            select(School).where(
+                School.id == school_id, School.is_active.is_(True)
+            )
+        )
+        school = result.scalar_one_or_none()
+        if school is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Selected school was not found or is inactive.",
+            )
+        return school
+
+    result = await db.execute(select(School).where(School.is_active.is_(True)))
+    schools = result.scalars().all()
+    if len(schools) == 1:
+        return schools[0]
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Please select your school.",
+    )
 
 # ── Cookie helpers ────────────────────────────────────────────────────────────
 
@@ -102,12 +142,20 @@ async def register_user(
             headers={"Retry-After": "60"},
         )
 
-    # Check username uniqueness. We keep this error specific (the chosen
-    # username is not PII; users expect clear "already taken" feedback at
-    # signup) — but pair it with the rate limit above so it can't be used
-    # to enumerate usernames quickly.
+    # Resolve which school this account belongs to (from the picker). Everything
+    # below — username/phone uniqueness, parent linking — is scoped to it.
+    school = await _resolve_school(db, payload.school_id)
+
+    # Check username uniqueness *within the school*. We keep this error specific
+    # (the chosen username is not PII; users expect clear "already taken"
+    # feedback at signup) — but pair it with the rate limit above so it can't be
+    # used to enumerate usernames quickly.
     existing = await db.execute(
-        select(User).where(User.username == payload.username, User.deleted_at.is_(None))
+        select(User).where(
+            User.username == payload.username,
+            User.school_id == school.id,
+            User.deleted_at.is_(None),
+        )
     )
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -141,7 +189,11 @@ async def register_user(
     # contact the school admin, which is the right out-of-band channel anyway.
     if payload.phone:
         phone_conflict = await db.execute(
-            select(User).where(User.phone == payload.phone, User.deleted_at.is_(None))
+            select(User).where(
+                User.phone == payload.phone,
+                User.school_id == school.id,
+                User.deleted_at.is_(None),
+            )
         )
         if phone_conflict.scalar_one_or_none():
             raise HTTPException(
@@ -163,6 +215,7 @@ async def register_user(
         username=payload.username,
         mpin_hash=hash_mpin(payload.mpin),
         role=payload.role,
+        school_id=school.id,
         is_active=True,
         is_approved=False,  # Pending admin approval
         academic_year_id=current_year.id if current_year else None,
@@ -177,6 +230,7 @@ async def register_user(
         teacher_profile = TeacherProfile(
             user_id=user.id,
             teachable_subjects=payload.teachable_subjects or [],
+            school_id=school.id,
         )
         db.add(teacher_profile)
 
@@ -201,6 +255,7 @@ async def register_user(
                 select(User).where(
                     sa_func.lower(User.username) == payload.parent_username.strip().lower(),
                     User.role == "parent",
+                    User.school_id == school.id,
                     User.deleted_at.is_(None),
                 )
             )
@@ -222,6 +277,7 @@ async def register_user(
                 conflict = await db.execute(
                     select(User).where(
                         sa_func.lower(User.username) == payload.parent_username.strip().lower(),
+                        User.school_id == school.id,
                         User.deleted_at.is_(None),
                     )
                 )
@@ -232,11 +288,13 @@ async def register_user(
                     )
 
                 # Parent account doesn't exist — auto-create it with the
-                # student-supplied parent MPIN (NOT the student's own MPIN).
+                # student-supplied parent MPIN (NOT the student's own MPIN),
+                # in the same school as the student.
                 new_parent = User(
                     username=payload.parent_username.strip(),
                     mpin_hash=hash_mpin(payload.parent_mpin),
                     role="parent",
+                    school_id=school.id,
                     is_active=True,
                     is_approved=False,
                     academic_year_id=current_year.id if current_year else None,
@@ -253,6 +311,7 @@ async def register_user(
             grade=grade,
             parent_user_id=parent_user_id,
             additional_subjects=subjects,
+            school_id=school.id,
         )
         db.add(profile)
 
@@ -281,10 +340,32 @@ async def login(
             headers={"Retry-After": "60"},
         )
 
-    result = await db.execute(
-        select(User).where(User.username == payload.username, User.deleted_at.is_(None))
-    )
-    user = result.scalar_one_or_none()
+    # Resolve which account this login targets. Usernames are unique per school,
+    # so the lookup is scoped by school. The school-less platform owner is tried
+    # first when no school is selected, so the owner never needs to pick one.
+    user = None
+    school: Optional[School] = None
+    if payload.school_id is None:
+        owner_result = await db.execute(
+            select(User).where(
+                User.username == payload.username,
+                User.role == UserRole.owner,
+                User.school_id.is_(None),
+                User.deleted_at.is_(None),
+            )
+        )
+        user = owner_result.scalar_one_or_none()
+
+    if user is None:
+        school = await _resolve_school(db, payload.school_id)
+        result = await db.execute(
+            select(User).where(
+                User.username == payload.username,
+                User.school_id == school.id,
+                User.deleted_at.is_(None),
+            )
+        )
+        user = result.scalar_one_or_none()
 
     # Check per-user lockout before touching the DB password check
     if user and await redis_manager.is_user_locked_out(user.id, ip):
@@ -337,7 +418,7 @@ async def login(
     # Successful login — clear any prior failure counters for this caller
     await redis_manager.clear_failed_logins(user.id, ip)
 
-    token_data = {"sub": str(user.id), "role": user.role}
+    token_data = {"sub": str(user.id), "role": user.role, "school_id": user.school_id}
     access_token = create_access_token(data=token_data)
     refresh_token = create_refresh_token(data=token_data)
 
@@ -352,6 +433,8 @@ async def login(
         role=user.role,
         user_id=user.id,
         username=user.username,
+        school_id=user.school_id,
+        school_name=school.name if school else None,
     )
 
 
@@ -392,13 +475,20 @@ async def refresh_access_token(
     user = result.scalar_one_or_none()
     if user is None or not user.is_approved or not user.is_active:
         raise credentials_exception
+    # Refuse to mint a new session for a suspended school. Without this the
+    # rotation below would hand out a fresh 30-day refresh token, letting a
+    # suspended school renew access indefinitely.
+    if user.school_id is not None and not await is_school_active_cached(
+        user.school_id, db
+    ):
+        raise credentials_exception
 
     # Blacklist the consumed JTI (TTL = remaining lifetime of the old token)
     if jti and exp:
         remaining = max(int(exp - datetime.now(timezone.utc).timestamp()), 1)
         await redis_manager.revoke_jti(jti, remaining)
 
-    token_data = {"sub": str(user.id), "role": user.role}
+    token_data = {"sub": str(user.id), "role": user.role, "school_id": user.school_id}
     new_access_token = create_access_token(data=token_data)
     new_refresh_token = create_refresh_token(data=token_data)
     _set_session_cookie(response, new_access_token)
@@ -626,6 +716,7 @@ async def delete_my_account(
         target_type="user",
         target_id=current_user.id,
         details={"username": current_user.username, "role": current_user.role.value},
+        school_id=current_user.school_id,
     ))
 
     # Cascade soft-delete to the parent's single linked student (if any).
@@ -648,6 +739,7 @@ async def delete_my_account(
                 "triggered_by_parent_id": current_user.id,
                 "triggered_by_parent_username": current_user.username,
             },
+            school_id=current_user.school_id,
         ))
 
     await db.commit()

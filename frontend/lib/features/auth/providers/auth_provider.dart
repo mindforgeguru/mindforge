@@ -20,6 +20,10 @@ class AuthState {
   final int? userId;
   final String? username;
   final String? profilePicUrl;
+  // The logged-in user's school, used to brand the UI. Both null for the
+  // platform owner (who belongs to no school).
+  final int? schoolId;
+  final String? schoolName;
   final bool isLoading;
   final String? error;
 
@@ -29,6 +33,8 @@ class AuthState {
     this.userId,
     this.username,
     this.profilePicUrl,
+    this.schoolId,
+    this.schoolName,
     this.isLoading = false,
     this.error,
   });
@@ -41,6 +47,8 @@ class AuthState {
     int? userId,
     String? username,
     String? profilePicUrl,
+    int? schoolId,
+    String? schoolName,
     bool? isLoading,
     String? error,
     bool clearError = false,
@@ -55,6 +63,8 @@ class AuthState {
       profilePicUrl: clearToken || clearProfilePic
           ? null
           : (profilePicUrl ?? this.profilePicUrl),
+      schoolId: clearToken ? null : (schoolId ?? this.schoolId),
+      schoolName: clearToken ? null : (schoolName ?? this.schoolName),
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
     );
@@ -90,7 +100,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _restoreSession() async {
-    String? token, role, userIdStr, username, profilePicUrl, refreshToken;
+    String? token, role, userIdStr, username, profilePicUrl, refreshToken,
+        schoolIdStr, schoolName;
     try {
       token        = await _storage.read(key: AppConstants.tokenStorageKey);
       role         = await _storage.read(key: AppConstants.roleStorageKey);
@@ -98,6 +109,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       username     = await _storage.read(key: AppConstants.usernameStorageKey);
       profilePicUrl = await _storage.read(key: AppConstants.profilePicUrlStorageKey);
       refreshToken = await _storage.read(key: AppConstants.refreshTokenStorageKey);
+      schoolIdStr  = await _storage.read(key: AppConstants.schoolIdStorageKey);
+      schoolName   = await _storage.read(key: AppConstants.schoolNameStorageKey);
     } catch (_) {
       // Keychain unavailable (e.g. macOS debug without signing) — start fresh
       return;
@@ -119,6 +132,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       userId: restoredUserId,
       username: username,
       profilePicUrl: profilePicUrl,
+      schoolId: schoolIdStr != null ? int.tryParse(schoolIdStr) : null,
+      schoolName: schoolName,
     );
 
     if (restoredUserId != null) {
@@ -131,15 +146,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (fcmToken != null) unawaited(_registerFcmToken(fcmToken));
   }
 
-  Future<void> login(String username, String mpin) async {
+  Future<void> login(String username, String mpin, {int? schoolId}) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final data = await _api.login(username, mpin);
+      final data = await _api.login(username, mpin, schoolId: schoolId);
       final token = data['access_token'] as String;
       final refreshToken = data['refresh_token'] as String?;
       final role = data['role'] as String;
       final userId = data['user_id'] as int;
       final uname = data['username'] as String;
+      final resolvedSchoolId = data['school_id'] as int?;
+      final schoolName = data['school_name'] as String?;
 
       try {
         await _storage.write(key: AppConstants.tokenStorageKey, value: token);
@@ -152,6 +169,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
             key: AppConstants.userIdStorageKey, value: userId.toString());
         await _storage.write(
             key: AppConstants.usernameStorageKey, value: uname);
+        if (resolvedSchoolId != null) {
+          await _storage.write(
+              key: AppConstants.schoolIdStorageKey,
+              value: resolvedSchoolId.toString());
+        }
+        if (schoolName != null) {
+          await _storage.write(
+              key: AppConstants.schoolNameStorageKey, value: schoolName);
+        }
       } catch (_) {
         // Keychain unavailable (e.g. macOS debug without signing) — session is
         // held in memory only; will not persist across app restarts.
@@ -181,6 +207,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: userId,
         username: uname,
         profilePicUrl: profilePicUrl,
+        schoolId: resolvedSchoolId,
+        schoolName: schoolName,
       );
 
       unawaited(CrashReporter.setUser(userId: userId, role: role));
@@ -229,7 +257,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<bool> register(String username, String mpin, String role,
-      {String? phone,
+      {int? schoolId,
+      String? phone,
       String? email,
       String? parentUsername,
       String? parentMpin,
@@ -239,6 +268,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await _api.register(username, mpin, role,
+          schoolId: schoolId,
           phone: phone,
           email: email,
           parentUsername: parentUsername,

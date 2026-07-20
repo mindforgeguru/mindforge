@@ -9,9 +9,10 @@ from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
-class FeeStructure(Base):
+class FeeStructure(TenantMixin, Base):
     """Defines fee amounts per academic year and grade."""
     __tablename__ = "fee_structures"
 
@@ -31,7 +32,7 @@ class FeeStructure(Base):
         return f"<FeeStructure year={self.academic_year} grade={self.grade} total={self.total_amount}>"
 
 
-class FeePayment(Base):
+class FeePayment(TenantMixin, Base):
     """Records individual fee payment transactions for a student."""
     __tablename__ = "fee_payments"
 
@@ -55,7 +56,7 @@ class FeePayment(Base):
         return f"<FeePayment student_id={self.student_id} amount={self.amount}>"
 
 
-class PaymentInfo(Base):
+class PaymentInfo(TenantMixin, Base):
     """Tuition center payment details shown to parents for fee payment."""
     __tablename__ = "payment_info"
 

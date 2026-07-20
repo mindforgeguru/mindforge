@@ -10,9 +10,10 @@ from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
-class AuditLog(Base):
+class AuditLog(TenantMixin, Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

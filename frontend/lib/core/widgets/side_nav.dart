@@ -42,6 +42,10 @@ class SideNav extends StatelessWidget {
   final String profileRoute;
   final VoidCallback onLogout;
 
+  /// The logged-in user's school, shown in the brand header. Null for the
+  /// platform owner (who belongs to no school).
+  final String? schoolName;
+
   /// When non-null, renders a "report a problem" action in the footer.
   final VoidCallback? onReportProblem;
 
@@ -51,6 +55,7 @@ class SideNav extends StatelessWidget {
     required this.username,
     required this.profileRoute,
     required this.onLogout,
+    this.schoolName,
     this.onReportProblem,
   });
 
@@ -94,12 +99,15 @@ class SideNav extends StatelessWidget {
   }
 
   Widget _header() {
+    final school = schoolName?.trim();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          _logoBox('assets/images/hansal_logo.png', 8, 84),
-          const SizedBox(height: 12),
+          // Per-school badge (initial) — replaces the old hard-coded single-
+          // school logo so every tenant is branded correctly.
+          if (school != null && school.isNotEmpty) _schoolBadge(school),
+          if (school != null && school.isNotEmpty) const SizedBox(height: 12),
           _logoBox('assets/images/logo.png', 10, 84),
           const SizedBox(height: 14),
           Text(
@@ -111,7 +119,46 @@ class SideNav extends StatelessWidget {
               letterSpacing: 1.5,
             ),
           ),
+          if (school != null && school.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              school,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.accentLight,
+                height: 1.2,
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _schoolBadge(String school) {
+    return Container(
+      width: 84,
+      height: 84,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 6, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          school[0].toUpperCase(),
+          style: GoogleFonts.poppins(
+            fontSize: 40,
+            fontWeight: FontWeight.w800,
+            color: AppColors.primary,
+          ),
+        ),
       ),
     );
   }

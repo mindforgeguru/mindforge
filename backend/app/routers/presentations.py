@@ -168,6 +168,7 @@ async def _broadcast_new_test(db: AsyncSession, test: Test) -> None:
         .join(User, User.id == StudentProfile.user_id)
         .where(
             StudentProfile.grade == test.grade,
+            StudentProfile.school_id == test.school_id,
             User.is_active == True,        # noqa: E712
             User.is_approved == True,      # noqa: E712
             User.deleted_at.is_(None),
@@ -456,6 +457,7 @@ async def upload_chapter(
         chapter_name=chapter_name,
         source_pdf_key=f"{bucket}/{pdf_key}",
         status=PresentationStatus.PROCESSING,
+        school_id=current_user.school_id,
     )
     db.add(row)
     await db.commit()
@@ -575,6 +577,7 @@ async def upload_deck(
         recommended_periods=periods,
         default_slides_per_period=_UPLOADED_SLIDES_PER_PERIOD,
         status=PresentationStatus.READY,
+        school_id=current_user.school_id,
     )
     db.add(row)
     await db.flush()  # assign row.id before adding slides
@@ -586,6 +589,7 @@ async def upload_deck(
             title=s["title"],
             body_md=s["body_md"],
             speaker_notes=s["speaker_notes"],
+            school_id=current_user.school_id,
         ))
     await db.commit()
     # Like /upload, no auto-adoption — the teacher hits "Adopt for my class"
@@ -616,7 +620,9 @@ async def list_available_chapters(
     """
     _require_teacher_or_admin(current_user)
 
-    q = select(ChapterDocument)
+    q = select(ChapterDocument).where(
+        ChapterDocument.school_id == current_user.school_id
+    )
     if grade is not None:
         q = q.where(ChapterDocument.grade == grade)
     if subject:
@@ -702,7 +708,8 @@ async def create_from_chapter(
 
     chapter = (await db.execute(
         select(ChapterDocument).where(
-            ChapterDocument.id == payload.chapter_document_id
+            ChapterDocument.id == payload.chapter_document_id,
+            ChapterDocument.school_id == current_user.school_id,
         )
     )).scalar_one_or_none()
     if chapter is None:
@@ -737,6 +744,7 @@ async def create_from_chapter(
         source_pdf_key=f"{settings.MINIO_BUCKET_DATABASE}/{chapter.file_key}",
         source_chapter_document_id=chapter.id,
         status=PresentationStatus.PROCESSING,
+        school_id=current_user.school_id,
     )
     db.add(row)
     await db.commit()
@@ -769,7 +777,9 @@ async def list_library(
     """
     _require_teacher_or_admin(current_user)
 
-    q = select(ChapterPresentation)
+    q = select(ChapterPresentation).where(
+        ChapterPresentation.school_id == current_user.school_id
+    )
     if not include_processing:
         q = q.where(ChapterPresentation.status == PresentationStatus.READY)
     if grade is not None:
@@ -894,6 +904,7 @@ async def list_presentations(
             PresentationTeacherProgress.presentation_id == ChapterPresentation.id,
         )
         .where(
+            ChapterPresentation.school_id == current_user.school_id,
             ChapterPresentation.status == PresentationStatus.READY,
             # NOT completed by slide-count
             or_(
@@ -957,7 +968,7 @@ async def get_presentation(
     _require_teacher_or_admin(current_user)
 
     pres = (await db.execute(
-        select(ChapterPresentation).where(ChapterPresentation.id == presentation_id)
+        select(ChapterPresentation).where(ChapterPresentation.id == presentation_id, ChapterPresentation.school_id == current_user.school_id)
     )).scalar_one_or_none()
     if pres is None:
         raise HTTPException(status_code=404, detail="Presentation not found.")
@@ -1095,7 +1106,10 @@ async def adopt_presentation(
     _require_teacher_or_admin(current_user)
 
     pres = (await db.execute(
-        select(ChapterPresentation.id).where(ChapterPresentation.id == presentation_id)
+        select(ChapterPresentation.id).where(
+            ChapterPresentation.id == presentation_id,
+            ChapterPresentation.school_id == current_user.school_id,
+        )
     )).scalar_one_or_none()
     if pres is None:
         raise HTTPException(status_code=404, detail="Presentation not found.")
@@ -1174,6 +1188,7 @@ async def patch_slide(
         select(PresentationSlide).where(
             PresentationSlide.id == slide_id,
             PresentationSlide.presentation_id == presentation_id,
+            PresentationSlide.school_id == current_user.school_id,
         )
     )).scalar_one_or_none()
     if slide is None:
@@ -1199,7 +1214,7 @@ async def patch_slide(
 
     # Mirror onto the parent so the list view shows recent activity.
     pres = (await db.execute(
-        select(ChapterPresentation).where(ChapterPresentation.id == presentation_id)
+        select(ChapterPresentation).where(ChapterPresentation.id == presentation_id, ChapterPresentation.school_id == current_user.school_id)
     )).scalar_one_or_none()
     if pres is not None:
         pres.last_edited_by = current_user.id
@@ -1239,7 +1254,7 @@ async def create_period_log(
     _require_teacher_or_admin(current_user)
 
     pres = (await db.execute(
-        select(ChapterPresentation).where(ChapterPresentation.id == presentation_id)
+        select(ChapterPresentation).where(ChapterPresentation.id == presentation_id, ChapterPresentation.school_id == current_user.school_id)
     )).scalar_one_or_none()
     if pres is None:
         raise HTTPException(status_code=404, detail="Presentation not found.")
@@ -1286,6 +1301,7 @@ async def create_period_log(
         slides_covered_from=slides_from,
         slides_covered_to=to_idx,
         notes=payload.notes,
+        school_id=current_user.school_id,
     )
     db.add(log)
 
@@ -1327,6 +1343,7 @@ async def create_period_log(
                 presentation_id=presentation_id,
                 slides_from=slides_from,
                 slides_to=to_idx,
+                school_id=current_user.school_id,
             )
             db.add(placeholder)
             await db.commit()
@@ -1376,6 +1393,7 @@ async def update_period_log(
         select(PresentationPeriodLog).where(
             PresentationPeriodLog.id == log_id,
             PresentationPeriodLog.presentation_id == presentation_id,
+            PresentationPeriodLog.school_id == current_user.school_id,
         )
     )).scalar_one_or_none()
     if log is None:
@@ -1467,7 +1485,10 @@ async def retry_auto_quiz(
     _require_teacher_or_admin(current_user)
 
     test = (await db.execute(
-        select(Test).where(Test.id == test_id)
+        select(Test).where(
+            Test.id == test_id,
+            Test.school_id == current_user.school_id,
+        )
     )).scalar_one_or_none()
     if test is None or not test.auto_generated:
         raise HTTPException(status_code=404, detail="Auto-quiz not found.")
@@ -1517,7 +1538,7 @@ async def delete_presentation(
     _require_teacher_or_admin(current_user)
 
     pres = (await db.execute(
-        select(ChapterPresentation).where(ChapterPresentation.id == presentation_id)
+        select(ChapterPresentation).where(ChapterPresentation.id == presentation_id, ChapterPresentation.school_id == current_user.school_id)
     )).scalar_one_or_none()
     if pres is None:
         raise HTTPException(status_code=404, detail="Presentation not found.")

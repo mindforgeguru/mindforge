@@ -101,6 +101,7 @@ class ParentSideNav extends ConsumerWidget {
     }
 
     return SideNav(
+      schoolName: auth.schoolName,
       username: auth.username ?? 'P',
       profileRoute: '${RouteNames.parentDashboard}/profile',
       onLogout: () => confirmLogout(context, ref),

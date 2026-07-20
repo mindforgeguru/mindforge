@@ -5,17 +5,23 @@ Implements soft-delete via deleted_at column.
 
 import enum
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import (
-    Boolean, DateTime, Enum, ForeignKey, Integer, JSON, String, func
+    Boolean, DateTime, Enum, ForeignKey, Integer, JSON, String, UniqueConstraint, func
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
+
+if TYPE_CHECKING:
+    from app.models.school import School
 
 
 class UserRole(str, enum.Enum):
+    # Platform super-admin — not tied to any school; can create/manage schools.
+    owner = "owner"
     teacher = "teacher"
     student = "student"
     parent = "parent"
@@ -24,11 +30,21 @@ class UserRole(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    # Usernames are unique *per school*, not globally — two schools can each
+    # have an "admin". The platform owner has school_id NULL; Postgres treats
+    # NULLs as distinct, so this constraint doesn't box the owner in.
+    __table_args__ = (
+        UniqueConstraint("school_id", "username", name="uq_users_school_username"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     mpin_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name='user_role'), nullable=False)
+    # The school this user belongs to. NULL only for the platform owner.
+    school_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     profile_pic_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -44,6 +60,9 @@ class User(Base):
     fcm_token: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     # Soft delete: set to timestamp when user is revoked/deleted
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # The tenant this user belongs to (None for the platform owner).
+    school: Mapped[Optional["School"]] = relationship("School", foreign_keys=[school_id])
 
     # Relationships — passive_deletes=True lets the DB-level ON DELETE CASCADE
     # handle child rows; without it, async flush tries to NULL a NOT NULL FK.
@@ -68,7 +87,7 @@ class User(Base):
         return f"<User id={self.id} username={self.username} role={self.role}>"
 
 
-class StudentProfile(Base):
+class StudentProfile(TenantMixin, Base):
     __tablename__ = "student_profiles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -96,7 +115,7 @@ class StudentProfile(Base):
         return f"<StudentProfile user_id={self.user_id} grade={self.grade}>"
 
 
-class TeacherProfile(Base):
+class TeacherProfile(TenantMixin, Base):
     __tablename__ = "teacher_profiles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

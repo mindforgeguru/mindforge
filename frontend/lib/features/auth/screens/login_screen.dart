@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
@@ -31,11 +32,59 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final Set<String> _selectedSubjects = {};
   final Set<String> _selectedTeacherSubjects = {};
 
+  // School picker — usernames are per-school, so both login and registration
+  // must be scoped to a school. Loaded once from the public /schools endpoint.
+  List<Map<String, dynamic>> _schools = [];
+  bool _schoolsLoading = true;
+  int? _selectedSchoolId;
+
+  // The platform owner has school_id NULL and is only found by the backend when
+  // `school_id` is omitted entirely (see auth.py `_resolve_school`). The picker
+  // still has to distinguish "owner chose the school-less option" from "nothing
+  // chosen yet", so owner selection carries this sentinel and is mapped back to
+  // null on the wire. Login only — you cannot register as owner.
+  static const int _ownerSchoolSentinel = -1;
+
+  int? get _schoolIdForRequest =>
+      _selectedSchoolId == _ownerSchoolSentinel ? null : _selectedSchoolId;
+
+  // Register mode drops the owner entry, so a lingering sentinel would leave
+  // the dropdown with a value matching no item — which trips an assertion.
+  void _clearOwnerSelection() {
+    if (_selectedSchoolId == _ownerSchoolSentinel) _selectedSchoolId = null;
+  }
+
   static const _subjectOptions = [
     _Subject('economics', 'Economics', Icons.bar_chart_outlined),
     _Subject('computer', 'Computer', Icons.computer_outlined),
     _Subject('ai', 'AI', Icons.psychology_outlined),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSchools();
+  }
+
+  Future<void> _loadSchools() async {
+    try {
+      final schools = await ref.read(apiClientProvider).getSchools();
+      if (!mounted) return;
+      setState(() {
+        _schools = schools;
+        // Auto-select when there's only one school so the field is pre-filled.
+        if (schools.length == 1) {
+          _selectedSchoolId = schools.first['id'] as int;
+        }
+        _schoolsLoading = false;
+      });
+    } catch (_) {
+      // Network/endpoint failure — leave the picker empty. The backend still
+      // resolves the sole school automatically for single-school deployments.
+      if (!mounted) return;
+      setState(() => _schoolsLoading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -80,6 +129,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _showSnack('Please enter your username.');
       return;
     }
+    // A school must be chosen whenever the picker has options (usernames are
+    // unique per school). Skipped only if the list failed to load, where the
+    // backend falls back to the sole school. Signing in as the platform owner
+    // counts as a choice — it deliberately sends no school at all.
+    if (_schools.isNotEmpty && _selectedSchoolId == null) {
+      _showSnack('Please select your school.');
+      return;
+    }
+    // Belt and braces: the owner option is never rendered in register mode, so
+    // a sentinel here means stale state rather than a real choice.
+    if (_isRegister && _selectedSchoolId == _ownerSchoolSentinel) {
+      _showSnack('Please select your school.');
+      return;
+    }
     if (_enteredPin.length < 6) {
       _showSnack('Please enter your 6-digit MPIN.');
       return;
@@ -119,6 +182,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         username,
         _enteredPin,
         _selectedRole,
+        schoolId: _selectedSchoolId,
         phone: phone.isNotEmpty ? phone : null,
         email: email.isNotEmpty ? email : null,
         parentUsername: isStudent ? parentUsernameTrimmed : null,
@@ -143,7 +207,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         });
       }
     } else {
-      await notifier.login(username, _enteredPin);
+      await notifier.login(username, _enteredPin,
+          schoolId: _schoolIdForRequest);
     }
   }
 
@@ -257,6 +322,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 onTap: () => setState(() {
                                   _isRegister = true;
                                   _clearPin();
+                                  _clearOwnerSelection();
                                 }),
                               ),
                             ],
@@ -264,6 +330,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
 
                         SizedBox(height: R.sp(context, compact ? 12 : 16)),
+
+                        // ── School ──────────────────────────────────────
+                        _schoolField(web: false),
+                        if (!_schoolsLoading && _schools.isNotEmpty)
+                          const SizedBox(height: 10),
 
                         // ── Username ────────────────────────────────────
                         TextField(
@@ -936,6 +1007,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                 const SizedBox(height: 20),
 
+                // School
+                _schoolField(web: true),
+                if (!_schoolsLoading && _schools.isNotEmpty)
+                  const SizedBox(height: 14),
+
                 // Username
                 TextField(
                   controller: _usernameController,
@@ -1264,6 +1340,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   onTap: () => setState(() {
                     _isRegister = !_isRegister;
                     _clearPin();
+                    _clearOwnerSelection();
                     _usernameController.clear();
                     _parentUsernameController.clear();
                     _parentMpinController.clear();
@@ -1288,6 +1365,80 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         ),
       ),
+    );
+  }
+
+  // ── School picker ──────────────────────────────────────────────────────────
+  // Shown on both Login and Request Access (usernames are unique per school).
+  // Renders a spinner while loading and nothing at all if the list is empty or
+  // failed to load — in which case the backend resolves a single-school
+  // deployment on its own.
+  Widget _schoolField({required bool web}) {
+    if (_schoolsLoading) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 10),
+            Text('Loading schools…',
+                style: GoogleFonts.poppins(
+                    fontSize: 12, color: AppColors.textSecondary)),
+          ],
+        ),
+      );
+    }
+    if (_schools.isEmpty) return const SizedBox.shrink();
+
+    final decoration = web
+        ? InputDecoration(
+            labelText: 'School',
+            prefixIcon: const Icon(Icons.account_balance_outlined),
+            filled: true,
+            fillColor: Colors.white,
+            border:
+                OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.divider)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppColors.primary, width: 2)),
+          )
+        : const InputDecoration(
+            labelText: 'School',
+            prefixIcon: Icon(Icons.account_balance_outlined),
+            isDense: true,
+          );
+
+    return DropdownButtonFormField<int>(
+      initialValue: _selectedSchoolId,
+      isExpanded: true,
+      decoration: decoration,
+      hint: const Text('Select your school'),
+      items: [
+        ..._schools.map((s) => DropdownMenuItem<int>(
+              value: s['id'] as int,
+              child:
+                  Text(s['name'] as String, overflow: TextOverflow.ellipsis),
+            )),
+        // Platform owner belongs to no school; sending a school_id would make
+        // the backend miss the account entirely (401). Sign-in only.
+        if (!_isRegister)
+          DropdownMenuItem<int>(
+            value: _ownerSchoolSentinel,
+            child: Text('Platform owner (no school)',
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                    fontStyle: FontStyle.italic,
+                    color: AppColors.textSecondary)),
+          ),
+      ],
+      onChanged: (v) => setState(() => _selectedSchoolId = v),
     );
   }
 

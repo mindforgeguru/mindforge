@@ -56,13 +56,17 @@ def xp_for_test_score(percentage: float) -> tuple[int, XPReason]:
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 
-async def _get_or_create_student_xp(db: AsyncSession, student_id: int) -> StudentXP:
+async def _get_or_create_student_xp(
+    db: AsyncSession, student_id: int, school_id: Optional[int] = None
+) -> StudentXP:
     row = (await db.execute(
         select(StudentXP).where(StudentXP.student_id == student_id)
     )).scalar_one_or_none()
     if row is not None:
         return row
-    row = StudentXP(student_id=student_id, total_xp=0, current_level=1)
+    row = StudentXP(
+        student_id=student_id, total_xp=0, current_level=1, school_id=school_id
+    )
     db.add(row)
     # Flush so subsequent UPDATEs in the same transaction see the row.
     await db.flush()
@@ -161,16 +165,24 @@ async def award_xp(
         if existing is not None:
             return None
 
+    # Resolve the student's school so the XP rows are tenant-scoped like
+    # everything else. One cheap lookup keeps every award_xp call site (which
+    # only knows student_id) unchanged.
+    school_id = (await db.execute(
+        select(User.school_id).where(User.id == student_id)
+    )).scalar_one_or_none()
+
     txn = XPTransaction(
         student_id=student_id,
         amount=amount,
         reason=reason,
         reference_id=reference_id,
         description=description,
+        school_id=school_id,
     )
     db.add(txn)
 
-    xp_row = await _get_or_create_student_xp(db, student_id)
+    xp_row = await _get_or_create_student_xp(db, student_id, school_id)
     old_level = xp_row.current_level
     xp_row.total_xp = max(0, xp_row.total_xp + amount)
 
@@ -352,6 +364,8 @@ async def get_leaderboard(
         .join(StudentXP, StudentXP.student_id == User.id)
         .where(
             User.role == "student",
+            # "school" scope means the viewer's school — never across tenants.
+            User.school_id == viewer.school_id,
             User.is_active == True,  # noqa: E712
             User.deleted_at.is_(None),
         )

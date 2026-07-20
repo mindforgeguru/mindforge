@@ -9,9 +9,10 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
-class AcademicYear(Base):
+class AcademicYear(TenantMixin, Base):
     __tablename__ = "academic_years"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

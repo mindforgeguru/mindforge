@@ -141,6 +141,7 @@ class TeacherSideNav extends ConsumerWidget {
     }
 
     return SideNav(
+      schoolName: auth.schoolName,
       username: auth.username ?? 'T',
       profileRoute: '${RouteNames.teacherDashboard}/profile',
       onLogout: () => confirmLogout(context, ref),

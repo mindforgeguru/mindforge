@@ -9,9 +9,10 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, fun
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
-class FeedbackReport(Base):
+class FeedbackReport(TenantMixin, Base):
     __tablename__ = "feedback_reports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

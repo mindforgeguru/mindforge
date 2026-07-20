@@ -109,6 +109,7 @@ class AdminSideNav extends ConsumerWidget {
     }
 
     return SideNav(
+      schoolName: auth.schoolName,
       username: auth.username ?? 'A',
       profileRoute: '${RouteNames.adminDashboard}/profile',
       onLogout: () => confirmLogout(context, ref),

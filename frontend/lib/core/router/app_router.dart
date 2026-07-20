@@ -42,6 +42,7 @@ import '../../features/parent/screens/fees_screen.dart' as parent;
 import '../../features/parent/screens/profile_screen.dart' as parent;
 import '../../features/parent/screens/homework_screen.dart' as parent;
 import '../../features/parent/screens/faculty_screen.dart' as parent;
+import '../../features/owner/screens/owner_dashboard_screen.dart' as owner;
 import '../../features/admin/screens/dashboard_screen.dart' as admin;
 import '../../features/admin/screens/fees_screen.dart' as admin;
 import '../../features/admin/screens/timetable_screen.dart' as admin;
@@ -93,6 +94,8 @@ class _RouterNotifier extends ChangeNotifier {
         return RouteNames.parentDashboard;
       case 'admin':
         return RouteNames.adminDashboard;
+      case 'owner':
+        return RouteNames.ownerDashboard;
       default:
         return RouteNames.login;
     }
@@ -106,6 +109,7 @@ class _RouterNotifier extends ChangeNotifier {
     'student': RouteNames.studentDashboard, // '/student'
     'parent': RouteNames.parentDashboard, // '/parent'
     'admin': RouteNames.adminDashboard, // '/admin'
+    'owner': RouteNames.ownerDashboard, // '/owner'
   };
 
   String? redirect(BuildContext context, GoRouterState state) {
@@ -171,6 +175,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: RouteNames.login,
         pageBuilder: (_, __) => _slidePage(const LoginScreen()),
+      ),
+
+      // ── Owner ─────────────────────────────────────────────────────────────
+      GoRoute(
+        path: RouteNames.ownerDashboard,
+        pageBuilder: (_, __) => _slidePage(const owner.OwnerDashboardScreen()),
       ),
 
       // ── Teacher ───────────────────────────────────────────────────────────

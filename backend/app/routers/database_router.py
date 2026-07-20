@@ -104,6 +104,7 @@ async def upload_old_test_paper(
             chapter=meta.get("chapter"),
             title=meta.get("title") or file.filename,
             ai_summary=meta.get("summary"),
+            school_id=current_user.school_id,
         )
         db.add(record)
         await db.flush()
@@ -199,6 +200,7 @@ async def upload_chapter_document(
         grade=grade,
         subject=subject,
         chapter_name=chapter_name,
+        school_id=current_user.school_id,
     )
     db.add(record)
     await db.commit()
@@ -357,6 +359,7 @@ async def upload_syllabus(
         chapters=chapter_list,
         file_key=key,
         original_filename=file.filename or "syllabus",
+        school_id=current_user.school_id,
     )
     db.add(record)
     await db.commit()

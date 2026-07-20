@@ -65,6 +65,8 @@ class AppConstants {
   static const String userIdStorageKey = 'mindforge_user_id';
   static const String usernameStorageKey = 'mindforge_username';
   static const String profilePicUrlStorageKey = 'mindforge_profile_pic_url';
+  static const String schoolIdStorageKey = 'mindforge_school_id';
+  static const String schoolNameStorageKey = 'mindforge_school_name';
 }
 
 /// Named routes for GoRouter.
@@ -77,4 +79,5 @@ class RouteNames {
   static const String studentDashboard = '/student';
   static const String parentDashboard = '/parent';
   static const String adminDashboard = '/admin';
+  static const String ownerDashboard = '/owner';
 }

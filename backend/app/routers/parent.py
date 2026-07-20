@@ -137,7 +137,9 @@ async def get_child_timetable(
     slot_date = date_type.fromisoformat(date)
     profile = await _get_child_profile(current_parent, db)
 
-    config_result = await db.execute(select(TimetableConfig))
+    config_result = await db.execute(
+        select(TimetableConfig).where(TimetableConfig.school_id == profile.school_id)
+    )
     config = config_result.scalar_one_or_none()
     period_time_map: dict[int, tuple[str, str]] = {}
     if config and config.period_times:
@@ -148,7 +150,9 @@ async def get_child_timetable(
     rows = (await db.execute(
         select(TimetableSlot, TeacherUser.username)
         .outerjoin(TeacherUser, TimetableSlot.teacher_id == TeacherUser.id)
-        .where(TimetableSlot.grade == profile.grade, TimetableSlot.slot_date == slot_date)
+        .where(TimetableSlot.grade == profile.grade,
+               TimetableSlot.school_id == profile.school_id,
+               TimetableSlot.slot_date == slot_date)
         .order_by(TimetableSlot.period_number)
     )).all()
 
@@ -187,7 +191,7 @@ async def get_child_grades(
 
     profile = await _get_child_profile(current_parent, db)
     # Surface 0s for online tests the child missed within the 48h window.
-    await _sweep_missed_tests_for_grade(profile.grade, db)
+    await _sweep_missed_tests_for_grade(profile.grade, profile.school_id, db)
     query = select(Grade).where(Grade.student_id == profile.user_id)
     if subject:
         query = query.where(Grade.subject == subject)
@@ -208,10 +212,12 @@ async def get_child_tests(
     from app.routers.student import _sweep_missed_tests_for_grade
 
     profile = await _get_child_profile(current_parent, db)
-    await _sweep_missed_tests_for_grade(profile.grade, db)
+    await _sweep_missed_tests_for_grade(profile.grade, profile.school_id, db)
     result = await db.execute(
         select(Test)
-        .where(Test.grade == profile.grade, Test.is_published == True)
+        .where(Test.grade == profile.grade,
+               Test.school_id == profile.school_id,
+               Test.is_published == True)
         .order_by(Test.created_at.desc())
     )
     return result.scalars().all()
@@ -233,7 +239,10 @@ async def get_child_fees(
         from app.models.academic_year import AcademicYear
         from datetime import date
         ay_result = await db.execute(
-            select(AcademicYear).where(AcademicYear.is_current == True)
+            select(AcademicYear).where(
+                AcademicYear.is_current == True,
+                AcademicYear.school_id == profile.school_id,
+            )
         )
         current_ay = ay_result.scalar_one_or_none()
         if current_ay:
@@ -247,6 +256,7 @@ async def get_child_fees(
     structure_result = await db.execute(
         select(FeeStructure).where(
             FeeStructure.grade == profile.grade,
+            FeeStructure.school_id == profile.school_id,
             FeeStructure.academic_year == academic_year,
         )
     )
@@ -280,7 +290,11 @@ async def get_child_fees(
 
     # Fetch all payment options and resolve QR presigned URLs
     from app.services import storage_service
-    pi_result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.slot))
+    pi_result = await db.execute(
+        select(PaymentInfo)
+        .where(PaymentInfo.school_id == profile.school_id)
+        .order_by(PaymentInfo.slot)
+    )
     payment_options_raw = pi_result.scalars().all()
 
     payment_options = []
@@ -332,6 +346,7 @@ async def get_child_homework(
         select(Homework)
         .where(
             Homework.grade == child_profile.grade,
+            Homework.school_id == child_profile.school_id,
             Homework.is_no_homework == False,  # noqa: E712
         )
         .order_by(Homework.created_at.desc())
@@ -386,7 +401,11 @@ async def get_parent_broadcasts(
     grade = child_profile.grade if child_profile else None
 
     from sqlalchemy import or_
-    q = select(Broadcast, User).join(User, Broadcast.sender_id == User.id)
+    q = (
+        select(Broadcast, User)
+        .join(User, Broadcast.sender_id == User.id)
+        .where(Broadcast.school_id == current_parent.school_id)
+    )
     if grade is not None:
         q = q.where(
             or_(
@@ -428,6 +447,7 @@ async def get_faculty_for_parent(
         select(User, TeacherProfile)
         .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
         .where(User.role == UserRole.teacher)
+        .where(User.school_id == current_parent.school_id)
         .where(User.deleted_at == None)
         .where(User.is_approved == True)
         .where(User.is_active == True)
@@ -467,7 +487,7 @@ async def get_parent_dashboard_summary(
     today = date_type.fromisoformat(date) if date else date_type.today()
 
     # Child's timetable for today
-    config = await get_timetable_config_cached(db)
+    config = await get_timetable_config_cached(db, profile.school_id)
     period_time_map: dict[int, tuple[str, str]] = {}
     if config and config.period_times:
         for pt in config.period_times:
@@ -477,7 +497,9 @@ async def get_parent_dashboard_summary(
     timetable_rows = (await db.execute(
         select(TimetableSlot, TeacherAlias.username)
         .outerjoin(TeacherAlias, TimetableSlot.teacher_id == TeacherAlias.id)
-        .where(TimetableSlot.grade == profile.grade, TimetableSlot.slot_date == today)
+        .where(TimetableSlot.grade == profile.grade,
+               TimetableSlot.school_id == profile.school_id,
+               TimetableSlot.slot_date == today)
         .order_by(TimetableSlot.period_number)
     )).all()
     child_timetable = [
@@ -496,6 +518,7 @@ async def get_parent_dashboard_summary(
     bc_rows = (await db.execute(
         select(Broadcast, User)
         .join(User, Broadcast.sender_id == User.id)
+        .where(Broadcast.school_id == profile.school_id)
         .where(or_(
             Broadcast.target_type == "all",
             (Broadcast.target_type == "grade") & (Broadcast.target_grade == profile.grade),
@@ -515,6 +538,7 @@ async def get_parent_dashboard_summary(
     homework = (await db.execute(
         select(Homework).where(
             Homework.grade == profile.grade,
+            Homework.school_id == profile.school_id,
             Homework.is_no_homework == False,  # noqa: E712
         ).order_by(Homework.created_at.desc())
     )).scalars().all()
@@ -527,14 +551,19 @@ async def get_parent_dashboard_summary(
     # Child's tests (published)
     child_tests = (await db.execute(
         select(Test)
-        .where(Test.grade == profile.grade, Test.is_published == True)
+        .where(Test.grade == profile.grade,
+               Test.school_id == profile.school_id,
+               Test.is_published == True)
         .order_by(Test.created_at.desc())
     )).scalars().all()
 
     # Child's fees (skip presigned URL resolution — dashboard only needs amounts)
     from app.models.academic_year import AcademicYear
     from datetime import date as _date
-    ay_result = await db.execute(select(AcademicYear).where(AcademicYear.is_current == True))
+    ay_result = await db.execute(select(AcademicYear).where(
+        AcademicYear.is_current == True,
+        AcademicYear.school_id == profile.school_id,
+    ))
     current_ay = ay_result.scalar_one_or_none()
     if current_ay:
         academic_year = current_ay.year_label
@@ -545,7 +574,9 @@ async def get_parent_dashboard_summary(
 
     structure = (await db.execute(
         select(FeeStructure).where(
-            FeeStructure.grade == profile.grade, FeeStructure.academic_year == academic_year,
+            FeeStructure.grade == profile.grade,
+            FeeStructure.school_id == profile.school_id,
+            FeeStructure.academic_year == academic_year,
         )
     )).scalar_one_or_none()
     if structure:

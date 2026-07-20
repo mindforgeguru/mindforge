@@ -63,6 +63,11 @@ class UserRegisterRequest(BaseModel):
     username: str
     mpin: str
     role: UserRole
+    # The school the user is joining, chosen from the public picker. Optional on
+    # the wire for backward-compatibility during rollout: when a deployment has
+    # exactly one school the server resolves it automatically; with more than
+    # one, it's required (400 otherwise).
+    school_id: Optional[int] = None
     phone: Optional[str] = None                  # required for student/teacher; optional for parent
     email: Optional[str] = None                  # optional for all
     parent_username: Optional[str] = None        # student only
@@ -152,6 +157,11 @@ class UserRegisterRequest(BaseModel):
 class UserLoginRequest(BaseModel):
     username: str
     mpin: str
+    # The school to authenticate against (usernames are unique per-school).
+    # Optional for backward-compat: omitted → the server tries the platform
+    # owner (school-less), then falls back to the sole school if only one
+    # exists; with multiple schools a selection is required.
+    school_id: Optional[int] = None
 
     @field_validator("username")
     @classmethod
@@ -177,6 +187,10 @@ class TokenResponse(BaseModel):
     role: UserRole
     user_id: int
     username: str
+    # The user's school, echoed back so the client can brand the UI immediately
+    # after login without a second round-trip. Both None for the platform owner.
+    school_id: Optional[int] = None
+    school_name: Optional[str] = None
 
 
 class RefreshRequest(BaseModel):

@@ -156,6 +156,7 @@ async def get_students_in_grade(
         .join(StudentProfile, User.id == StudentProfile.user_id)
         .where(
             StudentProfile.grade == grade,
+            StudentProfile.school_id == current_teacher.school_id,
             User.is_active == True,
             User.is_approved == True,
         )
@@ -197,6 +198,7 @@ async def get_attendance_dates(
     result = await db.execute(
         select(func.distinct(Attendance.date))
         .where(Attendance.grade == grade)
+        .where(Attendance.school_id == current_teacher.school_id)
         .where(Attendance.date >= first_day)
         .where(Attendance.date <= last_day)
         .order_by(Attendance.date)
@@ -218,7 +220,10 @@ async def get_attendance(
     duplicates are dropped from the response so the UI reflects a
     single canonical status per student per period.
     """
-    query = select(Attendance).where(Attendance.grade == grade)
+    query = select(Attendance).where(
+        Attendance.grade == grade,
+        Attendance.school_id == current_teacher.school_id,
+    )
     if date:
         from datetime import date as dt_date
         parsed_date = dt_date.fromisoformat(date)
@@ -255,6 +260,23 @@ async def mark_attendance(
             )
     student_ids = [item.student_id for item in payload.records]
 
+    # Cross-school guard: every student marked must belong to this teacher's
+    # school. Without this a teacher could mark (and thus create) attendance on
+    # another school's students by passing their ids.
+    if student_ids:
+        valid_result = await db.execute(
+            select(StudentProfile.user_id).where(
+                StudentProfile.user_id.in_(student_ids),
+                StudentProfile.school_id == current_teacher.school_id,
+            )
+        )
+        valid_ids = {row[0] for row in valid_result.all()}
+        if set(student_ids) - valid_ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="One or more students were not found.",
+            )
+
     # Batch-fetch all existing records for this date/period in one query.
     # There may be duplicates per (student, date, period) from past races
     # — we update the oldest one and delete the rest so the slot is
@@ -288,6 +310,7 @@ async def mark_attendance(
                 period=payload.period,
                 date=payload.date,
                 status=item.status,
+                school_id=current_teacher.school_id,
             )
             db.add(att)
             records.append(att)
@@ -392,6 +415,7 @@ async def get_all_teachers(
         .options(selectinload(User.teacher_profile))
         .where(
             User.role == "teacher",
+            User.school_id == current_teacher.school_id,
             User.is_active == True,
             User.is_approved == True,
         )
@@ -420,7 +444,11 @@ async def get_timetable_config(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Return the timetable config (period count + times) created by admin."""
-    result = await db.execute(select(TimetableConfig))
+    result = await db.execute(
+        select(TimetableConfig).where(
+            TimetableConfig.school_id == current_teacher.school_id
+        )
+    )
     return result.scalar_one_or_none()
 
 
@@ -452,7 +480,9 @@ async def get_timetable(
     slot_date = date_type.fromisoformat(date)
     result = await db.execute(
         select(TimetableSlot)
-        .where(TimetableSlot.grade == grade, TimetableSlot.slot_date == slot_date)
+        .where(TimetableSlot.grade == grade,
+               TimetableSlot.school_id == current_teacher.school_id,
+               TimetableSlot.slot_date == slot_date)
         .order_by(TimetableSlot.period_number)
     )
     return result.scalars().all()
@@ -472,6 +502,7 @@ async def delete_timetable_for_grade_date(
     result = await db.execute(
         sql_delete(TimetableSlot).where(
             TimetableSlot.grade == grade,
+            TimetableSlot.school_id == current_teacher.school_id,
             TimetableSlot.slot_date == slot_date,
         )
     )
@@ -490,6 +521,7 @@ async def create_timetable_slot(
     existing = await db.execute(
         select(TimetableSlot).where(
             TimetableSlot.grade == payload.grade,
+            TimetableSlot.school_id == current_teacher.school_id,
             TimetableSlot.slot_date == payload.slot_date,
             TimetableSlot.period_number == payload.period_number,
         )
@@ -500,7 +532,7 @@ async def create_timetable_slot(
         for key, value in payload.model_dump().items():
             setattr(slot, key, value)
     else:
-        slot = TimetableSlot(**payload.model_dump())
+        slot = TimetableSlot(**payload.model_dump(), school_id=current_teacher.school_id)
         db.add(slot)
     await db.commit()
     await db.refresh(slot)
@@ -524,6 +556,7 @@ async def create_timetable_slot(
             .join(User, User.id == StudentProfile.user_id)
             .where(
                 StudentProfile.grade == payload.grade,
+                StudentProfile.school_id == current_teacher.school_id,
                 User.is_active == True,
                 User.is_approved == True,
                 User.deleted_at.is_(None),
@@ -565,7 +598,10 @@ async def get_grades(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Retrieve grades with optional filters."""
-    query = select(Grade).where(Grade.teacher_id == current_teacher.id)
+    query = select(Grade).where(
+        Grade.teacher_id == current_teacher.id,
+        Grade.school_id == current_teacher.school_id,
+    )
     if grade is not None:
         # Filter by class grade via StudentProfile join
         query = query.join(StudentProfile, Grade.student_id == StudentProfile.user_id).where(
@@ -597,9 +633,21 @@ async def create_grade(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Duplicate request: this grade entry was already submitted.",
             )
+    # Cross-school guard: the graded student must belong to this teacher's
+    # school, else a teacher could write a grade onto another school's student.
+    target = await db.execute(
+        select(StudentProfile.user_id).where(
+            StudentProfile.user_id == payload.student_id,
+            StudentProfile.school_id == current_teacher.school_id,
+        )
+    )
+    if target.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
     grade_obj = Grade(
         **payload.model_dump(),
         teacher_id=current_teacher.id,
+        school_id=current_teacher.school_id,
     )
     db.add(grade_obj)
     await db.commit()
@@ -665,8 +713,8 @@ async def get_tests(
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """Retrieve tests (visible to all teachers) with pagination."""
-    query = select(Test)
+    """Retrieve tests for this teacher's school with pagination."""
+    query = select(Test).where(Test.school_id == current_teacher.school_id)
     if grade:
         query = query.where(Test.grade == grade)
     result = await db.execute(query.order_by(Test.created_at.desc()).offset(skip).limit(limit))
@@ -874,6 +922,7 @@ async def generate_test(
         total_marks=total_marks,
         time_limit_minutes=time_limit,
         expires_at=expires_at,
+        school_id=current_teacher.school_id,
     )
     db.add(test)
     await db.flush()  # get test.id without committing
@@ -932,6 +981,7 @@ async def generate_test(
         .join(User, User.id == StudentProfile.user_id)
         .where(
             StudentProfile.grade == grade,
+            StudentProfile.school_id == current_teacher.school_id,
             User.is_active == True,
             User.is_approved == True,
             User.deleted_at.is_(None),
@@ -982,7 +1032,7 @@ async def get_test(
 ):
     """Get a single test by ID (must belong to the calling teacher)."""
     result = await db.execute(
-        select(Test).where(Test.id == test_id)
+        select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
     )
     test = result.scalar_one_or_none()
     if not test:
@@ -1000,7 +1050,7 @@ async def update_test_questions(
 ):
     """Replace the questions list for a test and recalculate total marks and time limit."""
     result = await db.execute(
-        select(Test).where(Test.id == test_id)
+        select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
     )
     test = result.scalar_one_or_none()
     if not test:
@@ -1034,7 +1084,7 @@ async def delete_test(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Permanently delete a test and all its submissions/grades."""
-    result = await db.execute(select(Test).where(Test.id == test_id))
+    result = await db.execute(select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id))
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
@@ -1086,7 +1136,7 @@ async def get_test_pdf_urls(
 ):
     """Return pre-signed MinIO URLs for the test paper PDF and answer key PDF."""
     result = await db.execute(
-        select(Test).where(Test.id == test_id)
+        select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
     )
     test = result.scalar_one_or_none()
     if not test:
@@ -1116,7 +1166,7 @@ async def download_test_pdf(
 ):
     """Generate and stream the test paper PDF directly."""
     result = await db.execute(
-        select(Test).where(Test.id == test_id)
+        select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
     )
     test = result.scalar_one_or_none()
     if not test:
@@ -1147,7 +1197,7 @@ async def download_answer_key_pdf(
 ):
     """Generate and stream the answer key PDF directly."""
     result = await db.execute(
-        select(Test).where(Test.id == test_id)
+        select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
     )
     test = result.scalar_one_or_none()
     if not test:
@@ -1182,7 +1232,7 @@ async def get_test_submissions(
     saved (or zero) before this list is rendered.
     """
     result = await db.execute(
-        select(Test).where(Test.id == test_id)
+        select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
     )
     test = result.scalar_one_or_none()
     if not test:
@@ -1239,7 +1289,7 @@ async def get_test_grades(
 ):
     """List all offline grades entered for a test (visible to all teachers)."""
     result = await db.execute(
-        select(Test).where(Test.id == test_id)
+        select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Test not found")
@@ -1272,7 +1322,7 @@ async def save_offline_grades(
 ):
     """Bulk-save offline test grades for a list of students."""
     result = await db.execute(
-        select(Test).where(Test.id == test_id)
+        select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
     )
     test = result.scalar_one_or_none()
     if not test:
@@ -1280,6 +1330,20 @@ async def save_offline_grades(
     _require_test_owner(test, current_teacher.id)
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="Manual grades only allowed for offline tests")
+
+    # Cross-school guard: every graded student must belong to this school.
+    entry_ids = [e.student_id for e in payload.grades]
+    if entry_ids:
+        valid = {
+            row[0] for row in (await db.execute(
+                select(StudentProfile.user_id).where(
+                    StudentProfile.user_id.in_(entry_ids),
+                    StudentProfile.school_id == current_teacher.school_id,
+                )
+            )).all()
+        }
+        if set(entry_ids) - valid:
+            raise HTTPException(status_code=404, detail="One or more students were not found.")
 
     saved_grades = []
     for entry in payload.grades:
@@ -1297,6 +1361,7 @@ async def save_offline_grades(
             marks_obtained=entry.marks_obtained,
             max_marks=test.total_marks,
             grade_type=GradeType.offline,
+            school_id=test.school_id,
         )
         db.add(grade_obj)
         saved_grades.append((grade_obj, entry.student_id))
@@ -1378,6 +1443,7 @@ async def publish_test(
 
 async def _pending_hw_review_ids(
     grade: int,
+    school_id: int,
     today: date,
     db: AsyncSession,
 ) -> List[int]:
@@ -1405,6 +1471,7 @@ async def _pending_hw_review_ids(
         select(Homework)
         .where(
             Homework.grade == grade,
+            Homework.school_id == school_id,
             Homework.created_at < today_start,
             # "No homework" markers carry no roster to review.
             Homework.is_no_homework == False,  # noqa: E712
@@ -1421,6 +1488,7 @@ async def _pending_hw_review_ids(
             .join(StudentProfile, User.id == StudentProfile.user_id)
             .where(
                 StudentProfile.grade == grade,
+                StudentProfile.school_id == school_id,
                 User.is_active == True,  # noqa: E712
                 User.is_approved == True,  # noqa: E712
             )
@@ -1454,7 +1522,9 @@ async def create_homework(
     day's work.
     """
     today = datetime.now(timezone.utc).date()
-    pending = await _pending_hw_review_ids(payload.grade, today, db)
+    pending = await _pending_hw_review_ids(
+        payload.grade, current_teacher.school_id, today, db
+    )
     if pending:
         raise HTTPException(
             status_code=409,
@@ -1477,6 +1547,7 @@ async def create_homework(
         homework_type=payload.homework_type,
         test_id=payload.test_id,
         due_date=payload.due_date,
+        school_id=current_teacher.school_id,
     )
     db.add(hw)
     await db.commit()
@@ -1510,7 +1581,9 @@ async def mark_no_homework(
     assignment — yesterday's review must be closed out first.
     """
     today = datetime.now(timezone.utc).date()
-    pending = await _pending_hw_review_ids(payload.grade, today, db)
+    pending = await _pending_hw_review_ids(
+        payload.grade, current_teacher.school_id, today, db
+    )
     if pending:
         raise HTTPException(
             status_code=409,
@@ -1532,6 +1605,7 @@ async def mark_no_homework(
         description=None,
         homework_type=HomeworkType.written,
         is_no_homework=True,
+        school_id=current_teacher.school_id,
     )
     db.add(hw)
     await db.commit()
@@ -1551,6 +1625,7 @@ async def list_teacher_homework(
     assignments so any of them can review completion. "No homework" markers
     are workflow-only and excluded from the list."""
     q = select(Homework).where(
+        Homework.school_id == current_teacher.school_id,
         Homework.is_no_homework == False,  # noqa: E712
     )
     if grade is not None:
@@ -1569,6 +1644,7 @@ async def list_teacher_homework(
                 .join(StudentProfile, User.id == StudentProfile.user_id)
                 .where(
                     StudentProfile.grade == g,
+                    StudentProfile.school_id == current_teacher.school_id,
                     User.is_active == True,  # noqa: E712
                     User.is_approved == True,  # noqa: E712
                 )
@@ -1611,7 +1687,10 @@ async def delete_homework(
     Homework is shared school-wide, so any teacher may delete any assignment.
     """
     result = await db.execute(
-        select(Homework).where(Homework.id == homework_id)
+        select(Homework).where(
+            Homework.id == homework_id,
+            Homework.school_id == current_teacher.school_id,
+        )
     )
     hw = result.scalar_one_or_none()
     if not hw:
@@ -1632,7 +1711,10 @@ async def _build_completions_response(
     lock absent rows from a single fetch.
     """
     hw = (await db.execute(
-        select(Homework).where(Homework.id == homework_id)
+        select(Homework).where(
+            Homework.id == homework_id,
+            Homework.school_id == teacher.school_id,
+        )
     )).scalar_one_or_none()
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found")
@@ -1642,6 +1724,7 @@ async def _build_completions_response(
         .join(StudentProfile, User.id == StudentProfile.user_id)
         .where(
             StudentProfile.grade == hw.grade,
+            StudentProfile.school_id == teacher.school_id,
             User.is_active == True,
             User.is_approved == True,
         )
@@ -1667,6 +1750,7 @@ async def _build_completions_response(
     att_rows = (await db.execute(
         select(Attendance).where(
             Attendance.grade == hw.grade,
+            Attendance.school_id == teacher.school_id,
             Attendance.date == attendance_date,
         )
     )).scalars().all()
@@ -1734,7 +1818,10 @@ async def upsert_homework_completions(
          regardless of payload. They couldn't have done the homework.
     """
     hw = (await db.execute(
-        select(Homework).where(Homework.id == homework_id)
+        select(Homework).where(
+            Homework.id == homework_id,
+            Homework.school_id == current_teacher.school_id,
+        )
     )).scalar_one_or_none()
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found")
@@ -1743,6 +1830,7 @@ async def upsert_homework_completions(
     att_rows = (await db.execute(
         select(Attendance).where(
             Attendance.grade == hw.grade,
+            Attendance.school_id == current_teacher.school_id,
             Attendance.date == attendance_date,
         )
     )).scalars().all()
@@ -1768,6 +1856,7 @@ async def upsert_homework_completions(
             .join(StudentProfile, User.id == StudentProfile.user_id)
             .where(
                 StudentProfile.grade == hw.grade,
+                StudentProfile.school_id == current_teacher.school_id,
                 User.is_active == True,
                 User.is_approved == True,
             )
@@ -1806,6 +1895,7 @@ async def upsert_homework_completions(
                 student_id=rec.student_id,
                 completed=completed,
                 marked_by=current_teacher.id,
+                school_id=current_teacher.school_id,
             ))
             if completed:
                 newly_completed_student_ids.append(rec.student_id)
@@ -1888,6 +1978,7 @@ async def get_today_workflow(
     slots_today = (await db.execute(
         select(TimetableSlot).where(
             TimetableSlot.slot_date == today,
+            TimetableSlot.school_id == current_teacher.school_id,
         )
     )).scalars().all()
     today_by_grade: dict[int, list] = {}
@@ -1902,6 +1993,7 @@ async def get_today_workflow(
         .where(
             TimetableSlot.slot_date >= lookback,
             TimetableSlot.slot_date <= today,
+            TimetableSlot.school_id == current_teacher.school_id,
         )
         .distinct()
     )).all()
@@ -1937,6 +2029,7 @@ async def get_today_workflow(
             att_rows = (await db.execute(
                 select(Attendance.period).where(
                     Attendance.grade == grade,
+                    Attendance.school_id == current_teacher.school_id,
                     Attendance.date == today,
                     Attendance.period.in_(expected_periods),
                 ).distinct()
@@ -1951,12 +2044,15 @@ async def get_today_workflow(
         # can complete on any day — including holidays and days the
         # teacher has no class. Compute them unconditionally so the car
         # can advance even when attendance is N/A.
-        pending = await _pending_hw_review_ids(grade, today, db)
+        pending = await _pending_hw_review_ids(
+            grade, current_teacher.school_id, today, db
+        )
         # Only real assignments are reviewable — "no homework" markers carry
         # no roster, so they don't make the review step applicable.
         prior_hw_count = (await db.execute(
             select(func.count()).select_from(Homework).where(
                 Homework.grade == grade,
+                Homework.school_id == current_teacher.school_id,
                 Homework.created_at < today_start,
                 Homework.is_no_homework == False,  # noqa: E712
             )
@@ -1970,6 +2066,7 @@ async def get_today_workflow(
         tomorrow_hw_count = (await db.execute(
             select(func.count()).select_from(Homework).where(
                 Homework.grade == grade,
+                Homework.school_id == current_teacher.school_id,
                 Homework.created_at >= today_start,
             )
         )).scalar_one()
@@ -2035,6 +2132,7 @@ async def send_broadcast(
         message=payload.message,
         target_type=payload.target_type,
         target_grade=payload.target_grade,
+        school_id=current_teacher.school_id,
     )
     db.add(bc)
     await db.commit()
@@ -2073,6 +2171,7 @@ async def send_broadcast(
         select(StudentProfile)
         .join(User, User.id == StudentProfile.user_id)
         .where(
+            StudentProfile.school_id == current_teacher.school_id,
             User.is_active == True,  # noqa: E712
             User.is_approved == True,  # noqa: E712
             User.deleted_at.is_(None),
@@ -2089,6 +2188,7 @@ async def send_broadcast(
         row.id for row in (await db.execute(
             select(User.id).where(
                 User.role == UserRole.teacher,
+                User.school_id == current_teacher.school_id,
                 User.id != current_teacher.id,
                 User.is_active == True,  # noqa: E712
                 User.is_approved == True,  # noqa: E712
@@ -2142,6 +2242,7 @@ async def list_teacher_broadcasts(
     result = await db.execute(
         select(Broadcast, User.username)
         .join(User, User.id == Broadcast.sender_id)
+        .where(Broadcast.school_id == current_teacher.school_id)
         .order_by(Broadcast.created_at.desc())
     )
     return [
@@ -2183,6 +2284,7 @@ async def get_teacher_dashboard_summary(
     broadcasts_raw = (await db.execute(
         select(Broadcast, User.username)
         .join(User, User.id == Broadcast.sender_id)
+        .where(Broadcast.school_id == current_teacher.school_id)
         .order_by(Broadcast.created_at.desc())
         .limit(50)
     )).all()
@@ -2200,6 +2302,7 @@ async def get_teacher_dashboard_summary(
     homework = (await db.execute(
         select(Homework)
         .where(
+            Homework.school_id == current_teacher.school_id,
             Homework.is_no_homework == False,  # noqa: E712
         )
         .order_by(Homework.created_at.desc())
@@ -2219,6 +2322,7 @@ async def get_teacher_dashboard_summary(
     # unnecessary here.
     test_count_row = (await db.execute(
         select(func.count()).select_from(Test)
+        .where(Test.school_id == current_teacher.school_id)
     )).scalar()
 
     return {

@@ -36,5 +36,6 @@ async def submit_feedback(
         app_version=payload.app_version,
         route=payload.route,
         message=payload.message.strip(),
+        school_id=current_user.school_id,
     ))
     await db.commit()

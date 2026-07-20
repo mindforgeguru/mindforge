@@ -10,6 +10,7 @@ from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
 class TestType(str, enum.Enum):
@@ -17,7 +18,7 @@ class TestType(str, enum.Enum):
     offline = "offline"
 
 
-class Test(Base):
+class Test(TenantMixin, Base):
     """
     Represents a generated test.
     - source_file_url: MinIO URL of the uploaded PDF/image used for generation
@@ -80,7 +81,7 @@ class Test(Base):
         return f"<Test id={self.id} title={self.title} grade={self.grade}>"
 
 
-class TestSubmission(Base):
+class TestSubmission(TenantMixin, Base):
     """Records a student's attempt at an online test.
 
     Lifecycle:

@@ -84,7 +84,11 @@ async def get_student_xp_admin(
             )
 
     target = (await db.execute(
-        select(User).where(User.id == student_id, User.role == UserRole.student)
+        select(User).where(
+            User.id == student_id,
+            User.role == UserRole.student,
+            User.school_id == current_user.school_id,
+        )
     )).scalar_one_or_none()
     if target is None:
         raise HTTPException(status_code=404, detail="Student not found.")
@@ -106,7 +110,9 @@ async def adjust_xp(
     stored in the transaction's description column."""
     target = (await db.execute(
         select(User).where(
-            User.id == payload.student_id, User.role == UserRole.student
+            User.id == payload.student_id,
+            User.role == UserRole.student,
+            User.school_id == current_admin.school_id,
         )
     )).scalar_one_or_none()
     if target is None:

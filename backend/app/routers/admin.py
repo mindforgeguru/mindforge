@@ -48,12 +48,18 @@ async def _audit(
     """Append an immutable audit-log row. Failures are swallowed so they never
     break the primary operation — the important data is in the main tables."""
     try:
+        # Scope the entry to the acting admin's school so the audit log is
+        # tenant-isolated. Looked up here so no call site has to thread it.
+        school_id = (await db.execute(
+            select(User.school_id).where(User.id == admin_id)
+        )).scalar_one_or_none()
         db.add(AuditLog(
             admin_id=admin_id,
             action=action,
             target_type=target_type,
             target_id=target_id,
             details=details,
+            school_id=school_id,
         ))
         # The caller's db.commit() will flush this row together with the main change.
     except Exception:
@@ -105,7 +111,12 @@ async def change_admin_username(
     if not new_username or len(new_username) < 3:
         raise HTTPException(status_code=400, detail="Username must be at least 3 characters.")
     conflict = await db.execute(
-        select(User).where(User.username == new_username, User.id != current_admin.id, User.deleted_at.is_(None))
+        select(User).where(
+            User.username == new_username,
+            User.school_id == current_admin.school_id,
+            User.id != current_admin.id,
+            User.deleted_at.is_(None),
+        )
     )
     if conflict.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Username already taken.")
@@ -142,7 +153,11 @@ async def get_pending_users(
 ):
     """List all users awaiting approval."""
     result = await db.execute(
-        select(User).where(User.is_approved == False, User.deleted_at.is_(None))
+        select(User).where(
+            User.is_approved == False,
+            User.school_id == current_admin.school_id,
+            User.deleted_at.is_(None),
+        )
         .order_by(User.created_at.asc())
     )
     return result.scalars().all()
@@ -159,7 +174,11 @@ async def get_all_users(
     base_query = (
         select(User, StudentProfile)
         .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
-        .where(User.deleted_at.is_(None), User.is_approved == True)
+        .where(
+            User.deleted_at.is_(None),
+            User.is_approved == True,
+            User.school_id == current_admin.school_id,
+        )
     )
     if role:
         base_query = base_query.where(User.role == role)
@@ -245,7 +264,11 @@ async def edit_user(
 ):
     """Edit a user's username, role, grade (students), or reset their MPIN."""
     result = await db.execute(
-        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+        select(User).where(
+            User.id == user_id,
+            User.school_id == current_admin.school_id,
+            User.deleted_at.is_(None),
+        )
     )
     user = result.scalar_one_or_none()
     if not user:
@@ -260,6 +283,7 @@ async def edit_user(
             conflict = await db.execute(
                 select(User).where(
                     User.phone == new_phone,
+                    User.school_id == current_admin.school_id,
                     User.deleted_at.is_(None),
                     User.id != user_id,
                 )
@@ -277,6 +301,7 @@ async def edit_user(
         conflict = await db.execute(
             select(User).where(
                 User.username == payload.username,
+                User.school_id == current_admin.school_id,
                 User.deleted_at.is_(None),
                 User.id != user_id,
             )
@@ -319,9 +344,14 @@ async def edit_user(
         # Create new profile
         if new_role == UserRole.student:
             grade = payload.grade if payload.grade in (8, 9, 10) else 8
-            db.add(StudentProfile(user_id=user_id, grade=grade))
+            db.add(StudentProfile(
+                user_id=user_id, grade=grade, school_id=current_admin.school_id
+            ))
         elif new_role == UserRole.teacher:
-            db.add(TeacherProfile(user_id=user_id, teachable_subjects=[]))
+            db.add(TeacherProfile(
+                user_id=user_id, teachable_subjects=[],
+                school_id=current_admin.school_id,
+            ))
 
     else:
         # No role change — update grade and/or parent_username if student
@@ -345,6 +375,7 @@ async def edit_user(
                             select(User).where(
                                 sa_func.lower(User.username) == parent_username_clean.lower(),
                                 User.role == UserRole.parent,
+                                User.school_id == current_admin.school_id,
                                 User.deleted_at.is_(None),
                             )
                         )
@@ -358,6 +389,7 @@ async def edit_user(
                             collision = await db.execute(
                                 select(User).where(
                                     sa_func.lower(User.username) == parent_username_clean.lower(),
+                                    User.school_id == current_admin.school_id,
                                     User.deleted_at.is_(None),
                                 )
                             )
@@ -380,6 +412,7 @@ async def edit_user(
                                 username=parent_username_clean,
                                 mpin_hash=hash_mpin(payload.parent_mpin),
                                 role=UserRole.parent,
+                                school_id=current_admin.school_id,
                                 is_active=True,
                                 is_approved=True,
                                 academic_year_id=user.academic_year_id,
@@ -404,6 +437,7 @@ async def edit_user(
                     select(User).where(
                         sa_func.lower(User.username) == payload.student_username.strip().lower(),
                         User.role == UserRole.student,
+                        User.school_id == current_admin.school_id,
                         User.deleted_at.is_(None),
                     )
                 )
@@ -517,7 +551,7 @@ async def set_user_active(
 ):
     """Toggle a user's active status. Deactivating a student also deactivates their linked parent."""
     result = await db.execute(
-        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+        select(User).where(User.id == user_id, User.school_id == current_admin.school_id, User.deleted_at.is_(None))
     )
     user = result.scalar_one_or_none()
     if not user:
@@ -574,7 +608,7 @@ async def approve_user(
 ):
     """Approve a pending user account."""
     result = await db.execute(
-        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+        select(User).where(User.id == user_id, User.school_id == current_admin.school_id, User.deleted_at.is_(None))
     )
     user = result.scalar_one_or_none()
     if not user:
@@ -609,7 +643,7 @@ async def delete_pending_user(
     Used to reject sign-up requests outright and to clean up test data.
     """
     result = await db.execute(
-        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+        select(User).where(User.id == user_id, User.school_id == current_admin.school_id, User.deleted_at.is_(None))
     )
     user = result.scalar_one_or_none()
     if not user:
@@ -637,6 +671,7 @@ async def delete_all_pending_users(
     result = await db.execute(
         select(User).where(
             User.is_approved == False,
+            User.school_id == current_admin.school_id,
             User.deleted_at.is_(None),
             User.role != UserRole.admin,
         )
@@ -663,7 +698,7 @@ async def revoke_user(
     Sets deleted_at timestamp and deactivates the account.
     """
     result = await db.execute(
-        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+        select(User).where(User.id == user_id, User.school_id == current_admin.school_id, User.deleted_at.is_(None))
     )
     user = result.scalar_one_or_none()
     if not user:
@@ -701,6 +736,7 @@ async def list_teachers_for_admin(
         select(User, TeacherProfile)
         .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
         .where(User.role == UserRole.teacher)
+        .where(User.school_id == current_admin.school_id)
         .where(User.deleted_at == None)
         .order_by(User.username)
     )
@@ -730,6 +766,7 @@ async def admin_update_teacher_bio(
         select(User).where(
             User.id == teacher_id,
             User.role == UserRole.teacher,
+            User.school_id == current_admin.school_id,
             User.deleted_at == None,
         )
     )
@@ -744,7 +781,10 @@ async def admin_update_teacher_bio(
     profile = profile_result.scalar_one_or_none()
     if not profile:
         # Teacher exists but has no TeacherProfile row yet — create one.
-        profile = TeacherProfile(user_id=teacher_id, teachable_subjects=[])
+        profile = TeacherProfile(
+            user_id=teacher_id, teachable_subjects=[],
+            school_id=current_admin.school_id,
+        )
         db.add(profile)
         await db.flush()
     profile.bio = bio or None
@@ -767,6 +807,7 @@ async def admin_upload_teacher_photo(
         select(User).where(
             User.id == teacher_id,
             User.role == UserRole.teacher,
+            User.school_id == current_admin.school_id,
             User.deleted_at == None,
         )
     )
@@ -805,7 +846,9 @@ async def get_audit_log(
 ):
     """Return admin audit log entries, newest first."""
     from sqlalchemy import desc
-    query = select(AuditLog).order_by(desc(AuditLog.created_at))
+    query = select(AuditLog).where(
+        AuditLog.school_id == current_admin.school_id
+    ).order_by(desc(AuditLog.created_at))
     if action:
         query = query.where(AuditLog.action == action)
     if target_type:
@@ -841,7 +884,9 @@ async def get_all_fee_summaries(
     students_result = await db.execute(
         select(User, StudentProfile)
         .join(StudentProfile, StudentProfile.user_id == User.id)
-        .where(User.role == UserRole.student, User.deleted_at.is_(None), User.is_approved == True)
+        .where(User.role == UserRole.student, User.deleted_at.is_(None),
+               User.is_approved == True,
+               User.school_id == current_admin.school_id)
         .order_by(StudentProfile.grade, User.username)
     )
     rows = students_result.all()
@@ -853,6 +898,7 @@ async def get_all_fee_summaries(
     fs_result = await db.execute(
         select(FeeStructure).where(
             FeeStructure.academic_year == academic_year,
+            FeeStructure.school_id == current_admin.school_id,
             FeeStructure.grade.in_(grades),
         )
     )
@@ -917,7 +963,9 @@ async def get_fee_structures(
     current_admin: User = Depends(get_current_admin),
 ):
     """Get all fee structures, optionally filtered by academic year."""
-    query = select(FeeStructure)
+    query = select(FeeStructure).where(
+        FeeStructure.school_id == current_admin.school_id
+    )
     if academic_year:
         query = query.where(FeeStructure.academic_year == academic_year)
     result = await db.execute(query.order_by(FeeStructure.academic_year, FeeStructure.grade))
@@ -935,13 +983,14 @@ async def create_fee_structure(
     existing = await db.execute(
         select(FeeStructure).where(
             FeeStructure.grade == payload.grade,
+            FeeStructure.school_id == current_admin.school_id,
             FeeStructure.academic_year == payload.academic_year,
         )
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Fee structure for this grade/year already exists.")
 
-    structure = FeeStructure(**payload.model_dump())
+    structure = FeeStructure(**payload.model_dump(), school_id=current_admin.school_id)
     db.add(structure)
     await db.commit()
     await db.refresh(structure)
@@ -956,7 +1005,7 @@ async def update_fee_structure(
     current_admin: User = Depends(get_current_admin),
 ):
     """Update a fee structure."""
-    result = await db.execute(select(FeeStructure).where(FeeStructure.id == structure_id))
+    result = await db.execute(select(FeeStructure).where(FeeStructure.id == structure_id, FeeStructure.school_id == current_admin.school_id))
     structure = result.scalar_one_or_none()
     if not structure:
         raise HTTPException(status_code=404, detail="Fee structure not found.")
@@ -975,7 +1024,7 @@ async def delete_fee_structure(
     current_admin: User = Depends(get_current_admin),
 ):
     """Delete a fee structure by ID."""
-    result = await db.execute(select(FeeStructure).where(FeeStructure.id == structure_id))
+    result = await db.execute(select(FeeStructure).where(FeeStructure.id == structure_id, FeeStructure.school_id == current_admin.school_id))
     structure = result.scalar_one_or_none()
     if not structure:
         raise HTTPException(status_code=404, detail="Fee structure not found.")
@@ -993,7 +1042,7 @@ async def update_fee_payment(
     current_admin: User = Depends(get_current_admin),
 ):
     """Update the amount and/or notes of an existing fee payment."""
-    result = await db.execute(select(FeePayment).where(FeePayment.id == payment_id))
+    result = await db.execute(select(FeePayment).where(FeePayment.id == payment_id, FeePayment.school_id == current_admin.school_id))
     payment = result.scalar_one_or_none()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found.")
@@ -1015,7 +1064,7 @@ async def delete_fee_payment(
     current_admin: User = Depends(get_current_admin),
 ):
     """Delete a fee payment entry."""
-    result = await db.execute(select(FeePayment).where(FeePayment.id == payment_id))
+    result = await db.execute(select(FeePayment).where(FeePayment.id == payment_id, FeePayment.school_id == current_admin.school_id))
     payment = result.scalar_one_or_none()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found.")
@@ -1043,11 +1092,22 @@ async def record_fee_payment(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Duplicate request: this payment was already recorded.",
             )
+    # Cross-school guard: only record payments for this school's students.
+    target = await db.execute(
+        select(StudentProfile.user_id).where(
+            StudentProfile.user_id == payload.student_id,
+            StudentProfile.school_id == current_admin.school_id,
+        )
+    )
+    if target.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
     payment = FeePayment(
         student_id=payload.student_id,
         amount=payload.amount,
         notes=payload.notes,
         updated_by_admin_id=current_admin.id,
+        school_id=current_admin.school_id,
         **({"paid_at": payload.paid_at} if payload.paid_at else {}),
     )
     db.add(payment)
@@ -1085,7 +1145,11 @@ async def get_payment_info(
     current_admin: User = Depends(get_current_admin),
 ):
     """Get all payment options (up to 3 slots)."""
-    result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.slot))
+    result = await db.execute(
+        select(PaymentInfo)
+        .where(PaymentInfo.school_id == current_admin.school_id)
+        .order_by(PaymentInfo.slot)
+    )
     return result.scalars().all()
 
 
@@ -1099,13 +1163,16 @@ async def update_payment_info(
     """Update or create a payment option by slot (1, 2, or 3)."""
     if slot not in (1, 2, 3):
         raise HTTPException(status_code=400, detail="Slot must be 1, 2, or 3.")
-    result = await db.execute(select(PaymentInfo).where(PaymentInfo.slot == slot))
+    result = await db.execute(select(PaymentInfo).where(
+        PaymentInfo.slot == slot,
+        PaymentInfo.school_id == current_admin.school_id,
+    ))
     info = result.scalar_one_or_none()
     if info:
         for field, value in payload.model_dump().items():
             setattr(info, field, value)
     else:
-        info = PaymentInfo(slot=slot, **payload.model_dump())
+        info = PaymentInfo(slot=slot, school_id=current_admin.school_id, **payload.model_dump())
         db.add(info)
     await db.commit()
     await db.refresh(info)
@@ -1124,13 +1191,17 @@ async def upload_qr_code(
         raise HTTPException(status_code=400, detail="Slot must be 1, 2, or 3.")
     file_bytes = await file.read()
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else "png"
-    key = f"payment/qr_code_slot{slot}.{ext}"
+    # Namespace the object by school so one school's QR can't overwrite another's.
+    key = f"payment/{current_admin.school_id}/qr_code_slot{slot}.{ext}"
     url = await storage_service.upload_file("mindforge-profiles", key, file_bytes)
 
-    result = await db.execute(select(PaymentInfo).where(PaymentInfo.slot == slot))
+    result = await db.execute(select(PaymentInfo).where(
+        PaymentInfo.slot == slot,
+        PaymentInfo.school_id == current_admin.school_id,
+    ))
     info = result.scalar_one_or_none()
     if not info:
-        info = PaymentInfo(slot=slot, qr_code_url=url)
+        info = PaymentInfo(slot=slot, qr_code_url=url, school_id=current_admin.school_id)
         db.add(info)
     else:
         info.qr_code_url = url
@@ -1147,7 +1218,11 @@ async def get_timetable_config(
     current_admin: User = Depends(get_current_admin),
 ):
     """Get the current timetable configuration."""
-    result = await db.execute(select(TimetableConfig).order_by(TimetableConfig.id.desc()))
+    result = await db.execute(
+        select(TimetableConfig)
+        .where(TimetableConfig.school_id == current_admin.school_id)
+        .order_by(TimetableConfig.id.desc())
+    )
     return result.scalars().first()
 
 
@@ -1157,8 +1232,12 @@ async def update_timetable_config(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Update or create the global timetable configuration."""
-    result = await db.execute(select(TimetableConfig).order_by(TimetableConfig.id.desc()))
+    """Update or create this school's timetable configuration."""
+    result = await db.execute(
+        select(TimetableConfig)
+        .where(TimetableConfig.school_id == current_admin.school_id)
+        .order_by(TimetableConfig.id.desc())
+    )
     config = result.scalars().first()
     if config:
         config.periods_per_day = payload.periods_per_day
@@ -1171,12 +1250,13 @@ async def update_timetable_config(
             enable_weekends=payload.enable_weekends,
             period_times=payload.period_times,
             created_by_admin_id=current_admin.id,
+            school_id=current_admin.school_id,
         )
         db.add(config)
     await db.commit()
     await db.refresh(config)
     from app.core.cache import invalidate_timetable_config
-    await invalidate_timetable_config()
+    await invalidate_timetable_config(current_admin.school_id)
 
     # Broadcast timetable config change to all connected clients
     await redis_manager.publish({
@@ -1198,10 +1278,13 @@ async def clear_all_timetable_slots(
 ):
     """Delete all timetable slots (or only for a specific grade if provided)."""
     from sqlalchemy import delete as sql_delete
+    base = sql_delete(TimetableSlot).where(
+        TimetableSlot.school_id == current_admin.school_id
+    )
     if grade is not None:
-        await db.execute(sql_delete(TimetableSlot).where(TimetableSlot.grade == grade))
+        await db.execute(base.where(TimetableSlot.grade == grade))
     else:
-        await db.execute(sql_delete(TimetableSlot))
+        await db.execute(base)
     await db.commit()
     return {"message": "Timetable slots cleared." if grade is None else f"Timetable slots for grade {grade} cleared."}
 
@@ -1220,7 +1303,9 @@ async def get_academic_years(
 ):
     """List all academic years with user counts."""
     result = await db.execute(
-        select(AcademicYear).order_by(AcademicYear.started_at.desc())
+        select(AcademicYear)
+        .where(AcademicYear.school_id == current_admin.school_id)
+        .order_by(AcademicYear.started_at.desc())
     )
     years = result.scalars().all()
 
@@ -1230,6 +1315,7 @@ async def get_academic_years(
         count_result = await db.execute(
             select(sqlfunc.count(User.id)).where(
                 User.academic_year_id == y.id,
+                User.school_id == current_admin.school_id,
                 User.role != UserRole.admin,
             )
         )
@@ -1241,6 +1327,7 @@ async def get_academic_years(
             r = await db.execute(
                 select(sqlfunc.count(User.id)).where(
                     User.academic_year_id == y.id,
+                    User.school_id == current_admin.school_id,
                     User.role == role,
                 )
             )
@@ -1267,7 +1354,10 @@ async def get_current_academic_year(
 ):
     """Return the currently active academic year, or null if none set."""
     result = await db.execute(
-        select(AcademicYear).where(AcademicYear.is_current == True)
+        select(AcademicYear).where(
+            AcademicYear.is_current == True,
+            AcademicYear.school_id == current_admin.school_id,
+        )
     )
     y = result.scalar_one_or_none()
     if not y:
@@ -1292,7 +1382,9 @@ async def get_users_by_year(
     query = (
         select(User, StudentProfile)
         .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
-        .where(User.academic_year_id == year_id, User.role != UserRole.admin)
+        .where(User.academic_year_id == year_id,
+               User.school_id == current_admin.school_id,
+               User.role != UserRole.admin)
     )
     if role:
         query = query.where(User.role == role)
@@ -1324,19 +1416,23 @@ async def start_new_academic_year(
     """
     now = datetime.now(timezone.utc)
 
-    # 1. Close current year if one exists
+    # 1. Close current year if one exists (this school only)
     current_result = await db.execute(
-        select(AcademicYear).where(AcademicYear.is_current == True)
+        select(AcademicYear).where(
+            AcademicYear.is_current == True,
+            AcademicYear.school_id == current_admin.school_id,
+        )
     )
     current_year = current_result.scalar_one_or_none()
     if current_year:
         current_year.is_current = False
         current_year.ended_at = now
 
-    # 2. Soft-delete all non-admin users
+    # 2. Soft-delete all non-admin users *in this school* — never other schools'.
     non_admin_result = await db.execute(
         select(User).where(
             User.role != UserRole.admin,
+            User.school_id == current_admin.school_id,
             User.deleted_at.is_(None),
         )
     )
@@ -1345,8 +1441,12 @@ async def start_new_academic_year(
         user.is_active = False
         user.is_approved = False
 
-    # 3. Clear timetable slots (fresh slate for new year)
-    slots_result = await db.execute(select(TimetableSlot))
+    # 3. Clear this school's timetable slots (fresh slate for new year)
+    slots_result = await db.execute(
+        select(TimetableSlot).where(
+            TimetableSlot.school_id == current_admin.school_id
+        )
+    )
     for slot in slots_result.scalars().all():
         await db.delete(slot)
 
@@ -1357,12 +1457,13 @@ async def start_new_academic_year(
         is_current=True,
         started_at=now,
         started_by_admin_id=current_admin.id,
+        school_id=current_admin.school_id,
     )
     db.add(new_year)
     await db.commit()
     await db.refresh(new_year)
     from app.core.cache import invalidate_academic_year
-    await invalidate_academic_year()
+    await invalidate_academic_year(current_admin.school_id)
 
     # Notify all connected clients
     await redis_manager.publish({
@@ -1387,8 +1488,10 @@ async def init_academic_year(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Create the first academic year (only if none exists yet)."""
-    existing = await db.execute(select(AcademicYear))
+    """Create the first academic year (only if none exists yet for this school)."""
+    existing = await db.execute(
+        select(AcademicYear).where(AcademicYear.school_id == current_admin.school_id)
+    )
     if existing.scalars().first():
         raise HTTPException(status_code=409, detail="Academic year already exists.")
 
@@ -1399,6 +1502,7 @@ async def init_academic_year(
         is_current=True,
         started_at=now,
         started_by_admin_id=current_admin.id,
+        school_id=current_admin.school_id,
     )
     db.add(year)
     await db.commit()
@@ -1423,7 +1527,9 @@ async def download_pending_fees_report(
     students_result = await db.execute(
         select(User, StudentProfile)
         .join(StudentProfile, StudentProfile.user_id == User.id)
-        .where(User.role == UserRole.student, User.deleted_at.is_(None), User.is_approved == True)
+        .where(User.role == UserRole.student, User.deleted_at.is_(None),
+               User.is_approved == True,
+               User.school_id == current_admin.school_id)
         .order_by(StudentProfile.grade, User.username)
     )
     rows = students_result.all()
@@ -1435,6 +1541,7 @@ async def download_pending_fees_report(
     fs_result = await db.execute(
         select(FeeStructure).where(
             FeeStructure.academic_year == academic_year,
+            FeeStructure.school_id == current_admin.school_id,
             FeeStructure.grade.in_(grades),
         )
     )
@@ -1497,7 +1604,9 @@ async def download_student_ledger(
     result = await db.execute(
         select(User, StudentProfile)
         .join(StudentProfile, StudentProfile.user_id == User.id)
-        .where(User.id == student_id, User.deleted_at.is_(None))
+        .where(User.id == student_id,
+               User.school_id == current_admin.school_id,
+               User.deleted_at.is_(None))
     )
     row = result.first()
     if not row:
@@ -1507,6 +1616,7 @@ async def download_student_ledger(
     fs_result = await db.execute(
         select(FeeStructure).where(
             FeeStructure.grade == profile.grade,
+            FeeStructure.school_id == current_admin.school_id,
             FeeStructure.academic_year == academic_year,
         )
     )
@@ -1576,7 +1686,11 @@ async def list_feedback(
     """List user-submitted problem reports, newest first."""
     from app.models.feedback import FeedbackReport
 
-    stmt = select(FeedbackReport).order_by(FeedbackReport.created_at.desc())
+    stmt = (
+        select(FeedbackReport)
+        .where(FeedbackReport.school_id == current_admin.school_id)
+        .order_by(FeedbackReport.created_at.desc())
+    )
     if only_open:
         stmt = stmt.where(FeedbackReport.resolved == False)
     stmt = stmt.offset(skip).limit(limit)
@@ -1594,7 +1708,10 @@ async def resolve_feedback(
     from app.models.feedback import FeedbackReport
 
     result = await db.execute(
-        select(FeedbackReport).where(FeedbackReport.id == report_id)
+        select(FeedbackReport).where(
+            FeedbackReport.id == report_id,
+            FeedbackReport.school_id == current_admin.school_id,
+        )
     )
     report = result.scalar_one_or_none()
     if not report:

@@ -170,9 +170,12 @@ async def get_class_attendance_leaderboard(
     if not profile:
         return []
 
-    # Get all student user_ids in the same grade
+    # Get all student user_ids in the same grade *and same school*
     classmates_result = await db.execute(
-        select(StudentProfile.user_id).where(StudentProfile.grade == profile.grade)
+        select(StudentProfile.user_id).where(
+            StudentProfile.grade == profile.grade,
+            StudentProfile.school_id == current_student.school_id,
+        )
     )
     classmate_ids = [row[0] for row in classmates_result.all()]
     if not classmate_ids:
@@ -238,6 +241,7 @@ async def get_faculty(
         select(User, TeacherProfile)
         .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
         .where(User.role == UserRole.teacher)
+        .where(User.school_id == current_student.school_id)
         .where(User.deleted_at == None)
         .where(User.is_approved == True)
         .where(User.is_active == True)
@@ -272,7 +276,7 @@ async def get_my_timetable(
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
-    config = await get_timetable_config_cached(db)
+    config = await get_timetable_config_cached(db, current_student.school_id)
     period_time_map: dict[int, tuple[str, str]] = {}
     if config and config.period_times:
         for pt in config.period_times:
@@ -284,6 +288,7 @@ async def get_my_timetable(
         .outerjoin(TeacherUser, TimetableSlot.teacher_id == TeacherUser.id)
         .where(
             TimetableSlot.grade == profile.grade,
+            TimetableSlot.school_id == current_student.school_id,
             TimetableSlot.slot_date == slot_date,
         )
         .order_by(TimetableSlot.period_number)
@@ -444,6 +449,7 @@ async def _finalize_submission(
             marks_obtained=score,
             max_marks=test.total_marks,
             grade_type=GradeType.online,
+            school_id=test.school_id,
         )
     )
     await db.commit()
@@ -469,7 +475,10 @@ async def _finalize_submission(
 
     # Mark the test fully graded once every student in the grade has finalized.
     student_count_result = await db.execute(
-        select(func.count()).select_from(StudentProfile).where(StudentProfile.grade == test.grade)
+        select(func.count()).select_from(StudentProfile).where(
+            StudentProfile.grade == test.grade,
+            StudentProfile.school_id == test.school_id,
+        )
     )
     student_count = student_count_result.scalar_one()
     finalized_count_result = await db.execute(
@@ -567,7 +576,9 @@ async def _sweep_expired_attempts_for_student(
         )
 
 
-async def _sweep_missed_tests_for_grade(grade: int, db: AsyncSession) -> None:
+async def _sweep_missed_tests_for_grade(
+    grade: int, school_id: int, db: AsyncSession
+) -> None:
     """Materialise score=0 results for students who never took an online test
     whose 48h window has now closed — so the grade reflects to the student and
     their parent like any other test.
@@ -586,6 +597,7 @@ async def _sweep_missed_tests_for_grade(grade: int, db: AsyncSession) -> None:
     tests = (await db.execute(
         select(Test).where(
             Test.grade == grade,
+            Test.school_id == school_id,
             Test.test_type == TestType.online,
             Test.is_published == True,          # noqa: E712
             Test.is_graded == False,            # noqa: E712
@@ -598,7 +610,10 @@ async def _sweep_missed_tests_for_grade(grade: int, db: AsyncSession) -> None:
 
     student_ids = {
         row[0] for row in (await db.execute(
-            select(StudentProfile.user_id).where(StudentProfile.grade == grade)
+            select(StudentProfile.user_id).where(
+                StudentProfile.grade == grade,
+                StudentProfile.school_id == school_id,
+            )
         )).all()
     }
     if not student_ids:
@@ -630,6 +645,7 @@ async def _sweep_missed_tests_for_grade(grade: int, db: AsyncSession) -> None:
                 attempt_expires_at=test.expires_at,
                 is_finalized=False,
                 auto_submitted=True,
+                school_id=test.school_id,
             )
             db.add(missed)
             await db.flush()
@@ -644,10 +660,13 @@ async def _sweep_missed_tests_for_grade(grade: int, db: AsyncSession) -> None:
 async def _ensure_test_in_student_grade(
     test: Test, student_id: int, db: AsyncSession
 ) -> None:
-    # Defend against cross-grade IDOR: returns 404 (not 403) so out-of-grade
-    # test IDs are indistinguishable from non-existent ones.
+    # Defend against cross-grade / cross-school IDOR: returns 404 (not 403) so
+    # out-of-grade or other-school test IDs are indistinguishable from
+    # non-existent ones.
     profile = await get_student_profile_cached(student_id, db)
-    if profile is None or profile.grade != test.grade:
+    if (profile is None
+            or profile.grade != test.grade
+            or profile.school_id != test.school_id):
         raise HTTPException(status_code=404, detail="Test not found.")
 
 
@@ -820,7 +839,7 @@ async def get_pending_tests(
     await _sweep_expired_attempts_for_student(current_student.id, db)
     # Zero-out any tests whose 48h window closed without this student (or
     # classmates) taking them, so missed tests show up as graded 0.
-    await _sweep_missed_tests_for_grade(profile.grade, db)
+    await _sweep_missed_tests_for_grade(profile.grade, current_student.school_id, db)
 
     now = datetime.now(timezone.utc)
 
@@ -836,6 +855,7 @@ async def get_pending_tests(
         select(Test)
         .where(
             Test.grade == profile.grade,
+            Test.school_id == current_student.school_id,
             Test.is_published == True,
             Test.test_type == "online",
             Test.expires_at > now,
@@ -861,7 +881,9 @@ async def get_offline_tests(
 
     query = (
         select(Test)
-        .where(Test.grade == profile.grade, Test.test_type == TestType.offline,
+        .where(Test.grade == profile.grade,
+               Test.school_id == current_student.school_id,
+               Test.test_type == TestType.offline,
                Test.is_published == True)
     )
     query = _apply_subject_filter(query, profile)
@@ -880,7 +902,7 @@ async def get_completed_tests(
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
     await _sweep_expired_attempts_for_student(current_student.id, db)
-    await _sweep_missed_tests_for_grade(profile.grade, db)
+    await _sweep_missed_tests_for_grade(profile.grade, current_student.school_id, db)
 
     finalized_result = await db.execute(
         select(TestSubmission.test_id).where(
@@ -960,6 +982,7 @@ async def start_test_attempt(
             attempt_expires_at=attempt_deadline,
             is_finalized=False,
             auto_submitted=False,
+            school_id=test.school_id,
         )
         db.add(submission)
         await db.commit()
@@ -1121,6 +1144,7 @@ async def submit_test(
             attempt_expires_at=now,
             is_finalized=False,
             auto_submitted=payload.auto_submitted,
+            school_id=test.school_id,
         )
         db.add(submission)
         await db.commit()
@@ -1272,6 +1296,7 @@ async def get_student_homework(
         select(Homework)
         .where(
             Homework.grade == profile.grade,
+            Homework.school_id == current_student.school_id,
             Homework.is_no_homework == False,  # noqa: E712
         )
         .order_by(Homework.created_at.desc())
@@ -1320,7 +1345,11 @@ async def get_student_broadcasts(
     grade = profile.grade if profile else None
 
     from sqlalchemy import or_
-    q = select(Broadcast, User).join(User, Broadcast.sender_id == User.id)
+    q = (
+        select(Broadcast, User)
+        .join(User, Broadcast.sender_id == User.id)
+        .where(Broadcast.school_id == current_student.school_id)
+    )
     if grade is not None:
         q = q.where(
             or_(
@@ -1364,11 +1393,12 @@ async def get_my_fees(
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
     if not academic_year:
-        academic_year = await get_current_academic_year_cached(db)
+        academic_year = await get_current_academic_year_cached(db, current_student.school_id)
 
     structure_result = await db.execute(
         select(FeeStructure).where(
             FeeStructure.grade == profile.grade,
+            FeeStructure.school_id == current_student.school_id,
             FeeStructure.academic_year == academic_year,
         )
     )
@@ -1398,7 +1428,11 @@ async def get_my_fees(
     payments = payments_result.scalars().all()
     total_paid = sum(p.amount for p in payments)
 
-    pi_result = await db.execute(select(PaymentInfo).order_by(PaymentInfo.slot))
+    pi_result = await db.execute(
+        select(PaymentInfo)
+        .where(PaymentInfo.school_id == current_student.school_id)
+        .order_by(PaymentInfo.slot)
+    )
     payment_options_raw = pi_result.scalars().all()
 
     # Resolve presigned QR URLs in parallel instead of sequentially
@@ -1457,7 +1491,7 @@ async def get_student_dashboard_summary(
     today = date_type.fromisoformat(date) if date else date_type.today()
 
     # Timetable for today
-    config = await get_timetable_config_cached(db)
+    config = await get_timetable_config_cached(db, current_student.school_id)
     period_time_map: dict[int, tuple[str, str]] = {}
     if config and config.period_times:
         for pt in config.period_times:
@@ -1467,7 +1501,9 @@ async def get_student_dashboard_summary(
     timetable_rows = (await db.execute(
         select(TimetableSlot, TeacherAlias.username)
         .outerjoin(TeacherAlias, TimetableSlot.teacher_id == TeacherAlias.id)
-        .where(TimetableSlot.grade == profile.grade, TimetableSlot.slot_date == today)
+        .where(TimetableSlot.grade == profile.grade,
+               TimetableSlot.school_id == current_student.school_id,
+               TimetableSlot.slot_date == today)
         .order_by(TimetableSlot.period_number)
     )).all()
     timetable = [
@@ -1486,6 +1522,7 @@ async def get_student_dashboard_summary(
     bc_rows = (await db.execute(
         select(Broadcast, User)
         .join(User, Broadcast.sender_id == User.id)
+        .where(Broadcast.school_id == current_student.school_id)
         .where(or_(
             Broadcast.target_type == "all",
             (Broadcast.target_type == "grade") & (Broadcast.target_grade == profile.grade),
@@ -1505,6 +1542,7 @@ async def get_student_dashboard_summary(
     homework = (await db.execute(
         select(Homework).where(
             Homework.grade == profile.grade,
+            Homework.school_id == current_student.school_id,
             Homework.is_no_homework == False,  # noqa: E712
         ).order_by(Homework.created_at.desc())
     )).scalars().all()
@@ -1541,7 +1579,8 @@ async def get_student_dashboard_summary(
         )).all()
     }
     pending_q = select(Test).where(
-        Test.grade == profile.grade, Test.is_published == True,
+        Test.grade == profile.grade, Test.school_id == current_student.school_id,
+        Test.is_published == True,
         Test.test_type == "online", Test.expires_at > now,
     )
     if submitted_ids:
@@ -1549,7 +1588,8 @@ async def get_student_dashboard_summary(
     pending_q = _apply_subject_filter(pending_q, profile)
     pending_tests = (await db.execute(pending_q.order_by(Test.created_at.desc()))).scalars().all()
     offline_q = select(Test).where(
-        Test.grade == profile.grade, Test.test_type == TestType.offline, Test.is_published == True
+        Test.grade == profile.grade, Test.school_id == current_student.school_id,
+        Test.test_type == TestType.offline, Test.is_published == True
     )
     offline_q = _apply_subject_filter(offline_q, profile)
     offline_tests = (await db.execute(offline_q.order_by(Test.created_at.desc()))).scalars().all()
@@ -1560,10 +1600,12 @@ async def get_student_dashboard_summary(
     )).scalars().all()
 
     # Fees (skip presigned QR URL resolution — dashboard only needs amounts)
-    academic_year = await get_current_academic_year_cached(db)
+    academic_year = await get_current_academic_year_cached(db, current_student.school_id)
     structure = (await db.execute(
         select(FeeStructure).where(
-            FeeStructure.grade == profile.grade, FeeStructure.academic_year == academic_year,
+            FeeStructure.grade == profile.grade,
+            FeeStructure.school_id == current_student.school_id,
+            FeeStructure.academic_year == academic_year,
         )
     )).scalar_one_or_none()
     if structure:

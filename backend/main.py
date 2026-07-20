@@ -18,7 +18,7 @@ from app.core.database import engine, Base
 from app.core.redis_client import redis_manager
 from app.websockets.manager import ws_manager
 from app.routers import auth, teacher, student, parent, admin, xp
-from app.routers import database_router, feedback, presentations
+from app.routers import database_router, feedback, presentations, schools, owner
 import app.models  # noqa: F401 — registers all models with Base
 
 logging.basicConfig(level=logging.INFO)
@@ -151,6 +151,40 @@ async def lifespan(app: FastAPI):
                 session.add(admin_user)
                 await session.commit()
                 logger.info("Default admin seeded (username=admin) with ADMIN_SEED_MPIN")
+
+    # Seed the platform owner (school_id NULL) from OWNER_SEED_MPIN, same
+    # philosophy as the admin seed: no credential ships in code, skipped with a
+    # clear warning if the env var is missing/malformed. The owner is the only
+    # role that can create and manage schools.
+    owner_mpin = os.environ.get("OWNER_SEED_MPIN", "").strip()
+    owner_username = os.environ.get("OWNER_SEED_USERNAME", "chinmay_owner").strip()
+    if not (owner_mpin.isdigit() and len(owner_mpin) == 6):
+        logger.warning(
+            "OWNER_SEED_MPIN not set or not a 6-digit numeric string — "
+            "skipping owner seed. Set OWNER_SEED_MPIN in env to provision."
+        )
+    else:
+        async with AsyncSession(engine) as session:
+            result = await session.execute(
+                select(User).where(
+                    User.username == owner_username,
+                    User.role == UserRole.owner,
+                    User.deleted_at.is_(None),
+                )
+            )
+            if not result.scalar_one_or_none():
+                hashed = bcrypt.hashpw(owner_mpin.encode(), bcrypt.gensalt(12)).decode()
+                owner_user = User(
+                    username=owner_username, mpin_hash=hashed,
+                    role=UserRole.owner, school_id=None,
+                    is_active=True, is_approved=True,
+                )
+                session.add(owner_user)
+                await session.commit()
+                logger.info(
+                    "Platform owner seeded (username=%s) with OWNER_SEED_MPIN",
+                    owner_username,
+                )
     # Initialize Redis connection
     await redis_manager.connect()
     # Start Redis subscriber in background
@@ -233,6 +267,8 @@ async def cors_aware_internal_error(request: Request, exc: Exception) -> JSONRes
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(schools.router, prefix="/api/schools", tags=["Schools"])
+app.include_router(owner.router, prefix="/api/owner", tags=["Owner"])
 app.include_router(teacher.router, prefix="/api/teacher", tags=["Teacher"])
 app.include_router(student.router, prefix="/api/student", tags=["Student"])
 app.include_router(parent.router, prefix="/api/parent", tags=["Parent"])

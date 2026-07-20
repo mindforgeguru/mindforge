@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
 class XPReason(str, enum.Enum):
@@ -34,7 +35,7 @@ class XPReason(str, enum.Enum):
     MANUAL_ADJUSTMENT = "MANUAL_ADJUSTMENT"
 
 
-class StudentXP(Base):
+class StudentXP(TenantMixin, Base):
     """One row per student. Denormalised total + computed current level."""
     __tablename__ = "student_xp"
     __table_args__ = (
@@ -66,7 +67,7 @@ class StudentXP(Base):
         )
 
 
-class XPTransaction(Base):
+class XPTransaction(TenantMixin, Base):
     """Append-only audit log of every XP award."""
     __tablename__ = "xp_transactions"
 

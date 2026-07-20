@@ -10,6 +10,7 @@ from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
 class GradeType(str, enum.Enum):
@@ -18,7 +19,7 @@ class GradeType(str, enum.Enum):
     manual = "manual"    # manually entered by teacher
 
 
-class Grade(Base):
+class Grade(TenantMixin, Base):
     __tablename__ = "grades"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

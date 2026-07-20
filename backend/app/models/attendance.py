@@ -9,6 +9,7 @@ from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
 class AttendanceStatus(str, enum.Enum):
@@ -16,7 +17,7 @@ class AttendanceStatus(str, enum.Enum):
     absent = "absent"
 
 
-class Attendance(Base):
+class Attendance(TenantMixin, Base):
     __tablename__ = "attendance"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

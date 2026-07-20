@@ -1,3 +1,4 @@
+from app.models.school import School
 from app.models.user import User, StudentProfile, TeacherProfile
 from app.models.academic_year import AcademicYear
 from app.models.attendance import Attendance
@@ -9,6 +10,7 @@ from app.models.homework import Homework, HomeworkCompletion, Broadcast
 from app.models.database_models import OldTestPaper, ChapterDocument, SyllabusEntry
 from app.models.xp import StudentXP, XPTransaction, LevelConfig, XPReason
 from app.models.feedback import FeedbackReport
+from app.models.audit_log import AuditLog
 from app.models.presentation import (
     ChapterPresentation,
     PresentationSlide,

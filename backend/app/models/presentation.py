@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
 class PresentationStatus(str, enum.Enum):
@@ -30,7 +31,7 @@ class PresentationStatus(str, enum.Enum):
     FAILED = "FAILED"
 
 
-class ChapterPresentation(Base):
+class ChapterPresentation(TenantMixin, Base):
     """One row per chapter PDF uploaded by a teacher. Owns the shared deck."""
     __tablename__ = "chapter_presentations"
 
@@ -86,7 +87,7 @@ class ChapterPresentation(Base):
         )
 
 
-class PresentationSlide(Base):
+class PresentationSlide(TenantMixin, Base):
     """One slide in a deck. Any teacher can edit title/body/notes."""
     __tablename__ = "presentation_slides"
     __table_args__ = (
@@ -125,7 +126,7 @@ class PresentationSlide(Base):
         )
 
 
-class PresentationTeacherProgress(Base):
+class PresentationTeacherProgress(TenantMixin, Base):
     """One row per (presentation, teacher). Tracks that teacher's pace."""
     __tablename__ = "presentation_teacher_progress"
     __table_args__ = (
@@ -163,7 +164,7 @@ class PresentationTeacherProgress(Base):
         )
 
 
-class PresentationPeriodLog(Base):
+class PresentationPeriodLog(TenantMixin, Base):
     """Append-only "I taught slides X..Y in period N on date D" entry."""
     __tablename__ = "presentation_period_logs"
 

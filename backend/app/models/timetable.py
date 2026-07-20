@@ -9,9 +9,10 @@ from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Strin
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.mixins import TenantMixin
 
 
-class TimetableConfig(Base):
+class TimetableConfig(TenantMixin, Base):
     """Global timetable configuration set by admin."""
     __tablename__ = "timetable_configs"
 
@@ -29,7 +30,7 @@ class TimetableConfig(Base):
     admin = relationship("User", foreign_keys=[created_by_admin_id])
 
 
-class TimetableSlot(Base):
+class TimetableSlot(TenantMixin, Base):
     """Individual timetable slots per grade/date/period."""
     __tablename__ = "timetable_slots"
 

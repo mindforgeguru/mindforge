@@ -381,6 +381,7 @@ async def run_generation(db: AsyncSession, presentation_id: int) -> None:
                 title=s["title"],
                 body_md=s["body_md"],
                 speaker_notes=s["speaker_notes"],
+                school_id=row.school_id,
             ))
         row.total_slides = len(slides_payload)
         row.recommended_periods = plan["recommended_periods"]
@@ -430,11 +431,18 @@ async def get_or_create_progress(
     )).scalar_one_or_none()
     if row is not None:
         return row
+    # Inherit the presentation's school so the progress row is tenant-scoped.
+    school_id = (await db.execute(
+        select(ChapterPresentation.school_id).where(
+            ChapterPresentation.id == presentation_id
+        )
+    )).scalar_one_or_none()
     row = PresentationTeacherProgress(
         presentation_id=presentation_id,
         teacher_id=teacher_id,
         current_slide_index=0,
         periods_used=0,
+        school_id=school_id,
     )
     db.add(row)
     await db.flush()
