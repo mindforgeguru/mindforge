@@ -20,6 +20,16 @@ def _stub(name: str, **attrs) -> ModuleType:
 # ── asyncpg (pulled in by SQLAlchemy asyncpg dialect) ─────────────────────────
 _stub("asyncpg")
 
+# ── minio (pulled in via app.services.storage_service, which the auth router
+#    imports transitively). Not a test dependency; stubbing keeps the suite
+#    runnable without object storage installed.
+_stub("minio", Minio=MagicMock())
+_stub("minio.error", S3Error=type("S3Error", (Exception,), {}))
+
+# ── AI provider SDKs, imported by app.services.ai_service. Only the module
+#    needs to exist; nothing here calls a model.
+_stub("anthropic", Anthropic=MagicMock())
+
 # ── SQLAlchemy async engine / session ─────────────────────────────────────────
 engine_mock = MagicMock()
 engine_mock.connect = AsyncMock()
