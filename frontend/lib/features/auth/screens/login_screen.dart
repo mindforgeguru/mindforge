@@ -98,6 +98,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   String get _enteredPin => _pin.join();
 
+  // Shared field styling for the wide/web register form (filled white, rounded,
+  // primary focus border) — matches the Username/Register-as fields above.
+  InputDecoration _webRegisterDecoration(String label, IconData icon,
+      {String? helper}) {
+    return InputDecoration(
+      labelText: label,
+      helperText: helper,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.divider)),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.divider)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.primary, width: 2)),
+    );
+  }
+
   void _tapDigit(String d) {
     if (_pinIndex >= 6) return;
     setState(() {
@@ -1070,6 +1092,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       _selectedTeacherSubjects.clear();
                       _selectedGrade = 8;
                     }),
+                  ),
+
+                  // Phone & Email — required for teacher/student (validated on
+                  // submit), optional for parent. The mobile layout has these
+                  // too; omitting them here made desktop teacher/student
+                  // sign-up impossible (submit demands a phone with no field).
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    decoration: _webRegisterDecoration(
+                      _selectedRole == 'parent'
+                          ? 'Phone Number (optional)'
+                          : 'Phone Number',
+                      Icons.phone_outlined,
+                      helper: _selectedRole == 'student'
+                          ? "You can use your parent's number."
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    decoration: _webRegisterDecoration(
+                      'Email (optional)',
+                      Icons.email_outlined,
+                      helper: _selectedRole == 'student'
+                          ? "You can use your parent's email."
+                          : null,
+                    ),
                   ),
                   if (_selectedRole == 'student') ...[
                     const SizedBox(height: 14),

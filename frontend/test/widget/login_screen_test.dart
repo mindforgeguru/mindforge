@@ -159,4 +159,28 @@ void main() {
       expect(find.text('Register as'), findsNothing);
     });
   });
+
+  group('LoginScreen — registration fields', () {
+    // Regression: the wide/web layout (width >= 900) omitted the Phone and
+    // Email fields, so desktop teacher/student sign-up was impossible — submit
+    // requires a phone but there was no field to enter one.
+    testWidgets('wide/web layout shows Phone & Email in Request Access',
+        (tester) async {
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(_buildLoginScreen());
+      await tester.pump();
+
+      // The wide/web layout toggles register mode via this link (not a tab).
+      await tester.tap(find.text("Don't have an account? Request Access"));
+      await tester.pumpAndSettle();
+
+      // Default role is student → phone is labelled 'Phone Number' (required).
+      expect(find.text('Register as'), findsOneWidget);
+      expect(find.text('Phone Number'), findsOneWidget);
+      expect(find.text('Email (optional)'), findsOneWidget);
+    });
+  });
 }
