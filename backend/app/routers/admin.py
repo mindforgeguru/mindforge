@@ -1117,8 +1117,10 @@ async def record_fee_payment(
     await db.commit()
     await db.refresh(payment)
 
-    # Notify parent if linked
-    from app.models.user import StudentProfile
+    # Notify parent if linked. StudentProfile comes from the module-level
+    # import; re-importing it here made the name function-local, so the
+    # cross-school guard above referenced it before assignment and every call
+    # raised UnboundLocalError.
     profile_result = await db.execute(
         select(StudentProfile).where(StudentProfile.user_id == payload.student_id)
     )

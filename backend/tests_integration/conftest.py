@@ -252,6 +252,13 @@ def two_schools(api, owner_token):
         teacher_token = login(api, teacher_username, school_id=sid)
         assert teacher_token, f"teacher {tag} login failed"
 
+        # Bootstrap an academic year so year-scoped endpoints (rosters,
+        # ledgers) have something to resolve. 409 = already initialised, fine.
+        r = api.post(
+            "/api/admin/academic-years/init", headers=auth(admin_token)
+        )
+        assert r.status_code in (200, 201, 409), f"year init {tag}: {r.text}"
+
         schools[tag] = {
             "id": sid,
             "admin_username": admin_username,
@@ -261,6 +268,74 @@ def two_schools(api, owner_token):
             "teacher_token": teacher_token,
         }
     return schools
+
+
+async def _make_student(school_id: int, username: str, grade: int = 8) -> int:
+    """Insert an approved student straight into the database.
+
+    Registration is exercised elsewhere and is rate limited; these fixtures
+    only need a student row with the right school_id to hang fees and XP off.
+    The MPIN hash is a placeholder — nothing logs in as these accounts.
+    """
+    conn = await asyncpg.connect(DB_DSN)
+    try:
+        uid = await conn.fetchval(
+            """
+            INSERT INTO users (username, mpin_hash, role, school_id,
+                               is_active, is_approved)
+            VALUES ($1, 'x', 'student', $2, true, true)
+            RETURNING id
+            """,
+            username,
+            school_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO student_profiles (user_id, grade, school_id)
+            VALUES ($1, $2, $3)
+            """,
+            uid,
+            grade,
+            school_id,
+        )
+        return uid
+    finally:
+        await conn.close()
+
+
+@pytest.fixture(scope="session")
+def students(two_schools):
+    """One student per school, keyed by school tag."""
+    return {
+        tag: asyncio.run(
+            _make_student(two_schools[tag]["id"], f"{PREFIX}_student_{tag}")
+        )
+        for tag in ("a", "b")
+    }
+
+
+@pytest.fixture(scope="session")
+def fee_structure_in_a(api, two_schools):
+    """A fee structure owned by school A."""
+    r = api.post(
+        "/api/admin/fees/structure",
+        headers=auth(two_schools["a"]["admin_token"]),
+        json={"academic_year": "2026-27", "grade": 8, "base_amount": 1000},
+    )
+    assert r.status_code in (200, 201), f"fee structure create failed: {r.text}"
+    return r.json()["id"]
+
+
+@pytest.fixture(scope="session")
+def fee_payment_in_a(api, two_schools, students):
+    """A fee payment owned by school A."""
+    r = api.post(
+        "/api/admin/fees/payments",
+        headers=auth(two_schools["a"]["admin_token"]),
+        json={"student_id": students["a"], "amount": 500},
+    )
+    assert r.status_code in (200, 201), f"fee payment create failed: {r.text}"
+    return r.json()["id"]
 
 
 @pytest.fixture(scope="session")

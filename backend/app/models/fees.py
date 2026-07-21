@@ -5,7 +5,9 @@ Fee-related SQLAlchemy models.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,6 +17,14 @@ from app.models.mixins import TenantMixin
 class FeeStructure(TenantMixin, Base):
     """Defines fee amounts per academic year and grade."""
     __tablename__ = "fee_structures"
+    # Scoped by school (migration 035): every school has a grade 8, so keying
+    # this on (academic_year, grade) alone let the first school to configure a
+    # pair claim it platform-wide.
+    __table_args__ = (
+        UniqueConstraint(
+            "school_id", "academic_year", "grade", name="uq_fee_structure_school"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     academic_year: Mapped[str] = mapped_column(String(20), nullable=False)  # e.g. "2024-25"
@@ -59,9 +69,15 @@ class FeePayment(TenantMixin, Base):
 class PaymentInfo(TenantMixin, Base):
     """Tuition center payment details shown to parents for fee payment."""
     __tablename__ = "payment_info"
+    # Scoped by school (migration 035). slot is a small per-school index
+    # (1, 2, 3) for bank account details — unique globally, it meant only one
+    # school on the platform could hold slot 1.
+    __table_args__ = (
+        UniqueConstraint("school_id", "slot", name="uq_payment_info_slot_school"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=1, unique=True)
+    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     bank_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     branch: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)

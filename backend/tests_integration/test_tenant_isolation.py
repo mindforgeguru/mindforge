@@ -304,6 +304,26 @@ class TestSuspension:
 
 @pytest.mark.asyncio
 class TestRegistrationScoping:
+    async def test_registration_works_with_multiple_current_years(
+        self, api, two_schools
+    ):
+        # two_schools initialises an academic year per school, so more than one
+        # is_current row now exists. Registration resolved the current year
+        # without a school filter, so scalar_one_or_none() raised
+        # MultipleResultsFound and every signup 500'd. This asserts the fix by
+        # simply registering while that condition holds.
+        r = register(
+            api,
+            username=f"{PREFIX}_multiyear",
+            mpin=TEST_MPIN,
+            role="teacher",
+            school_id=two_schools["b"]["id"],
+            phone=_phone(31),
+        )
+        assert r.status_code == 201, (
+            f"registration broke with multiple current academic years: {r.text}"
+        )
+
     async def test_registration_tenants_both_user_and_profile_rows(
         self, api, two_schools
     ):

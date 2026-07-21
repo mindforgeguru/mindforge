@@ -206,9 +206,16 @@ async def register_user(
                 ),
             )
 
-    # Resolve current academic year (if any)
+    # Resolve the current academic year *for this school*. Without the
+    # school_id filter this matches every school's current year, and
+    # scalar_one_or_none() raises MultipleResultsFound (500) as soon as a
+    # second school has one — breaking all registration. Every other
+    # AcademicYear query (admin.py) is already school-scoped.
     year_result = await db.execute(
-        select(AcademicYear).where(AcademicYear.is_current == True)
+        select(AcademicYear).where(
+            AcademicYear.is_current == True,
+            AcademicYear.school_id == school.id,
+        )
     )
     current_year = year_result.scalar_one_or_none()
 
