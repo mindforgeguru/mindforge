@@ -1,14 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mindforge/core/api/api_client.dart';
 import 'package:mindforge/features/auth/screens/login_screen.dart';
 import 'package:mindforge/core/theme/app_theme.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Pump the login screen inside a real ProviderScope.
-/// No overrides needed — structural tests don't touch the network.
+/// Stubs the one network call LoginScreen makes on init. getSchools() returns
+/// an empty list synchronously so no real dio request (and its timeout timer)
+/// is started during structural tests — a live timer outlives the widget and
+/// trips flutter_test's "Timer still pending" invariant.
+class _FakeApiClient extends Fake implements ApiClient {
+  // Plain field, not routed through noSuchMethod: AuthNotifier assigns this in
+  // its constructor, so the fake must accept the setter.
+  @override
+  void Function()? onUnauthorized;
+
+  @override
+  Future<List<Map<String, dynamic>>> getSchools() async => const [];
+}
+
+/// Pump the login screen inside a ProviderScope with the network stubbed out.
 Widget _buildLoginScreen() => ProviderScope(
+      overrides: [
+        apiClientProvider.overrideWithValue(_FakeApiClient()),
+      ],
       child: MaterialApp(
         theme: AppTheme.lightTheme,
         home: const LoginScreen(),
