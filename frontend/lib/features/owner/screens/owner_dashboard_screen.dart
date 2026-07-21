@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -228,7 +229,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
       _snack('${s['name']} ${s['is_active'] == true ? 'suspended' : 'activated'}.');
       await _load();
     } catch (e) {
-      _snack('Failed: $e', error: true);
+      _snack(_msg(e), error: true);
     }
   }
 
@@ -324,9 +325,40 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
     }
   }
 
-  String _msg(Object e) {
-    final s = e.toString();
-    final i = s.indexOf('detail');
-    return i == -1 ? 'Failed: $s' : s;
+  String _msg(Object e) => ownerApiErrorMessage(e);
+}
+
+/// Pull a human message out of an API failure for the owner console. A
+/// DioException's toString() never contains the response body, so the old
+/// indexOf('detail') check always missed and dumped the raw exception at the
+/// user. Dig into the parsed body instead — it may be a Map ({"detail": "..."}
+/// or FastAPI's 422 {"detail": [{"msg": ...}]}); guard every access since a
+/// cold-edge 5xx can return a plain-string or null body.
+String ownerApiErrorMessage(Object e) {
+  if (e is DioException) {
+    final data = e.response?.data;
+    if (data is Map) {
+      final detail = data['detail'];
+      if (detail is String && detail.isNotEmpty) return _clean(detail);
+      if (detail is List && detail.isNotEmpty) {
+        final first = detail.first;
+        if (first is Map && first['msg'] is String) {
+          return _clean(first['msg'] as String);
+        }
+      }
+      if (detail != null) return _clean(detail.toString());
+    }
+    final status = e.response?.statusCode;
+    if (status != null) return 'Request failed (HTTP $status). Please try again.';
+    return 'Request failed. Please try again.';
   }
+  return 'Something went wrong. Please try again.';
+}
+
+// Pydantic v2 prepends "Value error, " to messages raised from a custom
+// validator (e.g. the weak-MPIN check), and it rides through the 422 body into
+// the UI. Strip that machine prefix so the user sees just the sentence.
+String _clean(String msg) {
+  const prefix = 'Value error, ';
+  return msg.startsWith(prefix) ? msg.substring(prefix.length) : msg;
 }
