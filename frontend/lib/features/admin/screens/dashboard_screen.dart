@@ -14,6 +14,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../../core/models/user.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
+import '../widgets/setup_road_card.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -59,14 +60,75 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
   }
 
   Future<void> _refreshDashboard() async {
+    // Re-fetch the setup inputs and derived status so the workflow road
+    // reflects any task just completed on another screen (or by another admin).
     ref.invalidate(pendingUsersProvider);
     ref.invalidate(currentAcademicYearProvider);
+    ref.invalidate(timetableConfigProvider);
+    ref.invalidate(feeStructuresProvider(null));
+    ref.invalidate(paymentInfoProvider);
+    ref.invalidate(adminSetupStatusProvider);
     await ref.read(pendingUsersProvider.future).catchError((_) => <UserModel>[]);
+  }
+
+  /// The normal dashboard body — pending-approval banner (when any) plus the
+  /// feature-tile grid. Only shown once school setup is complete.
+  List<Widget> _dashboardBodySlivers(
+      BuildContext context, int pendingCount, List<_DashCard> cards) {
+    return [
+      if (pendingCount > 0)
+        SliverToBoxAdapter(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withValues(alpha: 0.1),
+              border: Border.all(color: AppColors.warning),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber, color: AppColors.warning),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$pendingCount user(s) awaiting approval.',
+                    style: const TextStyle(
+                        color: AppColors.warning,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      context.go('${RouteNames.adminDashboard}/users'),
+                  child: const Text('Review'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        sliver: SliverGrid(
+          delegate: SliverChildBuilderDelegate(
+            (ctx, i) => _DashboardCard(card: cards[i]),
+            childCount: cards.length,
+          ),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 14,
+            crossAxisSpacing: 14,
+            childAspectRatio: 1.1,
+          ),
+        ),
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    final setupAsync = ref.watch(adminSetupStatusProvider);
     final pendingAsync = ref.watch(pendingUsersProvider);
     final currentYearAsync = ref.watch(currentAcademicYearProvider);
     final topPadding = MediaQuery.of(context).padding.top;
@@ -254,54 +316,34 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
             ),
           ),
 
-          // ── Pending users banner ──────────────────────────────────────
-          if (pendingCount > 0)
-            SliverToBoxAdapter(
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.1),
-                  border: Border.all(color: AppColors.warning),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber, color: AppColors.warning),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '$pendingCount user(s) awaiting approval.',
-                        style: const TextStyle(
-                            color: AppColors.warning,
-                            fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () =>
-                          context.go('${RouteNames.adminDashboard}/users'),
-                      child: const Text('Review'),
-                    ),
-                  ],
+          // ── Setup workflow gate ───────────────────────────────────────
+          // Until all four one-time setup tasks are done, the dashboard shows
+          // only the setup road. Once complete, the road stays pinned at the
+          // top and the normal tiles (Users/approvals, etc.) unlock below.
+          ...setupAsync.when(
+            loading: () => const [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 56),
+                  child: Center(child: CircularProgressIndicator()),
                 ),
               ),
-            ),
-
-          // ── Feature cards grid ────────────────────────────────────────
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            sliver: SliverGrid(
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) => _DashboardCard(card: cards[i]),
-                childCount: cards.length,
-              ),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 14,
-                crossAxisSpacing: 14,
-                childAspectRatio: 1.1,
-              ),
-            ),
+            ],
+            // A transient status error must not lock the admin out — fall back
+            // to the full dashboard.
+            error: (_, __) =>
+                _dashboardBodySlivers(context, pendingCount, cards),
+            data: (status) {
+              if (!status.allComplete) {
+                return [
+                  SliverToBoxAdapter(child: SetupRoadCard(status: status)),
+                ];
+              }
+              return [
+                SliverToBoxAdapter(child: SetupRoadCard(status: status)),
+                ..._dashboardBodySlivers(context, pendingCount, cards),
+              ];
+            },
           ),
         ],
         ),

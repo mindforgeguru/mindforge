@@ -99,3 +99,63 @@ final currentAcademicYearProvider =
   return api.getCurrentAcademicYear()
       .timeout(const Duration(seconds: 20));
 });
+
+/// One-time school setup progress, derived from the four existing providers.
+/// The four bootstrapping tasks must be finished in order — academic year →
+/// timetable → fees → bank/payment — before the admin dashboard unlocks.
+class AdminSetupStatus {
+  final bool academicYearDone;
+  final bool timetableDone;
+  final bool feesDone;
+  final bool paymentDone;
+
+  const AdminSetupStatus({
+    required this.academicYearDone,
+    required this.timetableDone,
+    required this.feesDone,
+    required this.paymentDone,
+  });
+
+  /// Task completion flags in workflow order.
+  List<bool> get steps =>
+      [academicYearDone, timetableDone, feesDone, paymentDone];
+
+  /// Index (0–3) of the first incomplete task, or 4 when everything is done.
+  int get currentStep {
+    for (var i = 0; i < steps.length; i++) {
+      if (!steps[i]) return i;
+    }
+    return steps.length;
+  }
+
+  bool get allComplete => currentStep == steps.length;
+}
+
+/// Combines the four setup providers into a single status. Watching each
+/// `.future` makes this re-derive whenever any of them is invalidated (e.g.
+/// after a task is saved), so the road advances immediately.
+final adminSetupStatusProvider = FutureProvider<AdminSetupStatus>((ref) async {
+  final token = ref.watch(authProvider.select((s) => s.token));
+  if (token == null) {
+    return const AdminSetupStatus(
+      academicYearDone: false,
+      timetableDone: false,
+      feesDone: false,
+      paymentDone: false,
+    );
+  }
+
+  // Passing null as the academic year returns every fee structure for the
+  // school, so "any fee structure exists" is a year-independent check.
+  final year = await ref.watch(currentAcademicYearProvider.future);
+  final config = await ref.watch(timetableConfigProvider.future);
+  final fees = await ref.watch(feeStructuresProvider(null).future);
+  final payments = await ref.watch(paymentInfoProvider.future);
+
+  return AdminSetupStatus(
+    academicYearDone: year != null,
+    timetableDone: config != null,
+    feesDone: fees.isNotEmpty,
+    paymentDone: payments.isNotEmpty,
+  );
+});

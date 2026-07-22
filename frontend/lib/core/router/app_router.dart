@@ -392,7 +392,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: 'fees',
-            pageBuilder: (_, __) => _slidePage(const admin.AdminFeesScreen()),
+            pageBuilder: (_, state) => _slidePage(admin.AdminFeesScreen(
+              initialTab:
+                  int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0,
+            )),
           ),
           GoRoute(
             path: 'timetable',

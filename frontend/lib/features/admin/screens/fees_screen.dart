@@ -8,13 +8,17 @@ import '../../../core/api/api_client.dart';
 import '../../../core/models/fees.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
+import '../../../core/widgets/confirm_dialog.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/image_pick.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 
 class AdminFeesScreen extends ConsumerStatefulWidget {
-  const AdminFeesScreen({super.key});
+  /// Tab to open on first build: 0 = Fee Structures, 1 = Payments,
+  /// 2 = Payment Info. The setup workflow deep-links to tab 2 (bank details).
+  final int initialTab;
+  const AdminFeesScreen({super.key, this.initialTab = 0});
 
   @override
   ConsumerState<AdminFeesScreen> createState() => _AdminFeesScreenState();
@@ -43,7 +47,11 @@ class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 2),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _initYear());
   }
 
@@ -230,18 +238,35 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
   }
 
   Future<void> _createStructure() async {
+    final base = double.tryParse(_baseCtrl.text) ?? 0;
+    final econ = double.tryParse(_econCtrl.text) ?? 0;
+    final comp = double.tryParse(_compCtrl.text) ?? 0;
+    final ai = double.tryParse(_aiCtrl.text) ?? 0;
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Confirm fee structure',
+      message: 'Grade $_newGrade · ${widget.selectedYear}\n'
+          'Base fee: ₹${base.toStringAsFixed(0)}\n'
+          'Economics: ₹${econ.toStringAsFixed(0)}   '
+          'Computer: ₹${comp.toStringAsFixed(0)}   '
+          'AI: ₹${ai.toStringAsFixed(0)}\n\n'
+          'Is this correct?',
+      confirmLabel: 'Save',
+    );
+    if (!ok || !mounted) return;
     try {
       final api = ref.read(apiClientProvider);
       await api.createFeeStructure({
         'academic_year': widget.selectedYear,
         'grade': _newGrade,
-        'base_amount': double.tryParse(_baseCtrl.text) ?? 0,
-        'economics_fee': double.tryParse(_econCtrl.text) ?? 0,
-        'computer_fee': double.tryParse(_compCtrl.text) ?? 0,
-        'ai_fee': double.tryParse(_aiCtrl.text) ?? 0,
+        'base_amount': base,
+        'economics_fee': econ,
+        'computer_fee': comp,
+        'ai_fee': ai,
       });
       ref.invalidate(feeStructuresProvider);
       ref.invalidate(feeSummariesProvider);
+      ref.invalidate(adminSetupStatusProvider);
       setState(() => _showAddForm = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -875,6 +900,21 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
   }
 
   Future<void> _save() async {
+    final acct = _accountCtrl.text.trim();
+    final ifsc = _ifscCtrl.text.trim().toUpperCase();
+    final upi = _upiCtrl.text.trim();
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Confirm payment details',
+      message: 'Bank: ${_bankNameCtrl.text.trim().isEmpty ? '—' : _bankNameCtrl.text.trim()}\n'
+          'Account holder: ${_holderCtrl.text.trim().isEmpty ? '—' : _holderCtrl.text.trim()}\n'
+          'Account no.: ${acct.isEmpty ? '—' : acct}\n'
+          'IFSC: ${ifsc.isEmpty ? '—' : ifsc}\n'
+          'UPI: ${upi.isEmpty ? '—' : upi}\n\n'
+          'Is this correct?',
+      confirmLabel: 'Save',
+    );
+    if (!ok || !mounted) return;
     setState(() => _saving = true);
     try {
       final api = ref.read(apiClientProvider);
@@ -883,11 +923,12 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
         'bank_name': _bankNameCtrl.text.trim(),
         'branch': _branchCtrl.text.trim(),
         'account_holder': _holderCtrl.text.trim(),
-        'account_number': _accountCtrl.text.trim(),
-        'ifsc': _ifscCtrl.text.trim().toUpperCase(),
-        'upi_id': _upiCtrl.text.trim(),
+        'account_number': acct,
+        'ifsc': ifsc,
+        'upi_id': upi,
       });
       ref.invalidate(paymentInfoProvider);
+      ref.invalidate(adminSetupStatusProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Option ${widget.slot} saved!'),
