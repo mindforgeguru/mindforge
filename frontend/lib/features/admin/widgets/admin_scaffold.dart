@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/providers/school_logo_provider.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/side_nav.dart';
@@ -110,6 +111,7 @@ class AdminSideNav extends ConsumerWidget {
 
     return SideNav(
       schoolName: auth.schoolName,
+      schoolLogoUrl: ref.watch(currentSchoolLogoProvider).valueOrNull,
       username: auth.username ?? 'A',
       profileRoute: '${RouteNames.adminDashboard}/profile',
       onLogout: () => confirmLogout(context, ref),

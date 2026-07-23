@@ -51,6 +51,7 @@ import '../../features/admin/screens/teachers_screen.dart' as admin;
 import '../../features/admin/screens/profile_screen.dart' as admin;
 import '../../features/admin/screens/feedback_screen.dart' as admin;
 import '../../features/admin/screens/academic_year_screen.dart';
+import '../../features/admin/screens/school_logo_screen.dart' as admin;
 import '../../features/admin/screens/reports_screen.dart';
 
 /// Shared page transition: fast fade+slide up (iOS-style feel on Android too).
@@ -416,6 +417,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'academic-year',
             pageBuilder: (_, __) => _slidePage(const AdminAcademicYearScreen()),
+          ),
+          GoRoute(
+            path: 'school-logo',
+            pageBuilder: (_, __) =>
+                _slidePage(const admin.AdminSchoolLogoScreen()),
           ),
           GoRoute(
             path: 'reports',

@@ -952,6 +952,16 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
+  /// Upload/replace the school's logo. Returns {'logo_url': ...}.
+  Future<Map<String, dynamic>> uploadSchoolLogo(
+      List<int> bytes, String filename) async {
+    final formData = dio_pkg.FormData.fromMap({
+      'file': dio_pkg.MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    final res = await _dio.post('/admin/school/logo', data: formData);
+    return res.data as Map<String, dynamic>;
+  }
+
   Future<List<dynamic>> getFeeStructures({String? academicYear}) async {
     final res = await _dio.get('/admin/fees/structure', queryParameters: {
       if (academicYear != null) 'academic_year': academicYear,

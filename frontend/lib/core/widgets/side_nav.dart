@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -46,6 +47,10 @@ class SideNav extends StatelessWidget {
   /// platform owner (who belongs to no school).
   final String? schoolName;
 
+  /// The school's uploaded logo. When present it replaces the initial-letter
+  /// badge above the MindForge logo; otherwise the initial is shown.
+  final String? schoolLogoUrl;
+
   /// When non-null, renders a "report a problem" action in the footer.
   final VoidCallback? onReportProblem;
 
@@ -56,6 +61,7 @@ class SideNav extends StatelessWidget {
     required this.profileRoute,
     required this.onLogout,
     this.schoolName,
+    this.schoolLogoUrl,
     this.onReportProblem,
   });
 
@@ -108,6 +114,7 @@ class SideNav extends StatelessWidget {
           // school logo so every tenant is branded correctly.
           if (school != null && school.isNotEmpty) _schoolBadge(school),
           if (school != null && school.isNotEmpty) const SizedBox(height: 12),
+          // (logo badge sits directly above the MindForge logo below)
           _logoBox('assets/images/logo.png', 10, 84),
           const SizedBox(height: 14),
           Text(
@@ -140,6 +147,7 @@ class SideNav extends StatelessWidget {
   }
 
   Widget _schoolBadge(String school) {
+    final logoUrl = schoolLogoUrl;
     return Container(
       width: 84,
       height: 84,
@@ -150,14 +158,29 @@ class SideNav extends StatelessWidget {
           BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 6, offset: const Offset(0, 2)),
         ],
       ),
-      child: Center(
-        child: Text(
-          school[0].toUpperCase(),
-          style: GoogleFonts.poppins(
-            fontSize: 40,
-            fontWeight: FontWeight.w800,
-            color: AppColors.primary,
-          ),
+      padding: logoUrl != null ? const EdgeInsets.all(8) : EdgeInsets.zero,
+      child: logoUrl != null
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: CachedNetworkImage(
+                imageUrl: logoUrl,
+                fit: BoxFit.contain,
+                // Fall back to the school initial if the image fails to load.
+                errorWidget: (_, __, ___) => _badgeInitial(school),
+              ),
+            )
+          : _badgeInitial(school),
+    );
+  }
+
+  Widget _badgeInitial(String school) {
+    return Center(
+      child: Text(
+        school[0].toUpperCase(),
+        style: GoogleFonts.poppins(
+          fontSize: 40,
+          fontWeight: FontWeight.w800,
+          color: AppColors.primary,
         ),
       ),
     );

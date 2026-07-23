@@ -18,6 +18,7 @@ from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.models.academic_year import AcademicYear
 from app.models.audit_log import AuditLog
 from app.models.fees import FeePayment, FeeStructure, PaymentInfo
+from app.models.school import School
 from app.models.timetable import TimetableConfig, TimetableSlot
 from app.models.user import User, UserRole, StudentProfile, TeacherProfile
 from app.schemas.fees import (
@@ -98,6 +99,33 @@ async def upload_admin_photo(
     await db.commit()
     await storage_service.delete_by_media_url(old_url)
     return {"profile_pic_url": public_url}
+
+
+@router.post("/school/logo", status_code=status.HTTP_200_OK)
+async def upload_school_logo(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Upload or replace this school's logo. Shown app-wide above the MindForge
+    logo. Namespaced by school so one tenant can't overwrite another's."""
+    reject_if_oversize(file)
+    raw = await file.read()
+    file_bytes, ext = validate_and_strip_exif(raw, file.filename or "upload")
+    bucket = "mindforge-profiles"
+    key = storage_service.profile_object_key(
+        f"school/{current_admin.school_id}/logo", ext)
+    await storage_service.upload_file(bucket, key, file_bytes)
+    public_url = storage_service.get_public_url(bucket, key)
+
+    result = await db.execute(
+        select(School).where(School.id == current_admin.school_id))
+    school = result.scalar_one()
+    old_url = school.logo_url
+    school.logo_url = public_url
+    await db.commit()
+    await storage_service.delete_by_media_url(old_url)
+    return {"logo_url": public_url}
 
 
 @router.put("/profile/username", status_code=status.HTTP_200_OK)

@@ -4,6 +4,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/models/fees.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/models/user.dart';
+import '../../../core/providers/school_logo_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
 final adminTeachersProvider =
@@ -100,27 +101,29 @@ final currentAcademicYearProvider =
       .timeout(const Duration(seconds: 20));
 });
 
-/// One-time school setup progress, derived from the four existing providers.
-/// The four bootstrapping tasks must be finished in order — academic year →
-/// timetable → fees → bank/payment — before the admin dashboard unlocks.
+/// One-time school setup progress, derived from the existing providers. The
+/// five bootstrapping tasks must be finished in order — academic year →
+/// timetable → fees → bank/payment → logo — before the admin dashboard unlocks.
 class AdminSetupStatus {
   final bool academicYearDone;
   final bool timetableDone;
   final bool feesDone;
   final bool paymentDone;
+  final bool logoDone;
 
   const AdminSetupStatus({
     required this.academicYearDone,
     required this.timetableDone,
     required this.feesDone,
     required this.paymentDone,
+    required this.logoDone,
   });
 
   /// Task completion flags in workflow order.
   List<bool> get steps =>
-      [academicYearDone, timetableDone, feesDone, paymentDone];
+      [academicYearDone, timetableDone, feesDone, paymentDone, logoDone];
 
-  /// Index (0–3) of the first incomplete task, or 4 when everything is done.
+  /// Index (0–4) of the first incomplete task, or 5 when everything is done.
   int get currentStep {
     for (var i = 0; i < steps.length; i++) {
       if (!steps[i]) return i;
@@ -131,9 +134,9 @@ class AdminSetupStatus {
   bool get allComplete => currentStep == steps.length;
 }
 
-/// Combines the four setup providers into a single status. Watching each
-/// `.future` makes this re-derive whenever any of them is invalidated (e.g.
-/// after a task is saved), so the road advances immediately.
+/// Combines the setup providers into a single status. Watching each `.future`
+/// makes this re-derive whenever any of them is invalidated (e.g. after a task
+/// is saved), so the road advances immediately.
 final adminSetupStatusProvider = FutureProvider<AdminSetupStatus>((ref) async {
   final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) {
@@ -142,6 +145,7 @@ final adminSetupStatusProvider = FutureProvider<AdminSetupStatus>((ref) async {
       timetableDone: false,
       feesDone: false,
       paymentDone: false,
+      logoDone: false,
     );
   }
 
@@ -151,11 +155,13 @@ final adminSetupStatusProvider = FutureProvider<AdminSetupStatus>((ref) async {
   final config = await ref.watch(timetableConfigProvider.future);
   final fees = await ref.watch(feeStructuresProvider(null).future);
   final payments = await ref.watch(paymentInfoProvider.future);
+  final logoUrl = await ref.watch(currentSchoolLogoProvider.future);
 
   return AdminSetupStatus(
     academicYearDone: year != null,
     timetableDone: config != null,
     feesDone: fees.isNotEmpty,
     paymentDone: payments.isNotEmpty,
+    logoDone: logoUrl != null,
   );
 });
