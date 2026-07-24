@@ -87,11 +87,21 @@ The one-session run passing is worth noting: the per-file split in CI was introd
 
 The 3 infos: one `prefer_const_declarations` in `lib/features/teacher/screens/homework_screen.dart:741`, two `no_leading_underscores_for_local_identifiers` in `test/unit/auth_notifier_test.dart`. CI runs `flutter analyze --no-fatal-infos`, so none of the three break the build.
 
+**Flutter integration — `app_test.dart`: PASS 5/5** on iPhone 17 Pro against the local stack (`--dart-define=LOCAL_DEV=true`), in 61 s. Was 2/5 at the start of the session. Five independent problems, each hidden behind the previous one:
+
+1. The login form's school picker (multi-tenancy, 2026-07-22) was never set, so `login_screen.dart` bailed with "Please select your school." and never called the API.
+2. The taller form pushed the Login button 0.3 px off-screen; `tap()` only *warns* on a missed hit, so the run hung instead of failing.
+3. `main()` is async, so `MaterialApp` was not mounted when test 1 asserted on it.
+4. **`main()` installs Crashlytics as `FlutterError.onError` / `PlatformDispatcher.onError` before `runApp`.** Inside a widget test that displaces the binding's reporter, so real failures were shipped to Crashlytics and the binding reported only `_pendingExceptionDetails != null`. This was suite-wide and had been masking every framework error since these tests were written — see §10 item 14 below.
+5. Admin credentials (`admin` / 300573, from the pre-multi-tenancy seed script) return 401 against the current local DB.
+
+`pumpAndSettle` is now bounded to 20 s in this file: the 10-minute default turned failures into silent stalls that made each diagnosis cycle unaffordable.
+
 ### 2.3 Not run this session
 
 | Suite | Why |
 |---|---|
-| Flutter integration (`integration_test/`) | Needs a booted simulator; last known result 5/5 on iPhone 17 Pro (2026-05-14). **This is the main remaining gap** — the realtime rewrite's Flutter half is unverified (§5.8, §10 item 10) |
+| Flutter integration — `all_screens_test.dart` | Not run. Has the same school/login helpers applied but has never been executed; it is the bigger sweep (all four roles, every screen) |
 | `tests/security_test.py`, `security_test_extended.py` | Not run — no longer blocked (the stack is up), just out of scope for this session. Point them at the **local** stack only; they include login rate-limit probes |
 | `tests/performance_test.py` | Same |
 
@@ -411,6 +421,14 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 - Closed §10 item 2 from the old record (SSL leaf expiry) — pinning moved to CA-level on 2026-06-01, so leaf rotation is no longer release-blocking. Current leaf expires 2026-08-27.
 - Closed §10 item 8 from the old record (Firebase web unconfigured) — `firebase_options.dart` now has a real `web` block as of 2026-06-30. Functional re-test still outstanding.
 
+### 2026-07-24 (Flutter integration tests: 2/5 -> 5/5)
+- `app_test.dart` **passes 5/5** on iPhone 17 Pro against the local stack, in 61 s. Five separate problems, each only visible once the one above it was fixed — which is why this took several runs rather than one speculative batch of fixes.
+- The one that mattered most was not a test bug at all: **`main()` installs Crashlytics as `FlutterError.onError` and `PlatformDispatcher.onError` before `runApp`**, so inside a widget test the app displaced the binding's reporter and real failures were shipped to Crashlytics. The binding could only report `_pendingExceptionDetails != null`. That had been masking every framework error in the suite since it was written; the admin-login failure was invisible for three runs because of it. §10 item 14.
+- Bounded `pumpAndSettle` to 20 s. The 10-minute default turned the first failing run into a 13-minute silent stall that printed nothing until killed — the single biggest drag on diagnosis. A hang is now a legible failure naming the exact `await`.
+- The admin login was failing on **stale credentials**, not on the UI: `admin` / 300573 comes from the pre-multi-tenancy seed script and returns 401 against the current local DB. Verified `demo_admin` / 847362 against the API before changing the test. §10 item 15.
+- Corrected an earlier claim from this session: the 13-minute hang was **not** caused by `tap()` warning-instead-of-failing on the off-screen Login button. That was fixed and the hang persisted; it was the unbounded `pumpAndSettle` plus the leaked binding state.
+- **Still unverified:** nothing exercises `RealtimeSync`. `all_screens_test.dart` has the school/login helpers but has never been run, and does not yet reclaim the error handlers.
+
 ### 2026-07-24 (local stack — caught a boot-breaking regression the venv missed)
 - **The dependency upgrade did not boot.** With the stack up and the backend image rebuilt on Python 3.11, the container **crashed on startup**: `ImportError: jinja2 must be installed to use Jinja2Templates`. `sentry-sdk` 2.18.0's Starlette integration decides whether to patch `Jinja2Templates` by probing for `markupsafe` as a proxy for "jinja2 is installed" — but `alembic → Mako` pulls markupsafe in independently, so the probe passes and it then does an unguarded `from starlette.templating import Jinja2Templates`. starlette <1.0 tolerated that; **1.x raises at module import**, killing the uvicorn worker. Fixed by `sentry-sdk[fastapi]` 2.18.0 → **2.66.1**, verified by reproducing the crash and the fix in isolation before rebuilding.
 - **Why the earlier venv check missed it:** Sentry integrations are only wired up when `sentry_sdk.init()` actually runs, which needs a `SENTRY_DSN`. The venv had none, so `setup_integrations` never executed. The Docker stack loads `.env.local`, which does. **A dependency bump is not verified until the app has started with production-shaped configuration** — imports and unit tests are not enough.
@@ -501,7 +519,7 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 
 9. **`flutter_secure_storage_web` blocks future wasm builds.** The wasm dry-run flags `dart:html` + `dart:js_util` usage. The JS build works today; revisit when Flutter's wasm target stabilises.
 
-10. **Realtime fan-out: backend verified end-to-end, frontend still unverified.** `tests_integration/test_realtime_delivery.py` now proves against the real stack that a published event reaches a connected socket, reaches staff, and does **not** cross schools — and the tests were falsified against the old code to confirm they detect the original bug. What remains unverified is the **Flutter side**: nothing has confirmed that `RealtimeSync` invalidates the right provider and the user sees the screen update, on a real device. §5.8 is the checklist for that. Two related items were deliberately left alone: `admin.py`'s `timetable_config_updated` and `new_academic_year` still use the unscoped `broadcast_all`, so they cross school boundaries.
+10. **Realtime fan-out: backend verified end-to-end; the Flutter half is still unverified.** `tests_integration/test_realtime_delivery.py` proves against the real stack that a published event reaches a connected socket, reaches staff, and does **not** cross schools, and the tests were falsified against the old code to confirm they detect the original bug. `app_test.dart` now passes 5/5, but it covers login and the admin dashboard — **nothing exercises `RealtimeSync`**: no test confirms that an inbound event invalidates the right provider and the user sees the screen update. §5.8 remains the checklist. Two related items were deliberately left alone: `admin.py`'s `timetable_config_updated` and `new_academic_year` still use the unscoped `broadcast_all`, so they cross school boundaries.
 
 11. **CI Flutter version drift.** CI pins `3.41.4`; local development is on `3.44.0`. A version-specific analyzer or test failure would not be caught symmetrically.
 
@@ -509,6 +527,10 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 
 
 13. **A dependency bump is not verified until the app boots with a real config.** The 2026-07-24 upgrade passed imports, 81 unit tests, OpenAPI generation and a TestClient smoke in a venv — then failed to start in Docker, because Sentry only wires up its integrations when a `SENTRY_DSN` is present and the venv had none. Any future `requirements.txt` change should be validated by rebuilding the image and watching the container reach "Application startup complete", not by a venv smoke test alone.
+
+14. **An app that installs its own error handlers blinds the integration tests.** `main()` sets Crashlytics as both `FlutterError.onError` and `PlatformDispatcher.onError` (`main.dart:63-64`) before `runApp`. Every integration test calls `app.main()`, so the app displaces the test binding's reporter: framework errors are shipped to Crashlytics instead of failing the test, and the binding surfaces only `_pendingExceptionDetails != null` — an assertion that replaces the real cause with a message about error handling. This silently masked every framework error in the suite from the day it was written until 2026-07-24. `app_test.dart` now reclaims both handlers in `launchApp()`; **`all_screens_test.dart` does not yet** and should get the same treatment.
+
+15. **`backend/scripts/seed_integration_test_users.py` is stale and misleading.** It predates multi-tenancy, has no `school_id` handling, and the credentials it documents (`admin` / 300573) now return 401 against the local database — which is what made the admin-login integration test fail. The tests were repointed at `demo_admin` / 847362 from `docs/local-test-accounts.md` instead. The script was deliberately **not** run, since it writes users and could create school-less rows in a dev database. Update it for multi-tenancy or retire it.
 
 ### Resolved (kept for history)
 - ~~SSL pin leaf cert expires 2026-06-28~~ — superseded 2026-06-01 by CA-level pinning (`ssl_pinning.dart`). Leaf rotation no longer breaks the app; current leaf expires 2026-08-27.
