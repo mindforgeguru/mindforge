@@ -64,13 +64,18 @@ class RedisManager:
                 continue
             try:
                 event = json.loads(message["data"])
-                target_type = event.get("target_type")  # "user" | "grade" | "broadcast"
+                # "user" | "users" | "grade" | "broadcast"
+                target_type = event.get("target_type")
                 payload = event.get("payload", {})
 
                 if target_type == "user":
                     user_id = event.get("user_id")
                     if user_id is not None:
                         await ws_manager.broadcast_to_user(user_id, payload)
+                elif target_type == "users":
+                    user_ids = event.get("user_ids") or []
+                    if user_ids:
+                        await ws_manager.broadcast_to_users(user_ids, payload)
                 elif target_type == "grade":
                     grade = event.get("grade")
                     if grade is not None:

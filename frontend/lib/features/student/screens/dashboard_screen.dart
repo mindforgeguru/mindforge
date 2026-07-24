@@ -95,11 +95,8 @@ class _StudentDashboardScreenState
     // Doing it inline freezes the UI thread on some devices.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _wsSub?.cancel();
-      // Force a fresh socket — Doze can leave `_channel` non-null with a
-      // dead underlying socket, so reusing it silently drops events.
-      ref.read(webSocketClientProvider).forceReconnect();
-      _connectWs();
+      // The socket itself is re-established by RealtimeSync, which owns the
+      // connection app-wide — reconnecting here too would race it.
       // Only invalidate — do NOT await the network call here.
       // The provider rebuilds in the background; waiting for the network on
       // resume can freeze the UI while WiFi/cellular reconnects after unlock.
@@ -115,41 +112,20 @@ class _StudentDashboardScreenState
     final ws = ref.read(webSocketClientProvider);
     _wsSub = ws.connect(userId, token).listen((event) {
       if (!mounted) return;
+      // Cache invalidation for every event lives in RealtimeSync, which is
+      // mounted above the router and so keeps working on every screen. This
+      // subscription only handles the two events that need to *show* UI, and
+      // therefore need a Scaffold to show it in.
       final eventType = event['event'] as String?;
       if (eventType == 'profile_updated') {
         _showProfileUpdatedDialog(event['new_username'] as String?);
       } else if (eventType == 'level_up') {
-        // Refresh the XP card data behind the dialog so the new level
-        // shows when the user dismisses.
-        ref.invalidate(studentXpProvider);
         LevelUpDialog.show(
           context,
           newLevel: (event['level'] as num?)?.toInt() ?? 0,
           newTitle: event['title'] as String? ?? '',
           totalXp: (event['total_xp'] as num?)?.toInt() ?? 0,
         );
-      } else if (eventType != null) {
-        // Any relevant event → refresh the single summary
-        ref.invalidate(studentDashboardSummaryProvider(_todayString));
-        // Most XP-relevant events also imply XP changed — refresh the card.
-        if (eventType == 'attendance_updated' ||
-            eventType == 'grade_added' ||
-            eventType == 'test_submitted') {
-          ref.invalidate(studentXpProvider);
-        }
-        // New test published → also refresh the tests screen
-        if (eventType == 'new_test_available' || eventType == 'test_status_changed') {
-          ref.invalidate(pendingTestsProvider);
-          ref.invalidate(offlineTestsProvider);
-        }
-        // New homework or a teacher marking completion → refresh the homework
-        // screen so its list and Pending/Complete pills update live instead of
-        // waiting for a manual pull-to-refresh.
-        if (eventType == 'homework_added' ||
-            eventType == 'homework_completion_updated') {
-          ref.invalidate(studentHomeworkProvider);
-          ref.invalidate(studentHomeworkCompletionsProvider);
-        }
       }
     });
   }

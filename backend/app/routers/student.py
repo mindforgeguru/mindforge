@@ -42,6 +42,7 @@ from app.models.homework import Homework, HomeworkCompletion, Broadcast
 from app.models.fees import FeeStructure, FeePayment, PaymentInfo
 from app.schemas.fees import FeePaymentResponse, PaymentInfoResponse
 from app.services import storage_service, xp_service
+from app.services.realtime_service import publish_to_school
 from app.core.cache import (
     get_student_profile_cached,
     get_timetable_config_cached,
@@ -493,10 +494,13 @@ async def _finalize_submission(
     if student_count > 0 and finalized_count >= student_count:
         test.is_graded = True
         await db.commit()
-        await redis_manager.publish({
-            "target_type": "broadcast",
-            "payload": {"event": "test_completed", "test_id": test.id},
-        })
+        # Same event the teacher-side grading path emits — scoped to the
+        # school so it doesn't wake every tenant on the instance.
+        await publish_to_school(
+            db,
+            school_id=test.school_id,
+            payload={"event": "test_completed", "test_id": test.id},
+        )
 
     await redis_manager.publish({
         "target_type": "user",

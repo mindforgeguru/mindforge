@@ -149,6 +149,12 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
       onRefresh: () async {
         setState(() => _limit = 20);
         ref.invalidate(teacherTestsProvider((null, _limit)));
+        // Await the refetch so the pull-down spinner stays up until the new
+        // list is in — otherwise it snaps away before anything has changed
+        // and the refresh reads as a no-op.
+        await ref
+            .read(teacherTestsProvider((null, _limit)).future)
+            .catchError((_) => <TestModel>[]);
       },
       child: SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),

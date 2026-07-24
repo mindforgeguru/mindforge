@@ -14,6 +14,7 @@ import 'core/services/notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/constants.dart';
 import 'core/providers/badge_provider.dart';
+import 'core/widgets/realtime_sync.dart';
 import 'features/student/providers/xp_provider.dart';
 
 /// Makes every scroll view respond to trackpad and mouse wheel gestures,
@@ -134,7 +135,9 @@ class _MindForgeAppState extends ConsumerState<MindForgeApp> {
               maxScaleFactor: 1.1,
             ),
           ),
-          child: child!,
+          // Above the router, so live updates reach every screen instead of
+          // only whichever dashboard happens to be mounted.
+          child: RealtimeSync(child: child!),
         );
       },
     );

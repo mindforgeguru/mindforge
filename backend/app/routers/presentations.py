@@ -43,6 +43,7 @@ from app.models.presentation import (
 from app.models.test import Test, TestType
 from app.models.user import StudentProfile, User, UserRole
 from app.schemas.test import TestGenerationParams
+from app.services.realtime_service import publish_to_grade, publish_to_users, school_staff_ids
 from app.schemas.presentation import (
     AvailableChapter,
     FromChapterRequest,
@@ -151,17 +152,19 @@ async def _notify_teacher(db: AsyncSession, teacher_id: int,
 
 async def _broadcast_new_test(db: AsyncSession, test: Test) -> None:
     """Mirror generate_test's broadcast + student/parent push for a new test."""
-    await redis_manager.publish({
-        "target_type": "grade",
-        "grade": test.grade,
-        "payload": {
+    await publish_to_grade(
+        db,
+        school_id=test.school_id,
+        grade=test.grade,
+        include_staff=True,
+        payload={
             "event": "new_test_available",
             "test_id": test.id,
             "title": test.title,
             "subject": test.subject,
             "test_type": "online",
         },
-    })
+    )
 
     profiles = (await db.execute(
         select(StudentProfile)
@@ -209,6 +212,26 @@ async def _broadcast_new_test(db: AsyncSession, test: Test) -> None:
         ))
 
 
+async def _broadcast_auto_quiz_status(db: AsyncSession, test: Test) -> None:
+    """Tell the school's staff that an auto-quiz row appeared or changed state.
+
+    The teacher's Tests tab renders the placeholder as "Generating…"; this is
+    what flips it to ready/failed (and what makes it show up at all) without
+    the teacher pulling to refresh.
+    """
+    await publish_to_users(
+        await school_staff_ids(db, school_id=test.school_id),
+        {
+            "event": "auto_quiz_status",
+            "test_id": test.id,
+            "status": test.generation_status,
+            "title": test.title,
+            "grade": test.grade,
+            "test_type": "online",
+        },
+    )
+
+
 async def _run_auto_test_job(
     test_id: int, presentation_id: int, teacher_id: int,
     slides_from: int, slides_to: int,
@@ -237,6 +260,11 @@ async def _run_auto_test_job(
                 )
             )
             await db.commit()
+            failed = (await db.execute(
+                select(Test).where(Test.id == test_id)
+            )).scalar_one_or_none()
+            if failed is not None:
+                await _broadcast_auto_quiz_status(db, failed)
             await _notify_teacher(db, teacher_id, title, body,
                                   route="/teacher/tests")
 
@@ -1348,6 +1376,11 @@ async def create_period_log(
             db.add(placeholder)
             await db.commit()
             await db.refresh(placeholder)
+            # Push the placeholder to every teacher's Tests list right away —
+            # otherwise it only appears on a manual refresh, and the polling
+            # that tracks generating → ready never starts because the list the
+            # screen is showing has no generating row in it.
+            await _broadcast_auto_quiz_status(db, placeholder)
             background_tasks.add_task(
                 _run_auto_test_job,
                 placeholder.id, presentation_id, current_user.id,

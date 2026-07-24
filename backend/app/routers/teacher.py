@@ -41,6 +41,7 @@ from app.schemas.homework import (
 from app.models.homework import Homework, HomeworkCompletion, HomeworkType, Broadcast
 from app.models.xp import XPReason
 from app.services import ai_service, notification_service, pdf_service, storage_service, xp_service
+from app.services.realtime_service import publish_to_grade, publish_to_school
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -337,17 +338,20 @@ async def mark_attendance(
                 ),
             )
 
-    # Broadcast attendance update to all students in the grade
-    await redis_manager.publish({
-        "target_type": "grade",
-        "grade": payload.grade,
-        "payload": {
+    # Broadcast attendance update to all students in the grade (+ staff, whose
+    # dashboards show today's attendance workflow state).
+    await publish_to_grade(
+        db,
+        school_id=current_teacher.school_id,
+        grade=payload.grade,
+        include_staff=True,
+        payload={
             "event": "attendance_updated",
             "date": str(payload.date),
             "period": payload.period,
             "grade": payload.grade,
         },
-    })
+    )
 
     # ── Push notifications for absent students ────────────────────────────────
     absent_ids = [
@@ -537,15 +541,17 @@ async def create_timetable_slot(
     await db.commit()
     await db.refresh(slot)
 
-    await redis_manager.publish({
-        "target_type": "grade",
-        "target_grade": payload.grade,
-        "payload": {
+    await publish_to_grade(
+        db,
+        school_id=current_teacher.school_id,
+        grade=payload.grade,
+        include_staff=True,
+        payload={
             "event": "timetable_updated",
             "grade": payload.grade,
             "slot_date": str(payload.slot_date),
         },
-    })
+    )
 
     # ── Push notification — fire once when period 1 is first created ──────────
     # Sending per-slot would spam students. Period 1 being newly saved signals
@@ -961,18 +967,21 @@ async def generate_test(
         except Exception:
             pass  # Storage unavailable — test is saved without PDF files
 
-    # Broadcast new test to the grade (teachers can also listen)
-    await redis_manager.publish({
-        "target_type": "grade",
-        "grade": grade,
-        "payload": {
+    # Broadcast new test to the grade plus staff, so every teacher's Tests
+    # list picks it up without a manual refresh.
+    await publish_to_grade(
+        db,
+        school_id=current_teacher.school_id,
+        grade=grade,
+        include_staff=True,
+        payload={
             "event": "new_test_available",
             "test_id": test.id,
             "title": title,
             "subject": subject,
             "test_type": test_type,
         },
-    })
+    )
 
     # ── Push notifications for new test ───────────────────────────────────────
     # Fetch all students in this grade + their parent links
@@ -1369,14 +1378,16 @@ async def save_offline_grades(
     test.is_graded = True
     await db.commit()
 
-    # Broadcast completed status to all connected clients (teachers, students, parents)
-    await redis_manager.publish({
-        "target_type": "broadcast",
-        "payload": {
+    # Broadcast completed status to this school's clients (teachers, students,
+    # parents). Scoped to the school so other tenants aren't woken up.
+    await publish_to_school(
+        db,
+        school_id=test.school_id,
+        payload={
             "event": "test_completed",
             "test_id": test_id,
         },
-    })
+    )
 
     # Notify each student
     for grade_obj, student_id in saved_grades:
@@ -1426,15 +1437,17 @@ async def publish_test(
         raise HTTPException(status_code=403, detail="Only the teacher who created this test can publish/unpublish it")
     test.is_published = not test.is_published
     await db.commit()
-    # Notify all connected clients so every teacher sees the updated status immediately
-    await redis_manager.publish({
-        "target_type": "broadcast",
-        "payload": {
+    # Notify this school's clients so every teacher — and the students who can
+    # now see (or no longer see) the test — updates immediately.
+    await publish_to_school(
+        db,
+        school_id=test.school_id,
+        payload={
             "event": "test_status_changed",
             "test_id": test_id,
             "is_published": test.is_published,
         },
-    })
+    )
     return {"is_published": test.is_published}
 
 
@@ -1552,18 +1565,23 @@ async def create_homework(
     db.add(hw)
     await db.commit()
     await db.refresh(hw)
-    # Notify all students and parents in the grade
-    await redis_manager.publish({
-        "target_type": "grade",
-        "grade": payload.grade,
-        "payload": {
+    # Notify students and parents in the grade, plus staff — the homework
+    # list and the dashboard's "Recent Homework" card are school-wide, so
+    # every teacher's screen needs to pick this up live.
+    await publish_to_grade(
+        db,
+        school_id=current_teacher.school_id,
+        grade=payload.grade,
+        include_staff=True,
+        payload={
             "event": "homework_added",
             "homework_id": hw.id,
+            "grade": hw.grade,
             "title": hw.title,
             "subject": hw.subject,
             "due_date": payload.due_date.isoformat() if payload.due_date else None,
         },
-    })
+    )
     return hw
 
 
@@ -1920,14 +1938,17 @@ async def upsert_homework_completions(
             description=f"Homework completed: {hw.title}",
         )
 
-    await redis_manager.publish({
-        "target_type": "grade",
-        "grade": hw.grade,
-        "payload": {
+    await publish_to_grade(
+        db,
+        school_id=current_teacher.school_id,
+        grade=hw.grade,
+        include_staff=True,
+        payload={
             "event": "homework_completion_updated",
             "homework_id": homework_id,
+            "grade": hw.grade,
         },
-    })
+    )
 
     return await _build_completions_response(homework_id, db, current_teacher)
 
@@ -2146,17 +2167,23 @@ async def send_broadcast(
         "sender": current_teacher.username,
     }
 
+    # Mirror the push-notification audience exactly: a grade broadcast goes to
+    # that grade's students/parents, and to *all* staff regardless of grade so
+    # the shared teacher announcement list stays in sync. A school-wide
+    # broadcast goes to everyone in the school — not `broadcast_all`, which
+    # would also hit users of other schools sharing the instance.
     if payload.target_type == "grade" and payload.target_grade is not None:
-        await redis_manager.publish({
-            "target_type": "grade",
-            "grade": payload.target_grade,
-            "payload": ws_payload,
-        })
+        await publish_to_grade(
+            db,
+            school_id=current_teacher.school_id,
+            grade=payload.target_grade,
+            include_staff=True,
+            payload=ws_payload,
+        )
     else:
-        await redis_manager.publish({
-            "target_type": "broadcast",
-            "payload": ws_payload,
-        })
+        await publish_to_school(
+            db, school_id=current_teacher.school_id, payload=ws_payload
+        )
 
     # ── Push notifications for broadcast ─────────────────────────────────────
     # Every broadcast reaches all teachers (so staff stay in the loop and see

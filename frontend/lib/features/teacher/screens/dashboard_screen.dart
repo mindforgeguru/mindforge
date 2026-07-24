@@ -85,9 +85,9 @@ class _TeacherDashboardScreenState
     if (pausedFor < const Duration(seconds: 30)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _wsSub?.cancel();
-      ref.read(webSocketClientProvider).forceReconnect();
-      _connectWs();
+      // The socket itself is re-established by RealtimeSync, which owns the
+      // connection app-wide — reconnecting here too would race it. This only
+      // refetches what this screen shows.
       ref.invalidate(teacherDashboardSummaryProvider);
       ref.invalidate(teacherTodayWorkflowProvider);
     });
@@ -101,17 +101,13 @@ class _TeacherDashboardScreenState
     final ws = ref.read(webSocketClientProvider);
     _wsSub = ws.connect(userId, token).listen((event) {
       if (!mounted) return;
+      // Cache invalidation for every event lives in RealtimeSync, which is
+      // mounted above the router and so keeps working on every screen. This
+      // subscription only handles the event that needs to show UI, and
+      // therefore needs a Scaffold to show it in.
       final eventType = event['event'] as String?;
       if (eventType == 'profile_updated') {
         _showProfileUpdatedDialog(event['new_username'] as String?);
-      } else if (eventType != null) {
-        ref.invalidate(teacherDashboardSummaryProvider);
-        if (eventType == 'attendance_updated' ||
-            eventType == 'homework_added' ||
-            eventType == 'homework_completion_updated' ||
-            eventType == 'timetable_updated') {
-          ref.invalidate(teacherTodayWorkflowProvider);
-        }
       }
     });
   }

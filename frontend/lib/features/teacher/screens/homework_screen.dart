@@ -528,6 +528,11 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
         'due_date': _dueDate?.toIso8601String().substring(0, 10),
       });
       ref.invalidate(teacherTodayWorkflowProvider);
+      // The dashboard's "Recent Homework" card reads from the summary, so it
+      // needs invalidating too. RealtimeSync does this when the WS event
+      // lands, but the teacher who just assigned it shouldn't have to wait on
+      // a round trip through the socket to see their own change.
+      ref.invalidate(teacherDashboardSummaryProvider);
       widget.onCreated();
       if (mounted) Navigator.pop(context);
     } on DioException catch (e) {

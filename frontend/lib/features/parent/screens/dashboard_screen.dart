@@ -80,9 +80,8 @@ class _ParentDashboardScreenState
     if (pausedFor < const Duration(seconds: 30)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _wsSub?.cancel();
-      ref.read(webSocketClientProvider).forceReconnect();
-      _connectWs();
+      // The socket itself is re-established by RealtimeSync, which owns the
+      // connection app-wide — reconnecting here too would race it.
       ref.invalidate(parentDashboardSummaryProvider(_todayString));
     });
   }
@@ -95,19 +94,13 @@ class _ParentDashboardScreenState
     final ws = ref.read(webSocketClientProvider);
     _wsSub = ws.connect(userId, token).listen((event) {
       if (!mounted) return;
+      // Cache invalidation for every event lives in RealtimeSync, which is
+      // mounted above the router and so keeps working on every screen. This
+      // subscription only handles the event that needs to show UI, and
+      // therefore needs a Scaffold to show it in.
       final eventType = event['event'] as String?;
       if (eventType == 'profile_updated') {
         _showProfileUpdatedDialog(event['new_username'] as String?);
-      } else if (eventType != null) {
-        ref.invalidate(parentDashboardSummaryProvider(_todayString));
-        // New homework or a teacher marking completion → refresh the homework
-        // screen so its list and Pending/Complete pills update live instead of
-        // waiting for a manual pull-to-refresh.
-        if (eventType == 'homework_added' ||
-            eventType == 'homework_completion_updated') {
-          ref.invalidate(parentHomeworkProvider);
-          ref.invalidate(parentChildHomeworkCompletionsProvider);
-        }
       }
     });
   }

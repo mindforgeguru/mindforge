@@ -68,10 +68,28 @@ class WebSocketManager:
             if ws in connections:
                 connections.remove(ws)
 
+    async def broadcast_to_users(self, user_ids: List[int], event: dict):
+        """
+        Send an event to an explicit list of users.
+
+        This is the path class-wide events take: recipients are resolved
+        from the database at publish time (see `realtime_service`) rather
+        than from a per-connection grade index, so parents with children in
+        several grades and staff who span grades are addressed correctly and
+        events never leak across schools.
+        """
+        for user_id in user_ids:
+            await self.broadcast_to_user(user_id, event)
+
     async def broadcast_to_grade(self, grade: int, event: dict):
         """
         Send an event to all connected users in a specific grade.
         Fetches all user_ids registered under that grade.
+
+        Deprecated: the grade index is only populated by `register_grade`,
+        which the WebSocket endpoint does not call. Prefer
+        `realtime_service.publish_to_grade`, which resolves the audience
+        from the database.
         """
         user_ids = list(self._grade_users.get(grade, set()))
         for user_id in user_ids:
