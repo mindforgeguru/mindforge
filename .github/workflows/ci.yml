@@ -5,12 +5,21 @@ on:
     branches: [main, "feature/**", "fix/**", "test/**"]
   pull_request:
     branches: [main]
-  # Required for the api-integration job below, which gates on
-  # `github.event_name == 'workflow_dispatch'`. Without this trigger declared
-  # here that job could never run at all — `gh workflow run ci.yml` would be
-  # rejected outright. Add `schedule:` here too if you want it on a timer; the
-  # job's condition already accounts for it.
+  # Lets the suites below be run on demand against any branch.
+  #
+  # `run_api_integration` is opt-in and defaults to false ON PURPOSE. That job
+  # runs tests/test_api.py, whose BASE_URL is https://api.mindforge.guru — it
+  # registers, approves and revokes users against **production**. Gating it on
+  # the bare `workflow_dispatch` event would mean a plain
+  # `gh workflow run ci.yml` silently wrote to the live database, which is not
+  # something anyone should trigger by accident while trying to check the unit
+  # tests.
   workflow_dispatch:
+    inputs:
+      run_api_integration:
+        description: "Run the live-API suite — WRITES TO PRODUCTION"
+        type: boolean
+        default: false
 
 jobs:
   # ── Backend unit tests (no DB/Redis needed) ──────────────────────────────────
@@ -138,7 +147,11 @@ jobs:
   api-integration:
     name: API integration tests (live server)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    # Deliberately NOT `github.event_name == 'workflow_dispatch'` — see the
+    # note on the trigger above. This suite writes to production, so it runs
+    # only when someone explicitly ticks the input (or on a schedule, if one
+    # is ever added).
+    if: inputs.run_api_integration || github.event_name == 'schedule'
 
     steps:
       - uses: actions/checkout@v4
