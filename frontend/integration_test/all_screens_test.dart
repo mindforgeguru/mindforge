@@ -22,16 +22,14 @@ import 'package:mindforge/main.dart' as app;
 const _adminUser    = String.fromEnvironment('ADMIN_USER',    defaultValue: 'demo_admin');
 // ignore: do_not_use_environment
 const _adminMpin    = String.fromEnvironment('ADMIN_MPIN',    defaultValue: '847362');
-// NOTE: no working teacher account is known on this stack.
-// docs/local-test-accounts.md states outright that teachers have no shared
-// credentials, and 847362 was probed against hansal_sir / chinmay_sir /
-// bina_maam and rejected by all three. The Teacher group therefore fails at
-// login until someone supplies --dart-define=TEACHER_USER/TEACHER_MPIN or
-// provisions a teacher with a known MPIN from the admin dashboard.
+// The teacher lives in a *different* school to the other three accounts, so
+// each role carries its own school name rather than sharing one constant.
 // ignore: do_not_use_environment
-const _teacherUser  = String.fromEnvironment('TEACHER_USER',  defaultValue: 'chinmay_sir');
+const _teacherUser  = String.fromEnvironment('TEACHER_USER',  defaultValue: 'metas_teacher2');
 // ignore: do_not_use_environment
-const _teacherMpin  = String.fromEnvironment('TEACHER_MPIN',  defaultValue: '100898');
+const _teacherMpin  = String.fromEnvironment('TEACHER_MPIN',  defaultValue: '290304');
+// ignore: do_not_use_environment
+const _teacherSchool = String.fromEnvironment('TEACHER_SCHOOL', defaultValue: 'metas');
 // ignore: do_not_use_environment
 const _studentUser  = String.fromEnvironment('STUDENT_USER',  defaultValue: 'hansel_kid');
 // ignore: do_not_use_environment
@@ -46,10 +44,11 @@ const _parentMpin   = String.fromEnvironment('PARENT_MPIN',   defaultValue: '111
 // ignore: do_not_use_environment
 const _schoolName   = String.fromEnvironment('SCHOOL_NAME',   defaultValue: 'Hansel & Gretel');
 
-const _admin   = (_adminUser,     _adminMpin);
-const _teacher = (_teacherUser,   _teacherMpin);
-const _student = (_studentUser,   _studentMpin);
-const _parent  = (_parentUser,    _parentMpin);
+// (username, mpin, school)
+const _admin   = (_adminUser,   _adminMpin,   _schoolName);
+const _teacher = (_teacherUser, _teacherMpin, _teacherSchool);
+const _student = (_studentUser, _studentMpin, _schoolName);
+const _parent  = (_parentUser,  _parentMpin,  _schoolName);
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -129,16 +128,16 @@ void main() {
   /// unset, so every login below would silently do nothing. Tolerates builds
   /// with no picker, but fails loudly if the picker exists without the
   /// expected school — that means an unreachable or unseeded backend.
-  Future<void> selectSchool(WidgetTester t) async {
+  Future<void> selectSchool(WidgetTester t, String schoolName) async {
     final dropdown = find.byType(DropdownButtonFormField<int>);
     if (dropdown.evaluate().isEmpty) return;
 
     await t.tap(dropdown.first);
     await settle(t);
 
-    final option = find.text(_schoolName);
+    final option = find.text(schoolName);
     expect(option, findsWidgets,
-        reason: 'School "$_schoolName" is not in the picker. Is the backend '
+        reason: 'School "$schoolName" is not in the picker. Is the backend '
             'up at the LOCAL_DEV address and seeded? Override with '
             '--dart-define=SCHOOL_NAME=...');
     // `.last` targets the item in the opened menu — a selected school also
@@ -148,9 +147,9 @@ void main() {
   }
 
   /// Login and wait up to 8 s for the network + navigation to settle.
-  Future<void> login(WidgetTester t, (String, String) creds) async {
+  Future<void> login(WidgetTester t, (String, String, String) creds) async {
     await passSplash(t);
-    await selectSchool(t);
+    await selectSchool(t, creds.$3);
     await t.enterText(find.widgetWithText(TextField, 'Username'), creds.$1);
     await t.pump();
     await enterMpin(t, creds.$2);
