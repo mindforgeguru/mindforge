@@ -94,8 +94,33 @@ class WebSocketClient {
   /// captured token if the callback is unavailable or returns null —
   /// preserves behavior for callers that don't inject a token resolver.
   String _resolveReconnectToken(String capturedToken) {
-    final current = _getCurrentToken?.call();
-    return (current != null && current.isNotEmpty) ? current : capturedToken;
+    try {
+      final current = _getCurrentToken?.call();
+      return (current != null && current.isNotEmpty) ? current : capturedToken;
+    } catch (_) {
+      // The resolver reads `apiClientProvider` off the Riverpod container. If
+      // the container has been disposed — app shutting down, or a widget test
+      // tearing down — that read throws `Bad state: Tried to read a provider
+      // from a ProviderContainer that was already disposed`, which surfaces as
+      // an uncaught async error rather than anything actionable. The reconnect
+      // it belongs to is moot at that point, so fall back to the captured
+      // token and let the generation guard drop the attempt.
+      return capturedToken;
+    }
+  }
+
+  /// Schedule a reconnect attempt, skipping it if this cycle is already stale.
+  ///
+  /// The generation check has to happen *here*, not inside `_connect`: the
+  /// token argument is evaluated before the call, so resolving it first would
+  /// touch a possibly-disposed container before `_connect` ever got the chance
+  /// to bail out.
+  void _scheduleReconnect(
+      int userId, String capturedToken, int generation, Duration delay) {
+    Future.delayed(delay, () {
+      if (generation != _generation) return;
+      _connect(userId, _resolveReconnectToken(capturedToken), generation);
+    });
   }
 
   void _connect(int userId, String token, int generation) {
@@ -121,9 +146,8 @@ class WebSocketClient {
       _channel!.ready.catchError((_) {
         if (generation != _generation) return;
         _channel = null;
-        Future.delayed(const Duration(seconds: 5), () {
-          _connect(userId, _resolveReconnectToken(token), generation);
-        });
+        _scheduleReconnect(userId, token, generation,
+            const Duration(seconds: 5));
       });
 
       _channel!.stream.listen(
@@ -143,15 +167,13 @@ class WebSocketClient {
           _channel = null; // mark as dead so connect() can detect it on resume
           // Auto-reconnect after 3 seconds on disconnect.
           // Pass the current generation so stale timers self-cancel.
-          Future.delayed(const Duration(seconds: 3), () {
-            _connect(userId, _resolveReconnectToken(token), generation);
-          });
+          _scheduleReconnect(userId, token, generation,
+              const Duration(seconds: 3));
         },
         onError: (error) {
           _channel = null; // mark as dead
-          Future.delayed(const Duration(seconds: 5), () {
-            _connect(userId, _resolveReconnectToken(token), generation);
-          });
+          _scheduleReconnect(userId, token, generation,
+              const Duration(seconds: 5));
         },
         cancelOnError: false,
       );
@@ -172,9 +194,8 @@ class WebSocketClient {
       });
     } catch (e) {
       // Retry connection after delay
-      Future.delayed(const Duration(seconds: 5), () {
-        _connect(userId, _resolveReconnectToken(token), generation);
-      });
+      _scheduleReconnect(userId, token, generation,
+          const Duration(seconds: 5));
     }
   }
 

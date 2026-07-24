@@ -2,6 +2,8 @@
 ///
 /// Navigates every screen for every role and asserts it renders without crash.
 /// Run with: flutter test integration_test/all_screens_test.dart
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,17 +12,30 @@ import 'package:integration_test/integration_test.dart';
 import 'package:mindforge/main.dart' as app;
 
 // ─── Credentials ─────────────────────────────────────────────────────────────
-// Pass via --dart-define=ADMIN_MPIN=xxx / TEACHER_USER=xxx etc. if changed
+// Defaults were verified against the local backend on 2026-07-24 by POSTing
+// /api/auth/login with school_id 1. The originals came from
+// backend/scripts/seed_integration_test_users.py, which predates multi-tenancy;
+// three of its four accounts (admin/300573, chinmay_sir/100898, dummy8/111111)
+// now return 401, which presents as "logged in but the screen is empty".
+// Override any of these with --dart-define for a differently-seeded stack.
 // ignore: do_not_use_environment
-const _adminMpin    = String.fromEnvironment('ADMIN_MPIN',    defaultValue: '300573');
+const _adminUser    = String.fromEnvironment('ADMIN_USER',    defaultValue: 'demo_admin');
+// ignore: do_not_use_environment
+const _adminMpin    = String.fromEnvironment('ADMIN_MPIN',    defaultValue: '847362');
+// NOTE: no working teacher account is known on this stack.
+// docs/local-test-accounts.md states outright that teachers have no shared
+// credentials, and 847362 was probed against hansal_sir / chinmay_sir /
+// bina_maam and rejected by all three. The Teacher group therefore fails at
+// login until someone supplies --dart-define=TEACHER_USER/TEACHER_MPIN or
+// provisions a teacher with a known MPIN from the admin dashboard.
 // ignore: do_not_use_environment
 const _teacherUser  = String.fromEnvironment('TEACHER_USER',  defaultValue: 'chinmay_sir');
 // ignore: do_not_use_environment
 const _teacherMpin  = String.fromEnvironment('TEACHER_MPIN',  defaultValue: '100898');
 // ignore: do_not_use_environment
-const _studentUser  = String.fromEnvironment('STUDENT_USER',  defaultValue: 'dummy8');
+const _studentUser  = String.fromEnvironment('STUDENT_USER',  defaultValue: 'hansel_kid');
 // ignore: do_not_use_environment
-const _studentMpin  = String.fromEnvironment('STUDENT_MPIN',  defaultValue: '111111');
+const _studentMpin  = String.fromEnvironment('STUDENT_MPIN',  defaultValue: '847362');
 // ignore: do_not_use_environment
 const _parentUser   = String.fromEnvironment('PARENT_USER',   defaultValue: 'dummy8_dad');
 // ignore: do_not_use_environment
@@ -31,7 +46,7 @@ const _parentMpin   = String.fromEnvironment('PARENT_MPIN',   defaultValue: '111
 // ignore: do_not_use_environment
 const _schoolName   = String.fromEnvironment('SCHOOL_NAME',   defaultValue: 'Hansel & Gretel');
 
-const _admin   = ('admin',        _adminMpin);
+const _admin   = (_adminUser,     _adminMpin);
 const _teacher = (_teacherUser,   _teacherMpin);
 const _student = (_studentUser,   _studentMpin);
 const _parent  = (_parentUser,    _parentMpin);
@@ -47,6 +62,42 @@ void main() {
     } catch (_) {}
   }
 
+  /// `pumpAndSettle` bounded to 20 s instead of the 10-minute default, so a
+  /// tree that never settles fails legibly rather than stalling the run.
+  Future<void> settle(WidgetTester t,
+      [Duration step = const Duration(milliseconds: 100)]) {
+    return t.pumpAndSettle(
+        step, EnginePhase.sendSemanticsUpdate, const Duration(seconds: 20));
+  }
+
+  /// Start the app, then take error reporting back from it.
+  ///
+  /// `main()` installs Crashlytics as both `FlutterError.onError` and
+  /// `PlatformDispatcher.onError` (main.dart:63-64) before runApp(). Inside a
+  /// widget test that displaces the binding's own reporter, so framework
+  /// errors are shipped to Crashlytics instead of failing the test and the
+  /// binding reports only `_pendingExceptionDetails != null` — hiding the real
+  /// cause. Restoring both handlers once the app has mounted puts genuine
+  /// failures back in front of the test framework.
+  ///
+  /// Do not call `app.main()` directly.
+  Future<void> launchApp(WidgetTester t) async {
+    final flutterOnError = FlutterError.onError;
+    final platformOnError = PlatformDispatcher.instance.onError;
+
+    app.main();
+
+    // main() is async — it awaits Firebase, Crashlytics, Analytics and
+    // SharedPreferences before runApp(), so neither the widget tree nor the
+    // handler override exists on the first frame.
+    for (int i = 0; i < 60 && find.byType(MaterialApp).evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+
+    FlutterError.onError = flutterOnError;
+    PlatformDispatcher.instance.onError = platformOnError;
+  }
+
   /// Advance past the splash screen (total animation ≈ 4.2 s).
   /// Also sets a phone-sized viewport so the PIN pad and login button are
   /// fully on-screen (932 = iPhone 14 Pro Max logical height).
@@ -57,7 +108,7 @@ void main() {
     for (int i = 0; i < 60; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }
-    await t.pumpAndSettle();
+    await settle(t);
   }
 
   Future<void> tapDigit(WidgetTester t, String d) async {
@@ -83,7 +134,7 @@ void main() {
     if (dropdown.evaluate().isEmpty) return;
 
     await t.tap(dropdown.first);
-    await t.pumpAndSettle();
+    await settle(t);
 
     final option = find.text(_schoolName);
     expect(option, findsWidgets,
@@ -93,7 +144,7 @@ void main() {
     // `.last` targets the item in the opened menu — a selected school also
     // renders its name in the closed field.
     await t.tap(option.last);
-    await t.pumpAndSettle();
+    await settle(t);
   }
 
   /// Login and wait up to 8 s for the network + navigation to settle.
@@ -107,12 +158,12 @@ void main() {
     // can push it past the bottom edge, where tap() misses instead of failing.
     final loginButton = find.byType(ElevatedButton).first;
     await t.ensureVisible(loginButton);
-    await t.pumpAndSettle();
+    await settle(t);
     await t.tap(loginButton);
     for (int i = 0; i < 80; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }
-    await t.pumpAndSettle();
+    await settle(t);
   }
 
   /// Tap a bottom-nav / quick-action label and wait for the screen to load.
@@ -121,7 +172,7 @@ void main() {
     for (int i = 0; i < 30; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }
-    await t.pumpAndSettle();
+    await settle(t);
   }
 
   /// Navigate via a dashboard section header's "See all →" button.
@@ -144,7 +195,7 @@ void main() {
       await t.drag(verticalScrollable(), const Offset(0, -500));
       await t.pump(const Duration(milliseconds: 120));
     }
-    await t.pumpAndSettle();
+    await settle(t);
 
     // The section title and its "See all →" button share the same Row
     final rows = find.ancestor(
@@ -159,7 +210,7 @@ void main() {
     for (int i = 0; i < 30; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }
-    await t.pumpAndSettle();
+    await settle(t);
   }
 
   /// Tap the profile avatar (ClipOval) to navigate to the profile screen.
@@ -168,7 +219,7 @@ void main() {
     for (int i = 0; i < 30; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }
-    await t.pumpAndSettle();
+    await settle(t);
   }
 
   /// Assert the current screen rendered (no blank/error page).
@@ -184,7 +235,7 @@ void main() {
     setUp(clearAuth);
 
     testWidgets('Dashboard', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _admin);
       expectScreen('Admin Dashboard');
       // Key dashboard cards visible
@@ -194,35 +245,35 @@ void main() {
     });
 
     testWidgets('Users screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _admin);
       await goTo(t, 'Users');
       expectScreen('Admin Users');
     });
 
     testWidgets('Fees screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _admin);
       await goTo(t, 'Fees');
       expectScreen('Admin Fees');
     });
 
     testWidgets('Reports screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _admin);
       await goTo(t, 'Reports');
       expectScreen('Admin Reports');
     });
 
     testWidgets('Timetable screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _admin);
       await goTo(t, 'Timetable');
       expectScreen('Admin Timetable');
     });
 
     testWidgets('Profile screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _admin);
       await goTo(t, 'Profile');
       expectScreen('Admin Profile');
@@ -239,42 +290,42 @@ void main() {
     setUp(clearAuth);
 
     testWidgets('Dashboard', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _teacher);
       expectScreen('Teacher Dashboard');
       expect(find.text('TEACHER'), findsWidgets);
     });
 
     testWidgets('Grades screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _teacher);
       await goTo(t, 'Grades');
       expectScreen('Teacher Grades');
     });
 
     testWidgets('Tests screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _teacher);
       await goTo(t, 'Tests');
       expectScreen('Teacher Tests');
     });
 
     testWidgets('Attendance screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _teacher);
       await goTo(t, 'Attendance');
       expectScreen('Teacher Attendance');
     });
 
     testWidgets('Timetable screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _teacher);
       await goTo(t, 'Timetable');
       expectScreen('Teacher Timetable');
     });
 
     testWidgets('Broadcasts screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _teacher);
       // Broadcasts is reached via the Announcements section "See all →" on mobile
       await goViaSeeAll(t, 'Announcements');
@@ -282,7 +333,7 @@ void main() {
     });
 
     testWidgets('Homework screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _teacher);
       // Homework is reached via the Recent Homework section "See all →" on mobile
       await goViaSeeAll(t, 'Recent Homework');
@@ -290,7 +341,7 @@ void main() {
     });
 
     testWidgets('Profile screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _teacher);
       await goToProfile(t);
       expectScreen('Teacher Profile');
@@ -307,35 +358,35 @@ void main() {
     setUp(clearAuth);
 
     testWidgets('Dashboard', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _student);
       expectScreen('Student Dashboard');
       expect(find.text('STUDENT'), findsWidgets);
     });
 
     testWidgets('Grades screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _student);
       await goTo(t, 'Grades');
       expectScreen('Student Grades');
     });
 
     testWidgets('Tests screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _student);
       await goTo(t, 'Tests');
       expectScreen('Student Tests');
     });
 
     testWidgets('Attendance screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _student);
       await goTo(t, 'Attendance');
       expectScreen('Student Attendance');
     });
 
     testWidgets('Timetable screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _student);
       // Timetable is not in the student bottom nav; reach it via dashboard header
       await goViaSeeAll(t, "Today's Timetable");
@@ -343,7 +394,7 @@ void main() {
     });
 
     testWidgets('Homework screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _student);
       // Homework is not in the student bottom nav; reach via dashboard section
       await goViaSeeAll(t, 'Recent Homework');
@@ -351,7 +402,7 @@ void main() {
     });
 
     testWidgets('Broadcasts screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _student);
       // Broadcasts is not in the student bottom nav; reach via Announcements section
       await goViaSeeAll(t, 'Announcements');
@@ -359,7 +410,7 @@ void main() {
     });
 
     testWidgets('Profile screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _student);
       await goToProfile(t);
       expectScreen('Student Profile');
@@ -376,41 +427,41 @@ void main() {
     setUp(clearAuth);
 
     testWidgets('Dashboard', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _parent);
       expectScreen('Parent Dashboard');
     });
 
     testWidgets('Attendance screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _parent);
       await goTo(t, 'Attendance');
       expectScreen('Parent Attendance');
     });
 
     testWidgets('Timetable screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _parent);
       await goTo(t, 'Timetable');
       expectScreen('Parent Timetable');
     });
 
     testWidgets('Grades screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _parent);
       await goTo(t, 'Grades');
       expectScreen('Parent Grades');
     });
 
     testWidgets('Fees screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _parent);
       await goTo(t, 'Fees');
       expectScreen('Parent Fees');
     });
 
     testWidgets('Homework screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _parent);
       // Homework is not in the parent bottom nav; reach via Recent Homework section
       await goViaSeeAll(t, 'Recent Homework');
@@ -418,7 +469,7 @@ void main() {
     });
 
     testWidgets('Profile screen', (t) async {
-      app.main();
+      await launchApp(t);
       await login(t, _parent);
       await goToProfile(t);
       expectScreen('Parent Profile');
