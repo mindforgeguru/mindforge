@@ -25,6 +25,11 @@ const _studentMpin  = String.fromEnvironment('STUDENT_MPIN',  defaultValue: '111
 const _parentUser   = String.fromEnvironment('PARENT_USER',   defaultValue: 'dummy8_dad');
 // ignore: do_not_use_environment
 const _parentMpin   = String.fromEnvironment('PARENT_MPIN',   defaultValue: '111111');
+// School to sign into. Multi-tenancy (2026-07-22) made the login form require
+// one, and all four seeded accounts above live in school id 1,
+// "Hansel & Gretel". Override for a differently-seeded stack.
+// ignore: do_not_use_environment
+const _schoolName   = String.fromEnvironment('SCHOOL_NAME',   defaultValue: 'Hansel & Gretel');
 
 const _admin   = ('admin',        _adminMpin);
 const _teacher = (_teacherUser,   _teacherMpin);
@@ -66,13 +71,44 @@ void main() {
     }
   }
 
+  /// Choose a school in the login form.
+  ///
+  /// Required since multi-tenancy landed: `login_screen.dart` bails out with
+  /// "Please select your school." and never calls the API while the picker is
+  /// unset, so every login below would silently do nothing. Tolerates builds
+  /// with no picker, but fails loudly if the picker exists without the
+  /// expected school — that means an unreachable or unseeded backend.
+  Future<void> selectSchool(WidgetTester t) async {
+    final dropdown = find.byType(DropdownButtonFormField<int>);
+    if (dropdown.evaluate().isEmpty) return;
+
+    await t.tap(dropdown.first);
+    await t.pumpAndSettle();
+
+    final option = find.text(_schoolName);
+    expect(option, findsWidgets,
+        reason: 'School "$_schoolName" is not in the picker. Is the backend '
+            'up at the LOCAL_DEV address and seeded? Override with '
+            '--dart-define=SCHOOL_NAME=...');
+    // `.last` targets the item in the opened menu — a selected school also
+    // renders its name in the closed field.
+    await t.tap(option.last);
+    await t.pumpAndSettle();
+  }
+
   /// Login and wait up to 8 s for the network + navigation to settle.
   Future<void> login(WidgetTester t, (String, String) creds) async {
     await passSplash(t);
+    await selectSchool(t);
     await t.enterText(find.widgetWithText(TextField, 'Username'), creds.$1);
     await t.pump();
     await enterMpin(t, creds.$2);
-    await t.tap(find.byType(ElevatedButton).first);
+    // Scroll the button into view first — the school picker grew the form and
+    // can push it past the bottom edge, where tap() misses instead of failing.
+    final loginButton = find.byType(ElevatedButton).first;
+    await t.ensureVisible(loginButton);
+    await t.pumpAndSettle();
+    await t.tap(loginButton);
     for (int i = 0; i < 80; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }

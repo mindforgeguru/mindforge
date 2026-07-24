@@ -9,6 +9,14 @@ import 'package:mindforge/main.dart' as app;
 // ignore: do_not_use_environment
 const _adminMpin = String.fromEnvironment('ADMIN_MPIN', defaultValue: '300573');
 
+// School to sign into. Multi-tenancy (2026-07-22) made the login form require
+// one, and the seeded local accounts (admin / chinmay_sir / dummy8 /
+// dummy8_dad) all live in school id 1, "Hansel & Gretel". Override with
+// --dart-define=SCHOOL_NAME=... when pointing at a differently-seeded stack.
+// ignore: do_not_use_environment
+const _schoolName =
+    String.fromEnvironment('SCHOOL_NAME', defaultValue: 'Hansel & Gretel');
+
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -63,6 +71,37 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Choose a school in the login form.
+  ///
+  /// Required since multi-tenancy landed: `login_screen.dart` bails out with
+  /// "Please select your school." and never calls the API while the picker is
+  /// unset, so a login attempt without this silently does nothing and any
+  /// assertion about the *result* of logging in waits forever.
+  ///
+  /// Tolerates builds with no picker (single-school deployments pre-select and
+  /// the backend resolves the sole school itself), but fails loudly if the
+  /// picker is there and the expected school is missing — that means the
+  /// backend is unreachable or unseeded, which is worth distinguishing from a
+  /// genuine UI failure.
+  Future<void> selectSchool(WidgetTester tester) async {
+    final dropdown = find.byType(DropdownButtonFormField<int>);
+    if (dropdown.evaluate().isEmpty) return;
+
+    await tester.tap(dropdown.first);
+    await tester.pumpAndSettle();
+
+    final option = find.text(_schoolName);
+    expect(option, findsWidgets,
+        reason: 'School "$_schoolName" is not in the picker. Is the backend '
+            'up at the LOCAL_DEV address and seeded? Override with '
+            '--dart-define=SCHOOL_NAME=...');
+    // `.last` targets the item inside the opened menu: once a school is
+    // selected its name also renders in the closed field, so the text can
+    // legitimately match twice.
+    await tester.tap(option.last);
+    await tester.pumpAndSettle();
+  }
+
   /// Tap a single keypad digit.
   Future<void> tapDigit(WidgetTester tester, String digit) async {
     final matches = find.text(digit);
@@ -77,10 +116,26 @@ void main() {
     }
   }
 
+  /// Tap the Login button, scrolling it into view first.
+  ///
+  /// The school picker added roughly a field's worth of height to the form and
+  /// pushed the button just past the bottom edge — it resolved to
+  /// `Offset(201.0, 874.3)` against a render tree of `Size(402.0, 874.0)`, i.e.
+  /// off-screen by a third of a pixel. `tap()` then warns and misses instead of
+  /// failing outright, so the test hangs waiting for a login that never
+  /// started. Scrolling first keeps this robust against further layout growth.
+  Future<void> tapLogin(WidgetTester tester) async {
+    final button = find.byType(ElevatedButton).first;
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+  }
+
   /// Type username, enter MPIN, tap Login, wait up to 8s for network + nav.
   Future<void> doLogin(WidgetTester tester,
       {required String username, required String mpin}) async {
     await passSplash(tester);
+    await selectSchool(tester);
 
     final usernameField = find.widgetWithText(TextField, 'Username');
     expect(usernameField, findsOneWidget);
@@ -89,7 +144,7 @@ void main() {
 
     await enterMpin(tester, mpin);
 
-    await tester.tap(find.byType(ElevatedButton).first);
+    await tapLogin(tester);
 
     for (int i = 0; i < 80; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -100,7 +155,13 @@ void main() {
   // ── Test 1: Splash → Login ─────────────────────────────────────────────────
   testWidgets('Splash screen shows then transitions to login', (tester) async {
     app.main();
-    await tester.pump();
+    // `main()` is async — it awaits Firebase init, Crashlytics, Analytics and
+    // SharedPreferences before calling runApp(), so the first frame contains
+    // no MaterialApp at all. A single pump() used to be enough by luck; pump
+    // until it actually mounts rather than racing the startup work.
+    for (int i = 0; i < 60 && find.byType(MaterialApp).evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(find.byType(MaterialApp), findsOneWidget);
     await passSplash(tester);
@@ -141,6 +202,10 @@ void main() {
   testWidgets('Wrong credentials shows error snackbar', (tester) async {
     app.main();
     await passSplash(tester);
+    // Without this the form short-circuits on "Please select your school."
+    // and never reaches the API, so the credential error under test never
+    // appears and this asserts on the wrong snackbar entirely.
+    await selectSchool(tester);
 
     final usernameField = find.widgetWithText(TextField, 'Username');
     expect(usernameField, findsOneWidget);
@@ -148,7 +213,7 @@ void main() {
     await tester.pump();
 
     await enterMpin(tester, '000000');
-    await tester.tap(find.byType(ElevatedButton).first);
+    await tapLogin(tester);
 
     // Pump until the snackbar appears (network responds), then assert immediately
     // before the default 4s snackbar duration elapses.
