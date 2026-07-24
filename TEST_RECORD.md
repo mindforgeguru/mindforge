@@ -1,6 +1,6 @@
 # Mindforge — Testing Record
 
-**Last updated:** 2026-07-24
+**Last updated:** 2026-07-25
 **Maintainer:** chinmay1975@gmail.com
 **Scope:** Reference document for every kind of testing performed on the Mindforge app — automated tests, security/privacy verification, and manual QA. Update this file every time a significant test session is run.
 
@@ -25,8 +25,8 @@
 | Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (4) | Real WebSocket: grade broadcast reaches the grade's students and staff, `homework_added` reaches both, school-wide broadcast does **not** cross schools | No — same skip |
 | API integration / probes | `tests/test_api.py`, `tests/security_test.py`, `tests/security_test_extended.py`, `tests/performance_test.py` | Live endpoint smoke, security probe matrix, latency | **No — the CI job is unreachable, see §10 item 3** |
 | Flutter unit tests | `frontend/test/unit/` (78, 6 files) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, models, admin setup status, owner API error messages | **Yes** |
-| Flutter widget tests | `frontend/test/widget/` (21, 4 files) | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card | **Yes** |
-| Flutter integration tests | `frontend/integration_test/` (`all_screens_test.dart`, `app_test.dart`) | Whole-app smoke through every screen | No — run locally against a device/simulator |
+| Flutter widget tests | `frontend/test/widget/` (26, 5 files) | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
+| Flutter integration tests | `frontend/integration_test/` — `app_test.dart` (5), `all_screens_test.dart` (29) | Auth flows; every screen for every role | No — needs a simulator **and** `--dart-define=LOCAL_DEV=true`, or it hits production |
 | Local stack bootstrap | `docker-compose.yml` + `docker-compose.local.yml` + `backend/scripts/seed_integration_test_users.py` | Spin up postgres/redis/minio/backend for integration testing | Manual |
 
 **How to run everything locally:**
@@ -56,7 +56,7 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-07-24
+**Date:** 2026-07-24 / 25
 **Branch:** `create_school`
 **Environment:** macOS (darwin 25.5.0), Flutter 3.44.0 (stable), Python 3.14
 
@@ -81,27 +81,40 @@ The one-session run passing is worth noting: the per-file split in CI was introd
 | Suite | Result |
 |---|---|
 | `flutter test test/unit/` | **PASS — 78/78** |
-| `flutter test test/widget/` | **PASS — 21/21** |
-| `flutter test` (everything) | **PASS — 99/99** |
-| `flutter analyze lib test` | **PASS — 0 errors, 0 warnings, 3 style infos** |
+| `flutter test test/widget/` | **PASS — 26/26** (+5 new `realtime_sync_test.dart`) |
+| `flutter test` (everything) | **PASS — 104/104** |
+| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 6 style infos** |
 
 The 3 infos: one `prefer_const_declarations` in `lib/features/teacher/screens/homework_screen.dart:741`, two `no_leading_underscores_for_local_identifiers` in `test/unit/auth_notifier_test.dart`. CI runs `flutter analyze --no-fatal-infos`, so none of the three break the build.
 
-**Flutter integration — `app_test.dart`: PASS 5/5** on iPhone 17 Pro against the local stack (`--dart-define=LOCAL_DEV=true`), in 61 s. Was 2/5 at the start of the session. Five independent problems, each hidden behind the previous one:
+**Flutter integration — `app_test.dart`: PASS 5/5** on iPhone 17 Pro against the local stack (`--dart-define=LOCAL_DEV=true`), in 61 s. Was 2/5 at the start of the session.
+
+**Flutter integration — `all_screens_test.dart`: 26 pass / 3 fail.** Was `+0 -15`. Two fixes moved it: the WebSocket disposed-container bug (§9) took it to `+19 -10`, and a working teacher account cleared 7 more.
+
+Five layered problems were fixed across the two files, each only visible once the one above it was:
 
 1. The login form's school picker (multi-tenancy, 2026-07-22) was never set, so `login_screen.dart` bailed with "Please select your school." and never called the API.
-2. The taller form pushed the Login button 0.3 px off-screen; `tap()` only *warns* on a missed hit, so the run hung instead of failing.
+2. The taller form pushed the Login button 0.3 px off-screen; `tap()` only *warns* on a missed hit, so the run hung rather than failing.
 3. `main()` is async, so `MaterialApp` was not mounted when test 1 asserted on it.
-4. **`main()` installs Crashlytics as `FlutterError.onError` / `PlatformDispatcher.onError` before `runApp`.** Inside a widget test that displaces the binding's reporter, so real failures were shipped to Crashlytics and the binding reported only `_pendingExceptionDetails != null`. This was suite-wide and had been masking every framework error since these tests were written — see §10 item 14 below.
-5. Admin credentials (`admin` / 300573, from the pre-multi-tenancy seed script) return 401 against the current local DB.
+4. **`main()` installs Crashlytics as `FlutterError.onError` / `PlatformDispatcher.onError` before `runApp`.** In a widget test that displaces the binding's reporter, so real failures went to Crashlytics and the binding reported only `_pendingExceptionDetails != null`. Suite-wide, and had masked every framework error since these tests were written — §10 item 14.
+5. Seeded credentials were stale: three of the four accounts in `seed_integration_test_users.py` now 401 — §10 item 15.
 
-`pumpAndSettle` is now bounded to 20 s in this file: the 10-minute default turned failures into silent stalls that made each diagnosis cycle unaffordable.
+`pumpAndSettle` is bounded to 20 s in both files; the 10-minute default turned failures into silent stalls that made diagnosis unaffordable.
+
+**The 3 remaining failures are pre-existing app bugs, not test rot** — and were invisible until the tests reclaimed error handling:
+
+| Test | Defect |
+|---|---|
+| Admin Timetable, Teacher Tests | Framework assertion: a `ListTile` inside a colour-filled `DecoratedBox` (`mindForgeCardDecoration()`) hides its own background and ink splashes, so tap feedback does not render. Fix is to wrap the tile in its own `Material`, or drop the colour from the intermediate box. |
+| Parent Fees | `RenderFlex overflowed by 13 pixels on the bottom` at a 390 px-wide viewport. |
+
+Both are debug-mode assertions and do **not** crash release builds. Deliberately left unfixed: the `ListTile` pattern comes from a shared card decoration used across 12+ screens, so correcting it is a visual change wanting review, not a test fix.
 
 ### 2.3 Not run this session
 
 | Suite | Why |
 |---|---|
-| Flutter integration — `all_screens_test.dart` | Not run. Has the same school/login helpers applied but has never been executed; it is the bigger sweep (all four roles, every screen) |
+| `pip-audit` on a CI runner | Green locally in a Python 3.12 venv; the runner has never executed the fixed workflow (see §8) |
 | `tests/security_test.py`, `security_test_extended.py` | Not run — no longer blocked (the stack is up), just out of scope for this session. Point them at the **local** stack only; they include login rate-limit probes |
 | `tests/performance_test.py` | Same |
 
@@ -421,6 +434,14 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 - Closed §10 item 2 from the old record (SSL leaf expiry) — pinning moved to CA-level on 2026-06-01, so leaf rotation is no longer release-blocking. Current leaf expires 2026-08-27.
 - Closed §10 item 8 from the old record (Firebase web unconfigured) — `firebase_options.dart` now has a real `web` block as of 2026-06-30. Functional re-test still outstanding.
 
+### 2026-07-24/25 (RealtimeSync covered; all_screens_test +0 -15 -> +26 -3)
+- **`RealtimeSync` now has coverage** — `frontend/test/widget/realtime_sync_test.dart`, 5 tests, no simulator or backend, so unlike the integration suites these run in CI. Covers student broadcast/homework refresh, teacher auto-quiz refresh, and two negative cases (an unrelated event must not invalidate; a student session must not run the teacher branch). Verified by falsification: deleting one `ref.invalidate` fails exactly one test, then restores to 5/5. This closes the last gap from the original realtime request — backend delivery was already proven end-to-end, client-side invalidation was not.
+- **Found a real WebSocket bug via `all_screens_test`.** The delayed reconnect resolved its token as a *call argument*, so the generation guard inside `_connect` could never prevent it; once the Riverpod container was disposed the pending timer threw `Bad state: Tried to read a provider from a ProviderContainer that was already disposed`. Latent until `RealtimeSync` began opening a socket for **every** role — admin and owner never had one before. **Not test-only:** an admin logout could raise it in the real app. Fixed by checking the generation *before* resolving the token (`_scheduleReconnect`) plus a defensive catch. Took `all_screens_test` from `+0 -15` to `+19 -10`, Admin 0/6 → 5/6 and the Student group fully green.
+- The 99 unit and widget tests pass with that bug present and structurally cannot reach it. **Second time this session the integration suite caught something the unit tests cannot** — the first being the dropped event fan-out.
+- A working teacher account (`metas_teacher2`, school 64 "metas") cleared 7 more failures → `+26 -3`. Credentials in `all_screens_test.dart` are now `(username, mpin, school)` triples: the teacher lives in a different school to the admin/student/parent accounts, so one shared school name could not log all four roles in. That also exercises the picker resolving different schools within a run.
+- Remaining 3 failures are pre-existing app bugs (see §2.2), left unfixed deliberately.
+- Full sweep at close: backend **81/81**, backend integration **36/36**, Flutter unit+widget **104/104**, `app_test.dart` **5/5**, `all_screens_test.dart` **26/29**, analyze 0 errors / 0 warnings / 6 style infos.
+
 ### 2026-07-24 (Flutter integration tests: 2/5 -> 5/5)
 - `app_test.dart` **passes 5/5** on iPhone 17 Pro against the local stack, in 61 s. Five separate problems, each only visible once the one above it was fixed — which is why this took several runs rather than one speculative batch of fixes.
 - The one that mattered most was not a test bug at all: **`main()` installs Crashlytics as `FlutterError.onError` and `PlatformDispatcher.onError` before `runApp`**, so inside a widget test the app displaced the binding's reporter and real failures were shipped to Crashlytics. The binding could only report `_pendingExceptionDetails != null`. That had been masking every framework error in the suite since it was written; the admin-login failure was invisible for three runs because of it. §10 item 14.
@@ -519,7 +540,7 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 
 9. **`flutter_secure_storage_web` blocks future wasm builds.** The wasm dry-run flags `dart:html` + `dart:js_util` usage. The JS build works today; revisit when Flutter's wasm target stabilises.
 
-10. **Realtime fan-out: backend verified end-to-end; the Flutter half is still unverified.** `tests_integration/test_realtime_delivery.py` proves against the real stack that a published event reaches a connected socket, reaches staff, and does **not** cross schools, and the tests were falsified against the old code to confirm they detect the original bug. `app_test.dart` now passes 5/5, but it covers login and the admin dashboard — **nothing exercises `RealtimeSync`**: no test confirms that an inbound event invalidates the right provider and the user sees the screen update. §5.8 remains the checklist. Two related items were deliberately left alone: `admin.py`'s `timetable_config_updated` and `new_academic_year` still use the unscoped `broadcast_all`, so they cross school boundaries.
+10. **~~Realtime fan-out unverified on the client~~** — closed 2026-07-25. `tests_integration/test_realtime_delivery.py` proves the backend delivers (falsified against the old code), and `test/widget/realtime_sync_test.dart` proves the client invalidates the right cache per role (also falsified). **Still open in the same area:** `admin.py`'s `timetable_config_updated` and `new_academic_year` continue to use the unscoped `broadcast_all`, so those two events cross school boundaries.
 
 11. **CI Flutter version drift.** CI pins `3.41.4`; local development is on `3.44.0`. A version-specific analyzer or test failure would not be caught symmetrically.
 
@@ -531,6 +552,8 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 14. **An app that installs its own error handlers blinds the integration tests.** `main()` sets Crashlytics as both `FlutterError.onError` and `PlatformDispatcher.onError` (`main.dart:63-64`) before `runApp`. Every integration test calls `app.main()`, so the app displaces the test binding's reporter: framework errors are shipped to Crashlytics instead of failing the test, and the binding surfaces only `_pendingExceptionDetails != null` — an assertion that replaces the real cause with a message about error handling. This silently masked every framework error in the suite from the day it was written until 2026-07-24. `app_test.dart` now reclaims both handlers in `launchApp()`; **`all_screens_test.dart` does not yet** and should get the same treatment.
 
 15. **`backend/scripts/seed_integration_test_users.py` is stale and misleading.** It predates multi-tenancy, has no `school_id` handling, and the credentials it documents (`admin` / 300573) now return 401 against the local database — which is what made the admin-login integration test fail. The tests were repointed at `demo_admin` / 847362 from `docs/local-test-accounts.md` instead. The script was deliberately **not** run, since it writes users and could create school-less rows in a dev database. Update it for multi-tenancy or retire it.
+
+16. **Two UI defects surfaced by the integration suite, left unfixed.** Both are debug-mode assertions that do not crash release builds, and both were invisible until the tests stopped letting Crashlytics swallow framework errors (item 14). (a) *Admin Timetable* and *Teacher Tests*: a `ListTile` sits inside a colour-filled `DecoratedBox` from the shared `mindForgeCardDecoration()`, which hides the tile's own background and ink splashes — tap feedback silently does not render. The helper is used across 12+ screens, so fixing it is a visual change wanting review rather than a test fix. (b) *Parent Fees*: `RenderFlex overflowed by 13 pixels on the bottom` at a 390 px viewport.
 
 ### Resolved (kept for history)
 - ~~SSL pin leaf cert expires 2026-06-28~~ — superseded 2026-06-01 by CA-level pinning (`ssl_pinning.dart`). Leaf rotation no longer breaks the app; current leaf expires 2026-08-27.
