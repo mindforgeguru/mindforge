@@ -407,15 +407,16 @@ flutter build apk --release
 
 Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, `flutter`, `api-integration`.
 
-| Check | Status | Evidence (2026-07-24) |
+| Check | Status | Evidence |
 |---|---|---|
-| Latest CI run on `main` | **was FAIL, fix pushed but unverified** | Run `29636357134` (2026-07-18) — `dependency-audit` failed; `backend-unit` and `flutter` passed. Fixed in §10 items 1–3; **CI has not re-run yet** (see the row below) |
-| History before the fix | **8 consecutive red runs** | Last green on `main` was 2026-06-18. Red on 06-23, 06-29, 06-30, 07-02, 07-03, 07-07 ×2, 07-18 — every one the `dependency-audit` job |
-| `pip-audit` passes | **PASS locally** | 20 findings → "No known vulnerabilities found, 1 ignored". Reproduced in a Python 3.12 venv; **not yet confirmed on a CI runner** |
-| All backend test files run in CI | **PASS** | Globbed — 7/7 files, 81 tests. Loop dry-run locally including the failure and empty-glob paths |
-| `api-integration` job is reachable | **PASS (config)** | `workflow_dispatch:` added. Job itself still never executed and needs the `ADMIN_MPIN` secret |
-| CI runs on the current working branch | **NO** | Triggers are `main`, `feature/**`, `fix/**`, `test/**`, `workflow_dispatch`. `create_school` still matches none — **nothing in this session has been CI-verified**. Merge to `main`, rename the branch, or run `gh workflow run ci.yml` to confirm |
-| CI Flutter version matches local | **NO** | CI pins `3.41.4`; local is `3.44.0`. Untouched — see §10 item 11 |
+| Latest CI run | **PASS** | Run `30119086970` on `create_school`, 2026-07-25 — **success**. First green run since 2026-06-18 |
+| `pip-audit` on a runner | **PASS** | "No known vulnerabilities found, 1 ignored" — confirms the dependency work holds on CI, not just in a local venv |
+| Backend unit on a runner | **PASS** | **81 tests across all 7 files** via the glob. Before this branch CI ran 3 files (42 tests) |
+| Flutter unit + widget on a runner | **PASS** | 1m25s |
+| `api-integration` | **SKIPPED by design** | Requires the explicit `run_api_integration` input — see §10 item 17 |
+| History before the fix | 8 consecutive red runs | 2026-06-23 → 07-18, every one the `dependency-audit` job |
+| CI runs on the current working branch | **NO** (unchanged) | Push triggers are `main`, `feature/**`, `fix/**`, `test/**`. `create_school` still matches none; this run was a manual `workflow_dispatch` |
+| CI Flutter version matches local | **NO** | CI pins `3.41.4`; local is `3.44.0`. Untouched — §10 item 11 |
 
 ---
 
@@ -433,6 +434,13 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 - **Found: Claude is now the primary AI provider** (pipeline Claude → Gemini → Groq), added 2026-06-08. Anthropic is a PII recipient that the May privacy sweep and `PRIVACY_POLICY.md` predate. §10 item 5.
 - Closed §10 item 2 from the old record (SSL leaf expiry) — pinning moved to CA-level on 2026-06-01, so leaf rotation is no longer release-blocking. Current leaf expires 2026-08-27.
 - Closed §10 item 8 from the old record (Firebase web unconfigured) — `firebase_options.dart` now has a real `web` block as of 2026-06-30. Functional re-test still outstanding.
+
+### 2026-07-25 (CI green for the first time in five weeks)
+- Run `30119086970` on `create_school`: **success**. Last green run before it was 2026-06-18, followed by 8 consecutive failures.
+- **`pip-audit` on a real runner: "No known vulnerabilities found, 1 ignored."** This was the largest unverified claim in the record — the dependency work was only ever proven in a local Python 3.12 venv, and CI runs 3.11.
+- **The backend glob ran all 7 test files, 81 tests.** CI previously ran 3 files / 42 tests, so 39 tests — including the whole multi-tenancy safety net — had never executed on CI.
+- **A mistake worth recording.** Adding `workflow_dispatch` (commit `2cd83ea`) made the previously-unreachable `api-integration` job runnable, but that job's `tests/test_api.py` targets **production** and registers/approves/revokes users. Triggering CI by hand therefore pointed it at the live database. It was cancelled once noticed; no data was created, but only because the suite is itself stale and every write 422'd on the missing `school_id`. The job now needs an explicit opt-in input (`fa2b6cd`). The lesson generalises: enabling a trigger is not the same as understanding what it will do, and that check belongs *before* the button, not after. §10 item 17.
+- `create_school` still matches no push trigger, so this was a manual dispatch; merging to `main` remains the only way this runs automatically.
 
 ### 2026-07-24/25 (RealtimeSync covered; all_screens_test +0 -15 -> +26 -3)
 - **`RealtimeSync` now has coverage** — `frontend/test/widget/realtime_sync_test.dart`, 5 tests, no simulator or backend, so unlike the integration suites these run in CI. Covers student broadcast/homework refresh, teacher auto-quiz refresh, and two negative cases (an unrelated event must not invalidate; a student session must not run the teacher branch). Verified by falsification: deleting one `ref.invalidate` fails exactly one test, then restores to 5/5. This closes the last gap from the original realtime request — backend delivery was already proven end-to-end, client-side invalidation was not.
@@ -554,6 +562,8 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 15. **`backend/scripts/seed_integration_test_users.py` is stale and misleading.** It predates multi-tenancy, has no `school_id` handling, and the credentials it documents (`admin` / 300573) now return 401 against the local database — which is what made the admin-login integration test fail. The tests were repointed at `demo_admin` / 847362 from `docs/local-test-accounts.md` instead. The script was deliberately **not** run, since it writes users and could create school-less rows in a dev database. Update it for multi-tenancy or retire it.
 
 16. **Two UI defects surfaced by the integration suite, left unfixed.** Both are debug-mode assertions that do not crash release builds, and both were invisible until the tests stopped letting Crashlytics swallow framework errors (item 14). (a) *Admin Timetable* and *Teacher Tests*: a `ListTile` sits inside a colour-filled `DecoratedBox` from the shared `mindForgeCardDecoration()`, which hides the tile's own background and ink splashes — tap feedback silently does not render. The helper is used across 12+ screens, so fixing it is a visual change wanting review rather than a test fix. (b) *Parent Fees*: `RenderFlex overflowed by 13 pixels on the bottom` at a 390 px viewport.
+
+17. **`tests/test_api.py` points at production and is stale.** Its `BASE_URL` is `https://api.mindforge.guru` and it registers, approves and revokes users against the live database. It is also broken: it predates multi-tenancy and omits `school_id`, so every write returns 422. This was discovered the hard way on run `30118897312` — adding `workflow_dispatch` to make the previously-unreachable `api-integration` job runnable also meant a plain `gh workflow run ci.yml` fired it at production. No data was created, only because the 422s rejected every write, and the run was cancelled once the target was noticed. The job now requires an explicit `run_api_integration` input defaulting to false. **The underlying file still needs fixing or retiring** — point it at a staging URL and add `school_id`, or delete it. Same bucket as item 15.
 
 ### Resolved (kept for history)
 - ~~SSL pin leaf cert expires 2026-06-28~~ — superseded 2026-06-01 by CA-level pinning (`ssl_pinning.dart`). Leaf rotation no longer breaks the app; current leaf expires 2026-08-27.
