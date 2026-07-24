@@ -5,6 +5,12 @@ on:
     branches: [main, "feature/**", "fix/**", "test/**"]
   pull_request:
     branches: [main]
+  # Required for the api-integration job below, which gates on
+  # `github.event_name == 'workflow_dispatch'`. Without this trigger declared
+  # here that job could never run at all — `gh workflow run ci.yml` would be
+  # rejected outright. Add `schedule:` here too if you want it on a timer; the
+  # job's condition already accounts for it.
+  workflow_dispatch:
 
 jobs:
   # ── Backend unit tests (no DB/Redis needed) ──────────────────────────────────
@@ -30,17 +36,32 @@ jobs:
       # interpreters avoids order-dependent failures (e.g. JWT secret
       # rebinding silently passing a tampered-token assertion). See
       # TEST_RECORD.md §10 if you want to revisit this.
-      - name: Run unit tests
+      #
+      # Globbed rather than listed file-by-file on purpose: the hand-written
+      # list silently missed four files (test_schema_invariants, test_tenancy,
+      # test_tenancy_wiring, test_realtime_fanout — 39 tests, including the
+      # whole multi-tenancy safety net) for weeks. A new tests/test_*.py file
+      # is now picked up automatically.
+      #
+      # The loop keeps going after a failure so one broken file doesn't mask
+      # the rest, then exits non-zero if any file failed.
+      - name: Run backend tests (one process per file)
         working-directory: backend
-        run: python -m pytest tests/test_unit.py -v
-
-      - name: Run logout-handler tests
-        working-directory: backend
-        run: python -m pytest tests/test_logout_handler.py -v
-
-      - name: Run WebSocket auth tests
-        working-directory: backend
-        run: python -m pytest tests/test_websocket_auth.py -v
+        run: |
+          set -u
+          status=0
+          shopt -s nullglob
+          files=(tests/test_*.py)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No test files matched tests/test_*.py"
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            echo "::group::$f"
+            python -m pytest "$f" -v || status=1
+            echo "::endgroup::"
+          done
+          exit $status
 
   # ── Dependency vulnerability audit ────────────────────────────────────────────
   dependency-audit:
@@ -61,9 +82,24 @@ jobs:
 
       # Audits the pinned requirements against the Python advisory DB and fails
       # the build on any known-vulnerable package. If a CVE has no fix yet, add
-      # `--ignore-vuln <ID>` here with a comment + tracking link.
+      # `--ignore-vuln <ID>` below with a comment + tracking link.
+      #
+      # ── Ignored advisories ────────────────────────────────────────────────
+      # PYSEC-2026-1325 (CVE-2024-23342) — Minerva timing attack on P-256 in
+      #   `ecdsa`. Affects every released version and upstream has declared
+      #   side-channel attacks out of scope, so there is no fix version to move
+      #   to. `ecdsa` is a hard dependency of `python-jose`, not something we
+      #   import. The vulnerable paths are ECDSA signing/keygen and ECDH
+      #   (`SigningKey.sign_digest`); MindForge signs JWTs with **HS256**
+      #   (symmetric HMAC — see `JWT_ALGORITHM` in app/core/config.py), so no
+      #   ECDSA private-key operation is ever performed. Re-evaluate if the JWT
+      #   algorithm ever changes to ES256/ES384/ES512, or drop it entirely by
+      #   migrating off python-jose to PyJWT.
+      #   https://osv.dev/vulnerability/PYSEC-2026-1325
       - name: Audit backend dependencies
-        run: pip-audit -r backend/requirements.txt --strict
+        run: |
+          pip-audit -r backend/requirements.txt --strict \
+            --ignore-vuln PYSEC-2026-1325
 
   # ── Flutter unit + widget tests ───────────────────────────────────────────────
   flutter:

@@ -1,4 +1,4 @@
-fastapi==0.120.4
+fastapi==0.139.2
 uvicorn[standard]==0.29.0
 sqlalchemy[asyncio]==2.0.30
 asyncpg==0.29.0
@@ -9,17 +9,40 @@ pymupdf==1.24.3
 python-pptx==1.0.2
 pytesseract==0.3.10
 reportlab==4.2.0
-python-multipart==0.0.27
-python-jose[cryptography]==3.4.0
+python-multipart==0.0.32
+python-jose[cryptography]==3.5.0
 bcrypt==4.1.3
 pydantic-settings==2.2.1
 anthropic==0.109.1
 google-genai==2.2.0
 groq==1.4.0
-Pillow==12.2.0
+Pillow==12.3.0
 websockets==13.1
 httpx==0.28.1
 python-dotenv==1.2.2
 aiofiles==23.2.1
 firebase-admin==6.5.0
-sentry-sdk[fastapi]==2.18.0
+# 2.18.0 cannot boot against starlette 1.x. Its Starlette integration decides
+# whether to patch Jinja2Templates by probing for `markupsafe` as a proxy for
+# "jinja2 is installed" — but alembic → Mako pulls markupsafe in on its own, so
+# the probe passes and it then does an unguarded
+# `from starlette.templating import Jinja2Templates`. starlette <1.0 tolerated
+# that; 1.x raises ImportError at module import, killing the worker on startup.
+# Only reproduces when a SENTRY_DSN is actually set (integrations are wired up
+# lazily), which is why it slipped past a venv smoke test and only surfaced in
+# the Docker stack. 2.66.1 guards the import properly.
+sentry-sdk[fastapi]==2.66.1
+
+# ── Pinned transitive dependencies ───────────────────────────────────────────
+# These arrive via fastapi / python-jose rather than being imported directly,
+# but both have carried advisories that the CI `pip-audit` gate fails on. They
+# are pinned so the audited version is the deployed version — an unpinned
+# resolver can quietly settle on an older release when a future direct-dep bump
+# tightens its own constraints.
+#
+# starlette   — fastapi>=0.133.0 dropped its `<1.0` cap, which is what finally
+#               allows the 1.x line. Fixes PYSEC-2026-161/248/249/2280/2281.
+# pyasn1      — python-jose 3.5.0 relaxed `pyasn1<0.5.0` to `>=0.5.0`, which is
+#               what unblocks this. Fixes PYSEC-2026-2263.
+starlette==1.3.1
+pyasn1==0.6.4
