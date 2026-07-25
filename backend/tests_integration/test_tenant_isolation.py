@@ -11,6 +11,8 @@ tenancy branch was being reviewed. Doing it by hand found three bugs; leaving it
 by hand means the fourth one ships.
 """
 
+import asyncio
+
 import asyncpg
 import pytest
 
@@ -141,6 +143,95 @@ class TestWriteIsolation:
         finally:
             await conn.close()
         assert still_active is True, "cross-tenant user modification landed"
+
+
+class TestAdminRoleEscalation:
+    """PUT /api/admin/users/{id} lets an admin change a user's role. It must
+    refuse the two privileged roles — `admin` and, critically, `owner` (the
+    cross-school platform super-admin). Otherwise an admin could set a user's
+    MPIN and role=owner and mint a tenant-boundary-crossing account."""
+
+    def _role_in_db(self, user_id):
+        async def _q():
+            conn = await asyncpg.connect(DB_DSN)
+            try:
+                return await conn.fetchval(
+                    "SELECT role FROM users WHERE id = $1", user_id
+                )
+            finally:
+                await conn.close()
+        return asyncio.run(_q())
+
+    def test_admin_cannot_promote_user_to_owner(self, api, two_schools):
+        victim = two_schools["a"]["teacher_id"]
+        r = api.put(
+            f"/api/admin/users/{victim}",
+            headers=auth(two_schools["a"]["admin_token"]),
+            json={"role": "owner"},
+        )
+        assert r.status_code == 403, (
+            f"admin was allowed to promote a user to owner: "
+            f"{r.status_code} {r.text}"
+        )
+        assert self._role_in_db(victim) == "teacher", \
+            "role changed to owner despite the 403"
+
+    def test_admin_cannot_promote_user_to_admin(self, api, two_schools):
+        victim = two_schools["a"]["teacher_id"]
+        r = api.put(
+            f"/api/admin/users/{victim}",
+            headers=auth(two_schools["a"]["admin_token"]),
+            json={"role": "admin"},
+        )
+        assert r.status_code == 403, r.text
+        assert self._role_in_db(victim) == "teacher"
+
+
+# ── Timetable teacher_id validation ───────────────────────────────────────────
+
+
+class TestTimetableTeacherIdScoping:
+    """POST /api/teacher/timetable accepts a client-supplied teacher_id that
+    lands straight on the row. It must be confined to the caller's school —
+    otherwise a slot could name an arbitrary teacher, including one in another
+    school."""
+
+    def _slot(self, teacher_id):
+        return {
+            "grade": 8,
+            "slot_date": "2026-09-01",
+            "period_number": 1,
+            "subject": "Physics",
+            "teacher_id": teacher_id,
+        }
+
+    def test_own_school_teacher_id_is_accepted(self, api, two_schools):
+        r = api.post(
+            "/api/teacher/timetable",
+            headers=auth(two_schools["a"]["teacher_token"]),
+            json=self._slot(two_schools["a"]["teacher_id"]),
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["teacher_id"] == two_schools["a"]["teacher_id"]
+
+    def test_other_schools_teacher_id_is_refused(self, api, two_schools):
+        r = api.post(
+            "/api/teacher/timetable",
+            headers=auth(two_schools["a"]["teacher_token"]),
+            json=self._slot(two_schools["b"]["teacher_id"]),
+        )
+        assert r.status_code == 422, (
+            f"a slot in school A was allowed to name school B's teacher "
+            f"({two_schools['b']['teacher_id']}): {r.status_code} {r.text}"
+        )
+
+    def test_nonexistent_teacher_id_is_refused(self, api, two_schools):
+        r = api.post(
+            "/api/teacher/timetable",
+            headers=auth(two_schools["a"]["teacher_token"]),
+            json=self._slot(99_000_000),
+        )
+        assert r.status_code == 422, r.text
 
 
 # ── Username scoping ──────────────────────────────────────────────────────────

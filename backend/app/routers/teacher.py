@@ -522,6 +522,27 @@ async def create_timetable_slot(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Upsert a timetable slot — updates if one exists for the same grade/date/period."""
+    # `teacher_id` is client-supplied and goes straight onto the row, so it must
+    # be confirmed to belong to this school. Without this a teacher could label
+    # a slot with an arbitrary teacher_id — including one from another school.
+    # The row's school_id is server-set, so this is an assignment-integrity
+    # guard, not a data-leak fix, but a slot should never reference a foreign
+    # teacher.
+    if payload.teacher_id is not None:
+        owner = (await db.execute(
+            select(User.id).where(
+                User.id == payload.teacher_id,
+                User.school_id == current_teacher.school_id,
+                User.role == UserRole.teacher,
+                User.deleted_at.is_(None),
+            )
+        )).scalar_one_or_none()
+        if owner is None:
+            raise HTTPException(
+                status_code=422,
+                detail="teacher_id does not match a teacher in your school.",
+            )
+
     existing = await db.execute(
         select(TimetableSlot).where(
             TimetableSlot.grade == payload.grade,
