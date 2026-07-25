@@ -16,8 +16,32 @@ import time
 import pytest
 import httpx
 
-BASE_URL = "https://api.mindforge.guru"
+# Target host. This suite REGISTERS, APPROVES and REVOKES users on whatever it
+# points at, so the default is deliberately overridable and pointing it at
+# production is gated behind an explicit opt-in (see the guard below).
+#   MF_API_BASE_URL=http://127.0.0.1:8000   # a local/staging stack
+BASE_URL = os.getenv("MF_API_BASE_URL", "https://api.mindforge.guru")
 TIMEOUT   = 20
+
+# ── Production write-guard ────────────────────────────────────────────────────
+# The workflow gates the CI job behind an input, but nothing stopped a bare
+# `python tests/test_api.py` (or `pytest tests/test_api.py`) from writing to
+# prod — which is exactly how run 30118897312 ended up registering against the
+# live database. Refuse to run against a production host unless someone sets
+# MF_API_ALLOW_PROD=1, so the mistake can't be made by accident.
+def _is_production(url: str) -> bool:
+    return "mindforge.guru" in url
+
+if _is_production(BASE_URL) and os.getenv("MF_API_ALLOW_PROD") != "1":
+    pytest.skip(
+        f"Refusing to run the write-heavy API suite against production "
+        f"({BASE_URL}). Point it at a local/staging stack with "
+        f"MF_API_BASE_URL=..., or set MF_API_ALLOW_PROD=1 to override. "
+        f"NOTE: this suite also predates multi-tenancy — it needs a school_id "
+        f"threaded through register/login and a reworked parent-creation flow "
+        f"before it will pass. See TEST_RECORD.md item 17.",
+        allow_module_level=True,
+    )
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
