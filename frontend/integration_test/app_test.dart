@@ -152,19 +152,33 @@ void main() {
     final dropdown = find.byType(DropdownButtonFormField<int>);
     if (dropdown.evaluate().isEmpty) return;
 
-    await tester.tap(dropdown.first);
-    await settle(tester);
+    // getSchools() is an async network call from the login screen's initState;
+    // its options aren't in the tree until it returns, and pumpAndSettle does
+    // not wait on the network in a live test. A dropdown captures its items
+    // when opened, so if the schools haven't loaded yet, reopening is the only
+    // way to pick them up — poll by close-and-reopen until the option appears.
+    for (int attempt = 0; attempt < 15; attempt++) {
+      await tester.tap(dropdown.first);
+      await settle(tester);
 
-    final option = find.text(_schoolName);
-    expect(option, findsWidgets,
-        reason: 'School "$_schoolName" is not in the picker. Is the backend '
-            'up at the LOCAL_DEV address and seeded? Override with '
-            '--dart-define=SCHOOL_NAME=...');
-    // `.last` targets the item inside the opened menu: once a school is
-    // selected its name also renders in the closed field, so the text can
-    // legitimately match twice.
-    await tester.tap(option.last);
-    await settle(tester);
+      final option = find.text(_schoolName);
+      if (option.evaluate().isNotEmpty) {
+        // `.last` targets the item inside the opened menu: a selected school
+        // also renders its name in the closed field, so it can match twice.
+        await tester.tap(option.last);
+        await settle(tester);
+        return;
+      }
+
+      // Options not loaded yet: dismiss the menu (modal barrier), wait, reopen.
+      await tester.tapAt(const Offset(4, 4));
+      await settle(tester);
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    fail('School "$_schoolName" never appeared in the picker (15 attempts). '
+        'Is the backend up at the LOCAL_DEV address and seeded? Override with '
+        '--dart-define=SCHOOL_NAME=...');
   }
 
   /// Tap a single keypad digit.

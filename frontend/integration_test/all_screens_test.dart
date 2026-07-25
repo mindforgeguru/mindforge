@@ -132,18 +132,37 @@ void main() {
     final dropdown = find.byType(DropdownButtonFormField<int>);
     if (dropdown.evaluate().isEmpty) return;
 
-    await t.tap(dropdown.first);
-    await settle(t);
+    // getSchools() is an async network call fired from the login screen's
+    // initState; its options aren't in the widget tree until it returns, and
+    // pumpAndSettle does not wait on the network in a live integration test.
+    // A dropdown captures its items when opened, so if the schools haven't
+    // loaded yet, reopening is the only way to pick them up — poll by
+    // close-and-reopen until the option appears. This is the fix for the
+    // intermittent "Admin Users" school-picker failure, which hit the first
+    // login of a run before getSchools() had landed.
+    for (int attempt = 0; attempt < 15; attempt++) {
+      await t.tap(dropdown.first);
+      await settle(t);
 
-    final option = find.text(schoolName);
-    expect(option, findsWidgets,
-        reason: 'School "$schoolName" is not in the picker. Is the backend '
-            'up at the LOCAL_DEV address and seeded? Override with '
-            '--dart-define=SCHOOL_NAME=...');
-    // `.last` targets the item in the opened menu — a selected school also
-    // renders its name in the closed field.
-    await t.tap(option.last);
-    await settle(t);
+      final option = find.text(schoolName);
+      if (option.evaluate().isNotEmpty) {
+        // `.last` targets the item in the opened menu — a selected school also
+        // renders its name in the closed field.
+        await t.tap(option.last);
+        await settle(t);
+        return;
+      }
+
+      // Options not loaded yet: dismiss the menu by tapping the modal barrier,
+      // wait for the request to land, then reopen.
+      await t.tapAt(const Offset(4, 4));
+      await settle(t);
+      await t.pump(const Duration(milliseconds: 400));
+    }
+
+    fail('School "$schoolName" never appeared in the picker (15 attempts). '
+        'Is the backend up at the LOCAL_DEV address and seeded? Override with '
+        '--dart-define=SCHOOL_NAME=...');
   }
 
   /// Login and wait up to 8 s for the network + navigation to settle.
