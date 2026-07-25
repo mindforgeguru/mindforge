@@ -18,8 +18,15 @@ import httpx
 from websockets.client import connect as ws_connect
 from websockets.exceptions import InvalidStatusCode, ConnectionClosed
 
-BASE_URL = "http://localhost:8000"
-WS_URL = "ws://localhost:8000"
+import os
+
+BASE_URL = os.getenv("MF_SEC_BASE_URL", "http://localhost:8000")
+WS_URL = BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
+
+# A multi-school stack rejects a login with no school_id (400). Applied to
+# every role's login, so the fixtures must all live in one school — which is
+# how the tenancy integration tests already provision themselves.
+SCHOOL_ID = os.getenv("MF_SEC_SCHOOL_ID")
 
 PASS = "PASS"
 FAIL = "FAIL"
@@ -37,19 +44,34 @@ def record(category, test, status, detail=""):
     print(line)
 
 
+# Per-role (username, mpin, id). Defaults are the pre-multi-tenancy seed
+# accounts and no longer exist on a current DB — override each role via
+# MF_SEC_<ROLE>_USER / _MPIN / _ID (and MF_SEC_SCHOOL_ID above) to point at a
+# real, single-school fixture. The `id` is used by the IDOR / WebSocket tests
+# to target a specific user, so it must match the account.
+def _user(role, default_user, default_mpin, default_id):
+    r = role.upper()
+    return {
+        "username": os.getenv(f"MF_SEC_{r}_USER", default_user),
+        "mpin": os.getenv(f"MF_SEC_{r}_MPIN", default_mpin),
+        "id": int(os.getenv(f"MF_SEC_{r}_ID", str(default_id))),
+    }
+
+
 USERS = {
-    "admin":   {"username": "admin",        "mpin": "300573", "id": 1},
-    "teacher": {"username": "chinmay_sir",  "mpin": "100898", "id": 2},
-    "parent":  {"username": "dummy8_dad",   "mpin": "111111", "id": 25},
-    "student": {"username": "dummy8",       "mpin": "111111", "id": 26},
+    "admin":   _user("admin",   "admin",       "300573", 1),
+    "teacher": _user("teacher", "chinmay_sir", "100898", 2),
+    "parent":  _user("parent",  "dummy8_dad",  "111111", 25),
+    "student": _user("student", "dummy8",      "111111", 26),
 }
 
 
 async def login(client, role):
     u = USERS[role]
-    resp = await client.post(f"{BASE_URL}/api/auth/login",
-                             json={"username": u["username"], "mpin": u["mpin"]},
-                             timeout=15)
+    body = {"username": u["username"], "mpin": u["mpin"]}
+    if SCHOOL_ID:
+        body["school_id"] = int(SCHOOL_ID)
+    resp = await client.post(f"{BASE_URL}/api/auth/login", json=body, timeout=15)
     if resp.status_code != 200:
         return None, None
     data = resp.json()
