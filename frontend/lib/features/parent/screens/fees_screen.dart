@@ -45,7 +45,7 @@ class ParentFeesScreen extends ConsumerWidget {
           ),
         ),
         body: feesAsync.when(
-          loading: () => const ShimmerCards(count: 3, cardHeight: 140),
+          loading: () => const ShimmerCards(count: 3, cardHeight: 140, scrollable: true),
           error: (e, _) => parentErrorWidget(e, onRetry: () => ref.invalidate(parentChildFeesProvider)),
           data: (fees) => TabBarView(
             children: [

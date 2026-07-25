@@ -21,6 +21,25 @@ void main() {
 
       expect(find.byType(ShimmerCard), findsNothing);
     });
+
+    testWidgets('scrollable: does not overflow a bounded box shorter than '
+        'its natural height', (tester) async {
+      // The fees loading placeholder — 3 cards of 140 px plus 16 px margin
+      // each = 468 px natural — sits under a TabBar in a ~455 px pane. As a
+      // plain Column (mainAxisSize.max) that overflows by 13 px and Flutter
+      // asserts. `scrollable: true` clips instead. Reproduce the exact bound.
+      await tester.pumpWidget(_wrap(
+        const SizedBox(
+          height: 455,
+          child: ShimmerCards(count: 3, cardHeight: 140, scrollable: true),
+        ),
+      ));
+
+      // A RenderFlex overflow surfaces as a thrown FlutterError captured by the
+      // test binding; takeException() returns null when none was thrown.
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ShimmerCard), findsNWidgets(3));
+    });
   });
 
   group('ShimmerList', () {

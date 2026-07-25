@@ -135,15 +135,36 @@ class ShimmerCards extends StatelessWidget {
   final int count;
   final double cardHeight;
 
-  const ShimmerCards({super.key, this.count = 3, this.cardHeight = 120});
+  /// When true, lay the cards out in a non-scrolling [ListView] instead of a
+  /// [Column]. A Column is `mainAxisSize.max` and overflows when its natural
+  /// height exceeds a bounded parent — e.g. this placeholder under a TabBar,
+  /// where 3×140 cards plus margins (468 px) don't fit a ~455 px pane and
+  /// Flutter asserts a 13 px overflow. A ListView clips instead of overflowing.
+  ///
+  /// Only enable this where the parent gives a **bounded** height (a top-level
+  /// `.when(loading:)` body). Inside an already-scrolling parent it would ask
+  /// for an unbounded viewport; the default (Column) is correct there.
+  final bool scrollable;
+
+  const ShimmerCards({
+    super.key,
+    this.count = 3,
+    this.cardHeight = 120,
+    this.scrollable = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: List.generate(
-        count,
-        (_) => ShimmerCard(height: cardHeight),
-      ),
+    final cards = List.generate(
+      count,
+      (_) => ShimmerCard(height: cardHeight),
     );
+    if (scrollable) {
+      return ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        children: cards,
+      );
+    }
+    return Column(children: cards);
   }
 }

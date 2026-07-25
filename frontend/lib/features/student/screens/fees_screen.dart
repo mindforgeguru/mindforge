@@ -21,7 +21,7 @@ class StudentFeesScreen extends ConsumerWidget {
     final isWide = MediaQuery.of(context).size.width >= 900;
 
     Widget buildBody() => feesAsync.when(
-          loading: () => const ShimmerCards(count: 3, cardHeight: 140),
+          loading: () => const ShimmerCards(count: 3, cardHeight: 140, scrollable: true),
           error: (e, _) => ErrorView(
             error: e,
             onRetry: () => ref.invalidate(studentFeesProvider),
