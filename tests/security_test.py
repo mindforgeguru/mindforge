@@ -9,9 +9,15 @@ import asyncio
 import httpx
 import base64
 import json
+import os
 import time
 
-BASE_URL = "https://api.mindforge.guru"
+# Target host. Defaults to production for the historical "point it at prod and
+# eyeball the headers" use, but this suite fires rate-limit and injection probes
+# — override to the local stack (MF_SEC_BASE_URL=http://127.0.0.1:8000) when
+# exercising a dependency change, so prod's login limiter isn't hammered and the
+# version actually under test is the one running locally.
+BASE_URL = os.getenv("MF_SEC_BASE_URL", "https://api.mindforge.guru")
 
 PASS = "✅ PASS"
 FAIL = "❌ FAIL"
@@ -28,12 +34,21 @@ def record(category, test, status, detail=""):
     print(line)
 
 
-async def get_token(client, username="admin", mpin=None):
+async def get_token(client, username=None, mpin=None):
+    # Username / MPIN / school default to the production admin but are all
+    # env-overridable — a multi-school local stack rejects a login with no
+    # school_id (400), which is why the access-control tests below silently
+    # skipped when this was hardcoded. Set MF_SEC_ADMIN_USER / ADMIN_MPIN /
+    # MF_SEC_SCHOOL_ID to exercise them against the local stack.
+    username = username or os.getenv("MF_SEC_ADMIN_USER", "admin")
     if mpin is None:
-        import os
         mpin = os.getenv("ADMIN_MPIN", "300573")
+    body = {"username": username, "mpin": mpin}
+    school_id = os.getenv("MF_SEC_SCHOOL_ID")
+    if school_id:
+        body["school_id"] = int(school_id)
     resp = await client.post(f"{BASE_URL}/api/auth/login",
-                             json={"username": username, "mpin": mpin}, timeout=15)
+                             json=body, timeout=15)
     if resp.status_code == 200:
         return resp.json().get("access_token")
     return None
