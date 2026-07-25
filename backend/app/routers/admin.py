@@ -13,6 +13,7 @@ from sqlalchemy import func as sqlfunc
 
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
+from app.services.realtime_service import publish_to_school
 from app.core.security import get_current_admin
 from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.models.academic_year import AcademicYear
@@ -1288,14 +1289,17 @@ async def update_timetable_config(
     from app.core.cache import invalidate_timetable_config
     await invalidate_timetable_config(current_admin.school_id)
 
-    # Broadcast timetable config change to all connected clients
-    await redis_manager.publish({
-        "target_type": "broadcast",
-        "payload": {
+    # Broadcast the timetable-config change to this school only. `broadcast`
+    # fans out to every socket on the instance, which leaks the event to other
+    # tenants; scope it to the admin's school.
+    await publish_to_school(
+        db,
+        school_id=current_admin.school_id,
+        payload={
             "event": "timetable_config_updated",
             "periods_per_day": payload.periods_per_day,
         },
-    })
+    )
 
     return config
 
@@ -1495,15 +1499,17 @@ async def start_new_academic_year(
     from app.core.cache import invalidate_academic_year
     await invalidate_academic_year(current_admin.school_id)
 
-    # Notify all connected clients
-    await redis_manager.publish({
-        "target_type": "broadcast",
-        "payload": {
+    # Notify this school's users only — the academic year is per-school, and a
+    # bare `broadcast` would tell every other tenant to re-register too.
+    await publish_to_school(
+        db,
+        school_id=current_admin.school_id,
+        payload={
             "event": "new_academic_year",
             "year_label": new_label,
             "message": f"New academic year {new_label} has started. Please register again.",
         },
-    })
+    )
 
     return {
         "id": new_year.id,

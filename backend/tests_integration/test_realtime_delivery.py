@@ -258,3 +258,55 @@ def test_broadcast_does_not_leak_to_another_school(
     assert not leaked, (
         f"school B user received school A's broadcast: {leaked}"
     )
+
+
+def test_timetable_config_reaches_own_school(
+    api, two_schools, students
+):
+    """An admin's timetable-config change must reach that school's users.
+
+    `timetable_config_updated` used to be published with `target_type:
+    "broadcast"`, so it both leaked to other schools (below) and — once the
+    grade index was found to be dead — this positive case has to be pinned too,
+    so a future "fix" can't scope it down to nobody.
+    """
+    student_id = students["a"]
+
+    async def scenario():
+        async with _connect(student_id, _mint_access_token(student_id)) as ws:
+            await asyncio.sleep(0.5)
+            r = api.put(
+                "/api/admin/timetable/config",
+                headers=auth(two_schools["a"]["admin_token"]),
+                json={"periods_per_day": 8},
+            )
+            assert r.status_code in (200, 201), r.text
+            return await _collect(ws, RECV_TIMEOUT)
+
+    got = _events_of(asyncio.run(scenario()), "timetable_config_updated")
+    assert got, "student received no timetable_config_updated for own school"
+
+
+def test_timetable_config_does_not_leak_to_another_school(
+    api, two_schools, teacher_user_ids
+):
+    """The tenancy half: school A's timetable-config change must not reach a
+    school B user. Regression guard for the `broadcast_all` leak at
+    admin.py:update_timetable_config."""
+    outsider_id = teacher_user_ids["b"]
+
+    async def scenario():
+        async with _connect(outsider_id, _mint_access_token(outsider_id)) as ws:
+            await asyncio.sleep(0.5)
+            r = api.put(
+                "/api/admin/timetable/config",
+                headers=auth(two_schools["a"]["admin_token"]),
+                json={"periods_per_day": 9},
+            )
+            assert r.status_code in (200, 201), r.text
+            return await _collect(ws, SILENCE_TIMEOUT)
+
+    leaked = _events_of(asyncio.run(scenario()), "timetable_config_updated")
+    assert not leaked, (
+        f"school B user received school A's timetable_config_updated: {leaked}"
+    )
