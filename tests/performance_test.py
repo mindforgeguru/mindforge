@@ -5,11 +5,30 @@ Run: python tests/performance_test.py
 """
 
 import asyncio
+import os
 import time
 import statistics
 import httpx
 
-BASE_URL = "https://api.mindforge.guru"
+# Target host. Defaults to production (the meaningful place for a latency
+# benchmark), but overridable so the upgraded local stack can be load-tested
+# without hammering prod or tripping its login lockout.
+#   MF_PERF_BASE_URL=http://127.0.0.1:8000
+BASE_URL = os.getenv("MF_PERF_BASE_URL", "https://api.mindforge.guru")
+
+# Login identity. A multi-school stack rejects a login with no school_id (400),
+# which would also break the "invalid login returns 401" check, so school_id is
+# threaded into every login body when set.
+ADMIN_USER = os.getenv("MF_PERF_ADMIN_USER", "admin")
+ADMIN_MPIN = os.getenv("MF_PERF_ADMIN_MPIN", os.getenv("ADMIN_MPIN", "300573"))
+SCHOOL_ID = os.getenv("MF_PERF_SCHOOL_ID")
+
+
+def _login_body(mpin=None):
+    body = {"username": ADMIN_USER, "mpin": mpin or ADMIN_MPIN}
+    if SCHOOL_ID:
+        body["school_id"] = int(SCHOOL_ID)
+    return body
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -57,14 +76,10 @@ def stats(results: list[dict], label: str):
     print(f"    Rating: {rating}")
 
 
-async def get_token(client, username="admin", mpin=None):
+async def get_token(client):
     """Login and return access token."""
-    if mpin is None:
-        import os
-        mpin = os.getenv("ADMIN_MPIN", "300573")
     resp = await client.post(f"{BASE_URL}/api/auth/login",
-                             json={"username": username, "mpin": mpin},
-                             timeout=15)
+                             json=_login_body(), timeout=15)
     if resp.status_code == 200:
         return resp.json().get("access_token")
     return None
@@ -84,18 +99,19 @@ async def test_login_concurrent(client, n=8):
     Kept at 8 (below the 10-attempt rate-limit bucket) so the bucket is not
     exhausted before the later token-fetch step.
     """
-    import os
-    mpin = os.getenv("ADMIN_MPIN", "300573")
     tasks = [timed_request(client, "POST", f"{BASE_URL}/api/auth/login",
-                           json={"username": "admin", "mpin": mpin})
+                           json=_login_body())
              for _ in range(n)]
     return await asyncio.gather(*tasks)
 
 
 async def test_login_invalid(client, n=10):
-    """Invalid login attempts — also verifies 401 is returned, not 500."""
+    """Invalid login attempts — also verifies 401 is returned, not 500.
+
+    Uses a valid username + school with a wrong MPIN so the request reaches the
+    credential check (401) rather than bouncing on a missing school_id (400)."""
     tasks = [timed_request(client, "POST", f"{BASE_URL}/api/auth/login",
-                           json={"username": "admin", "mpin": "000000"})
+                           json=_login_body(mpin="000000"))
              for _ in range(n)]
     return await asyncio.gather(*tasks)
 
