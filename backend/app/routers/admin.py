@@ -348,8 +348,17 @@ async def edit_user(
     old_role = user.role
     new_role = payload.role if payload.role and payload.role != old_role else None
 
-    if new_role and new_role == UserRole.admin:
-        raise HTTPException(status_code=403, detail="Cannot promote a user to admin.")
+    # A school admin manages student / teacher / parent accounts only. Neither
+    # `admin` nor `owner` may be granted here: `owner` is the platform-wide
+    # super-admin (cross-school), so allowing it would let an admin mint a
+    # tenant-boundary-crossing account — a privilege escalation. Both
+    # privileged roles are seeded / provisioned out of band, never via this
+    # self-service edit.
+    if new_role and new_role in (UserRole.admin, UserRole.owner):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Cannot change a user's role to {new_role.value}.",
+        )
 
     if new_role:
         # Remove old profile
