@@ -1204,7 +1204,12 @@ class _TestTileState extends ConsumerState<_TestTile> {
       decoration: mindForgeCardDecoration(),
       child: Column(
         children: [
-          ListTile(
+          // Transparent Material so the row's tap ink paints inside the card;
+          // otherwise the card's coloured DecoratedBox hides it and Flutter
+          // asserts in debug.
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
             onTap: isLocked
                 ? null
                 : () => Navigator.push(
@@ -1244,6 +1249,7 @@ class _TestTileState extends ConsumerState<_TestTile> {
                 ? null
                 : const Icon(Icons.chevron_right,
                     size: 16, color: AppColors.textMuted),
+            ),
           ),
 
           // ── Action bar (status + publish + delete) ────────────────────────

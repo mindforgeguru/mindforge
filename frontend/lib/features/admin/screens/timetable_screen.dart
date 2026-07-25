@@ -272,13 +272,20 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
                         }),
                       ),
                       const Divider(),
-                      SwitchListTile(
-                        value: _enableWeekends,
-                        title: const Text('Enable Weekend Classes'),
-                        subtitle:
-                            const Text('Allow Saturday & Sunday scheduling'),
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setState(() => _enableWeekends = v),
+                      // Transparent Material so the switch's ink paints inside
+                      // this card. Without it the tile's nearest Material is
+                      // above the card's coloured DecoratedBox, which hides the
+                      // splash — Flutter asserts on exactly this in debug.
+                      Material(
+                        type: MaterialType.transparency,
+                        child: SwitchListTile(
+                          value: _enableWeekends,
+                          title: const Text('Enable Weekend Classes'),
+                          subtitle:
+                              const Text('Allow Saturday & Sunday scheduling'),
+                          contentPadding: EdgeInsets.zero,
+                          onChanged: (v) => setState(() => _enableWeekends = v),
+                        ),
                       ),
                     ],
                   ),
