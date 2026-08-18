@@ -74,10 +74,50 @@ def test_expired_access_token_raises():
 
 def test_tampered_token_raises():
     token = create_access_token({"sub": "1", "role": "teacher"})
-    # Flip the last character to invalidate the signature
-    tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
+    head, payload, sig = token.split(".")
+
+    # Flip a character in the MIDDLE of the signature, not the last one.
+    #
+    # An HS256 signature is 32 bytes, which is 43 base64url characters: the
+    # first 42 carry 252 bits, so the 43rd holds only the remaining 4 and its
+    # low 2 bits are ignored on decode. 'A', 'B', 'C' and 'D' therefore all
+    # decode to the same byte. The previous version of this test replaced the
+    # last character with 'A', which was a silent no-op whenever the signature
+    # already ended in one of those four — the token came back unmodified,
+    # decoded fine, and the test failed with "DID NOT RAISE JWTError" roughly
+    # 6% of the time. Measured at 4/40 locally and caught once on CI.
+    #
+    # Every bit of a middle character is significant, so any change there is a
+    # real change. The assert below makes that a hard guarantee rather than an
+    # assumption.
+    i = len(sig) // 2
+    flipped = "A" if sig[i] != "A" else "B"
+    tampered = f"{head}.{payload}.{sig[:i]}{flipped}{sig[i + 1:]}"
+
+    assert tampered != token, "tamper was a no-op — the test would pass vacuously"
     with pytest.raises(JWTError):
         decode_access_token(tampered)
+
+
+def test_tampered_payload_raises():
+    # The attack the signature actually defends against: re-encode the claims
+    # to claim another role, keeping the original signature. Distinct from
+    # corrupting the signature, and the case that matters in practice.
+    import base64
+    import json
+
+    token = create_access_token({"sub": "1", "role": "teacher"})
+    head, payload, sig = token.split(".")
+
+    raw = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
+    claims = json.loads(raw)
+    claims["role"] = "admin"
+    forged = base64.urlsafe_b64encode(
+        json.dumps(claims).encode()
+    ).decode().rstrip("=")
+
+    with pytest.raises(JWTError):
+        decode_access_token(f"{head}.{forged}.{sig}")
 
 
 def test_fake_token_raises():
