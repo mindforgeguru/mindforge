@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/websocket_client.dart';
+import '../providers/session_reset.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/parent/providers/parent_provider.dart';
 import '../../features/student/providers/student_provider.dart';
@@ -42,6 +43,8 @@ class _RealtimeSyncState extends ConsumerState<RealtimeSync>
     with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _sub;
   int? _connectedUserId;
+  /// Last identity seen, kept across logout so an account switch is detectable.
+  int? _sessionUserId;
   String? _connectedToken;
   DateTime? _lastPausedAt;
 
@@ -65,6 +68,37 @@ class _RealtimeSyncState extends ConsumerState<RealtimeSync>
     final auth = ref.read(authProvider);
     final userId = auth.userId;
     final token = auth.token;
+
+    // The signed-in identity changed — log out, a 401 wipe, or a straight
+    // switch to another account. Drop everything the outgoing session cached:
+    // the root ProviderScope lives as long as the app does (on web logging out
+    // does not reload the page), and most data providers are not autoDispose,
+    // so otherwise the next user to sign in here reads the previous user's
+    // timetable, homework, grades and fees straight out of memory.
+    //
+    // Only an identity change counts. A JWT rotation keeps the same userId and
+    // must not wipe the caches.
+    if (_sessionUserId != null && userId != _sessionUserId) {
+      // Deferred a frame so the router has swapped away from the outgoing
+      // screens first. Invalidating while they're still mounted would have
+      // them refetch with a cleared token and surface 401s on the way out.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) resetSessionCaches(ref.invalidate);
+      });
+    } else if (_sessionUserId == null && userId != null) {
+      // Signing in from a fully signed-out state — the only screen mounted
+      // right now is the public login screen, so there's no stale-token 401
+      // risk in resetting immediately. This case used to be skipped on the
+      // assumption that the sign-out which preceded it already reset things,
+      // but that reset is itself deferred by a frame (see above): a login
+      // that completes before that frame renders — normal for an automated
+      // flow, and possible for a human on a fast reconnect — would have the
+      // about-to-mount dashboard read the outgoing session's still-cached
+      // values. Resetting synchronously here, before any screen for this new
+      // identity has had a chance to watch these providers, closes that race.
+      resetSessionCaches(ref.invalidate);
+    }
+    _sessionUserId = userId;
 
     if (userId == null || token == null) {
       _sub?.cancel();
