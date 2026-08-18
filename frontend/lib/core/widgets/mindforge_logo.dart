@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_theme.dart';
+import 'school_logo.dart';
 
 /// MindForge logo — combines the brand image with MIND FORGE wordmark.
 /// [size] controls the overall scale; [dark] flips to light colors for
@@ -11,11 +12,24 @@ class MindForgeLogo extends StatelessWidget {
   final bool dark; // true = cream text on dark bg, false = plum text on light bg
   final bool showTagline;
 
+  /// Explicit school logo to show. The login screen passes the school picked
+  /// in its dropdown, because that happens before sign-in — the app-wide
+  /// [SchoolLogo] provider keys off the authenticated user's school and can't
+  /// know it yet. Null → fall back to the school provider (post-auth) or the
+  /// bundled MindForge logo.
+  final String? logoUrl;
+
+  /// School name to show in place of the "MIND FORGE" wordmark (login passes
+  /// the picked school). Null → "MIND FORGE".
+  final String? schoolName;
+
   const MindForgeLogo({
     super.key,
     this.size = 1.0,
     this.dark = false,
     this.showTagline = false,
+    this.logoUrl,
+    this.schoolName,
   });
 
   @override
@@ -36,16 +50,16 @@ class MindForgeLogo extends StatelessWidget {
             borderRadius: BorderRadius.circular(12 * size),
           ),
           padding: EdgeInsets.all(6 * size),
-          child: Image.asset(
-            'assets/images/logo.png',
-            fit: BoxFit.contain,
-          ),
+          child: SchoolLogo(fit: BoxFit.contain, logoUrl: logoUrl),
         ),
         SizedBox(height: 10 * size),
 
-        // MIND FORGE wordmark
+        // School name (falls back to the MIND FORGE wordmark).
         Text(
-          'MIND FORGE',
+          schoolName ?? 'MIND FORGE',
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: GoogleFonts.poppins(
             fontSize: 22 * size,
             fontWeight: FontWeight.w800,
@@ -88,10 +102,7 @@ class MindForgeAppBarTitle extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
           ),
           padding: const EdgeInsets.all(3),
-          child: Image.asset(
-            'assets/images/logo.png',
-            fit: BoxFit.contain,
-          ),
+          child: SchoolLogo(fit: BoxFit.contain),
         ),
         const SizedBox(width: 8),
         Column(
@@ -202,10 +213,7 @@ class MindForgeFooter extends StatelessWidget {
                             borderRadius: BorderRadius.circular(5),
                           ),
                           padding: const EdgeInsets.all(2),
-                          child: Image.asset(
-                            'assets/images/logo.png',
-                            fit: BoxFit.contain,
-                          ),
+                          child: SchoolLogo(fit: BoxFit.contain),
                         ),
                         const SizedBox(width: 10),
                         Text(
