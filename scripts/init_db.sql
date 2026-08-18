@@ -265,17 +265,15 @@ CREATE OR REPLACE VIEW pending_tests AS
       AND t.expires_at > NOW();
 
 -- =============================================================================
--- SEED: default admin account
--- MPIN: 123456 (bcrypt hash — CHANGE IN PRODUCTION)
+-- ADMIN / OWNER PROVISIONING
 -- =============================================================================
-INSERT INTO users (username, mpin_hash, role, is_active, is_approved)
-VALUES (
-    'admin',
-    '$2b$12$80F76W9aI4iuWX8e7zsR3enN1OQL01RDM/69XBQhWVaaeKO2yaD8W', -- bcrypt of '123456'
-    'admin',
-    TRUE,
-    TRUE
-) ON CONFLICT (username) DO NOTHING;
+-- No default admin is seeded here. A hardcoded credential in this file runs at
+-- Postgres initdb on every fresh volume — below the app layer — so it cannot be
+-- gated and becomes a guessable, always-approved account (CWE-798).
+--
+-- Provision the first admin/owner through the app's env-gated seed instead:
+-- set ADMIN_SEED_MPIN / OWNER_SEED_MPIN (6-digit) in the backend environment,
+-- or use the Owner Console → Add Admin. Never commit a real MPIN hash.
 
 -- =============================================================================
 -- COMMENTS
