@@ -3,6 +3,10 @@
 Operational security notes for MindForge. This documents the manual,
 console-side hardening that lives outside the codebase.
 
+> For the full threat picture — every risk class, scored verified / stale / open —
+> see [`SECURITY_RISK_REGISTER.md`](SECURITY_RISK_REGISTER.md). The Firebase key
+> restriction below is one open item in it.
+
 ## Firebase client API keys — restrict in Google Cloud Console
 
 **Context.** The `AIza…` keys shipped in the app (`google-services.json`,

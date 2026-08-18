@@ -1,0 +1,905 @@
+<title>MindForge Risk Register</title>
+<style>
+  :root {
+    --ground: #f7f8fa;
+    --surface: #ffffff;
+    --surface-2: #f1f3f7;
+    --ink: #16181f;
+    --ink-2: #3b4150;
+    --muted: #5d6472;
+    --rule: #e2e5eb;
+    --rule-strong: #cdd2dc;
+    --accent: #3d51c9;
+    --accent-soft: #eaedfb;
+    --ok: #16794a;
+    --ok-soft: #e4f2ea;
+    --warn: #9a6510;
+    --warn-soft: #f8eeda;
+    --gap: #bc2f2a;
+    --gap-soft: #fbe8e6;
+    --shadow: 0 1px 2px rgba(16, 18, 23, .05), 0 8px 24px -12px rgba(16, 18, 23, .12);
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #101217;
+      --surface: #171a21;
+      --surface-2: #1d212a;
+      --ink: #e8eaef;
+      --ink-2: #c0c6d2;
+      --muted: #939bab;
+      --rule: #272b35;
+      --rule-strong: #363c48;
+      --accent: #8e9cf5;
+      --accent-soft: #1e2340;
+      --ok: #5cc48d;
+      --ok-soft: #14291f;
+      --warn: #dda63f;
+      --warn-soft: #2b2213;
+      --gap: #f0736b;
+      --gap-soft: #2e1917;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #101217;
+    --surface: #171a21;
+    --surface-2: #1d212a;
+    --ink: #e8eaef;
+    --ink-2: #c0c6d2;
+    --muted: #939bab;
+    --rule: #272b35;
+    --rule-strong: #363c48;
+    --accent: #8e9cf5;
+    --accent-soft: #1e2340;
+    --ok: #5cc48d;
+    --ok-soft: #14291f;
+    --warn: #dda63f;
+    --warn-soft: #2b2213;
+    --gap: #f0736b;
+    --gap-soft: #2e1917;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .6);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    padding: 56px 0 32px;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+  }
+
+  .eyebrow span::before { content: "/ "; color: var(--rule-strong); }
+  .eyebrow span:first-child::before { content: ""; }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(30px, 5.4vw, 52px);
+    line-height: 1.03;
+    letter-spacing: -.035em;
+    font-weight: 600;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: 17px;
+    color: var(--ink-2);
+    max-width: 64ch;
+    margin: 0;
+  }
+
+  /* ---------- posture ---------- */
+
+  .posture {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 36px 0 0;
+  }
+
+  .tile {
+    background: var(--surface);
+    padding: 18px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .tile-n {
+    font-family: var(--mono);
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: -.04em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .tile-l {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .tile-sub { font-size: 12.5px; color: var(--muted); }
+
+  .t-ok .tile-n { color: var(--ok); }
+  .t-warn .tile-n { color: var(--warn); }
+  .t-gap .tile-n { color: var(--gap); }
+
+  .cbar {
+    display: flex;
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 20px 0 0;
+    background: var(--surface-2);
+  }
+
+  .cbar i { display: block; height: 100%; }
+  .cbar .s-ok { background: var(--ok); }
+  .cbar .s-warn { background: var(--warn); }
+  .cbar .s-gap { background: var(--gap); }
+
+  /* ---------- filter ---------- */
+
+  .filterbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--ground);
+    padding: 16px 0 14px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 40px;
+  }
+
+  .filterbar .fl {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-right: 4px;
+  }
+
+  .fbtn {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .04em;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--rule-strong);
+    background: var(--surface);
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+  }
+
+  .fbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .fbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .fbtn[aria-pressed="true"] {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--ground);
+  }
+
+  /* ---------- sections ---------- */
+
+  section { margin: 44px 0 0; }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .sec-n {
+    color: var(--accent);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sec-tally {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rows { display: flex; flex-direction: column; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 116px 1fr;
+    gap: 4px 18px;
+    padding: 14px 16px 14px 14px;
+    border-bottom: 1px solid var(--rule);
+    border-left: 3px solid transparent;
+    background: var(--surface);
+  }
+
+  .row:hover { background: var(--surface-2); }
+
+  .row.s-ok { border-left-color: var(--ok); }
+  .row.s-warn { border-left-color: var(--warn); }
+  .row.s-gap { border-left-color: var(--gap); }
+
+  .chip {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    align-self: start;
+    justify-self: start;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  .s-ok .chip { background: var(--ok-soft); color: var(--ok); }
+  .s-warn .chip { background: var(--warn-soft); color: var(--warn); }
+  .s-gap .chip { background: var(--gap-soft); color: var(--gap); }
+
+  .risk { font-size: 15px; font-weight: 600; letter-spacing: -.005em; }
+  .note { grid-column: 2; font-size: 13.5px; color: var(--muted); }
+  .note code {
+    font-family: var(--mono);
+    font-size: .93em;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--ink-2);
+  }
+
+  .flag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--gap);
+    border: 1px solid var(--gap);
+    border-radius: 3px;
+    padding: 0 5px;
+    margin-left: 8px;
+    vertical-align: 1.5px;
+    font-weight: 600;
+  }
+
+  .flag.new { color: var(--accent); border-color: var(--accent); }
+
+  /* ---------- priority ---------- */
+
+  .priority {
+    margin: 56px 0 0;
+    border: 1px solid var(--rule-strong);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .priority h2 {
+    padding: 16px 20px;
+    background: var(--ink);
+    color: var(--ground);
+    border: 0;
+  }
+
+  .priority h2 .sec-n { color: var(--ground); opacity: .55; }
+
+  ol.plist { margin: 0; padding: 0; list-style: none; counter-reset: p; }
+
+  ol.plist li {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 16px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface);
+    counter-increment: p;
+  }
+
+  ol.plist li:last-child { border-bottom: 0; }
+
+  ol.plist li::before {
+    content: counter(p, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    padding-top: 2px;
+  }
+
+  .p-t { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .p-d { font-size: 13.5px; color: var(--muted); }
+
+  .legend {
+    margin: 40px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+    border-top: 1px solid var(--rule);
+    padding-top: 20px;
+  }
+
+  .legend p { margin: 0 0 8px; max-width: 72ch; }
+  .legend b { color: var(--ink-2); font-weight: 600; }
+
+  .empty {
+    display: none;
+    padding: 32px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: .04em;
+  }
+
+  section.void .empty { display: block; }
+  section.void .rows { display: none; }
+
+  @media (max-width: 620px) {
+    .row { grid-template-columns: 1fr; }
+    .note { grid-column: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">
+      <span>MindForge</span>
+      <span>Flutter + FastAPI</span>
+      <span>Multi-tenant · minors' data</span>
+      <span>Compiled 18 Aug 2026</span>
+    </p>
+    <h1>Security Risk Register</h1>
+    <p class="standfirst">
+      Every class of risk an app like this faces, and where MindForge actually stands on each one.
+      Status is drawn from <code>TEST_RECORD.md</code>, the test suites in the repo, and what the code
+      shows today — not from what was intended.
+    </p>
+
+    <div class="posture" id="posture">
+      <div class="tile t-ok">
+        <div class="tile-n" data-count="ok">0</div>
+        <div class="tile-l">Verified</div>
+        <div class="tile-sub">Tested, with evidence</div>
+      </div>
+      <div class="tile t-warn">
+        <div class="tile-n" data-count="warn">0</div>
+        <div class="tile-l">Stale</div>
+        <div class="tile-sub">Built, not re-checked</div>
+      </div>
+      <div class="tile t-gap">
+        <div class="tile-n" data-count="gap">0</div>
+        <div class="tile-l">Open</div>
+        <div class="tile-sub">Untested or absent</div>
+      </div>
+      <div class="tile">
+        <div class="tile-n" data-count="all">0</div>
+        <div class="tile-l">Total tracked</div>
+        <div class="tile-sub">Across 13 domains</div>
+      </div>
+    </div>
+
+    <div class="cbar" id="cbar" aria-hidden="true">
+      <i class="s-ok"></i><i class="s-warn"></i><i class="s-gap"></i>
+    </div>
+  </header>
+
+  <div class="filterbar">
+    <span class="fl">Show</span>
+    <button class="fbtn" data-filter="all" aria-pressed="true">All</button>
+    <button class="fbtn" data-filter="ok" aria-pressed="false">Verified</button>
+    <button class="fbtn" data-filter="warn" aria-pressed="false">Stale</button>
+    <button class="fbtn" data-filter="gap" aria-pressed="false">Open</button>
+  </div>
+
+  <main id="register">
+
+    <!-- 1 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">01</span> Authentication &amp; sessions</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Credential storage</span>
+          <p class="note">MPINs bcrypt-hashed at work factor 12. Covered by <code>test_unit.py</code>.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Brute force / credential stuffing</span>
+          <p class="note">10 attempts/min per (IP, username) at <code>auth.py:361</code>; register capped 5/60s. Probed by <code>security_test.py</code>.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">JWT forgery, tampering, alg confusion</span>
+          <p class="note">HS256, no <code>none</code> acceptance. Probed by <code>test_jwt_security</code>.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Suspended tenant still authenticating</span>
+          <p class="note">Login <em>and</em> refresh both gated; owner exempt. <code>test_tenancy_wiring.py</code> 8/8.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Session bleed on account switch (shared device)</span>
+          <p class="note">Cache-reset race let the next sign-in read the previous user's data. Found and fixed today — commit <code>2bbb630</code>.<span class="flag new">This session</span></p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Account lockout + lockout-DoS guard</span>
+          <p class="note">15-min lockout with a guard against locking someone out deliberately. Code present; not re-verified since May.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Refresh-token rotation and JTI revocation</span>
+          <p class="note">Rotate-on-use with old JTI blacklisted in Redis. Passed the extended probe in May; the auth layer has changed since.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Token lifetime and expiry handling</span>
+          <p class="note">60-min access, 30-day refresh, Dio auto-refresh interceptor. Not re-confirmed.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Deactivated, pending or deleted users signing in</span>
+          <p class="note">Blocked in <code>auth.py</code>; last actually exercised 2026-05-19.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Weak / guessable MPIN</span>
+          <p class="note">Blocklist added 2026-07-07 at set and change time. Never manually re-tested.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Multi-factor authentication</span>
+          <p class="note">Not implemented. A 6-digit PIN is the only factor for every role, including admins and the platform owner.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Account enumeration</span>
+          <p class="note">Never probed whether a wrong username and a wrong MPIN are distinguishable by response body or timing.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Forgot-MPIN / recovery flow abuse</span>
+          <p class="note">The login screen offers "Forgot your MPIN?" — that flow has no security test at all.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Session fixation</span>
+          <p class="note">Not assessed.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 2 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">02</span> Authorization &amp; tenant isolation</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Cross-school data access</span>
+          <p class="note">Strongest area in the codebase: 32 integration + 19 unit + 8 wiring tests, and cross-school reads return 404 rather than 403 so row existence doesn't leak.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Vertical privilege escalation</span>
+          <p class="note">Student → teacher → admin paths probed in <code>security_test_extended.py</code>.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Mass assignment / role injection</span>
+          <p class="note">Was <b>critical</b> — <code>/auth/register</code> accepted <code>role="admin"</code>. Fixed 2026-05-19 with a schema validator.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Admin escalating a user to platform owner</span>
+          <p class="note">Blocked; commit <code>f9e2386</code>.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">IDOR / BOLA on object ids</span>
+          <p class="note">Covered by the extended probe suite.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Realtime events crossing tenants</span>
+          <p class="note">Two separate leaks found and fixed (fan-out, then <code>admin.py</code> config events). Tests falsified against the unfixed code.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Cross-school foreign keys accepted on write</span>
+          <p class="note">Timetable <code>teacher_id</code> now validated against the caller's school; commit <code>25451eb</code>.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Unauthenticated media proxy</span>
+          <p class="note">Bucket allowlist verified, but <code>/api/media/{bucket}/{key}</code> stays open by design and leans entirely on object keys being unguessable. Never adversarially tested.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Business-logic abuse</span>
+          <p class="note">No tests for a student re-taking a locked test, editing submitted answers, tampering with their own grade, or a teacher backdating attendance.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Parent–child link tampering</span>
+          <p class="note">Nothing verifies a parent cannot bind themselves to another family's student.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 3 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">03</span> Injection &amp; input handling</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">SQL injection</span>
+          <p class="note">Probed live; SQLAlchemy throughout, and a static sweep confirmed no f-string SQL.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Command injection / unsafe deserialization</span>
+          <p class="note">Static sweep clean: no <code>eval</code>, <code>exec</code>, <code>os.system</code>, <code>shell=True</code>, <code>pickle.loads</code> or <code>yaml.load</code>.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Path traversal</span>
+          <p class="note">Covered in <code>security_test_extended.py</code>.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Cross-site scripting (web build)</span>
+          <p class="note">CSP meta tag on the Flutter web entry, and canvas rendering limits DOM surface. Never actively probed.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Prompt injection through uploaded documents</span>
+          <p class="note">Teacher PDFs go straight to Claude and the output becomes tests and quizzes students sit. A crafted document steering generation has never been tested.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Fuzzing beyond the happy path</span>
+          <p class="note">Input validation is spot-checked, not fuzzed. No schema-driven or property-based testing.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Log injection and audit-trail integrity</span>
+          <p class="note">Audit rows exist; nothing prevents forged entries or verifies the trail can't be poisoned.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 4 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">04</span> File upload &amp; media</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Malicious image upload</span>
+          <p class="note">Genuinely well built: magic-byte check, 5 MB cap, EXIF stripped by re-encode, and a 40 MP decompression-bomb guard in <code>upload_utils.py</code>.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Oversized document upload</span>
+          <p class="note">25 MB PDFs, 50 MB decks, rejected on declared size before buffering.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">PDF / PPTX type spoofing</span>
+          <p class="note">Unlike images, documents are gated on the <code>content_type</code> header only — which the client sets. No magic-byte or structural check.<span class="flag">Gap found</span></p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Malware in uploaded files</span>
+          <p class="note">No AV or content scanning. Files are stored and served back to other users in the school.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Zip-bomb via .pptx</span>
+          <p class="note">A <code>.pptx</code> is a zip archive; expansion is unbounded at parse time.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 5 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">05</span> Transport &amp; network</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">TLS enforcement and HSTS</span>
+          <p class="note">Live-checked: HTTP/2 only, <code>max-age=31536000; includeSubDomains</code>.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Missing security headers</span>
+          <p class="note">All four present on success <em>and</em> error responses: nosniff, <code>X-Frame-Options: DENY</code>, CSP <code>default-src 'none'</code>, HSTS.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">WebSocket authentication</span>
+          <p class="note">JWT required, <code>sub</code> matched to the path user id, revoked JTIs rejected. 5/5 in <code>test_websocket_auth.py</code>.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Man-in-the-middle on mobile</span>
+          <p class="note">CA-level pinning to Let's Encrypt is implemented and code-reviewed, but the mitmproxy test that would prove it is still an unticked release-QA item.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Permissive CORS</span>
+          <p class="note">Wildcard origin removed 2026-06-23; not re-verified since.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Pinning bypass on a rooted device</span>
+          <p class="note">No Frida / objection testing. Pinning stops a network attacker, not someone who owns the handset.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 6 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">06</span> Mobile &amp; client hardening</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Android backup exfiltration</span>
+          <p class="note"><code>android:allowBackup="false"</code> set in the manifest.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Token at rest on device</span>
+          <p class="note">Refresh tokens go to <code>flutter_secure_storage</code> (Keychain / Keystore). Not re-verified.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Token at rest in the browser</span>
+          <p class="note">Logout clears <code>mindforge_*</code> localStorage keys — confirmed 2026-05-19, not since.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Reverse engineering the release binary</span>
+          <p class="note">Builds run without <code>--obfuscate --split-debug-info</code>. Dart symbol names, API routes and logic are readable from the APK.<span class="flag">Gap found</span></p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Rooted / jailbroken device</span>
+          <p class="note">No root, jailbreak or Play Integrity detection anywhere in the app.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Screen capture of student records</span>
+          <p class="note">No <code>FLAG_SECURE</code> or iOS equivalent on screens showing grades, fees or attendance.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Runtime tampering / hooking</span>
+          <p class="note">No anti-debug or integrity checks. A hooked client can call any endpoint the user's token permits.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Deep-link and intent hijacking</span>
+          <p class="note">Exported activities and URL schemes have never been reviewed.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 7 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">07</span> Secrets &amp; configuration</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Weak or defaulted signing key</span>
+          <p class="note"><code>JWT_SECRET</code> has no default — the app refuses to start without it.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Shipping default infrastructure credentials</span>
+          <p class="note">Backend refuses to boot under <code>APP_ENV=production</code> if Postgres, Redis or MinIO are on built-in defaults.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Seeded default admin account</span>
+          <p class="note"><code>init_db.sql</code> seeds a live <code>admin</code> / <code>123456</code> backfilled into school 1. Confirmed logging in on local; <b>status on the Railway production database is unverified</b>. Highest-severity open item here.<span class="flag">Critical</span></p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Firebase client keys unrestricted</span>
+          <p class="note">Documented in <code>SECURITY.md</code> with the exact restriction each key needs — never applied in the GCP console. Defence-in-depth; worst case is quota abuse.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Secrets committed to git history</span>
+          <p class="note">No <code>gitleaks</code> or <code>trufflehog</code> scan has ever run over the repo or its history.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Secrets in the working tree</span>
+          <p class="note"><code>.env</code> and <code>.env.local</code> are gitignored; last actually audited in May.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 8 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">08</span> Supply chain</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Vulnerable Python dependencies</span>
+          <p class="note"><code>pip-audit --strict</code> green on a real CI runner — 20 findings across 5 packages driven to 0, with one documented ignore (<code>ecdsa</code>, unreachable under HS256).</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Vulnerable Dart / Flutter dependencies</span>
+          <p class="note">No audit equivalent runs against <code>pubspec.lock</code>. Only Python is scanned.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Vulnerable base images</span>
+          <p class="note">No container scanning (<code>trivy</code>, <code>grype</code>) on the backend image.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Static analysis for security defects</span>
+          <p class="note">No SAST in CI — no CodeQL, no Semgrep. <code>flutter analyze</code> is a linter, not a security tool.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Malicious or typosquatted package</span>
+          <p class="note">No provenance or lockfile-integrity gate.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 9 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">09</span> Availability, abuse &amp; cost</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">AI generation cost abuse</span>
+          <p class="note">Per-user rate limits on test generation and presentation processing.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Unthrottled API surface</span>
+          <p class="note">Rate limiting exists on 4 routers only — auth, feedback, presentations, teacher AI. Every other endpoint is uncapped.<span class="flag">Gap found</span></p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">DDoS / volumetric attack</span>
+          <p class="note">No WAF. Whatever the Railway edge provides has never been established or tested.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Backup and disaster recovery</span>
+          <p class="note">No documented backup schedule, and no restore has ever been rehearsed.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Object-storage data loss</span>
+          <p class="note">A known live failure mode: MinIO losing its objects blanks every avatar and upload. Production needs a volume mounted at <code>/data</code>.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Push-notification abuse</span>
+          <p class="note">Broadcast and FCM paths have no send-rate ceiling per sender.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 10 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">10</span> Privacy &amp; compliance</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Privacy policy drafted</span>
+          <p class="note"><code>PRIVACY_POLICY.md</code> exists and discloses that teacher uploads may contain student names.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Children's data regulation</span>
+          <p class="note">This app holds records on minors. No COPPA, GDPR-K or local equivalent assessment has been done, and no verifiable parental-consent mechanism exists. For a school product this is the largest compliance exposure on the page.<span class="flag">Critical</span></p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Undisclosed AI recipient</span>
+          <p class="note">Claude became the primary generation provider on 2026-06-08 and reads uploaded PDFs natively. The policy's sharing table names Gemini and Groq — not Anthropic.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">PII leaking into AI prompts</span>
+          <p class="note">The prompt sweep that found this clean predates the entire Claude pipeline.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Policy not published</span>
+          <p class="note">Not hosted at a public URL, not reviewed by counsel, and <code>AppConstants.privacyPolicyUrl</code> is still empty. Blocks store submission.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Data retention</span>
+          <p class="note">No defined retention or purge policy. Soft-deleted rows persist indefinitely.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Account deletion completeness</span>
+          <p class="note">Soft delete, JTI revocation, FCM clear and audit row — all verified by reading in May, before the owner role existed. Whether owner self-delete is blocked is an open question.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">PII reaching error-reporting vendors</span>
+          <p class="note">Sentry runs <code>send_default_pii=False</code> plus a key scrubber. Not re-confirmed.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 11 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">11</span> AI pipeline</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Provider fallback reliability</span>
+          <p class="note">Claude → Gemini → Groq. Understood operationally, but no test asserts the chain degrades correctly when the primary fails.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Trusting generated content</span>
+          <p class="note">AI-generated questions and answer keys become graded material with no human-approval gate in the flow.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Cross-tenant contamination in AI context</span>
+          <p class="note">Nothing verifies that one school's uploaded material can't surface in another school's generated output.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Uploaded documents retained by third parties</span>
+          <p class="note">Files sent through the Anthropic Files API — retention and deletion on the vendor side is undocumented here.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 12 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">12</span> Detection &amp; response</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Audit logging</span>
+          <p class="note">An <code>AuditLog</code> table exists and survives its author. No review process, and coverage across sensitive actions is unmapped.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Error visibility</span>
+          <p class="note">Sentry on the backend, Crashlytics on the client. Both wired; neither verified end-to-end recently.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Security alerting</span>
+          <p class="note">Failed logins are logged as warnings but nothing alerts on a spike, an impossible-travel pattern, or mass data access.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Incident response</span>
+          <p class="note">No runbook for a breach: no containment steps, no notification path, no mass token-revocation procedure.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Responsible disclosure</span>
+          <p class="note">No <code>security.txt</code>, no contact route for someone who finds a flaw.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <!-- 13 -->
+    <section>
+      <div class="sec-head">
+        <h2><span class="sec-n">13</span> Build &amp; release pipeline</h2>
+        <span class="sec-tally"></span>
+      </div>
+      <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Android release signing</span>
+          <p class="note">Signed with a release keystore; <code>key.properties</code> gitignored.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Test suite writing to production</span>
+          <p class="note"><code>tests/test_api.py</code> targeted the live database and was fired at it once by accident. A production guard now blocks it — but the suite itself is still stale.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Code merging without CI</span>
+          <p class="note">Triggers cover <code>main</code>, <code>feature/**</code>, <code>fix/**</code>, <code>test/**</code>. This branch — <code>create_school</code> — matches none, so all of this work is unverified by CI.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Toolchain drift</span>
+          <p class="note">CI pins Flutter 3.41.4; local is 3.44.0. A version-specific failure would not surface symmetrically.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">iOS release verification</span>
+          <p class="note">Blocked on Apple Developer Program enrolment. No IPA has ever been built or tested.</p></div>
+        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Independent penetration test</span>
+          <p class="note">Every result on this page comes from self-testing. No external assessment, no DAST, no bug bounty.</p></div>
+      </div>
+      <p class="empty">No rows in this state.</p>
+    </section>
+
+    <div class="priority">
+      <h2><span class="sec-n">↓</span> What to fix first</h2>
+      <ol class="plist">
+        <li>
+          <div>
+            <div class="p-t">Check whether <code>admin</code> / <code>123456</code> works in production</div>
+            <div class="p-d">Everything else on this page is theoretical if a default credential is live. Confirm against the Railway database today, and delete or rotate the seeded row.</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <div class="p-t">Decide the children's-data position</div>
+            <div class="p-d">COPPA / GDPR-K governs a product holding minors' records. This gates store submission and carries real legal weight — it isn't a hardening task you can defer past launch.</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <div class="p-t">Publish the privacy policy and add Anthropic to it</div>
+            <div class="p-d">Host it, populate <code>privacyPolicyUrl</code>, and disclose Claude as a recipient. Three small tasks that together unblock submission.</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <div class="p-t">Turn on build obfuscation</div>
+            <div class="p-d">Adding <code>--obfuscate --split-debug-info</code> is a one-line change that removes a whole class of reconnaissance from the shipped binary.</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <div class="p-t">Extend rate limiting past the four routers that have it</div>
+            <div class="p-d">A global default with per-route overrides. Currently most of the API can be hammered freely by any authenticated user.</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <div class="p-t">Validate document uploads by content, not by header</div>
+            <div class="p-d">Images already do this properly — apply the same magic-byte treatment to PDFs and decks.</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <div class="p-t">Add secrets scanning and a Dart dependency audit to CI</div>
+            <div class="p-d">Both are configuration, not engineering, and they close the two supply-chain blind spots that <code>pip-audit</code> doesn't reach.</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <div class="p-t">Make CI run on the branch you actually work on</div>
+            <div class="p-d">Every gate above is worth less while the branch carrying the work matches no trigger.</div>
+          </div>
+        </li>
+      </ol>
+    </div>
+
+    <div class="legend">
+      <p><b>Verified</b> — exercised by a test or a live check, with evidence in the repo. <b>Stale</b> — the control exists in code and passed once, but the record marks it unconfirmed since May and the surrounding code has changed. <b>Open</b> — never tested, or not built.</p>
+      <p>Your multi-tenancy and authentication work is genuinely strong, and stronger than most projects at this stage — that's where the tests are, and it shows. The open items cluster in three places instead: <b>the client binary</b>, which is essentially unhardened; <b>privacy and compliance</b>, which matters more here than in most apps because the records are children's; and <b>operational readiness</b> — backups, alerting, and a plan for the day something goes wrong.</p>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  (function () {
+    var register = document.getElementById('register');
+    var sections = Array.prototype.slice.call(register.querySelectorAll('section'));
+    var rows = Array.prototype.slice.call(register.querySelectorAll('.row'));
+
+    function stateOf(el) {
+      if (el.classList.contains('s-ok')) return 'ok';
+      if (el.classList.contains('s-warn')) return 'warn';
+      return 'gap';
+    }
+
+    // Totals are computed from the rows themselves so the summary can never
+    // drift from the register below it.
+    var totals = { ok: 0, warn: 0, gap: 0 };
+    rows.forEach(function (r) { totals[stateOf(r)] += 1; });
+    var all = rows.length;
+
+    document.querySelector('[data-count="ok"]').textContent = totals.ok;
+    document.querySelector('[data-count="warn"]').textContent = totals.warn;
+    document.querySelector('[data-count="gap"]').textContent = totals.gap;
+    document.querySelector('[data-count="all"]').textContent = all;
+
+    var bar = document.getElementById('cbar');
+    bar.querySelector('.s-ok').style.width = (totals.ok / all * 100) + '%';
+    bar.querySelector('.s-warn').style.width = (totals.warn / all * 100) + '%';
+    bar.querySelector('.s-gap').style.width = (totals.gap / all * 100) + '%';
+
+    sections.forEach(function (sec) {
+      var srows = sec.querySelectorAll('.row');
+      var t = { ok: 0, warn: 0, gap: 0 };
+      Array.prototype.forEach.call(srows, function (r) { t[stateOf(r)] += 1; });
+      var parts = [];
+      if (t.ok) parts.push(t.ok + ' verified');
+      if (t.warn) parts.push(t.warn + ' stale');
+      if (t.gap) parts.push(t.gap + ' open');
+      sec.querySelector('.sec-tally').textContent = parts.join('  ·  ');
+    });
+
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('.fbtn'));
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var want = btn.dataset.filter;
+        buttons.forEach(function (b) {
+          b.setAttribute('aria-pressed', String(b === btn));
+        });
+        rows.forEach(function (r) {
+          r.style.display = (want === 'all' || stateOf(r) === want) ? '' : 'none';
+        });
+        sections.forEach(function (sec) {
+          var visible = Array.prototype.filter.call(
+            sec.querySelectorAll('.row'),
+            function (r) { return r.style.display !== 'none'; }
+          ).length;
+          sec.classList.toggle('void', visible === 0);
+        });
+      });
+    });
+  })();
+</script>

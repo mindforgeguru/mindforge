@@ -4,6 +4,11 @@
 **Maintainer:** chinmay1975@gmail.com
 **Scope:** Reference document for every kind of testing performed on the Mindforge app — automated tests, security/privacy verification, and manual QA. Update this file every time a significant test session is run.
 
+> **Companion file.** This record tracks *what was run and when*.
+> [`SECURITY_RISK_REGISTER.md`](SECURITY_RISK_REGISTER.md) tracks *what could go wrong*
+> — every risk class scored verified / stale / open, including the ones nothing here
+> covers yet. Update both when a security gap closes.
+>
 > **How to use this file.** Each section has a checklist with a status column. When you run a check, set the status to `PASS` / `FAIL` / `SKIP` / `NOT RE-VERIFIED` and add the date. Old results are kept in the "History" section at the bottom so we can see drift over time.
 >
 > **A status carried forward from an earlier session is not evidence.** If you didn't re-run it, mark it `NOT RE-VERIFIED (last checked YYYY-MM-DD)` rather than leaving a stale `PASS` that reads as fresh. The 2026-07-24 pass relabelled a large block of §3–§4 on exactly these grounds.
