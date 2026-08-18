@@ -126,6 +126,18 @@ class ApiClient {
         },
         onError: (DioException error, handler) async {
           if (error.response?.statusCode == 401) {
+            // `mfa_required` is a challenge, not a rejection: the password was
+            // correct and the server is asking for the second factor. Passing
+            // it through the branch below would wipe stored credentials and
+            // fire onUnauthorized — tearing down the session in the middle of a
+            // successful sign-in, which is exactly what it did until this was
+            // caught by driving the real login screen.
+            final mfaChallenge = error.response?.data is Map &&
+                (error.response!.data as Map)['detail'] == 'mfa_required';
+            if (mfaChallenge) {
+              return handler.next(error);
+            }
+
             // Don't retry the refresh endpoint, the login endpoint, or
             // requests that explicitly opted out.
             if (error.requestOptions.path.contains('/auth/refresh') ||
@@ -299,14 +311,52 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
+  /// Signs in. [mfaCode] / [recoveryCode] are only needed for admin and owner
+  /// accounts that have enrolled in two-factor — the server replies 401 with
+  /// detail `mfa_required` when one is missing, which is how the UI knows to
+  /// prompt rather than having to know in advance who is enrolled.
   Future<Map<String, dynamic>> login(String username, String mpin,
-      {int? schoolId}) async {
+      {int? schoolId, String? mfaCode, String? recoveryCode}) async {
     final res = await _dio.post('/auth/login', data: {
       'username': username,
       'mpin': mpin,
       if (schoolId != null) 'school_id': schoolId,
+      if (mfaCode != null && mfaCode.isNotEmpty) 'mfa_code': mfaCode,
+      if (recoveryCode != null && recoveryCode.isNotEmpty)
+        'recovery_code': recoveryCode,
     });
     return res.data as Map<String, dynamic>;
+  }
+
+  // ── Two-factor (admin / owner) ─────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> mfaStatus() async {
+    final res = await _dio.get('/auth/mfa/status');
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Issues a secret and the otpauth:// URI. Does not enable anything — only
+  /// [mfaConfirm] does, so an abandoned setup cannot lock the account.
+  Future<Map<String, dynamic>> mfaSetup() async {
+    final res = await _dio.post('/auth/mfa/setup');
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Verifies a code and turns MFA on. The recovery codes come back exactly
+  /// once — they are stored hashed and cannot be retrieved again.
+  Future<Map<String, dynamic>> mfaConfirm(String code) async {
+    final res = await _dio.post('/auth/mfa/confirm', data: {'code': code});
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<void> mfaDisable(
+      {required String mpin, String? code, String? recoveryCode}) async {
+    await _dio.post('/auth/mfa/disable', data: {
+      'mpin': mpin,
+      if (code != null && code.isNotEmpty) 'code': code,
+      if (recoveryCode != null && recoveryCode.isNotEmpty)
+        'recovery_code': recoveryCode,
+    });
   }
 
   /// Tells the server to revoke the current access + refresh tokens.

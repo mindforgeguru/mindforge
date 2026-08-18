@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/mindforge_logo.dart';
+import '../../../core/widgets/school_logo.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -47,6 +48,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   int? get _schoolIdForRequest =>
       _selectedSchoolId == _ownerSchoolSentinel ? null : _selectedSchoolId;
+
+  /// The picked school's uploaded logo (null when none / owner / unpicked).
+  /// Drives the login header logo so it reflects the chosen school before the
+  /// user is authenticated — where the app-wide school-logo provider can't
+  /// yet know which school it is.
+  String? get _pickedSchoolLogoUrl {
+    final id = _selectedSchoolId;
+    if (id == null || id == _ownerSchoolSentinel) return null;
+    for (final s in _schools) {
+      if (s['id'] == id) {
+        final url = s['logo_url'] as String?;
+        return (url != null && url.isNotEmpty) ? url : null;
+      }
+    }
+    return null;
+  }
+
+  /// The picked school's name, shown in place of the "MIND FORGE" wordmark on
+  /// the login header once a school is chosen. Null → "MIND FORGE".
+  String? get _pickedSchoolName {
+    final id = _selectedSchoolId;
+    if (id == null || id == _ownerSchoolSentinel) return null;
+    for (final s in _schools) {
+      if (s['id'] == id) {
+        final name = s['name'] as String?;
+        return (name != null && name.isNotEmpty) ? name : null;
+      }
+    }
+    return null;
+  }
 
   // Register mode drops the owner entry, so a lingering sentinel would leave
   // the dropdown with a value matching no item — which trips an assertion.
@@ -229,9 +260,93 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         });
       }
     } else {
-      await notifier.login(username, _enteredPin,
-          schoolId: _schoolIdForRequest);
+      try {
+        await notifier.login(username, _enteredPin,
+            schoolId: _schoolIdForRequest);
+      } on MfaRequiredException {
+        // Password was correct; this account has a second factor. Prompt for it
+        // rather than surfacing an error — nothing has gone wrong.
+        if (!mounted) return;
+        await _promptForSecondFactor(username);
+      }
     }
+  }
+
+  /// Collects a 6-digit authenticator code, or a recovery code if the phone is
+  /// gone, and retries the sign-in with it.
+  Future<void> _promptForSecondFactor(String username) async {
+    final codeController = TextEditingController();
+    var useRecovery = false;
+
+    final submitted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Two-factor authentication'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                useRecovery
+                    ? 'Enter one of the recovery codes you saved when you set '
+                        'this up. Each code works once.'
+                    : 'Enter the 6-digit code from your authenticator app.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: codeController,
+                autofocus: true,
+                keyboardType:
+                    useRecovery ? TextInputType.text : TextInputType.number,
+                textCapitalization: useRecovery
+                    ? TextCapitalization.characters
+                    : TextCapitalization.none,
+                decoration: InputDecoration(
+                  labelText: useRecovery ? 'Recovery code' : '6-digit code',
+                  hintText: useRecovery ? 'ABCD-EFGH-JKMN' : '123456',
+                  border: const OutlineInputBorder(),
+                ),
+                onSubmitted: (_) => Navigator.of(dialogContext).pop(true),
+              ),
+              TextButton(
+                onPressed: () => setDialogState(() {
+                  useRecovery = !useRecovery;
+                  codeController.clear();
+                }),
+                child: Text(useRecovery
+                    ? 'Use my authenticator app instead'
+                    : "I don't have my phone"),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Verify'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final entered = codeController.text.trim();
+    codeController.dispose();
+    if (submitted != true || entered.isEmpty || !mounted) return;
+
+    await ref.read(authProvider.notifier).login(
+          username,
+          _enteredPin,
+          schoolId: _schoolIdForRequest,
+          mfaCode: useRecovery ? null : entered,
+          recoveryCode: useRecovery ? entered : null,
+        );
   }
 
   void _showSnack(String msg, {Color? color}) {
@@ -240,6 +355,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         content: Text(msg),
         backgroundColor: color ?? AppColors.error,
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// There is no self-service MPIN reset — recovery is admin-mediated (an admin
+  /// sets a new MPIN from the Users screen). This just tells the user where to
+  /// go; a parent can act for a student.
+  void _showForgotMpinHelp() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Forgot your MPIN?'),
+        content: const Text(
+          "For your security, your MPIN can't be recovered on your own.\n\n"
+          "Ask your school's admin to reset it — they can set a new MPIN for "
+          "you from their dashboard. A student can also ask their parent.",
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
       ),
     );
   }
@@ -301,6 +439,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       size: logoScale,
                       dark: true,
                       showTagline: true,
+                      logoUrl: _pickedSchoolLogoUrl,
+                      schoolName: _pickedSchoolName,
                     ),
                   ),
 
@@ -729,6 +869,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                           ),
                         ),
+
+                        // No self-service MPIN reset — point users to their
+                        // admin rather than leave them stuck at login.
+                        if (!_isRegister)
+                          TextButton(
+                            onPressed: _showForgotMpinHelp,
+                            child: Text(
+                              'Forgot your MPIN?',
+                              style: GoogleFonts.poppins(
+                                fontSize: R.fs(context, 13, min: 12, max: 15),
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -865,14 +1020,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ],
                         ),
                         padding: const EdgeInsets.all(10),
-                        child: Image.asset('assets/images/logo.png',
-                            fit: BoxFit.contain),
+                        child: SchoolLogo(
+                            fit: BoxFit.contain, logoUrl: _pickedSchoolLogoUrl),
                       ),
                       const SizedBox(width: 16),
-                      Column(
+                      Flexible(
+                        child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('MIND FORGE',
+                          Text(_pickedSchoolName ?? 'MIND FORGE',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.poppins(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w800,
@@ -883,6 +1041,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   fontSize: 12,
                                   color: Colors.white.withValues(alpha: 0.5))),
                         ],
+                      ),
                       ),
                     ],
                   ),
@@ -1387,6 +1546,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 letterSpacing: 0.5)),
                   ),
                 ),
+
+                // No self-service MPIN reset — direct users to their admin.
+                if (!_isRegister)
+                  TextButton(
+                    onPressed: _showForgotMpinHelp,
+                    child: Text(
+                      'Forgot your MPIN?',
+                      style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary),
+                    ),
+                  ),
 
                 const SizedBox(height: 10),
 

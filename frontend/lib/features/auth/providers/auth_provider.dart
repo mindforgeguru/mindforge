@@ -146,10 +146,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (fcmToken != null) unawaited(_registerFcmToken(fcmToken));
   }
 
-  Future<void> login(String username, String mpin, {int? schoolId}) async {
+  /// Signs in, optionally with a second factor.
+  ///
+  /// Throws [MfaRequiredException] when the account is enrolled and no code was
+  /// supplied. That is a normal branch, not an error state — the caller shows
+  /// the code prompt and calls back with [mfaCode] or [recoveryCode]. It is
+  /// deliberately not folded into `state.error`, so the login screen does not
+  /// flash "invalid credentials" at someone whose password was correct.
+  Future<void> login(String username, String mpin,
+      {int? schoolId, String? mfaCode, String? recoveryCode}) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final data = await _api.login(username, mpin, schoolId: schoolId);
+      final data = await _api.login(username, mpin,
+          schoolId: schoolId, mfaCode: mfaCode, recoveryCode: recoveryCode);
       final token = data['access_token'] as String;
       final refreshToken = data['refresh_token'] as String?;
       final role = data['role'] as String;
@@ -219,8 +228,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final fcmToken = await NotificationService.getToken();
       if (fcmToken != null) unawaited(_registerFcmToken(fcmToken));
     } catch (e) {
+      // A 401 carrying `mfa_required` means the password was right and the
+      // second factor is outstanding. Surfaced as an exception rather than an
+      // error state so the screen can branch to the code prompt instead of
+      // telling the user their credentials were wrong.
+      if (_isMfaRequired(e)) {
+        state = state.copyWith(isLoading: false, clearError: true);
+        throw const MfaRequiredException();
+      }
       state = state.copyWith(isLoading: false, error: _parseError(e));
     }
+  }
+
+  bool _isMfaRequired(Object e) {
+    if (e is! DioException) return false;
+    if (e.response?.statusCode != 401) return false;
+    final data = e.response?.data;
+    return data is Map && data['detail'] == 'mfa_required';
   }
 
   /// Called after a successful photo upload to update in-memory + storage.
@@ -368,3 +392,13 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
     ),
   );
 });
+
+
+/// Thrown by [AuthNotifier.login] when the account is enrolled in two-factor
+/// and no code was supplied. Not an error — the expected first leg of an
+/// enrolled sign-in.
+class MfaRequiredException implements Exception {
+  const MfaRequiredException();
+  @override
+  String toString() => 'MfaRequiredException';
+}
