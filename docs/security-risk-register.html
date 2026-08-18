@@ -681,8 +681,8 @@
           <p class="note">300/min per user, in-app so it ships with the deployment. nginx <em>did</em> define a 120 r/m zone — but nginx is compose-only and never loads in production, so the config read as covered while the API was open.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">DDoS / volumetric attack</span>
           <p class="note">No WAF. Whatever the Railway edge provides has never been established or tested.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Backup and disaster recovery</span>
-          <p class="note">No documented backup schedule, and no restore has ever been rehearsed.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Backup and disaster recovery</span>
+          <p class="note">Backup + restore-rehearsal scripts with a runbook. Rehearsed against the local stack — all row counts matched, and both failure paths confirmed to fail. Stale because production is not covered: the scripts drive compose, while prod is Railway-managed Postgres plus a MinIO volume.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Object-storage data loss</span>
           <p class="note">A known live failure mode: MinIO losing its objects blanks every avatar and upload. Production needs a volume mounted at <code>/data</code>.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Push-notification abuse</span>

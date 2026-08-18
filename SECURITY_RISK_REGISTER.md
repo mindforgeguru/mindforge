@@ -28,8 +28,8 @@ There is also a rendered, filterable version of this register:
 | | Count |
 |---|---|
 | Verified | **34** |
-| Stale | **19** |
-| Open | **37** |
+| Stale | **20** |
+| Open | **36** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
@@ -151,7 +151,7 @@ goes wrong.
 | AI generation cost abuse | VERIFIED | Per-user rate limits on test generation and presentation processing. |
 | Unthrottled API surface | VERIFIED | 300/min per authenticated user, in-app so it ships with the deployment. `nginx.conf` **did** define a 120 r/m zone, which is why this looked covered — but nginx is compose-only and production runs `start.sh` on :8000 behind Railway's edge, so it never loaded. Verified live: 330 requests → exactly 300×200 then 30×429, health exempt, 429 carries Retry-After and all four security headers. |
 | DDoS / volumetric attack | OPEN | No WAF. Whatever the Railway edge provides has never been established or tested. |
-| Backup and disaster recovery | OPEN | No documented backup schedule, and no restore has ever been rehearsed. |
+| Backup and disaster recovery | STALE | `scripts/backup.sh` + `scripts/restore_rehearsal.sh`, with a runbook at `docs/backup-runbook.md`. Rehearsed 2026-08-19 against the local stack: 61 users / 7 schools / 534 attendance / 86 grades / 3 payments all matched after restore, and both failure paths were confirmed to fail (corrupt dump → exit 1, manifest claiming 99 users → exit 1). **STALE because production is not covered** — the scripts drive `docker exec` against compose, while prod is Railway-managed Postgres plus a MinIO volume. |
 | Object-storage data loss | OPEN | A known live failure mode: MinIO losing its objects blanks every avatar and upload. Production needs a volume mounted at `/data`. |
 | Push-notification abuse | OPEN | Broadcast and FCM paths have no send-rate ceiling per sender. |
 
@@ -331,6 +331,35 @@ uncommitted `SchoolLogo` work and imported `school_logo.dart`, which was
 untracked — so committing them alone would have failed a clean checkout on an
 unresolved import, exactly as before. Caught this time by checking the
 dependency closure *before* committing rather than by watching CI go red.
+
+### 2026-08-19 — Wave 3 (partial): backup tooling, rehearsed
+
+Backup and disaster recovery moves OPEN → STALE. Not VERIFIED, because the half
+that matters most is still uncovered: these scripts drive `docker exec` against
+the compose stack, and production is Railway-managed Postgres plus a MinIO
+volume. Local backups being provably restorable says nothing about production.
+
+Started here rather than with MFA on consequence: a breach is recoverable, and
+deleted student records are not. This register already carries object-store data
+loss as a failure mode that **has happened** — avatars and uploads blanked while
+the media proxy returned clean 404s.
+
+`restore_rehearsal.sh` is the piece worth having. It restores into a throwaway
+database, compares row counts against a manifest written at backup time, and
+drops the scratch copy on every path including failure. The live database is
+never touched and the script refuses to run if the scratch name ever resolves to
+it. The failure modes it exists for — a truncated dump, a permissions error that
+skipped a table, a version mismatch — all produce a plausible-looking file that
+only fails when you need it.
+
+Falsified in both directions, per the gitleaks lesson: a corrupted dump is
+caught at the checksum, and a manifest claiming 99 users against a 61-user dump
+fails the comparison. Both exit 1.
+
+One thing this turned up: `backups/` was not gitignored. A dump holds every
+student record in plaintext, so the tooling as first written created a
+convenient way to commit the entire database. Fixed, and the ignore rule was
+verified rather than assumed.
 
 ---
 

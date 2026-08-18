@@ -46,3 +46,8 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Database dumps and object-store copies produced by scripts/backup.sh.
+# These contain every student record in plaintext — never commit them.
+backups/
+*.dump
