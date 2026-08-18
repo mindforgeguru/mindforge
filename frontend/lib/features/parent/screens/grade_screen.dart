@@ -13,12 +13,19 @@ import '../../../core/utils/constants.dart';
 import '../providers/parent_provider.dart';
 import '../widgets/parent_scaffold.dart';
 import '../widgets/parent_error_widget.dart';
+import '../../../core/widgets/school_logo.dart';
+import '../../../core/security/screen_security.dart';
 
 class ParentGradeScreen extends StatelessWidget {
   const ParentGradeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Fees and marks: not capturable. See ScreenSecurity.
+    return SecureScreen(child: _buildBody(context));
+  }
+
+  Widget _buildBody(BuildContext context) {
     return DefaultTabController(
       length: 3,
       child: ParentScaffold(
@@ -31,7 +38,7 @@ class ParentGradeScreen extends StatelessWidget {
                 width: 32, height: 32,
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
                 padding: const EdgeInsets.all(3),
-                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                child: SchoolLogo(fit: BoxFit.contain),
               ),
             ),
           ],

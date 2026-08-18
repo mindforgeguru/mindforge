@@ -12,6 +12,8 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
+import '../../../core/security/screen_security.dart';
 
 class TeacherGradeScreen extends ConsumerStatefulWidget {
   const TeacherGradeScreen({super.key});
@@ -21,7 +23,7 @@ class TeacherGradeScreen extends ConsumerStatefulWidget {
 }
 
 class _TeacherGradeScreenState extends ConsumerState<TeacherGradeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, SecureScreenMixin {
   late final TabController _tabCtrl;
 
   @override
@@ -48,7 +50,7 @@ class _TeacherGradeScreenState extends ConsumerState<TeacherGradeScreen>
               width: 32, height: 32,
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

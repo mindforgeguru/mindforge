@@ -17,6 +17,8 @@ import '../../../core/widgets/error_view.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
+import '../../../core/security/screen_security.dart';
 
 // File-level DateFormat cache — creating these objects is expensive;
 // sharing one instance per format pattern avoids repeated allocations.
@@ -28,6 +30,11 @@ class StudentGradeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Fees and marks: not capturable. See ScreenSecurity.
+    return SecureScreen(child: _buildBody(context));
+  }
+
+  Widget _buildBody(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 900;
 
     if (isWide) {
@@ -93,7 +100,7 @@ class StudentGradeScreen extends StatelessWidget {
                 width: 32, height: 32,
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
                 padding: const EdgeInsets.all(3),
-                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                child: SchoolLogo(fit: BoxFit.contain),
               ),
             ),
           ],

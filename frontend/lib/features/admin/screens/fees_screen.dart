@@ -13,6 +13,8 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/image_pick.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
+import '../../../core/security/screen_security.dart';
 
 class AdminFeesScreen extends ConsumerStatefulWidget {
   /// Tab to open on first build: 0 = Fee Structures, 1 = Payments,
@@ -40,7 +42,7 @@ List<String> _yearOptions() {
 }
 
 class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, SecureScreenMixin {
   late final TabController _tabController;
   String _selectedYear = _currentAcademicYear();
 
@@ -100,7 +102,7 @@ class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
               width: 32, height: 32,
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

@@ -11,12 +11,19 @@ import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
+import '../../../core/security/screen_security.dart';
 
 class StudentFeesScreen extends ConsumerWidget {
   const StudentFeesScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Fees and marks: not capturable. See ScreenSecurity.
+    return SecureScreen(child: _buildBody(context, ref));
+  }
+
+  Widget _buildBody(BuildContext context, WidgetRef ref) {
     final feesAsync = ref.watch(studentFeesProvider);
     final isWide = MediaQuery.of(context).size.width >= 900;
 
@@ -90,7 +97,7 @@ class StudentFeesScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
               child:
-                  Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                  SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

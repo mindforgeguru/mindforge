@@ -10,12 +10,19 @@ import '../../../core/utils/responsive.dart';
 import '../providers/parent_provider.dart';
 import '../widgets/parent_scaffold.dart';
 import '../widgets/parent_error_widget.dart';
+import '../../../core/widgets/school_logo.dart';
+import '../../../core/security/screen_security.dart';
 
 class ParentFeesScreen extends ConsumerWidget {
   const ParentFeesScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Fees and marks: not capturable. See ScreenSecurity.
+    return SecureScreen(child: _buildBody(context, ref));
+  }
+
+  Widget _buildBody(BuildContext context, WidgetRef ref) {
     final feesAsync = ref.watch(parentChildFeesProvider);
 
     return DefaultTabController(
@@ -30,7 +37,7 @@ class ParentFeesScreen extends ConsumerWidget {
                 width: 32, height: 32,
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
                 padding: const EdgeInsets.all(3),
-                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                child: SchoolLogo(fit: BoxFit.contain),
               ),
             ),
           ],
