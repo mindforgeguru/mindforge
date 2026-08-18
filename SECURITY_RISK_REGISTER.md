@@ -28,8 +28,8 @@ There is also a rendered, filterable version of this register:
 | | Count |
 |---|---|
 | Verified | **36** |
-| Stale | **22** |
-| Open | **32** |
+| Stale | **23** |
+| Open | **31** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
@@ -57,7 +57,7 @@ goes wrong.
 | Token lifetime and expiry handling | STALE | 60-min access, 30-day refresh, Dio auto-refresh interceptor. Not re-confirmed. |
 | Deactivated, pending or deleted users signing in | STALE | Blocked in `auth.py`; last actually exercised 2026-05-19. |
 | Weak / guessable MPIN | STALE | Blocklist added 2026-07-07 at set and change time. Never manually re-tested. |
-| Multi-factor authentication | OPEN | Not implemented. A 6-digit PIN is the only factor for every role, including admins and the platform owner. |
+| Multi-factor authentication | STALE | TOTP (RFC 6238, stdlib, checked against all six official vectors) for **admin and owner**, opt-in. Two-step enrolment so an abandoned setup cannot lock the account; single-use recovery codes; disable requires MPIN *and* a factor. Verified end to end in the running app. STALE: parents, students and teachers still have one factor by design, and no real authenticator app has been scanned — only generated codes. |
 | Account enumeration | VERIFIED | **Was exploitable.** Bodies always matched, but `login()` short-circuited past bcrypt for an unknown username: 238.7 ms vs 3.9 ms, a 61x tell. Closed with `verify_mpin_constant_time`, which always hashes; re-measured at 240.6 vs 239.7 ms (1.00x). 5 tests. |
 | Forgot-MPIN / recovery flow abuse | OPEN | The login screen offers "Forgot your MPIN?" — that flow has no security test at all. |
 | Session fixation | OPEN | Not assessed. |
@@ -118,7 +118,7 @@ goes wrong.
 | Token at rest on device | STALE | Refresh tokens go to `flutter_secure_storage` (Keychain / Keystore). Not re-verified. |
 | Token at rest in the browser | STALE | Logout clears `mindforge_*` localStorage keys — confirmed 2026-05-19, not since. |
 | Reverse engineering the release binary | STALE | Build commands now carry `--obfuscate --split-debug-info` (`TEST_RECORD.md` §6/§7, 2026-08-19), with the symbol-retention rule Crashlytics needs. STALE not VERIFIED: no obfuscated build has actually been produced or inspected yet. |
-| Rooted / jailbroken device | OPEN | No root, jailbreak or Play Integrity detection anywhere in the app. |
+| Rooted / jailbroken device | OPEN | **Deliberately not built** (decided 2026-08-19). Defeated by anyone motivated, needs native code on both platforms, and does not address the actual threat here — a student after grades or a test edge would use a second device, which no client hardening touches. Revisit if the threat model changes. |
 | Screen capture of student records | STALE | `FLAG_SECURE` via a native MethodChannel, reference-counted so nested secured screens don't unsecure each other; wired into the six fee and grade screens. 5 tests. STALE not VERIFIED: no Android device or emulator has confirmed a screenshot is actually blocked, and iOS has no implementation (blocked on Apple enrolment). Attendance and timetables are deliberately left capturable. |
 | Runtime tampering / hooking | OPEN | No anti-debug or integrity checks. A hooked client can call any endpoint the user's token permits. |
 | Deep-link and intent hijacking | OPEN | Exported activities and URL schemes have never been reviewed. |
@@ -407,6 +407,45 @@ fishing for.
 STALE, not VERIFIED: one pattern is covered. Impossible travel and mass data
 access are still unwatched, and no alert *route* exists — Sentry will receive the
 event, but nothing has been configured to tell a human about it.
+
+### 2026-08-19 — Wave 3 completed: MFA, and a decision not to build
+
+**MFA for admin and owner.** A compromised student MPIN costs one student's
+records; an admin's costs a school's, the owner's costs every school. Scoped
+there deliberately — TOTP for parents and students on shared family devices
+would cause more lockouts than it prevents compromises.
+
+TOTP is implemented from RFC 6238 rather than added as a dependency, and checked
+against all six of the RFC's own vectors. Wave 1 was spent shrinking the
+dependency surface of an app holding minors' data; forty lines of stdlib
+implementing a fully specified construction with published vectors is the better
+side of that trade.
+
+Two ordering decisions carry the security: the second factor is checked *after*
+the MPIN, so it cannot become the enumeration oracle the constant-time check
+exists to prevent; and enrolment is two steps, so an abandoned setup leaves the
+account exactly as it was.
+
+**Two bugs found by running it, neither reachable from the suites.**
+
+The login fields were patched in against a non-unique anchor and landed on
+`UserRegisterRequest` — login 500'd, and `mfa_code` briefly became accepted input
+on the public signup route.
+
+Then Dio's interceptor treated *any* 401 on `/auth/login` as terminal — clearing
+storage and firing `onUnauthorized`. An `mfa_required` challenge went down that
+path, so the app tore its own session down mid-sign-in and the prompt never
+appeared. The backend was correct throughout; only driving the real screen
+against the real server showed it.
+
+And a process note worth keeping: the first browser attempt proved nothing,
+because `flutter run` does not recompile on save and the page was serving a
+bundle built before any of the changes.
+
+**Root detection: deliberately not built.** Easily defeated, native work on both
+platforms, and orthogonal to the real threat — a student wanting grades early
+would use a second device. Recorded as a decision rather than left looking like
+an oversight.
 
 ---
 
