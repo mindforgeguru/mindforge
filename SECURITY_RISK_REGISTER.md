@@ -28,8 +28,8 @@ There is also a rendered, filterable version of this register:
 | | Count |
 |---|---|
 | Verified | **36** |
-| Stale | **21** |
-| Open | **33** |
+| Stale | **22** |
+| Open | **32** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
@@ -183,7 +183,7 @@ goes wrong.
 |---|---|---|
 | Audit logging | STALE | An `AuditLog` table exists and survives its author. No review process, and coverage across sensitive actions is unmapped. |
 | Error visibility | STALE | Sentry on the backend, Crashlytics on the client. Both wired; neither verified end-to-end recently. |
-| Security alerting | OPEN | Failed logins are logged as warnings but nothing alerts on a spike, an impossible-travel pattern, or mass data access. |
+| Security alerting | STALE | Credential-spray detection: distinct usernames per IP over 15 min, escalating to ERROR at 8 so it becomes a Sentry event rather than a breadcrumb. Verified live — 6 failures on one account alert 0 times, one password against 10 accounts alerts from the 8th. STALE because only this one pattern is covered; impossible travel and mass data access are still unwatched, and no alert route has been configured in Sentry. |
 | Incident response | OPEN | No runbook for a breach: no containment steps, no notification path, no mass token-revocation procedure. |
 | Responsible disclosure | OPEN | No `security.txt`, no contact route for someone who finds a flaw. |
 
@@ -386,6 +386,27 @@ cases look identical and the vulnerability look absent. And `/child/timetable`
 422s without a `date`, which would have made that authorization case pass
 without testing anything. Both were caught by checking status codes rather than
 trusting the aggregate.
+
+### 2026-08-19 — Wave 3 continued: spray detection
+
+Two gaps that compound. The login limiter is keyed `{ip}:{username}` at 10/min,
+which stops someone grinding one account and does nothing about one password
+tried once against many — spraying 200 usernames is 200 requests each at a tenth
+of its own budget. And failed logins log at WARNING, which Sentry's logging
+integration records as a *breadcrumb*, never an alert, so a spray in progress was
+invisible unless something unrelated errored in the same request.
+
+Counts distinct usernames per IP, which is what separates spraying from
+mistyping — the latter re-adds the same set member and never grows it. Crosses
+at 8, logs at ERROR so it becomes a Sentry event.
+
+The summary line carries an IP and a count and nothing else. Shipping the list of
+targeted accounts to a third party would hand over exactly what the attacker was
+fishing for.
+
+STALE, not VERIFIED: one pattern is covered. Impossible travel and mass data
+access are still unwatched, and no alert *route* exists — Sentry will receive the
+event, but nothing has been configured to tell a human about it.
 
 ---
 

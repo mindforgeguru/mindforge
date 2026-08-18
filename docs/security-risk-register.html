@@ -748,8 +748,8 @@
           <p class="note">An <code>AuditLog</code> table exists and survives its author. No review process, and coverage across sensitive actions is unmapped.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Error visibility</span>
           <p class="note">Sentry on the backend, Crashlytics on the client. Both wired; neither verified end-to-end recently.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Security alerting</span>
-          <p class="note">Failed logins are logged as warnings but nothing alerts on a spike, an impossible-travel pattern, or mass data access.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Security alerting</span>
+          <p class="note">Credential-spray detection: distinct usernames per IP, escalating to ERROR so Sentry sees an event rather than a breadcrumb. Verified live in both directions. Stale because only this one pattern is covered, and no alert route is configured to reach a human.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Incident response</span>
           <p class="note">No runbook for a breach: no containment steps, no notification path, no mass token-revocation procedure.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Responsible disclosure</span>
