@@ -19,7 +19,8 @@ from sqlalchemy.exc import IntegrityError
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import (
-    hash_mpin, verify_mpin, create_access_token, create_refresh_token,
+    hash_mpin, verify_mpin, verify_mpin_constant_time,
+    create_access_token, create_refresh_token,
     decode_access_token, get_current_user
 )
 from app.models.academic_year import AcademicYear
@@ -404,7 +405,11 @@ async def login(
             headers={"Retry-After": "900"},
         )
 
-    if not user or not verify_mpin(payload.mpin, user.mpin_hash):
+    # Constant-time in the sense that matters here: the same bcrypt work is
+    # done whether or not the username exists. The previous short-circuit
+    # skipped hashing entirely for an unknown user, leaving a ~60x latency
+    # gap that answered "does this account exist?" despite identical bodies.
+    if not verify_mpin_constant_time(payload.mpin, user):
         # Record the failure against the user (if the username exists)
         if user:
             locked = await redis_manager.record_failed_login(user.id, ip)

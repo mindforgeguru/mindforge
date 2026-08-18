@@ -6,6 +6,7 @@ Security utilities:
 """
 
 import logging
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -37,6 +38,33 @@ def hash_mpin(mpin: str) -> str:
 def verify_mpin(plain_mpin: str, hashed_mpin: str) -> bool:
     """Verify a plain MPIN against its bcrypt hash."""
     return bcrypt.checkpw(plain_mpin.encode(), hashed_mpin.encode())
+
+
+# Hash of a value nobody knows, used purely to spend the same time on a login
+# for a username that does not exist as on one that does. Generated per process
+# from os.urandom, so it is not a credential and cannot be precomputed. Costs
+# one bcrypt (~200 ms) at import.
+_DUMMY_MPIN_HASH = hash_mpin(secrets.token_hex(16))
+
+
+def verify_mpin_constant_time(plain_mpin: str, user) -> bool:
+    """Verify an MPIN, doing equal bcrypt work whether or not `user` exists.
+
+    `login()` previously read `if not user or not verify_mpin(...)`. Python
+    short-circuits `or`, so an unknown username skipped bcrypt entirely and the
+    request returned in ~4 ms against ~240 ms for a real one. Bodies matched, but
+    a 61x latency gap answers "does this account exist?" just as well — measured
+    on the local stack, 2026-08-19.
+
+    Enumeration is worth closing here specifically because usernames are
+    school-issued and guessable, and the accounts belong to children.
+
+    Always hashes. Returns False when `user` is None.
+    """
+    if user is None:
+        verify_mpin(plain_mpin, _DUMMY_MPIN_HASH)
+        return False
+    return verify_mpin(plain_mpin, user.mpin_hash)
 
 
 # ─── JWT ──────────────────────────────────────────────────────────────────────
