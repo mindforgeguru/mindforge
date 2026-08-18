@@ -1,8 +1,17 @@
 name: CI
 
 on:
+  # Every branch, deliberately. The previous allowlist was
+  # [main, feature/**, fix/**, test/**], which silently excluded any branch
+  # named outside that scheme — `create_school` carried multi-tenancy, the
+  # realtime fan-out rewrite and a cross-school leak fix without a single CI
+  # run. An allowlist that has to be remembered at branch-creation time is a
+  # gate that fails open, and it failed open for weeks.
+  #
+  # PRs into main still run too; a PR from a branch in this repo means two runs
+  # for the same commit, which is cheap next to merging something unverified.
   push:
-    branches: [main, "feature/**", "fix/**", "test/**"]
+    branches: ["**"]
   pull_request:
     branches: [main]
   # Lets the suites below be run on demand against any branch.
@@ -109,6 +118,57 @@ jobs:
         run: |
           pip-audit -r backend/requirements.txt --strict \
             --ignore-vuln PYSEC-2026-1325
+
+  # ── Committed-secret scan ────────────────────────────────────────────────────
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      # gitleaks scans commit history, not just the working tree, so it needs
+      # the full clone — the default shallow fetch would scan one commit and
+      # pass vacuously.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Pinned by digest-bearing tag rather than `latest`: a scanner that
+      # silently changes rules between runs makes a green build meaningless.
+      #
+      # Allowlist and its rationale live in .gitleaks.toml. Baseline established
+      # 2026-08-18 — 231 commits, 8 findings, all Firebase *client* keys (public
+      # by design) plus one deliberately-invalid JWT test fixture. Zero real
+      # secrets. The allowlist is value-scoped, not path-scoped, and was
+      # falsified: a new high-entropy key in an already-allowlisted file is
+      # still reported.
+      # Pinned by digest = gitleaks v8.30.1, the exact image the baseline above
+      # was measured with. Bump deliberately and re-baseline; do not float.
+      - name: Scan history for committed secrets
+        run: |
+          docker run --rm -v "$PWD:/repo" \
+            zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            detect --source=/repo --config=/repo/.gitleaks.toml \
+                   --redact --no-banner --verbose
+
+  # ── Dart/Flutter dependency audit ────────────────────────────────────────────
+  dart-dependency-audit:
+    name: Dart dependency audit (osv-scanner)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # pip-audit covers backend/requirements.txt only, so pubspec.lock — 192
+      # packages — was entirely unscanned until 2026-08-18. There is no official
+      # `dart pub audit`; OSV is the advisory source that actually indexes pub.
+      # Baseline at introduction: 192 packages, 0 issues.
+      # Pinned by digest for the same reason as gitleaks above — this is the
+      # exact image the 192-package / 0-issue baseline was measured with.
+      - name: Audit pubspec.lock against the OSV database
+        run: |
+          docker run --rm -v "$PWD/frontend:/src" \
+            ghcr.io/google/osv-scanner@sha256:8108ae94eadea5a02c9bec6e646909d5b790b44bd62d7f5b7f0b1d6d0ffc7734 \
+            scan source --lockfile=/src/pubspec.lock
 
   # ── Flutter unit + widget tests ───────────────────────────────────────────────
   flutter:

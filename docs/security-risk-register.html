@@ -610,8 +610,8 @@
           <p class="note">Refresh tokens go to <code>flutter_secure_storage</code> (Keychain / Keystore). Not re-verified.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Token at rest in the browser</span>
           <p class="note">Logout clears <code>mindforge_*</code> localStorage keys — confirmed 2026-05-19, not since.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Reverse engineering the release binary</span>
-          <p class="note">Builds run without <code>--obfuscate --split-debug-info</code>. Dart symbol names, API routes and logic are readable from the APK.<span class="flag">Gap found</span></p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Reverse engineering the release binary</span>
+          <p class="note">Build commands now carry <code>--obfuscate --split-debug-info</code>, with the symbol-retention rule Crashlytics needs. Stale, not verified: no obfuscated build has been produced or inspected yet.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Rooted / jailbroken device</span>
           <p class="note">No root, jailbreak or Play Integrity detection anywhere in the app.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Screen capture of student records</span>
@@ -635,12 +635,12 @@
           <p class="note"><code>JWT_SECRET</code> has no default — the app refuses to start without it.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Shipping default infrastructure credentials</span>
           <p class="note">Backend refuses to boot under <code>APP_ENV=production</code> if Postgres, Redis or MinIO are on built-in defaults.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Seeded default admin account</span>
-          <p class="note"><code>init_db.sql</code> seeds a live <code>admin</code> / <code>123456</code> backfilled into school 1. Confirmed logging in on local; <b>status on the Railway production database is unverified</b>. Highest-severity open item here.<span class="flag">Critical</span></p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Seeded default admin account</span>
+          <p class="note">Removed from <code>init_db.sql</code> — provisioning is now only via the env-gated seed or Owner Console. Deployed databases that already ran the old file are not retroactively cleaned, so production still needs confirming.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Firebase client keys unrestricted</span>
           <p class="note">Documented in <code>SECURITY.md</code> with the exact restriction each key needs — never applied in the GCP console. Defence-in-depth; worst case is quota abuse.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Secrets committed to git history</span>
-          <p class="note">No <code>gitleaks</code> or <code>trufflehog</code> scan has ever run over the repo or its history.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Secrets committed to git history</span>
+          <p class="note">gitleaks over all 231 commits: <b>zero real secrets</b>. The 8 hits are public-by-design Firebase client keys and one invalid JWT fixture, allowlisted by exact value and falsified. Now a CI job.<span class="flag new">Fixed</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Secrets in the working tree</span>
           <p class="note"><code>.env</code> and <code>.env.local</code> are gitignored; last actually audited in May.</p></div>
       </div>
@@ -656,8 +656,8 @@
       <div class="rows">
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Vulnerable Python dependencies</span>
           <p class="note"><code>pip-audit --strict</code> green on a real CI runner — 20 findings across 5 packages driven to 0, with one documented ignore (<code>ecdsa</code>, unreachable under HS256).</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Vulnerable Dart / Flutter dependencies</span>
-          <p class="note">No audit equivalent runs against <code>pubspec.lock</code>. Only Python is scanned.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Vulnerable Dart / Flutter dependencies</span>
+          <p class="note">osv-scanner over <code>pubspec.lock</code>: <b>192 packages, 0 issues</b>. Now a CI job, image pinned by digest.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Vulnerable base images</span>
           <p class="note">No container scanning (<code>trivy</code>, <code>grype</code>) on the backend image.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Static analysis for security defects</span>
@@ -769,8 +769,8 @@
           <p class="note">Signed with a release keystore; <code>key.properties</code> gitignored.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Test suite writing to production</span>
           <p class="note"><code>tests/test_api.py</code> targeted the live database and was fired at it once by accident. A production guard now blocks it — but the suite itself is still stale.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Code merging without CI</span>
-          <p class="note">Triggers cover <code>main</code>, <code>feature/**</code>, <code>fix/**</code>, <code>test/**</code>. This branch — <code>create_school</code> — matches none, so all of this work is unverified by CI.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Code merging without CI</span>
+          <p class="note">Push trigger widened to <code>"**"</code> so every branch runs. Stale, not verified: nothing has been pushed, so no runner has executed the widened trigger or the two new scanner jobs.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Toolchain drift</span>
           <p class="note">CI pins Flutter 3.41.4; local is 3.44.0. A version-specific failure would not surface symmetrically.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">iOS release verification</span>

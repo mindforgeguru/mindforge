@@ -381,12 +381,33 @@ Last executed **2026-05-19** on Flutter 3.41.7 / Chrome against the local stack.
 
 ## 6. Release-Build QA (Android)
 
+Release builds are **obfuscated**. Without `--obfuscate`, Dart class, method and
+field names ship in the binary, so anyone unzipping the APK reads the API routes,
+the auth flow and the pinning logic as source-like symbols. Added 2026-08-19.
+
 ```bash
 cd frontend
-flutter build appbundle --release
-flutter build apk --release
+V=$(grep '^version:' pubspec.yaml | awk '{print $2}')   # e.g. 1.0.0+9
+
+flutter build appbundle --release \
+  --obfuscate --split-debug-info=build/symbols/$V
+flutter build apk --release \
+  --obfuscate --split-debug-info=build/symbols/$V
 ```
 
+> **Keep `build/symbols/<version>` for every release you ship.** Obfuscation
+> renames symbols, so a Crashlytics stack trace from an obfuscated build is
+> unreadable without the matching symbol files — and they are the *only* copy.
+> Lose them and every crash report from that build is permanently undecodable.
+> Archive them outside `build/` (that directory is disposable and gitignored),
+> keyed by version, before the next `flutter clean`.
+>
+> Upload per release so crashes stay legible:
+> `firebase crashlytics:symbols:upload --app <android-app-id> build/symbols/$V`
+
+- [ ] Release build is obfuscated (`--obfuscate --split-debug-info` both present)
+- [ ] Symbol files archived for this version, outside `build/`
+- [ ] Crashlytics symbols uploaded, and a forced crash **symbolicates readably**
 - [ ] APK installs on a real Android device (not emulator)
 - [ ] Login works on release build (catches ProGuard stripping JSON model classes)
 - [ ] Push notification received on release build
@@ -404,7 +425,8 @@ flutter build apk --release
 **Blocked** — not enrolled in the Apple Developer Program. Once enrolled:
 
 - [ ] Xcode → Signing & Capabilities → Team picked, `DEVELOPMENT_TEAM` in `project.pbxproj`
-- [ ] `flutter build ipa --release` succeeds
+- [ ] `flutter build ipa --release --obfuscate --split-debug-info=build/symbols/$V` succeeds
+      (same symbol-retention rule as §6 — archive them per version)
 - [ ] TestFlight upload + install
 - [ ] Repeat §5 and §6 on the IPA build
 

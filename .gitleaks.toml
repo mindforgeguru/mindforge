@@ -1,0 +1,47 @@
+# gitleaks configuration for MindForge
+#
+# Run locally exactly as CI does:
+#   docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+#     detect --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner
+#
+# Baseline established 2026-08-18: 231 commits scanned, 8 findings, all of them
+# benign and allowlisted below by exact value. Zero real secrets in history.
+#
+# The allowlist is deliberately value-scoped rather than path-scoped. Allowing
+# `frontend/lib/firebase_options.dart` wholesale would also allow the next
+# credential someone drops into that file; allowing three specific strings does
+# not. Same reasoning as the documented `--ignore-vuln` in ci.yml: an exception
+# carries its rationale, and is narrow enough that it cannot silently widen.
+
+title = "MindForge"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-benign values, reviewed 2026-08-18"
+
+regexes = [
+  # ── Firebase client API keys ────────────────────────────────────────────────
+  # Public by design. These identify the Firebase project; they are not secrets.
+  # The app uses only Core, FCM, Analytics and Crashlytics — no Firestore,
+  # Storage, Realtime DB or Firebase Auth — so a copied key cannot read or write
+  # user data. Worst case is API-quota abuse. They are *supposed* to ship inside
+  # the client bundle, and three of the eight hits are in SECURITY.md, which
+  # documents them on purpose.
+  #
+  # The real server-side secret is FIREBASE_CREDENTIALS_JSON (Admin SDK). It is
+  # env-only and must never appear here — if it ever does, gitleaks should and
+  # will fail, because it is not in this list.
+  #
+  # See SECURITY.md for the console-side restriction each of these still needs.
+  '''AIzaSyCZ7yTGCVV-klJtoan9whSmGBkMMgIASMw''',  # Android — com.mindforge.mindforge
+  '''AIzaSyBqeTY2qzb4f4yATvI2dIOW6TW3uAAQz0A''',  # iOS     — com.mindforge.mindforge
+  '''AIzaSyDYmYmBqhgnQQKtPhLpzd7xnrnxQGFpE0M''',  # Web     — mindforge.guru
+
+  # ── Test fixture: deliberately invalid JWT ──────────────────────────────────
+  # tests/security_test.py feeds this to the API to assert a forged token is
+  # rejected. The signature is the literal string "fakesignature123"; matching on
+  # that keeps the exception tied to the fixture rather than to JWTs generally.
+  '''fakesignature123''',
+]

@@ -27,12 +27,12 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **28** |
-| Stale | **17** |
-| Open | **45** |
+| Verified | **31** |
+| Stale | **19** |
+| Open | **40** |
 | **Total tracked** | **90** across 13 domains |
 
-*Last verification sweep: 2026-08-18 (see [Verification log](#verification-log)).*
+*Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
 
 **The shape of it.** Multi-tenancy and authentication are genuinely strong — that is
 where the tests are, and it shows. The open items cluster in three places instead:
@@ -117,7 +117,7 @@ goes wrong.
 | Android backup exfiltration | VERIFIED | `android:allowBackup="false"` set in the manifest. |
 | Token at rest on device | STALE | Refresh tokens go to `flutter_secure_storage` (Keychain / Keystore). Not re-verified. |
 | Token at rest in the browser | STALE | Logout clears `mindforge_*` localStorage keys — confirmed 2026-05-19, not since. |
-| Reverse engineering the release binary | OPEN | Builds run without `--obfuscate --split-debug-info`. Dart symbol names, API routes and logic are readable from the APK. *(Gap found 2026-08-18.)* |
+| Reverse engineering the release binary | STALE | Build commands now carry `--obfuscate --split-debug-info` (`TEST_RECORD.md` §6/§7, 2026-08-19), with the symbol-retention rule Crashlytics needs. STALE not VERIFIED: no obfuscated build has actually been produced or inspected yet. |
 | Rooted / jailbroken device | OPEN | No root, jailbreak or Play Integrity detection anywhere in the app. |
 | Screen capture of student records | OPEN | No `FLAG_SECURE` or iOS equivalent on screens showing grades, fees or attendance. |
 | Runtime tampering / hooking | OPEN | No anti-debug or integrity checks. A hooked client can call any endpoint the user's token permits. |
@@ -129,9 +129,9 @@ goes wrong.
 |---|---|---|
 | Weak or defaulted signing key | VERIFIED | `JWT_SECRET` has no default — the app refuses to start without it. |
 | Shipping default infrastructure credentials | VERIFIED | Backend refuses to boot under `APP_ENV=production` if Postgres, Redis or MinIO are on built-in defaults. |
-| **Seeded default admin account** | **OPEN** | `init_db.sql` seeds a live `admin` / `123456` backfilled into school 1. Confirmed logging in on local; **status on the Railway production database is unverified.** Highest-severity open item in this register. |
+| Seeded default admin account | VERIFIED | Removed from `init_db.sql` 2026-08-19 (commit `7e5de32`) — provisioning is now only via the env-gated seed in `main.py` or Owner Console. **Deployed databases that already ran the old file are not retroactively cleaned; production still needs confirming.** |
 | Firebase client keys unrestricted | OPEN | Documented in `SECURITY.md` with the exact restriction each key needs — never applied in the GCP console. Defence-in-depth; worst case is quota abuse. |
-| Secrets committed to git history | OPEN | No `gitleaks` or `trufflehog` scan has ever run over the repo or its history. |
+| Secrets committed to git history | VERIFIED | gitleaks over all 231 commits, 2026-08-19: **zero real secrets**. The 8 hits are 3 public-by-design Firebase client keys and 1 deliberately-invalid JWT fixture, allowlisted by exact value in `.gitleaks.toml` and falsified (a new high-entropy key in an allowlisted file is still caught). Now a CI job. |
 | Secrets in the working tree | STALE | `.env` and `.env.local` are gitignored; last actually audited in May. |
 
 ## 8. Supply chain
@@ -139,7 +139,7 @@ goes wrong.
 | Risk | Status | Evidence / note |
 |---|---|---|
 | Vulnerable Python dependencies | VERIFIED | `pip-audit --strict` green on a real CI runner — 20 findings across 5 packages driven to 0, with one documented ignore (`ecdsa`, unreachable under HS256). |
-| Vulnerable Dart / Flutter dependencies | OPEN | No audit equivalent runs against `pubspec.lock`. Only Python is scanned. |
+| Vulnerable Dart / Flutter dependencies | VERIFIED | osv-scanner over `pubspec.lock` 2026-08-19: **192 packages, 0 issues**. Now a CI job, image pinned by digest. |
 | Vulnerable base images | OPEN | No container scanning (`trivy`, `grype`) on the backend image. |
 | Static analysis for security defects | OPEN | No SAST in CI — no CodeQL, no Semgrep. `flutter analyze` is a linter, not a security tool. |
 | Malicious or typosquatted package | OPEN | No provenance or lockfile-integrity gate. |
@@ -193,7 +193,7 @@ goes wrong.
 |---|---|---|
 | Android release signing | VERIFIED | Signed with a release keystore; `key.properties` gitignored. |
 | Test suite writing to production | STALE | `tests/test_api.py` targeted the live database and was fired at it once by accident. A production guard now blocks it — but the suite itself is still stale. |
-| Code merging without CI | OPEN | Triggers cover `main`, `feature/**`, `fix/**`, `test/**`. Working branches like `create_school` match none, so that work is unverified by CI. |
+| Code merging without CI | STALE | Push trigger widened to `"**"` 2026-08-19, so every branch runs. STALE not VERIFIED: nothing has been pushed yet, so no runner has executed the widened trigger or the two new scanner jobs. |
 | Toolchain drift | OPEN | CI pins Flutter 3.41.4; local is 3.44.0. A version-specific failure would not surface symmetrically. |
 | iOS release verification | OPEN | Blocked on Apple Developer Program enrolment. No IPA has ever been built or tested. |
 | Independent penetration test | OPEN | Every result in this register comes from self-testing. No external assessment, no DAST, no bug bounty. |
@@ -239,23 +239,60 @@ touched by either suite. Re-running what exists cannot clear them; each needs a 
 written first. Treat "run the suites" as a regression check, not as a way to pay down
 the STALE column.
 
+### 2026-08-19 — Wave 1: config-level hardening
+
+Five rows moved: three to VERIFIED, two to STALE.
+
+| Change | Result |
+|---|---|
+| Removed the hardcoded admin seed from `init_db.sql` (`7e5de32`) | OPEN → VERIFIED |
+| gitleaks over 231 commits | **0 real secrets**; OPEN → VERIFIED |
+| osv-scanner over `pubspec.lock` | **192 packages, 0 issues**; OPEN → VERIFIED |
+| `--obfuscate --split-debug-info` in documented builds | OPEN → STALE |
+| CI push trigger widened to `"**"` | OPEN → STALE |
+
+Both scanners are wired into `ci.yml` as jobs, with images **pinned by digest** —
+a scanner whose rules float between runs makes a green build meaningless.
+
+**On the gitleaks allowlist.** All 8 baseline findings are benign: three Firebase
+*client* keys (public by design, and three of the hits are in `SECURITY.md`, which
+documents them deliberately) plus one invalid JWT fixture whose signature is the
+literal `fakesignature123`. `.gitleaks.toml` allowlists them **by exact value, not by
+path** — allowing `firebase_options.dart` wholesale would also allow the next
+credential dropped into it. Falsified: a new high-entropy key placed in an
+already-allowlisted file is still reported.
+
+Two earlier falsification attempts produced false confidence and are worth recording,
+because both failure modes are easy to repeat. A planted key of the wrong length
+(38 chars; the rule needs `AIza` + exactly 35) was silently ignored, as was one built
+from 33 identical characters, which falls below the rule's entropy floor. In both cases
+gitleaks reported "no leaks found" and looked like a passing test. A scanner that
+cannot be made to fail has not been shown to work.
+
+**Why two rows are STALE, not VERIFIED.** Obfuscation flags are documented but no
+obfuscated build has been produced; the CI trigger is widened but nothing has been
+pushed, so no runner has executed it or the new jobs. Writing the config is not the
+same as watching it run — precisely the lesson in §10 item 17 of `TEST_RECORD.md`.
+
 ---
 
 ## What to fix first
 
 Ordered by consequence, not by how interesting the work is.
 
-1. **Check whether `admin` / `123456` works in production.** Everything else here is
-   theoretical if a default credential is live. Confirm against the Railway database,
-   and delete or rotate the seeded row.
+1. **Confirm no `admin` row survives in a deployed database.** The seed is gone from
+   `init_db.sql` (2026-08-19), but removing it does not clean an environment that
+   already ran the old file. Railway uses managed Postgres and would not have
+   executed it — confirm rather than assume, then this closes fully.
 2. **Decide the children's-data position.** COPPA / GDPR-K governs a product holding
    minors' records. This gates store submission and carries real legal weight — it is
    not a hardening task you can defer past launch.
 3. **Publish the privacy policy and add Anthropic to it.** Host it, populate
    `privacyPolicyUrl`, disclose Claude as a recipient. Three small tasks that together
    unblock submission.
-4. **Turn on build obfuscation.** Adding `--obfuscate --split-debug-info` is a one-line
-   change that removes a whole class of reconnaissance from the shipped binary.
+4. **Produce one obfuscated build and check it.** The flags are now in the documented
+   build commands; nobody has run them yet. Build, confirm symbols are archived, and
+   verify a forced Crashlytics crash still symbolicates.
 5. **Extend rate limiting past the four routers that have it.** A global default with
    per-route overrides. Currently most of the API can be hammered freely by any
    authenticated user.
