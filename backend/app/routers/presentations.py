@@ -31,7 +31,7 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.redis_client import redis_manager
 from app.core.security import get_current_user
-from app.core.upload_utils import reject_if_oversize
+from app.core.upload_utils import reject_if_oversize, validate_document
 from app.models.database_models import ChapterDocument
 from app.models.presentation import (
     ChapterPresentation,
@@ -451,22 +451,21 @@ async def upload_chapter(
     if not chapter_name:
         raise HTTPException(status_code=422, detail="Chapter name is required.")
 
-    if file.content_type not in ("application/pdf", "application/octet-stream"):
-        # Some browsers send octet-stream; allow but verify extension.
-        if not (file.filename or "").lower().endswith(".pdf"):
-            raise HTTPException(status_code=415, detail="Only PDF uploads are supported.")
-
     # Reject by declared size before buffering the whole PDF into memory; the
     # post-read length check below stays as the source of truth.
     reject_if_oversize(file, _MAX_PDF_BYTES)
     data = await file.read()
-    if not data:
-        raise HTTPException(status_code=422, detail="Uploaded file is empty.")
     if len(data) > _MAX_PDF_BYTES:
         raise HTTPException(
             status_code=413,
             detail=f"PDF too large (max {_MAX_PDF_BYTES // (1024 * 1024)} MB).",
         )
+
+    # Decide the type from the bytes. This previously trusted `content_type` or
+    # the filename extension, both of which the client sets — so anything at all
+    # could be stored as a .pdf and handed to the AI pipeline. Also covers the
+    # empty-body case (422).
+    validate_document(data, file.filename or "", {"pdf"})
 
     # Store the PDF in object storage. Key includes a uuid so re-uploads of
     # the same chapter never collide.

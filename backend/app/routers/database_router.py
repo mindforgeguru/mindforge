@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_teacher
-from app.core.upload_utils import reject_if_oversize
+from app.core.upload_utils import reject_if_oversize, validate_document
 from app.models.user import User
 from app.models.database_models import OldTestPaper, ChapterDocument, SyllabusEntry
 from app.services import ai_service, storage_service
@@ -36,6 +36,9 @@ _MAX_DOC_BYTES = 25 * 1024 * 1024  # 25 MB
 # Cap the batch size on the multi-file old-tests endpoint so the per-file cap
 # can't be multiplied into a huge aggregate upload.
 _MAX_FILES_PER_UPLOAD = 20
+# Knowledge-base uploads are chapter PDFs and scanned answer sheets. The type is
+# decided from the file's bytes, not from its name — see validate_document.
+_ALLOWED_DOC_EXTS = {"pdf", "png", "jpg", "webp"}
 
 
 def _enforce_size(file: UploadFile, data: bytes) -> None:
@@ -48,9 +51,10 @@ def _enforce_size(file: UploadFile, data: bytes) -> None:
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
-
-def _ext(filename: str) -> str:
-    return filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+#
+# `_ext(filename)` used to live here and derived the extension from the upload's
+# name. Every call site now uses validate_document, which derives it from the
+# bytes instead, so trusting the name is no longer possible by accident.
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -78,7 +82,10 @@ async def upload_old_test_paper(
         reject_if_oversize(file, _MAX_DOC_BYTES)
         data = await file.read()
         _enforce_size(file, data)
-        ext = _ext(file.filename or "doc.pdf")
+        # Identify from the bytes. This used to take the extension straight
+        # off the filename and hand it to the AI scanner, so the caller
+        # chose how their upload was parsed.
+        ext = validate_document(data, file.filename or "", _ALLOWED_DOC_EXTS)
 
         # AI scan
         try:
@@ -184,7 +191,10 @@ async def upload_chapter_document(
     reject_if_oversize(file, _MAX_DOC_BYTES)
     data = await file.read()
     _enforce_size(file, data)
-    ext = _ext(file.filename or "chapter.pdf")
+    # Identify from the bytes. This used to take the extension straight
+    # off the filename and hand it to the AI scanner, so the caller
+    # chose how their upload was parsed.
+    ext = validate_document(data, file.filename or "", _ALLOWED_DOC_EXTS)
 
     key = f"chapters/{current_user.id}/{uuid.uuid4()}.{ext}"
     try:
@@ -317,7 +327,10 @@ async def upload_syllabus(
     reject_if_oversize(file, _MAX_DOC_BYTES)
     data = await file.read()
     _enforce_size(file, data)
-    ext = _ext(file.filename or "syllabus.pdf")
+    # Identify from the bytes. This used to take the extension straight
+    # off the filename and hand it to the AI scanner, so the caller
+    # chose how their upload was parsed.
+    ext = validate_document(data, file.filename or "", _ALLOWED_DOC_EXTS)
 
     # Store file in MinIO
     key = f"syllabus/{current_user.id}/{uuid.uuid4()}.{ext}"
