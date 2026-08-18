@@ -477,8 +477,8 @@
           <p class="note">Cache-reset race let the next sign-in read the previous user's data. Found and fixed today — commit <code>2bbb630</code>.<span class="flag new">This session</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Account lockout + lockout-DoS guard</span>
           <p class="note">15-min lockout with a guard against locking someone out deliberately. Code present; not re-verified since May.</p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Refresh-token rotation and JTI revocation</span>
-          <p class="note">Rotate-on-use with old JTI blacklisted in Redis. Passed the extended probe in May; the auth layer has changed since.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Refresh-token rotation and JTI revocation</span>
+          <p class="note">Rotate-on-use with old JTI blacklisted in Redis. Re-confirmed today: access token 401s after logout, rotated refresh token 401s on reuse.<span class="flag new">This session</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Token lifetime and expiry handling</span>
           <p class="note">60-min access, 30-day refresh, Dio auto-refresh interceptor. Not re-confirmed.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Deactivated, pending or deleted users signing in</span>
@@ -519,7 +519,7 @@
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Cross-school foreign keys accepted on write</span>
           <p class="note">Timetable <code>teacher_id</code> now validated against the caller's school; commit <code>25451eb</code>.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Unauthenticated media proxy</span>
-          <p class="note">Bucket allowlist verified, but <code>/api/media/{bucket}/{key}</code> stays open by design and leans entirely on object keys being unguessable. Never adversarially tested.</p></div>
+          <p class="note">Bucket allowlist and path traversal re-probed today — 5/5 rejected, including double-encoded and null-byte keys. Still stale because the real risk is different: the endpoint stays open by design and leans on object keys being <em>unguessable</em>, which no probe tests.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Business-logic abuse</span>
           <p class="note">No tests for a student re-taking a locked test, editing submitted answers, tampering with their own grade, or a teacher backdating attendance.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Parent–child link tampering</span>

@@ -27,10 +27,12 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **27** |
-| Stale | **18** |
+| Verified | **28** |
+| Stale | **17** |
 | Open | **45** |
 | **Total tracked** | **90** across 13 domains |
+
+*Last verification sweep: 2026-08-18 (see [Verification log](#verification-log)).*
 
 **The shape of it.** Multi-tenancy and authentication are genuinely strong — that is
 where the tests are, and it shows. The open items cluster in three places instead:
@@ -51,7 +53,7 @@ goes wrong.
 | Suspended tenant still authenticating | VERIFIED | Login *and* refresh both gated; owner exempt. `test_tenancy_wiring.py` 8/8. |
 | Session bleed on account switch (shared device) | VERIFIED | Cache-reset race let the next sign-in read the previous user's data. Found and fixed 2026-08-18 — commit `2bbb630`. |
 | Account lockout + lockout-DoS guard | STALE | 15-min lockout with a guard against deliberate lockout of another user. Code present; not re-verified since May. |
-| Refresh-token rotation and JTI revocation | STALE | Rotate-on-use with old JTI blacklisted in Redis. Passed the extended probe in May; auth layer has changed since. |
+| Refresh-token rotation and JTI revocation | VERIFIED | Rotate-on-use with old JTI blacklisted in Redis. Re-confirmed 2026-08-18: `security_test_extended.py` §6 — access token 401s after logout, and a rotated refresh token 401s on reuse. |
 | Token lifetime and expiry handling | STALE | 60-min access, 30-day refresh, Dio auto-refresh interceptor. Not re-confirmed. |
 | Deactivated, pending or deleted users signing in | STALE | Blocked in `auth.py`; last actually exercised 2026-05-19. |
 | Weak / guessable MPIN | STALE | Blocklist added 2026-07-07 at set and change time. Never manually re-tested. |
@@ -71,7 +73,7 @@ goes wrong.
 | IDOR / BOLA on object ids | VERIFIED | Covered by the extended probe suite. |
 | Realtime events crossing tenants | VERIFIED | Two separate leaks found and fixed (fan-out, then `admin.py` config events). Tests falsified against the unfixed code. |
 | Cross-school foreign keys accepted on write | VERIFIED | Timetable `teacher_id` now validated against the caller's school; commit `25451eb`. |
-| Unauthenticated media proxy | STALE | Bucket allowlist verified, but `/api/media/{bucket}/{key}` stays open by design and leans entirely on object keys being unguessable. Never adversarially tested. |
+| Unauthenticated media proxy | STALE | Bucket allowlist and path traversal re-probed 2026-08-18 — 5/5 rejected, including double-encoded and null-byte keys. Still STALE because the actual risk is different: the endpoint stays open by design and leans on object keys being *unguessable*, which no probe tests. |
 | Business-logic abuse | OPEN | No tests for a student re-taking a locked test, editing submitted answers, tampering with their own grade, or a teacher backdating attendance. |
 | Parent–child link tampering | OPEN | Nothing verifies a parent cannot bind themselves to another family's student. |
 
@@ -195,6 +197,47 @@ goes wrong.
 | Toolchain drift | OPEN | CI pins Flutter 3.41.4; local is 3.44.0. A version-specific failure would not surface symmetrically. |
 | iOS release verification | OPEN | Blocked on Apple Developer Program enrolment. No IPA has ever been built or tested. |
 | Independent penetration test | OPEN | Every result in this register comes from self-testing. No external assessment, no DAST, no bug bounty. |
+
+---
+
+## Verification log
+
+### 2026-08-18 — Wave 0: re-run the existing probe suites
+
+Both suites run against the **local** stack (`MF_SEC_BASE_URL=http://127.0.0.1:8000`),
+with school-1 fixtures. Pinning matters: `security_test.py` defaults to production and
+fires rate-limit and injection probes.
+
+```bash
+# 21 PASS / 1 FAIL / 1 WARN
+MF_SEC_BASE_URL=http://127.0.0.1:8000 MF_SEC_ADMIN_USER=demo_admin \
+ADMIN_MPIN=847362 MF_SEC_SCHOOL_ID=1 python3 tests/security_test.py
+
+# 49 PASS / 0 FAIL / 0 WARN
+MF_SEC_BASE_URL=http://127.0.0.1:8000 MF_SEC_SCHOOL_ID=1 \
+MF_SEC_ADMIN_USER=demo_admin   MF_SEC_ADMIN_MPIN=847362   MF_SEC_ADMIN_ID=280 \
+MF_SEC_TEACHER_USER=chinmay_sir MF_SEC_TEACHER_MPIN=847362 MF_SEC_TEACHER_ID=2 \
+MF_SEC_STUDENT_USER=nitin       MF_SEC_STUDENT_MPIN=123456 MF_SEC_STUDENT_ID=3 \
+MF_SEC_PARENT_USER=nitin_dad    MF_SEC_PARENT_MPIN=123456  MF_SEC_PARENT_ID=4 \
+python3 tests/security_test_extended.py
+```
+
+`security_test.py`'s one FAIL (HTTPS enforced) and one WARN (uvicorn `server` banner)
+are local-stack artifacts — there is no TLS on localhost, and in production the Railway
+edge overrides the banner. This matches the 2026-05-19 and 2026-07-25 baselines exactly,
+so the surface has not regressed.
+
+**Net effect on this register: one row moved.** Refresh-token rotation and JTI
+revocation went STALE → VERIFIED. Everything else the suites cover was already VERIFIED
+and was simply re-confirmed — valuable as regression evidence, but it does not change
+posture.
+
+**The finding worth keeping:** the remaining STALE items are stale *precisely because no
+existing test covers them*. Account lockout, token lifetime, deactivated-user login,
+MPIN blocklist, CORS, token-at-rest, Sentry scrubbing, account deletion — none is
+touched by either suite. Re-running what exists cannot clear them; each needs a test
+written first. Treat "run the suites" as a regression check, not as a way to pay down
+the STALE column.
 
 ---
 
