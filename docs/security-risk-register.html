@@ -614,8 +614,8 @@
           <p class="note">Build commands now carry <code>--obfuscate --split-debug-info</code>, with the symbol-retention rule Crashlytics needs. Stale, not verified: no obfuscated build has been produced or inspected yet.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Rooted / jailbroken device</span>
           <p class="note">No root, jailbreak or Play Integrity detection anywhere in the app.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Screen capture of student records</span>
-          <p class="note">No <code>FLAG_SECURE</code> or iOS equivalent on screens showing grades, fees or attendance.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Screen capture of student records</span>
+          <p class="note"><code>FLAG_SECURE</code> via a native channel, reference-counted so nested secured screens don't unsecure each other; wired into the six fee and grade screens. Stale, not verified: no device has confirmed a screenshot is actually blocked, and iOS has no implementation yet. Timetables stay capturable on purpose.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Runtime tampering / hooking</span>
           <p class="note">No anti-debug or integrity checks. A hooked client can call any endpoint the user's token permits.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Deep-link and intent hijacking</span>

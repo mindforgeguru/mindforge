@@ -28,8 +28,8 @@ There is also a rendered, filterable version of this register:
 | | Count |
 |---|---|
 | Verified | **34** |
-| Stale | **18** |
-| Open | **38** |
+| Stale | **19** |
+| Open | **37** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
@@ -119,7 +119,7 @@ goes wrong.
 | Token at rest in the browser | STALE | Logout clears `mindforge_*` localStorage keys — confirmed 2026-05-19, not since. |
 | Reverse engineering the release binary | STALE | Build commands now carry `--obfuscate --split-debug-info` (`TEST_RECORD.md` §6/§7, 2026-08-19), with the symbol-retention rule Crashlytics needs. STALE not VERIFIED: no obfuscated build has actually been produced or inspected yet. |
 | Rooted / jailbroken device | OPEN | No root, jailbreak or Play Integrity detection anywhere in the app. |
-| Screen capture of student records | OPEN | No `FLAG_SECURE` or iOS equivalent on screens showing grades, fees or attendance. |
+| Screen capture of student records | STALE | `FLAG_SECURE` via a native MethodChannel, reference-counted so nested secured screens don't unsecure each other; wired into the six fee and grade screens. 5 tests. STALE not VERIFIED: no Android device or emulator has confirmed a screenshot is actually blocked, and iOS has no implementation (blocked on Apple enrolment). Attendance and timetables are deliberately left capturable. |
 | Runtime tampering / hooking | OPEN | No anti-debug or integrity checks. A hooked client can call any endpoint the user's token permits. |
 | Deep-link and intent hijacking | OPEN | Exported activities and URL schemes have never been reviewed. |
 
@@ -321,9 +321,16 @@ makes it innermost and the 429 inherits the headers. Nothing in the suite
 assembles the middleware stack, so this was only visible by curling a throttled
 response. Worth remembering when adding any middleware that can short-circuit.
 
-Still open in Wave 2: `FLAG_SECURE` on grade and fee screens. Left deliberately —
-blanket screenshot blocking is user-hostile in a way the other two changes are
-not, and which screens it should cover is a product call.
+`FLAG_SECURE` landed after that call was made: fees and grades only, native
+MethodChannel rather than a pub package, since this app holds minors' data and
+dependency scanning was just added to shrink that surface. It stays STALE until
+a real device confirms a screenshot is blocked.
+
+Wiring it surfaced the `2bbb630` trap a second time. All six screens carried
+uncommitted `SchoolLogo` work and imported `school_logo.dart`, which was
+untracked — so committing them alone would have failed a clean checkout on an
+unresolved import, exactly as before. Caught this time by checking the
+dependency closure *before* committing rather than by watching CI go red.
 
 ---
 
