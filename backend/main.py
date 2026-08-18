@@ -16,6 +16,10 @@ import logging
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.core.redis_client import redis_manager
+from app.core.security import decode_access_token
+from app.core.throttle import (
+    GLOBAL_MAX_PER_MINUTE, GLOBAL_WINDOW_SECONDS, is_exempt, throttle_identity,
+)
 from app.websockets.manager import ws_manager
 from app.routers import auth, teacher, student, parent, admin, xp
 from app.routers import database_router, feedback, presentations, schools, owner
@@ -226,9 +230,68 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# ─── Global request throttle ──────────────────────────────────────────────────
+
+class GlobalThrottleMiddleware(BaseHTTPMiddleware):
+    """A blast-radius cap on runaway or scripted clients.
+
+    nginx.conf has a 120 r/m API zone, but nginx is compose-only — production
+    runs start.sh on :8000 behind Railway's edge, so that zone never loads. See
+    app/core/throttle.py for the reasoning; the short version is that this
+    travels with the app and the nginx rule does not.
+
+    Not a security control. Login, register and AI generation keep their own
+    much stricter per-route limits.
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        path = request.url.path
+        if is_exempt(path) or request.method == "OPTIONS":
+            # Preflights are browser-generated and cost nothing to serve;
+            # counting them would throttle a page that is behaving normally.
+            return await call_next(request)
+
+        # Identify the caller. A malformed or expired token is not this
+        # middleware's problem — the endpoint's own dependency will reject it —
+        # so any decode failure just falls back to the IP bucket.
+        user_id = None
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer "):
+            try:
+                sub = decode_access_token(auth[7:]).get("sub")
+                user_id = int(sub) if sub is not None else None
+            except Exception:
+                user_id = None
+
+        key = throttle_identity(
+            user_id, request.client.host if request.client else None
+        )
+        if await redis_manager.rate_limit(
+            key, GLOBAL_MAX_PER_MINUTE, GLOBAL_WINDOW_SECONDS
+        ):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please slow down and retry."},
+                headers={"Retry-After": str(GLOBAL_WINDOW_SECONDS)},
+            )
+
+        return await call_next(request)
+
+
 # ─── CORS ─────────────────────────────────────────────────────────────────────
 # CORS must be added before SecurityHeadersMiddleware so that preflight OPTIONS
 # responses also carry the security headers.
+#
+# Starlette applies middleware in reverse registration order, so the last one
+# added is outermost. The throttle is registered *first* — making it innermost —
+# so its 429 travels back out through SecurityHeadersMiddleware and picks up the
+# same four headers as every other response.
+#
+# Registering it last instead was the obvious-looking arrangement and is wrong:
+# the 429 short-circuits above the header middleware and ships bare. That was
+# caught by curling a throttled response, not by the test suite, which does not
+# exercise the assembled middleware stack.
+app.add_middleware(GlobalThrottleMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
