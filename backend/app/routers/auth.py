@@ -31,6 +31,7 @@ from app.schemas.user import (
     RefreshRequest, RefreshResponse, UserResponse,
 )
 from app.core.redis_client import redis_manager
+from app.core.security_events import note_failed_login
 from app.core.cache import is_school_active_cached
 from app.services import storage_service
 
@@ -422,6 +423,15 @@ async def login(
             logger.warning(
                 "Failed login for unknown username=%r ip=%s", payload.username, ip,
             )
+
+        # Watch for the shape the limiters miss. The per-(IP, username) cap
+        # stops someone grinding one account; it does nothing about one password
+        # tried once against many, which is what walking a class list looks
+        # like. Counts distinct usernames per IP and escalates to ERROR — and so
+        # to a Sentry event — once it stops looking like ordinary mistyping.
+        # Runs for unknown usernames too, since that is most of a spray.
+        await note_failed_login(payload.username, ip)
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or MPIN.",
