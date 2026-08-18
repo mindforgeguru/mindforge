@@ -27,9 +27,9 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **34** |
-| Stale | **20** |
-| Open | **36** |
+| Verified | **36** |
+| Stale | **21** |
+| Open | **33** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
@@ -58,7 +58,7 @@ goes wrong.
 | Deactivated, pending or deleted users signing in | STALE | Blocked in `auth.py`; last actually exercised 2026-05-19. |
 | Weak / guessable MPIN | STALE | Blocklist added 2026-07-07 at set and change time. Never manually re-tested. |
 | Multi-factor authentication | OPEN | Not implemented. A 6-digit PIN is the only factor for every role, including admins and the platform owner. |
-| Account enumeration | OPEN | Never probed whether a wrong username and a wrong MPIN are distinguishable by response body or timing. |
+| Account enumeration | VERIFIED | **Was exploitable.** Bodies always matched, but `login()` short-circuited past bcrypt for an unknown username: 238.7 ms vs 3.9 ms, a 61x tell. Closed with `verify_mpin_constant_time`, which always hashes; re-measured at 240.6 vs 239.7 ms (1.00x). 5 tests. |
 | Forgot-MPIN / recovery flow abuse | OPEN | The login screen offers "Forgot your MPIN?" — that flow has no security test at all. |
 | Session fixation | OPEN | Not assessed. |
 
@@ -74,8 +74,8 @@ goes wrong.
 | Realtime events crossing tenants | VERIFIED | Two separate leaks found and fixed (fan-out, then `admin.py` config events). Tests falsified against the unfixed code. |
 | Cross-school foreign keys accepted on write | VERIFIED | Timetable `teacher_id` now validated against the caller's school; commit `25451eb`. |
 | Unauthenticated media proxy | STALE | Bucket allowlist and path traversal re-probed 2026-08-18 — 5/5 rejected, including double-encoded and null-byte keys. Still STALE because the actual risk is different: the endpoint stays open by design and leans on object keys being *unguessable*, which no probe tests. |
-| Business-logic abuse | OPEN | No tests for a student re-taking a locked test, editing submitted answers, tampering with their own grade, or a teacher backdating attendance. |
-| Parent–child link tampering | OPEN | Nothing verifies a parent cannot bind themselves to another family's student. |
+| Business-logic abuse | STALE | Score is server-computed by `_grade_submission` against the test key; `/save` and `/submit` both 409 once `is_finalized` is set. 9 tests pin the submission surface as exactly `{answers, auto_submitted}`, so a score-bearing field cannot be added silently. STALE: teacher-side abuse — backdating attendance, editing a published grade — is still untested. |
+| Parent–child link tampering | VERIFIED | Structurally prevented: `parent_user_id` is written only in `admin.py`, the parent router is read-only, and `_get_child_profile` resolves the child from the authenticated parent's id — there is no id in the request to swap. Both admin link paths scope to `current_admin.school_id`. 12 integration tests, including that another school's student id cannot redirect the read. |
 
 ## 3. Injection & input handling
 
@@ -360,6 +360,32 @@ One thing this turned up: `backups/` was not gitignored. A dump holds every
 student record in plaintext, so the tooling as first written created a
 convenient way to commit the entire database. Fixed, and the ignore rule was
 verified rather than assumed.
+
+### 2026-08-19 — Wave 4: business-logic and authorization edges
+
+Went after the risks specific to a school app rather than the remaining Wave 3
+items. A student changing their own grade, or a parent reaching another family's
+child, matter more here than root detection.
+
+**One real vulnerability, found and fixed.** Account enumeration by timing.
+`login()` read `if not user or not verify_mpin(...)`; Python short-circuits, so
+an unknown username never reached bcrypt — 3.9 ms against 238.7 ms for a real
+one. Identical bodies, 61x tell. That matters more than usual here: usernames
+are school-issued and guessable, so confirming which exist turns guesswork into
+a target list of children's accounts. Now 1.00x.
+
+**Two properties confirmed sound.** Parent → child access has no id in the
+request to tamper with, and the score never leaves the server. Both were correct
+by construction; neither had a test, so both were one refactor from breaking
+silently.
+
+Two measurement mistakes worth recording, because each produced a confident
+wrong answer. Timing samples taken in a tight loop tripped the login limiter, so
+most were instant 429s that never reached the password check — making the two
+cases look identical and the vulnerability look absent. And `/child/timetable`
+422s without a `date`, which would have made that authorization case pass
+without testing anything. Both were caught by checking status codes rather than
+trusting the aggregate.
 
 ---
 
