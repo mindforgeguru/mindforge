@@ -27,9 +27,9 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **32** |
+| Verified | **34** |
 | Stale | **18** |
-| Open | **40** |
+| Open | **38** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
@@ -95,7 +95,7 @@ goes wrong.
 |---|---|---|
 | Malicious image upload | VERIFIED | Genuinely well built: magic-byte check, 5 MB cap, EXIF stripped by re-encode, and a 40 MP decompression-bomb guard in `upload_utils.py`. |
 | Oversized document upload | VERIFIED | 25 MB PDFs, 50 MB decks, rejected on declared size before buffering. |
-| PDF / PPTX type spoofing | OPEN | Unlike images, documents are gated on the `content_type` header only — which the client sets. No magic-byte or structural check. *(Gap found 2026-08-18.)* |
+| Document type spoofing | VERIFIED | `validate_document` decides from the bytes; wired into the PDF path and all three knowledge-base uploads, where the extension used to come off the filename and route the AI. 11 tests, plus live proof: an ELF payload named `.pdf` is 415 under both `application/pdf` and `application/octet-stream`, while a genuine PDF is 202. *(`.pptx` already checked its ZIP header — the original note overstated that half.)* |
 | Malware in uploaded files | OPEN | No AV or content scanning. Files are stored and served back to other users in the school. |
 | Zip-bomb via `.pptx` | OPEN | A `.pptx` is a zip archive; expansion is unbounded at parse time. |
 
@@ -149,7 +149,7 @@ goes wrong.
 | Risk | Status | Evidence / note |
 |---|---|---|
 | AI generation cost abuse | VERIFIED | Per-user rate limits on test generation and presentation processing. |
-| Unthrottled API surface | OPEN | Rate limiting exists on 4 routers only — auth, feedback, presentations, teacher AI. Every other endpoint is uncapped. *(Gap found 2026-08-18.)* |
+| Unthrottled API surface | VERIFIED | 300/min per authenticated user, in-app so it ships with the deployment. `nginx.conf` **did** define a 120 r/m zone, which is why this looked covered — but nginx is compose-only and production runs `start.sh` on :8000 behind Railway's edge, so it never loaded. Verified live: 330 requests → exactly 300×200 then 30×429, health exempt, 429 carries Retry-After and all four security headers. |
 | DDoS / volumetric attack | OPEN | No WAF. Whatever the Railway edge provides has never been established or tested. |
 | Backup and disaster recovery | OPEN | No documented backup schedule, and no restore has ever been rehearsed. |
 | Object-storage data loss | OPEN | A known live failure mode: MinIO losing its objects blanks every avatar and upload. Production needs a volume mounted at `/data`. |
@@ -292,6 +292,38 @@ Two things worth carrying forward. Staging narrowly is still right; the missing 
 was checking that the file being staged didn't depend on one that wasn't. And "passes
 locally" is not a claim about the repository — it is a claim about a working directory,
 which is a different thing and was wrong here.
+
+### 2026-08-19 — Wave 2 (partial): upload validation and throttling
+
+| Change | Result |
+|---|---|
+| `validate_document` on 4 unchecked upload sites | OPEN → VERIFIED |
+| 300/min in-app throttle | OPEN → VERIFIED |
+
+**A correction to this register.** The upload row claimed documents were gated on
+`content_type` alone. `.pptx` already checked its ZIP header — the real gaps were
+the PDF path, and `database_router.py`, which checked nothing and took the
+extension off the *filename* to decide how the AI parsed the file. That is worse
+than the row described, and in a different place.
+
+**Why "unthrottled" was both wrong and right.** `nginx.conf` defines a 120 r/m
+API zone, so the repo reads as throttled. nginx is a docker-compose service;
+production runs `backend/Dockerfile`'s `start.sh` on :8000 behind Railway's edge,
+confirmed by the live `server: railway-hikari`. The protection was real locally
+and absent in production — the worst shape for a control, because reading the
+config tells you it is handled.
+
+**A bug this introduced and the reason the suite missed it.** Registering the
+throttle last makes it outermost, so its 429 short-circuits above
+`SecurityHeadersMiddleware` and ships bare — silently breaking the "headers on
+error responses too" property that §5 records as VERIFIED. Registering it first
+makes it innermost and the 429 inherits the headers. Nothing in the suite
+assembles the middleware stack, so this was only visible by curling a throttled
+response. Worth remembering when adding any middleware that can short-circuit.
+
+Still open in Wave 2: `FLAG_SECURE` on grade and fee screens. Left deliberately —
+blanket screenshot blocking is user-hostile in a way the other two changes are
+not, and which screens it should cover is a product call.
 
 ---
 

@@ -564,8 +564,8 @@
           <p class="note">Genuinely well built: magic-byte check, 5 MB cap, EXIF stripped by re-encode, and a 40 MP decompression-bomb guard in <code>upload_utils.py</code>.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Oversized document upload</span>
           <p class="note">25 MB PDFs, 50 MB decks, rejected on declared size before buffering.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">PDF / PPTX type spoofing</span>
-          <p class="note">Unlike images, documents are gated on the <code>content_type</code> header only — which the client sets. No magic-byte or structural check.<span class="flag">Gap found</span></p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Document type spoofing</span>
+          <p class="note">Type is now decided from the bytes, on the PDF path and all three knowledge-base uploads — where the extension previously came off the filename and routed the AI. Live proof: an ELF payload named <code>.pdf</code> is rejected under both content types; a genuine PDF is accepted.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Malware in uploaded files</span>
           <p class="note">No AV or content scanning. Files are stored and served back to other users in the school.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Zip-bomb via .pptx</span>
@@ -677,8 +677,8 @@
       <div class="rows">
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">AI generation cost abuse</span>
           <p class="note">Per-user rate limits on test generation and presentation processing.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Unthrottled API surface</span>
-          <p class="note">Rate limiting exists on 4 routers only — auth, feedback, presentations, teacher AI. Every other endpoint is uncapped.<span class="flag">Gap found</span></p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Unthrottled API surface</span>
+          <p class="note">300/min per user, in-app so it ships with the deployment. nginx <em>did</em> define a 120 r/m zone — but nginx is compose-only and never loads in production, so the config read as covered while the API was open.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">DDoS / volumetric attack</span>
           <p class="note">No WAF. Whatever the Railway edge provides has never been established or tested.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Backup and disaster recovery</span>
