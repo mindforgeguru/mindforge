@@ -27,8 +27,8 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **31** |
-| Stale | **19** |
+| Verified | **32** |
+| Stale | **18** |
 | Open | **40** |
 | **Total tracked** | **90** across 13 domains |
 
@@ -131,7 +131,7 @@ goes wrong.
 | Shipping default infrastructure credentials | VERIFIED | Backend refuses to boot under `APP_ENV=production` if Postgres, Redis or MinIO are on built-in defaults. |
 | Seeded default admin account | VERIFIED | Removed from `init_db.sql` 2026-08-19 (commit `7e5de32`) — provisioning is now only via the env-gated seed in `main.py` or Owner Console. **Deployed databases that already ran the old file are not retroactively cleaned; production still needs confirming.** |
 | Firebase client keys unrestricted | OPEN | Documented in `SECURITY.md` with the exact restriction each key needs — never applied in the GCP console. Defence-in-depth; worst case is quota abuse. |
-| Secrets committed to git history | VERIFIED | gitleaks over all 231 commits, 2026-08-19: **zero real secrets**. The 8 hits are 3 public-by-design Firebase client keys and 1 deliberately-invalid JWT fixture, allowlisted by exact value in `.gitleaks.toml` and falsified (a new high-entropy key in an allowlisted file is still caught). Now a CI job. |
+| Secrets committed to git history | VERIFIED | gitleaks over all 231 commits: **zero real secrets**. The 8 hits are 3 public-by-design Firebase client keys and 1 deliberately-invalid JWT fixture, allowlisted by exact value in `.gitleaks.toml` and falsified (a new high-entropy key in an allowlisted file is still caught). Green on a real runner, `32176217465`. |
 | Secrets in the working tree | STALE | `.env` and `.env.local` are gitignored; last actually audited in May. |
 
 ## 8. Supply chain
@@ -139,7 +139,7 @@ goes wrong.
 | Risk | Status | Evidence / note |
 |---|---|---|
 | Vulnerable Python dependencies | VERIFIED | `pip-audit --strict` green on a real CI runner — 20 findings across 5 packages driven to 0, with one documented ignore (`ecdsa`, unreachable under HS256). |
-| Vulnerable Dart / Flutter dependencies | VERIFIED | osv-scanner over `pubspec.lock` 2026-08-19: **192 packages, 0 issues**. Now a CI job, image pinned by digest. |
+| Vulnerable Dart / Flutter dependencies | VERIFIED | osv-scanner over `pubspec.lock`: **192 packages, 0 issues**. Image pinned by digest; green on a real runner, `32176217465`. |
 | Vulnerable base images | OPEN | No container scanning (`trivy`, `grype`) on the backend image. |
 | Static analysis for security defects | OPEN | No SAST in CI — no CodeQL, no Semgrep. `flutter analyze` is a linter, not a security tool. |
 | Malicious or typosquatted package | OPEN | No provenance or lockfile-integrity gate. |
@@ -193,7 +193,7 @@ goes wrong.
 |---|---|---|
 | Android release signing | VERIFIED | Signed with a release keystore; `key.properties` gitignored. |
 | Test suite writing to production | STALE | `tests/test_api.py` targeted the live database and was fired at it once by accident. A production guard now blocks it — but the suite itself is still stale. |
-| Code merging without CI | STALE | Push trigger widened to `"**"` 2026-08-19, so every branch runs. STALE not VERIFIED: nothing has been pushed yet, so no runner has executed the widened trigger or the two new scanner jobs. |
+| Code merging without CI | VERIFIED | Push trigger widened to `"**"`. Proven on run `32176217465` — the first push-triggered CI this branch has ever had, all 5 jobs green, `api-integration` correctly skipped. It caught a real break on its first attempt (see log). |
 | Toolchain drift | OPEN | CI pins Flutter 3.41.4; local is 3.44.0. A version-specific failure would not surface symmetrically. |
 | iOS release verification | OPEN | Blocked on Apple Developer Program enrolment. No IPA has ever been built or tested. |
 | Independent penetration test | OPEN | Every result in this register comes from self-testing. No external assessment, no DAST, no bug bounty. |
@@ -273,6 +273,25 @@ cannot be made to fail has not been shown to work.
 obfuscated build has been produced; the CI trigger is widened but nothing has been
 pushed, so no runner has executed it or the new jobs. Writing the config is not the
 same as watching it run — precisely the lesson in §10 item 17 of `TEST_RECORD.md`.
+
+### 2026-08-19 — first push-triggered CI run, and what it caught
+
+Run `32175724699` (first ever on push for this branch) **failed**, and the failure
+was mine. `2bbb630` staged only `realtime_sync.dart`, on the reasoning that the
+branch's other uncommitted work shouldn't be swept in. But that file imports
+`session_reset.dart`, which was untracked — so `HEAD` did not analyze on a clean
+checkout: one unresolved URI and two undefined-method errors.
+
+It passed locally throughout, because the file was sitting on my disk. Only a clean
+checkout could surface it, and the widened trigger produced one within minutes of
+being merged. Fixed in `cbddcba`; re-verified in a throwaway clone before pushing —
+0 analyze errors, 82 unit and 27 widget tests green — then confirmed on run
+`32176217465`, all 5 jobs green.
+
+Two things worth carrying forward. Staging narrowly is still right; the missing step
+was checking that the file being staged didn't depend on one that wasn't. And "passes
+locally" is not a claim about the repository — it is a claim about a working directory,
+which is a different thing and was wrong here.
 
 ---
 

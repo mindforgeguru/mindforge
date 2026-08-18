@@ -769,8 +769,8 @@
           <p class="note">Signed with a release keystore; <code>key.properties</code> gitignored.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Test suite writing to production</span>
           <p class="note"><code>tests/test_api.py</code> targeted the live database and was fired at it once by accident. A production guard now blocks it — but the suite itself is still stale.</p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Code merging without CI</span>
-          <p class="note">Push trigger widened to <code>"**"</code> so every branch runs. Stale, not verified: nothing has been pushed, so no runner has executed the widened trigger or the two new scanner jobs.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Code merging without CI</span>
+          <p class="note">Push trigger widened to <code>"**"</code>. Proven on the first push-triggered run this branch has ever had — all 5 jobs green, live-API job correctly skipped. It caught a real build break on its first attempt.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Toolchain drift</span>
           <p class="note">CI pins Flutter 3.41.4; local is 3.44.0. A version-specific failure would not surface symmetrically.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">iOS release verification</span>
