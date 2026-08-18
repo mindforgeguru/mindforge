@@ -162,6 +162,13 @@ class UserLoginRequest(BaseModel):
     # owner (school-less), then falls back to the sole school if only one
     # exists; with multiple schools a selection is required.
     school_id: Optional[int] = None
+    # Second factor, admin/owner only and only once enrolled. Optional so the
+    # first call can be made without it: the server answers 401 with
+    # mfa_required so the client knows to prompt, rather than the client having
+    # to know in advance which accounts are enrolled.
+    mfa_code: Optional[str] = None
+    # Fallback when the authenticator is gone. Single-use; see app.core.mfa.
+    recovery_code: Optional[str] = None
 
     @field_validator("username")
     @classmethod
@@ -339,3 +346,15 @@ class StudentProfileResponse(BaseModel):
     additional_subjects: Optional[List[str]] = None
 
     model_config = {"from_attributes": True}
+
+
+class MfaCodeRequest(BaseModel):
+    """A 6-digit code from the authenticator app."""
+    code: str
+
+
+class MfaDisableRequest(BaseModel):
+    """Turning MFA off re-authenticates: MPIN plus one of the two factors."""
+    mpin: str
+    code: Optional[str] = None
+    recovery_code: Optional[str] = None

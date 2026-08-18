@@ -73,6 +73,18 @@ class User(Base):
     # Soft delete: set to timestamp when user is revoked/deleted
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # ── MFA (admin and owner only; see migration 036) ─────────────────────────
+    # mfa_secret is stored as-is because TOTP verification needs the original
+    # value — unlike an MPIN it cannot be hashed. As sensitive as mpin_hash
+    # above, under the same access controls.
+    mfa_secret: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Only set once a code has been verified, so an abandoned enrolment cannot
+    # lock the account.
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # sha256 hashes of single-use recovery codes. sha256 not bcrypt: these are
+    # 160-bit random values with no guess space for a slow hash to protect.
+    mfa_recovery_codes: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
     # The tenant this user belongs to (None for the platform owner).
     school: Mapped[Optional["School"]] = relationship("School", foreign_keys=[school_id])
 

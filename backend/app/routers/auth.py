@@ -28,10 +28,13 @@ from app.models.school import School
 from app.models.user import User, StudentProfile, TeacherProfile, UserRole
 from app.schemas.user import (
     UserRegisterRequest, UserLoginRequest, TokenResponse,
-    RefreshRequest, RefreshResponse, UserResponse,
+    RefreshRequest, RefreshResponse, UserResponse, MfaCodeRequest, MfaDisableRequest,
 )
 from app.core.redis_client import redis_manager
 from app.core.security_events import note_failed_login
+from app.core.mfa import consume_recovery_code
+from app.core.totp import generate_secret, provisioning_uri, verify_totp
+from app.core.mfa import generate_recovery_codes
 from app.core.cache import is_school_active_cached
 from app.services import storage_service
 
@@ -41,6 +44,9 @@ router = APIRouter()
 # here (WARNING) so brute-force / abuse is visible in logs and Sentry breadcrumbs
 # rather than silently absorbed by the Redis lockout counter.
 logger = logging.getLogger("mindforge.security")
+# Same sink; named separately at the MFA call sites to make the audit
+# intent explicit when reading them.
+_security_audit = logger
 
 
 # ── School resolution ─────────────────────────────────────────────────────────
@@ -455,6 +461,47 @@ async def login(
             detail="Your account has been deactivated.",
         )
 
+    # ── Second factor ────────────────────────────────────────────────────────
+    # Checked *after* the MPIN, deliberately. Answering "MFA required" before
+    # verifying the password would tell an attacker which accounts are
+    # privileged and enrolled, for free — the same enumeration mistake the
+    # constant-time MPIN check exists to avoid. By this point the caller has
+    # already proved they know the MPIN, so revealing it costs nothing.
+    if user.mfa_enabled:
+        if payload.recovery_code:
+            ok, remaining = consume_recovery_code(
+                payload.recovery_code, user.mfa_recovery_codes
+            )
+            if not ok:
+                logger.warning(
+                    "MFA recovery code rejected user_id=%s ip=%s", user.id, ip,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid recovery code.",
+                )
+            # Burn it. Assigning a new list rather than mutating in place so
+            # SQLAlchemy sees the JSON column as dirty and actually persists it.
+            user.mfa_recovery_codes = remaining
+            await db.commit()
+            logger.warning(
+                "MFA satisfied by recovery code user_id=%s ip=%s remaining=%d",
+                user.id, ip, len(remaining),
+            )
+        elif not payload.mfa_code:
+            # 401 with a marker the client can branch on, rather than a bare
+            # rejection — the app needs to know to show the code prompt.
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="mfa_required",
+            )
+        elif not verify_totp(user.mfa_secret, payload.mfa_code):
+            logger.warning("MFA code rejected user_id=%s ip=%s", user.id, ip)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication code.",
+            )
+
     # Successful login — clear any prior failure counters for this caller
     await redis_manager.clear_failed_logins(user.id, ip)
 
@@ -784,3 +831,153 @@ async def delete_my_account(
 
     await db.commit()
     _clear_session_cookie(response)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MFA (admin and owner only)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Scoped to privileged roles on purpose. A compromised student MPIN costs one
+# student's records; a compromised admin costs a school's, and the owner's costs
+# every school on the platform. TOTP for parents and students — many sharing a
+# family device, most without an authenticator app — would produce far more
+# lockouts than compromises prevented.
+#
+# Enrolment is two steps so an abandoned attempt cannot lock anyone out: /setup
+# issues a secret but leaves MFA off, and only /confirm — which requires a
+# working code — flips mfa_enabled.
+
+_MFA_ROLES = (UserRole.admin, UserRole.owner)
+
+
+def _require_mfa_eligible(user: User) -> None:
+    if user.role not in _MFA_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Two-factor authentication is available for admin and owner accounts.",
+        )
+
+
+@router.get("/mfa/status")
+async def mfa_status(current_user: User = Depends(get_current_user)):
+    """Whether MFA is on, and whether this account may use it."""
+    return {
+        "eligible": current_user.role in _MFA_ROLES,
+        "enabled": bool(current_user.mfa_enabled),
+        "recovery_codes_remaining": len(current_user.mfa_recovery_codes or []),
+    }
+
+
+@router.post("/mfa/setup")
+async def mfa_setup(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Issue a TOTP secret and the QR payload. Does **not** enable MFA.
+
+    Re-runnable while disabled: each call replaces the pending secret, so a user
+    who abandoned a half-finished enrolment just starts again.
+    """
+    _require_mfa_eligible(current_user)
+    if current_user.mfa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Two-factor authentication is already enabled.",
+        )
+
+    secret = generate_secret()
+    current_user.mfa_secret = secret
+    await db.commit()
+
+    _security_audit.warning(
+        "MFA setup started user_id=%s role=%s", current_user.id, current_user.role,
+    )
+    return {
+        "secret": secret,
+        "provisioning_uri": provisioning_uri(current_user.username, secret),
+    }
+
+
+@router.post("/mfa/confirm")
+async def mfa_confirm(
+    payload: MfaCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Verify a code from the authenticator, then enable MFA.
+
+    Returns the recovery codes once and never again — only their hashes are
+    stored. The client is responsible for making the user save them before
+    leaving the screen.
+    """
+    _require_mfa_eligible(current_user)
+    if current_user.mfa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Two-factor authentication is already enabled.",
+        )
+    if not current_user.mfa_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Start setup before confirming.",
+        )
+    if not verify_totp(current_user.mfa_secret, payload.code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That code didn't match. Check your authenticator and try again.",
+        )
+
+    plain, hashed = generate_recovery_codes()
+    current_user.mfa_recovery_codes = hashed
+    current_user.mfa_enabled = True
+    await db.commit()
+
+    _security_audit.warning(
+        "MFA enabled user_id=%s role=%s", current_user.id, current_user.role,
+    )
+    return {"enabled": True, "recovery_codes": plain}
+
+
+@router.post("/mfa/disable")
+async def mfa_disable(
+    payload: MfaDisableRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Turn MFA off. Requires the MPIN *and* a current code or recovery code.
+
+    Re-authenticating matters here: without it, anyone who walks up to an
+    unlocked, already-signed-in session could strip the second factor off the
+    account — which would make MFA protect only the login screen.
+    """
+    _require_mfa_eligible(current_user)
+    if not current_user.mfa_enabled:
+        return {"enabled": False}
+
+    if not verify_mpin(payload.mpin, current_user.mpin_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect MPIN.",
+        )
+
+    satisfied = bool(payload.code) and verify_totp(current_user.mfa_secret, payload.code)
+    if not satisfied and payload.recovery_code:
+        satisfied, remaining = consume_recovery_code(
+            payload.recovery_code, current_user.mfa_recovery_codes
+        )
+        if satisfied:
+            current_user.mfa_recovery_codes = remaining
+    if not satisfied:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="A valid authentication code or recovery code is required.",
+        )
+
+    current_user.mfa_enabled = False
+    current_user.mfa_secret = None
+    current_user.mfa_recovery_codes = None
+    await db.commit()
+
+    _security_audit.warning(
+        "MFA disabled user_id=%s role=%s", current_user.id, current_user.role,
+    )
+    return {"enabled": False}
