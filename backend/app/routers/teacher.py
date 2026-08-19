@@ -41,7 +41,10 @@ from app.schemas.homework import (
 from app.models.homework import Homework, HomeworkCompletion, HomeworkType, Broadcast
 from app.models.xp import XPReason
 from app.services import ai_service, notification_service, pdf_service, storage_service, xp_service
-from app.services.realtime_service import publish_to_grade, publish_to_school
+from app.core.quiz_window import start_window_on_first_publish
+from app.services.realtime_service import (
+    announce_test_to_students, publish_to_grade, publish_to_school,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1443,6 +1446,7 @@ async def save_offline_grades(
     return {"saved": len(saved_grades)}
 
 
+
 @router.post("/tests/{test_id}/publish", status_code=status.HTTP_200_OK)
 async def publish_test(
     test_id: int,
@@ -1457,7 +1461,15 @@ async def publish_test(
     if not test:
         raise HTTPException(status_code=403, detail="Only the teacher who created this test can publish/unpublish it")
     test.is_published = not test.is_published
+    start_window_on_first_publish(test)
     await db.commit()
+    await db.refresh(test)
+
+    # Publishing is the moment students gain access, so it is the moment they
+    # are told. This used to fire at generation for auto-quizzes, which notified
+    # students about a quiz no one had reviewed yet.
+    if test.is_published:
+        await announce_test_to_students(db, test)
     # Notify this school's clients so every teacher — and the students who can
     # now see (or no longer see) the test — updates immediately.
     await publish_to_school(
@@ -1855,6 +1867,9 @@ async def upsert_homework_completions(
          depends on attendance.
       2. Students marked absent today are forced to completed=False
          regardless of payload. They couldn't have done the homework.
+
+    Rule 1 is preceded by an enrolment check so an empty grade reports why it
+    is empty instead of demanding attendance that cannot be recorded.
     """
     hw = (await db.execute(
         select(Homework).where(
@@ -1864,6 +1879,34 @@ async def upsert_homework_completions(
     )).scalar_one_or_none()
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found")
+
+    # Resolved before the attendance check: a grade with nobody in it can never
+    # have attendance rows, so checking attendance first would tell the teacher
+    # to "mark attendance" — an action that inserts nothing and leaves them
+    # stuck on an error they cannot clear.
+    #
+    # Doubles as the defence against a crafted payload writing rows for someone
+    # else's class: only ids in here are accepted below.
+    valid_student_ids = {
+        row[0] for row in (await db.execute(
+            select(User.id)
+            .join(StudentProfile, User.id == StudentProfile.user_id)
+            .where(
+                StudentProfile.grade == hw.grade,
+                StudentProfile.school_id == current_teacher.school_id,
+                User.is_active == True,
+                User.is_approved == True,
+            )
+        )).all()
+    }
+    if not valid_student_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No active students are enrolled in grade {hw.grade}, "
+                "so there is no homework status to record."
+            ),
+        )
 
     attendance_date = datetime.now(timezone.utc).date()
     att_rows = (await db.execute(
@@ -1884,22 +1927,6 @@ async def upsert_homework_completions(
     absent_student_ids = {
         a.student_id for a in att_rows
         if a.status == AttendanceStatus.absent
-    }
-
-    # Reject student_ids that don't actually belong to this homework's grade —
-    # cheap defence against a crafted payload trying to write rows for someone
-    # else's class.
-    valid_student_ids = {
-        row[0] for row in (await db.execute(
-            select(User.id)
-            .join(StudentProfile, User.id == StudentProfile.user_id)
-            .where(
-                StudentProfile.grade == hw.grade,
-                StudentProfile.school_id == current_teacher.school_id,
-                User.is_active == True,
-                User.is_approved == True,
-            )
-        )).all()
     }
 
     existing = {

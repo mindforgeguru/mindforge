@@ -43,7 +43,9 @@ from app.models.presentation import (
 from app.models.test import Test, TestType
 from app.models.user import StudentProfile, User, UserRole
 from app.schemas.test import TestGenerationParams
-from app.services.realtime_service import publish_to_grade, publish_to_users, school_staff_ids
+from app.services.realtime_service import (
+    publish_to_grade, publish_to_users, school_staff_ids,
+)
 from app.schemas.presentation import (
     AvailableChapter,
     FromChapterRequest,
@@ -82,7 +84,7 @@ _UPLOADED_SLIDES_PER_PERIOD = 8
 # (Manually-generated tests are unaffected and can be any length.)
 _AUTO_TEST_MCQ_COUNT = 5
 _AUTO_TEST_TIME_BUFFER_MIN = 2     # reading/settling time on top of 1 min/question
-_AUTO_TEST_WINDOW_HOURS = 48       # take it within 48h or it's graded 0
+from app.core.quiz_window import AUTO_TEST_WINDOW_HOURS as _AUTO_TEST_WINDOW_HOURS
 # Need at least this much slide text to bother asking the AI for a quiz.
 _AUTO_TEST_MIN_SOURCE_CHARS = 200
 
@@ -150,66 +152,6 @@ async def _notify_teacher(db: AsyncSession, teacher_id: int,
             logger.warning("Auto-quiz teacher notification failed", exc_info=True)
 
 
-async def _broadcast_new_test(db: AsyncSession, test: Test) -> None:
-    """Mirror generate_test's broadcast + student/parent push for a new test."""
-    await publish_to_grade(
-        db,
-        school_id=test.school_id,
-        grade=test.grade,
-        include_staff=True,
-        payload={
-            "event": "new_test_available",
-            "test_id": test.id,
-            "title": test.title,
-            "subject": test.subject,
-            "test_type": "online",
-        },
-    )
-
-    profiles = (await db.execute(
-        select(StudentProfile)
-        .join(User, User.id == StudentProfile.user_id)
-        .where(
-            StudentProfile.grade == test.grade,
-            StudentProfile.school_id == test.school_id,
-            User.is_active == True,        # noqa: E712
-            User.is_approved == True,      # noqa: E712
-            User.deleted_at.is_(None),
-        )
-    )).scalars().all()
-
-    all_user_ids = {p.user_id for p in profiles}
-    all_user_ids.update(p.parent_user_id for p in profiles if p.parent_user_id)
-    token_map = {
-        row.id: row.fcm_token
-        for row in (await db.execute(
-            select(User.id, User.fcm_token)
-            .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
-        ))
-    }
-
-    student_tokens = [token_map[p.user_id] for p in profiles if p.user_id in token_map]
-    parent_tokens = [
-        token_map[p.parent_user_id] for p in profiles
-        if p.parent_user_id and p.parent_user_id in token_map
-    ]
-
-    if student_tokens:
-        asyncio.create_task(notification_service.send_to_tokens(
-            tokens=student_tokens,
-            title="New Quiz Available",
-            body=(f"A new quiz '{test.title}' is ready — Grade {test.grade} "
-                  f"{test.subject}. You have 48 hours to take it."),
-            data={"route": "/student/tests"},
-        ))
-    if parent_tokens:
-        asyncio.create_task(notification_service.send_to_tokens(
-            tokens=parent_tokens,
-            title="New Quiz Available",
-            body=(f"A new quiz '{test.title}' was added for your child "
-                  f"(Grade {test.grade} — {test.subject})."),
-            data={"route": "/parent/tests"},
-        ))
 
 
 async def _broadcast_auto_quiz_status(db: AsyncSession, test: Test) -> None:
@@ -387,26 +329,36 @@ async def _run_auto_test_job(
                     # Recompute from the actual count: slides may yield fewer
                     # questions than the target, and the time must match.
                     time_limit_minutes=_auto_test_time_limit(len(mcqs)),
-                    is_published=True,
+                    # Left unpublished on purpose. Nothing else in this chain has
+                    # a human in it — a teacher uploads a PDF, a model writes the
+                    # slides, and those become questions — so this is the only
+                    # point at which someone reads the AI's output before children
+                    # see it. Manual tests already work this way; auto-quizzes used
+                    # to publish themselves and skip the same gate.
+                    is_published=False,
                     generation_status="ready",
                     generation_error=None,
-                    expires_at=now + timedelta(hours=_AUTO_TEST_WINDOW_HOURS),
+                    # No deadline yet. The 48-hour window starts when the teacher
+                    # publishes (see _start_window_on_first_publish), so review
+                    # time comes out of the teacher's day, not the students'.
+                    expires_at=None,
                 )
             )
             await db.commit()
 
-            test = (await db.execute(
-                select(Test).where(Test.id == test_id)
-            )).scalar_one()
-            await _broadcast_new_test(db, test)
+            # Deliberately no _broadcast_new_test here: students cannot open an
+            # unpublished test, and telling them one exists would only produce a
+            # notification that leads nowhere. The broadcast happens on publish.
             await _notify_teacher(
-                db, teacher_id, "Quiz ready",
+                db, teacher_id, "Quiz ready to review",
                 f"Your auto-quiz for '{pres.chapter_name}' (slides "
-                f"{slides_from + 1}-{slides_to}) is live — {len(mcqs)} questions, "
-                f"48-hour window.",
+                f"{slides_from + 1}-{slides_to}) is ready — {len(mcqs)} questions. "
+                f"Check the questions, then publish it. Students can't see it "
+                f"until you do; they then get {_AUTO_TEST_WINDOW_HOURS} hours.",
                 route="/teacher/tests",
             )
-            logger.info("Auto-quiz published: test=%s pres=%s slides %s-%s",
+            logger.info("Auto-quiz generated, awaiting teacher publish: "
+                        "test=%s pres=%s slides %s-%s",
                         test_id, presentation_id, slides_from, slides_to)
         except Exception:
             logger.exception("Auto-quiz job crashed for test=%s", test_id)
