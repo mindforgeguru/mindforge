@@ -60,7 +60,10 @@ _stub("app.core.redis_client", redis_manager=redis_mock)
 # Stub AI / PDF services that auth.py pulls in transitively via app.services
 _stub("google", genai=MagicMock())
 _stub("google.genai", Client=MagicMock(), types=MagicMock())
-_stub("groq")
+# Carries Groq, because ai_service does `from groq import Groq`. A bare
+# stub here satisfies this file and then breaks any later test in the
+# same process that imports ai_service — see TEST_RECORD §10 item 4.
+_stub("groq", Groq=MagicMock())
 _stub("pytesseract")
 _stub("reportlab")
 _stub("reportlab.lib")

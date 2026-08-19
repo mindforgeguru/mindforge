@@ -29,6 +29,18 @@ _stub("minio.error", S3Error=type("S3Error", (Exception,), {}))
 # ── AI provider SDKs, imported by app.services.ai_service. Only the module
 #    needs to exist; nothing here calls a model.
 _stub("anthropic", Anthropic=MagicMock())
+_stub("groq", Groq=MagicMock())
+# google-genai is imported as `from google import genai`; stub the attribute on
+# the real namespace package rather than replacing `google`, which would break
+# anything else importing from it.
+try:  # pragma: no cover - only runs where google-genai is absent
+    from google import genai  # noqa: F401
+except Exception:
+    import types as _types
+    _google = sys.modules.setdefault("google", ModuleType("google"))
+    _genai = _stub("google.genai", Client=MagicMock())
+    _stub("google.genai.types", UploadFileConfig=MagicMock())
+    setattr(_google, "genai", _genai)
 
 # ── SQLAlchemy async engine / session ─────────────────────────────────────────
 engine_mock = MagicMock()
