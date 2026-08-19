@@ -486,7 +486,7 @@
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Weak / guessable MPIN</span>
           <p class="note">Blocklist added 2026-07-07 at set and change time. Never manually re-tested.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Multi-factor authentication</span>
-          <p class="note">TOTP for admin and owner, opt-in — implemented from RFC 6238 and checked against all six official vectors. Two-step enrolment, single-use recovery codes, verified end to end in the running app. Stale: other roles keep one factor by design, and no real authenticator app has been scanned yet.<span class="flag new">New</span></p></div>
+          <p class="note">TOTP for admin and owner, opt-in, with an enrolment screen in the admin profile and owner console — QR plus typed key, single-use recovery codes, screen capture blocked while the secret is visible. Stale for one reason: no real authenticator app has scanned the QR, so every test code came from the same code that checks it.<span class="flag new">New</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Account enumeration</span>
           <p class="note"><b>Was exploitable.</b> Bodies always matched, but login short-circuited past bcrypt for an unknown username — 239 ms vs 4 ms, a 61x tell. Now always hashes; re-measured at 1.00x.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Forgot-MPIN / recovery flow abuse</span>
