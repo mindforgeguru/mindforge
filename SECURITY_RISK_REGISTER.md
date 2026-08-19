@@ -545,10 +545,11 @@ outstanding.
    documented commands but have never been run. Confirm the symbol files are
    archived and that a forced crash still reports readably — get this wrong and
    crash reports from that build are permanently unreadable.
-8. **Test prompt injection through uploaded documents.** Teacher PDFs go
-   straight to Claude and the output becomes tests students sit. A crafted
-   document steering that has never been tried, and it is the most
-   product-specific risk left open.
+8. **Run `scripts/probe_prompt_injection.py` once an AI key works.** The
+   prompts are hardened and a teacher now approves every generated quiz, so the
+   dangerous half is closed. This is the outstanding *measurement* — whether the
+   prompt wording actually holds — and it cannot run while Gemini is over its
+   spending cap and no Claude key is set locally.
 
 ---
 
