@@ -543,8 +543,8 @@
           <p class="note">Covered in <code>security_test_extended.py</code>.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Cross-site scripting (web build)</span>
           <p class="note">CSP meta tag on the Flutter web entry, and canvas rendering limits DOM surface. Never actively probed.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Prompt injection through uploaded documents</span>
-          <p class="note">Teacher PDFs go straight to Claude and the output becomes tests and quizzes students sit. A crafted document steering generation has never been tested.</p></div>
+        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Prompt injection through uploaded documents</span>
+          <p class="note">The three prompts that read uploaded files now frame the document as data and tell the model to ignore instructions inside it — there was previously no defence at all. Stale on purpose: the tests prove the wording is there, not that a model obeys it, and no provider was reachable to check.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Fuzzing beyond the happy path</span>
           <p class="note">Input validation is spot-checked, not fuzzed. No schema-driven or property-based testing.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Log injection and audit-trail integrity</span>

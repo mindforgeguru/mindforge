@@ -28,8 +28,8 @@ There is also a rendered, filterable version of this register:
 | | Count |
 |---|---|
 | Verified | **36** |
-| Stale | **23** |
-| Open | **31** |
+| Stale | **24** |
+| Open | **30** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
@@ -85,7 +85,7 @@ goes wrong.
 | Command injection / unsafe deserialization | VERIFIED | Static sweep clean: no `eval`, `exec`, `os.system`, `shell=True`, `pickle.loads` or `yaml.load`. |
 | Path traversal | VERIFIED | Covered in `security_test_extended.py`. |
 | Cross-site scripting (web build) | STALE | CSP meta tag on the Flutter web entry, and canvas rendering limits DOM surface. Never actively probed. |
-| Prompt injection through uploaded documents | OPEN | Teacher PDFs go straight to Claude and the output becomes tests and quizzes students sit. A crafted document steering generation has never been tested. |
+| Prompt injection through uploaded documents | STALE | All three prompts that read uploaded files now frame the document as data and tell the model to ignore directives inside it — previously there was no defence at all. **Mitigation of unverified efficacy:** the tests prove the wording is present, not that a model obeys it. No provider was reachable to test (no Claude key locally; Gemini over its spending cap). `scripts/probe_prompt_injection.py` runs the empirical half, with a control, when a key exists. |
 | Fuzzing beyond the happy path | OPEN | Input validation is spot-checked, not fuzzed. No schema-driven or property-based testing. |
 | Log injection and audit-trail integrity | OPEN | Audit rows exist; nothing prevents forged entries or verifies the trail can't be poisoned. |
 
@@ -446,6 +446,35 @@ bundle built before any of the changes.
 platforms, and orthogonal to the real threat — a student wanting grades early
 would use a second device. Recorded as a decision rather than left looking like
 an oversight.
+
+### 2026-08-19 — Prompt injection on the chapter-PDF pipeline
+
+The path is: teacher uploads a PDF → model writes slides → a period log turns
+those slides into an auto-quiz → broadcast to students. **No human reads
+anything in between.** So text inside an uploaded document reaches children
+unreviewed.
+
+The realistic attack is not a malicious teacher but an ordinary one downloading
+a chapter PDF from the web that carries instructions in white 5pt text —
+invisible on the page, plainly readable in the text layer the model receives.
+Built one to confirm: it does not render, and it does come back from
+`get_text()`.
+
+All three prompts reading uploaded files had **no defence whatsoever**. They now
+frame the document as data and say directives inside it must be ignored,
+including the slide-fill stage — whose input is model output derived from the
+untrusted file, so an injection surviving stage one would otherwise get a second
+attempt.
+
+**Recorded as STALE, and the distinction matters.** The tests prove the wording
+exists. They cannot prove a model obeys it, and prompt-level defence against
+injection is known to be imperfect. Nothing was reachable to test against: no
+Claude key locally, and Gemini has exceeded its monthly spending cap — which
+also means AI generation is currently down on this machine.
+
+**The stronger fix is a product decision, not a prompt.** If a person reviewed
+generated quizzes before they reached students, this risk would mostly
+disappear regardless of what any prompt says. Worth considering.
 
 ---
 
