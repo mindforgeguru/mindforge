@@ -8,6 +8,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../auth/screens/mfa_setup_screen.dart';
 
 /// Platform-owner console: create/list schools and provision their admins.
 class OwnerDashboardScreen extends ConsumerStatefulWidget {
@@ -75,6 +76,15 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
             tooltip: 'Refresh',
             onPressed: _load,
             icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            // The owner reaches every school on the platform, so this is the
+            // single account where a second factor is worth the most.
+            tooltip: 'Two-factor authentication',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MfaSetupScreen()),
+            ),
+            icon: const Icon(Icons.verified_user_outlined),
           ),
           IconButton(
             tooltip: 'Log out',

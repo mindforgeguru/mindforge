@@ -11,6 +11,7 @@ import '../../../core/utils/image_pick.dart';
 import '../../../core/widgets/app_about_section.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../widgets/admin_scaffold.dart';
+import '../../auth/screens/mfa_setup_screen.dart';
 
 class AdminProfileScreen extends ConsumerStatefulWidget {
   const AdminProfileScreen({super.key});
@@ -382,6 +383,32 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
             ),
 
             const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            // ── Two-factor section ────────────────────────────────────
+            // Sits above Change MPIN deliberately: an admin account reaches
+            // every student record in the school, so the second factor matters
+            // more here than a stronger PIN does.
+            Text('Two-factor authentication',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.verified_user_outlined),
+              title: const Text('Manage two-factor'),
+              subtitle: const Text(
+                  'Ask for a code from your phone as well as your MPIN'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MfaSetupScreen()),
+              ),
+            ),
+
+            const SizedBox(height: 24),
             const Divider(),
             const SizedBox(height: 16),
 
