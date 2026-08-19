@@ -451,31 +451,44 @@ an oversight.
 
 ## What to fix first
 
-Ordered by consequence, not by how interesting the work is.
+Ordered by consequence, not by how interesting the work is. Items 5–8 of the
+original list (rate limiting, upload validation, secret scanning, CI triggers)
+were completed on 2026-08-19 and have been removed rather than left looking
+outstanding.
 
-1. **Confirm no `admin` row survives in a deployed database.** The seed is gone from
-   `init_db.sql` (2026-08-19), but removing it does not clean an environment that
-   already ran the old file. Railway uses managed Postgres and would not have
-   executed it — confirm rather than assume, then this closes fully.
-2. **Decide the children's-data position.** COPPA / GDPR-K governs a product holding
-   minors' records. This gates store submission and carries real legal weight — it is
-   not a hardening task you can defer past launch.
-3. **Publish the privacy policy and add Anthropic to it.** Host it, populate
-   `privacyPolicyUrl`, disclose Claude as a recipient. Three small tasks that together
-   unblock submission.
-4. **Produce one obfuscated build and check it.** The flags are now in the documented
-   build commands; nobody has run them yet. Build, confirm symbols are archived, and
-   verify a forced Crashlytics crash still symbolicates.
-5. **Extend rate limiting past the four routers that have it.** A global default with
-   per-route overrides. Currently most of the API can be hammered freely by any
-   authenticated user.
-6. **Validate document uploads by content, not by header.** Images already do this
-   properly — apply the same magic-byte treatment to PDFs and decks.
-7. **Add secrets scanning and a Dart dependency audit to CI.** Both are configuration,
-   not engineering, and they close the two supply-chain blind spots `pip-audit`
-   doesn't reach.
-8. **Make CI run on the branch you actually work on.** Every gate above is worth less
-   while the branch carrying the work matches no trigger.
+**Yours — none of these are coding tasks**
+
+1. **Confirm no `admin` row survives in a deployed database.** Two minutes, and
+   still the highest-consequence item here. The seed is gone from `init_db.sql`
+   (`7e5de32`), but removing it does not clean an environment that already ran
+   the old file. Railway's managed Postgres would not have executed it —
+   confirm rather than assume, then this closes fully.
+2. **Decide the children's-data position.** COPPA / GDPR-K governs a product
+   holding minors' records. Legal weight rather than hardening, and it gates
+   store submission. A lawyer question, not an engineering one.
+3. **Publish the privacy policy, and add Anthropic to it.** Host it, populate
+   `privacyPolicyUrl`, disclose Claude as a recipient of uploaded documents.
+   Three small tasks that together unblock store submission.
+4. **Restrict the Firebase keys in the GCP console.** `SECURITY.md` already
+   lists each key and the restriction it needs. Console clicks, no code.
+5. **Confirm production backups actually restore.** The tooling is rehearsed
+   locally; production — Railway Postgres plus the MinIO volume — is untested.
+   `docs/backup-runbook.md` says what is needed.
+
+**Mine, if you want them**
+
+6. **Scan the MFA QR with a real authenticator app, and add the enrolment
+   screen.** Today MFA works but can only be switched on through the API, and
+   every code in testing was produced by the same code that checks it. Both
+   gaps are why that row is STALE rather than VERIFIED.
+7. **Produce one obfuscated release build and check it.** The flags are in the
+   documented commands but have never been run. Confirm the symbol files are
+   archived and that a forced crash still reports readably — get this wrong and
+   crash reports from that build are permanently unreadable.
+8. **Test prompt injection through uploaded documents.** Teacher PDFs go
+   straight to Claude and the output becomes tests students sit. A crafted
+   document steering that has never been tried, and it is the most
+   product-specific risk left open.
 
 ---
 
