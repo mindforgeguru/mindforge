@@ -727,8 +727,8 @@
       <div class="rows">
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Provider fallback reliability</span>
           <p class="note">Claude → Gemini → Groq. Understood operationally, but no test asserts the chain degrades correctly when the primary fails.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Trusting generated content</span>
-          <p class="note">AI-generated questions and answer keys become graded material with no human-approval gate in the flow.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Trusting generated content</span>
+          <p class="note">Auto-quizzes are created unpublished and reach students only when a teacher publishes — the gate manual tests already used, which auto-quizzes were skipping by publishing themselves. The 48h window now starts at approval, so review time is not taken from the students. Verified live in both directions.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Cross-tenant contamination in AI context</span>
           <p class="note">Nothing verifies that one school's uploaded material can't surface in another school's generated output.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Uploaded documents retained by third parties</span>

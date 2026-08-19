@@ -27,9 +27,9 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **36** |
+| Verified | **37** |
 | Stale | **24** |
-| Open | **30** |
+| Open | **29** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
@@ -173,7 +173,7 @@ goes wrong.
 | Risk | Status | Evidence / note |
 |---|---|---|
 | Provider fallback reliability | STALE | Claude → Gemini → Groq. Understood operationally, but no test asserts the chain degrades correctly when the primary fails. |
-| Trusting generated content | OPEN | AI-generated questions and answer keys become graded material with no human-approval gate in the flow. |
+| Trusting generated content | VERIFIED | Auto-quizzes are created unpublished and reach students only when a teacher publishes — the same gate manual tests already passed through, which auto-quizzes were setting `is_published=True` on themselves to skip. The 48h attempt window now starts at publish, so review time is not taken out of the students'. Verified live: a student cannot see the quiz before publish, can after, and the window is 48h from approval. |
 | Cross-tenant contamination in AI context | OPEN | Nothing verifies that one school's uploaded material can't surface in another school's generated output. |
 | Uploaded documents retained by third parties | OPEN | Files sent through the Anthropic Files API — retention and deletion on the vendor side is undocumented here. |
 
@@ -475,6 +475,37 @@ also means AI generation is currently down on this machine.
 **The stronger fix is a product decision, not a prompt.** If a person reviewed
 generated quizzes before they reached students, this risk would mostly
 disappear regardless of what any prompt says. Worth considering.
+
+### 2026-08-19 — A human back in the loop on AI-generated tests
+
+The strongest answer to prompt injection turned out not to be a better prompt.
+It was noticing that the gate already existed and auto-quizzes were walking
+around it.
+
+Every test carries `is_published`, students only ever see published ones
+(filtered in five places), and teachers have a Publish button. Manual tests
+respect that. Auto-quizzes set `is_published=True` on themselves at generation
+and broadcast straight to the grade — so the one path with no human in it was
+also the one path that skipped the human gate.
+
+They are now created unpublished, and the existing Publish button is the review.
+No new concept, no migration, no UI work: the teacher's list already showed
+unpublished tests and already had the button.
+
+**The trap worth recording.** `expires_at` was set at generation. Holding the
+quiz for review without changing that would have taken the teacher's thinking
+time out of the students' 48 hours — approve a day late and they get 24, approve
+two days late and they get a quiz that is already dead. The window now starts at
+publish, and cannot be extended by unpublish/republish.
+
+Two mistakes made along the way, both caught before they shipped. The helper was
+first put in the router, which made its test import a router and reorder module
+stubs for everything running afterwards — breaking `test_realtime_fanout` exactly
+as `TEST_RECORD` §10 item 4 warns. It now lives in `app/core/quiz_window.py`,
+which has no heavy imports. And the broadcast helper, when moved into
+`realtime_service`, referenced `asyncio` and `notification_service` without
+importing either — a crash that would have fired on the first real publish and
+that no unit test would have reached.
 
 ---
 
