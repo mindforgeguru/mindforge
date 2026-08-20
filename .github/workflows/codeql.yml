@@ -1,0 +1,101 @@
+name: CodeQL
+
+# Static analysis of the source itself.
+#
+# Everything else in CI checks *dependencies* (pip-audit, osv-scanner) or
+# *history* (gitleaks). Nothing read the application code. Every finding in
+# SECURITY_RISK_REGISTER.md up to 2026-08-20 came from a human deciding to go
+# and look, which finds things once; this finds them on every push, including
+# pushes nobody thought about security while making.
+#
+# Free here only because the repository is public — CodeQL on a private repo
+# requires GitHub Advanced Security.
+#
+# ── One thing to know before enabling this on a public repo ──────────────────
+# The alert *list* on the Security tab needs **write** access to view, so
+# unfixed findings are not published to the world. But code scanning
+# annotations **on a pull request** are visible to anyone with read access,
+# which on a public repo is everyone. So a PR that introduces a flaw
+# advertises it while it is open. Merging via direct push (as this branch has
+# been) never exposes anything; opening a PR with a live finding does.
+# https://docs.github.com/en/code-security/how-tos/manage-security-alerts/manage-code-scanning-alerts/assessing-code-scanning-alerts-for-your-repository
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  # Query packs get new rules for bug classes discovered after the code was
+  # written. Without a schedule, unchanged code is only ever judged against the
+  # rules that existed the day it last changed — a file untouched for a year
+  # would never be re-examined. Monday morning, so results are waiting at the
+  # start of the week rather than arriving mid-Friday.
+  schedule:
+    - cron: "17 6 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+
+    # Scoped here rather than at workflow level, and deliberately minimal.
+    # `security-events: write` is what lets the analysis upload results; it is
+    # a genuinely powerful permission (it can write to the repository's
+    # security surface) and nothing else in this repo's CI needs it, which is
+    # why this lives in its own workflow instead of as another job in ci.yml.
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    strategy:
+      # One language failing should not hide the other's results.
+      fail-fast: false
+      matrix:
+        # `python` is the backend — the code that holds the database, the
+        # tokens and the file uploads.
+        #
+        # `actions` analyses the workflow files themselves. That is not
+        # box-ticking: a workflow that interpolates untrusted input into a
+        # `run:` block executes attacker-controlled shell with the repository
+        # token, and this repo has several multi-line `run:` blocks.
+        #
+        # Deliberately absent:
+        #   dart        — CodeQL has no Dart support at all.
+        #   swift       — 195 .swift files exist locally but 7 are tracked;
+        #                 the rest are CocoaPods vendor code. Analysing it
+        #                 needs a macOS runner and a full build for almost no
+        #                 first-party code.
+        #   java-kotlin — one file, MainActivity.kt. Needs a Gradle build to
+        #                 analyse; not worth the runner time for one file.
+        language: [python, actions]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Left at the default query suite on purpose. `security-extended`
+          # exists and finds more, at the cost of more false positives. The
+          # order that works is: get clean against the high-precision set
+          # first, then widen — a scanner people have learned to ignore
+          # catches nothing. Switch by adding `queries: security-extended`
+          # here once the default suite reports zero.
+          #
+          # No build step follows: Python and Actions are analysed directly
+          # from source, so there is nothing to compile.
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          # Findings are uploaded to the Security tab; this step does not fail
+          # the build on them. That is the intended state *for now* — the
+          # first run of any new scanner returns a pile that has to be triaged
+          # before it can be a gate, and a red build nobody can fix teaches
+          # people to ignore red builds.
+          #
+          # To make it a gate later, do it in branch protection (require the
+          # "Code scanning results" check), not here.
