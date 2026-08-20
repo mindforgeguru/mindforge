@@ -30,6 +30,22 @@ on:
         type: boolean
         default: false
 
+# Declared here rather than left to the repository default, which is what
+# CodeQL flagged on 2026-08-20 (7 × actions/missing-workflow-permissions, one
+# per job). The repo default happens to be `read` today — but that is a
+# checkbox in Settings, and a checkbox someone can flip is not a guarantee.
+# Flipping it would silently hand a write-scoped token to all seven jobs
+# below, several of which run third-party container images over repository
+# contents. Same failure mode as the branch allowlist above: a control that
+# depends on being remembered is a control that fails open.
+#
+# Nothing in this file writes to the repository — no commits, no comments, no
+# SARIF upload, no releases. `contents: read` is the whole requirement.
+# CodeQL uploads results and therefore needs more; that is why it declares its
+# own permissions in .github/workflows/codeql.yml instead of living here.
+permissions:
+  contents: read
+
 jobs:
   # ── Backend unit tests (no DB/Redis needed) ──────────────────────────────────
   backend-unit:
