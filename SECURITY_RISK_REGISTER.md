@@ -27,12 +27,12 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **37** |
+| Verified | **39** |
 | Stale | **24** |
-| Open | **29** |
+| Open | **27** |
 | **Total tracked** | **90** across 13 domains |
 
-*Last verification sweep: 2026-08-19 (see [Verification log](#verification-log)).*
+*Last verification sweep: 2026-08-20 (see [Verification log](#verification-log)).*
 
 **The shape of it.** Multi-tenancy and authentication are genuinely strong — that is
 where the tests are, and it shows. The open items cluster in three places instead:
@@ -140,8 +140,8 @@ goes wrong.
 |---|---|---|
 | Vulnerable Python dependencies | VERIFIED | `pip-audit --strict` green on a real CI runner — 20 findings across 5 packages driven to 0, with one documented ignore (`ecdsa`, unreachable under HS256). |
 | Vulnerable Dart / Flutter dependencies | VERIFIED | osv-scanner over `pubspec.lock`: **192 packages, 0 issues**. Image pinned by digest; green on a real runner, `32176217465`. |
-| Vulnerable base images | OPEN | No container scanning (`trivy`, `grype`) on the backend image. |
-| Static analysis for security defects | OPEN | No SAST in CI — no CodeQL, no Semgrep. `flutter analyze` is a linter, not a security tool. |
+| Vulnerable base images | VERIFIED | trivy (v0.74.0, pinned by digest) scans the **built** backend image on every push. Baseline 2026-08-20, reproduced identically locally and on a CI runner (`32338143062`): **122 HIGH/CRITICAL — 109 with no upstream fix, 13 fixable**, 8 of those one util-linux CVE counted per sibling package. Reports, does not gate; `--ignore-unfixed --exit-code 1` is the documented one-line change once the 13 are cleared. |
+| Static analysis for security defects | VERIFIED | CodeQL on every push and weekly (`codeql.yml`), languages `python` + `actions`. First run 2026-08-20 scanned **137/137 Python files, 43 rules, 0 findings** and **2/2 workflow files, 17 rules, 7 findings**. The pipeline was falsified by its own result rather than a planted bug: the 7 were real, were fixed in `91f37e4`, and the next run reported 0 open / 7 fixed. Dart is unsupported by CodeQL; Swift (7 tracked files) and Kotlin (1) both need a full build and are skipped on purpose. |
 | Malicious or typosquatted package | OPEN | No provenance or lockfile-integrity gate. |
 
 ## 9. Availability, abuse & cost
@@ -509,6 +509,87 @@ that no unit test would have reached.
 
 ---
 
+### 2026-08-20 — Scanners that read the code and the image
+
+Everything CI checked until today was *around* the software: dependency
+manifests, commit history. Nothing read the application source, and nothing
+looked inside the container the backend actually runs in. Every finding in this
+register up to this point came from a person deciding to go and look — which
+finds things exactly once, on the day someone looks.
+
+**CodeQL** (`.github/workflows/codeql.yml`), free only because this repository
+is public — a fact this register had never recorded, and one that changes the
+threat model: nothing here is protected by being hard to find, and any secret
+ever committed is exposed permanently.
+
+Languages `python` and `actions`. The second is not box-ticking. A workflow
+that interpolates untrusted input into a `run:` block executes
+attacker-controlled shell holding the repository token, and this repo has
+several multi-line `run:` blocks.
+
+Its own workflow, not another job in `ci.yml`, because it needs
+`security-events: write` and nothing else in CI does.
+
+First run:
+
+| Language | Files scanned | Rules | Findings |
+|---|---|---|---|
+| python | 137 / 137 | 43 | 0 |
+| actions | 2 / 2 | 17 | **7** |
+
+The Python zero is a real zero, not a vacuous pass: the log records full
+extraction coverage and the interpreted query list includes SSRF, path
+injection, LDAP injection, XXE, reflected XSS and weak-crypto checks.
+
+**The 7 findings were the falsification.** No planted bug was needed — the
+scanner found something real on its first run: every job in `ci.yml` inherited
+the repository's default `GITHUB_TOKEN` permissions
+(`actions/missing-workflow-permissions`, one alert per job). The default is
+`read` today, so nothing was exposed; but it is a checkbox in Settings, and
+flipping it would silently hand a write-scoped token to seven jobs, several of
+which run third-party container images over the repository contents. The same
+shape as the branch allowlist that failed open for weeks. Fixed in `91f37e4`
+with a workflow-level `permissions: contents: read`; the following run reported
+**0 open, 7 fixed**, which closes the loop in both directions — the pipeline
+demonstrably produces findings *and* demonstrably clears them.
+
+**trivy** (`ci.yml`, job `container-scan`), v0.74.0 pinned by digest to match
+gitleaks and osv-scanner. `pip-audit` reads `requirements.txt`, which covers
+what we chose to install and nothing underneath it; the image is
+`python:3.11-slim` plus tesseract, poppler, gcc and curl, and nothing had ever
+looked at that layer.
+
+Scanned from a `docker save` tarball via `--input` rather than by mounting
+`/var/run/docker.sock`, which would hand the scanner control of the host
+daemon — a lot of trust for a tool whose job is parsing untrusted package
+metadata.
+
+Baseline, identical locally and on runner `32338143062`:
+
+- **122 HIGH/CRITICAL** (117 OS, 5 Python)
+- **109 have no upstream fix** — Debian has not shipped one, so they are not
+  actionable here
+- **13 are fixable today**: 8 are a single util-linux CVE (`CVE-2026-53615`)
+  counted once per sibling package, plus `setuptools`, `wheel`,
+  `jaraco.context` and `msgpack`
+- `ecdsa` `CVE-2024-23342` reappears here; it is the advisory already assessed
+  and ignored in the pip-audit job — HS256 only, no ECDSA operation is ever
+  performed
+
+**Neither scanner gates.** `--exit-code 0` on trivy and no failure threshold on
+CodeQL are deliberate and temporary. The first run of a new scanner returns a
+backlog, and a red build nobody can fix is how people learn to ignore red
+builds. Each file records the exact change that turns it into a gate.
+
+Both workflows lint clean under `actionlint` before push.
+
+**Caveat worth keeping visible.** On a public repo the alert *list* still needs
+write access to read, so unfixed findings are not published. But code scanning
+annotations **on a pull request** are visible to anyone. A PR carrying a live
+finding advertises it for as long as it is open.
+
+---
+
 ## What to fix first
 
 Ordered by consequence, not by how interesting the work is. Items 5–8 of the
@@ -551,6 +632,15 @@ outstanding.
    dangerous half is closed. This is the outstanding *measurement* — whether the
    prompt wording actually holds — and it cannot run while Gemini is over its
    spending cap and no Claude key is set locally.
+
+9. **Clear the 13 fixable CVEs in the backend image, then make trivy a gate.**
+   The scan added 2026-08-20 found 122 HIGH/CRITICAL, of which 109 have no
+   upstream fix and 13 do. Eight of the thirteen are one util-linux CVE
+   counted once per sibling package, so an `apt-get upgrade` in the Dockerfile
+   likely takes most of it; the rest are `setuptools`, `wheel`,
+   `jaraco.context` and `msgpack`. Once the actionable list is empty, switch
+   the job to `--ignore-unfixed --exit-code 1` so it blocks rather than
+   reports — the one-line change is documented in `ci.yml`.
 
 ---
 

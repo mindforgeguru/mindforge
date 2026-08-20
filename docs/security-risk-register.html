@@ -658,10 +658,10 @@
           <p class="note"><code>pip-audit --strict</code> green on a real CI runner — 20 findings across 5 packages driven to 0, with one documented ignore (<code>ecdsa</code>, unreachable under HS256).</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Vulnerable Dart / Flutter dependencies</span>
           <p class="note">osv-scanner over <code>pubspec.lock</code>: <b>192 packages, 0 issues</b>. Now a CI job, image pinned by digest.<span class="flag new">Fixed</span></p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Vulnerable base images</span>
-          <p class="note">No container scanning (<code>trivy</code>, <code>grype</code>) on the backend image.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Static analysis for security defects</span>
-          <p class="note">No SAST in CI — no CodeQL, no Semgrep. <code>flutter analyze</code> is a linter, not a security tool.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Vulnerable base images</span>
+          <p class="note">trivy v0.74.0 (pinned by digest) scans the <b>built</b> backend image on every push. Baseline 2026-08-20, identical locally and on a runner: <b>122 HIGH/CRITICAL</b> — 109 with no upstream fix, <b>13 fixable</b> (8 of them one util-linux CVE counted per sibling package). Reports rather than gates; the one-line change to make it a gate is recorded in the workflow.<span class="flag new">Fixed</span></p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Static analysis for security defects</span>
+          <p class="note">CodeQL on every push and weekly — <code>python</code> (137/137 files, 43 rules, 0 findings) and <code>actions</code> (2/2 files, 17 rules, <b>7 findings</b>). No planted bug was needed to falsify it: the 7 were real, were fixed, and the next run reported 0 open / 7 fixed. Dart is unsupported by CodeQL; Swift and Kotlin are 8 tracked files needing a full build, skipped on purpose.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Malicious or typosquatted package</span>
           <p class="note">No provenance or lockfile-integrity gate.</p></div>
       </div>
