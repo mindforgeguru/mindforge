@@ -1,7 +1,7 @@
 # Privacy Policy for Mindforge
 
 **Effective date:** 19 May 2026
-**Last updated:** 19 May 2026
+**Last updated:** 21 August 2026
 
 > **Note to the publisher:** This policy has not been reviewed by a lawyer. If you operate in regulated jurisdictions (EU, US) or process payments, you should have legal counsel review it before publishing.
 
@@ -53,13 +53,13 @@ We use the information above to:
 - Diagnose crashes and bugs (Crashlytics / Sentry) and improve the product (Analytics).
 - Comply with the school's record-keeping obligations and respond to legal requests.
 
-We do not sell your personal information. We do not use your information for advertising or for profiling unrelated to school activity. We do not train any AI models on student data. The AI providers we use (Google Gemini and Groq) operate under their own data-use terms — see their respective privacy policies for how they handle content submitted to their APIs.
+We do not sell your personal information. We do not use your information for advertising or for profiling unrelated to school activity. We do not train any AI models on student data. The AI providers we use (Anthropic — the provider of the Claude models — together with Google Gemini and Groq) operate under their own data-use terms — see their respective privacy policies for how they handle content submitted to their APIs.
 
 ## 5. AI features
 
-Mindforge uses third-party AI services (Google Gemini and Groq) for features such as test grading and content generation. Where AI features process student-submitted content (e.g., a test answer), we send only the minimum data needed for the feature and do not send personally identifying fields (name, phone, email) as part of the AI prompt. Outputs are reviewed by teachers before being recorded.
+Mindforge uses third-party AI services (Anthropic's Claude models, Google Gemini, and Groq) for features such as test grading and content generation. Where AI features process student-submitted content (e.g., a test answer), we send only the minimum data needed for the feature and do not send personally identifying fields (name, phone, email) as part of the AI prompt. Outputs are reviewed by teachers before being recorded.
 
-Teachers may also upload source documents (chapter scans, past test papers, answer keys) when generating tests or grading. These files are sent in full to the AI provider so that questions, answer keys, or graded responses can be extracted. Such documents may incidentally contain identifying information (e.g., student names on a scanned answer sheet); we recommend teachers redact identifiable student information before uploading.
+Teachers may also upload source documents (chapter scans, past test papers, answer keys) when generating tests or grading. These files are sent in full to our AI provider — currently Anthropic, whose Claude models read the uploaded document directly — so that questions, answer keys, or graded responses can be extracted. Such documents may incidentally contain identifying information (e.g., student names on a scanned answer sheet); we recommend teachers redact identifiable student information before uploading.
 
 ## 6. Children's privacy
 
@@ -87,7 +87,7 @@ We share data only with the parties needed to run the service:
 | **Firebase (Google) — Crashlytics** | Crash diagnostics | Crash stack traces, device metadata, anonymous user ID |
 | **Firebase (Google) — Analytics** | Usage analytics | Anonymous event data |
 | **Sentry** | Backend error tracking | Error stack traces, request metadata, anonymous user ID |
-| **Google Gemini, Groq** | AI features (grading, content) | Only the minimum prompt content; no PII |
+| **Anthropic (Claude), Google Gemini, Groq** | AI features — content generation and grading; Claude also reads teacher-uploaded documents directly | For prompts: only the minimum content, no identifying fields. For uploaded documents (chapter scans, answer sheets): the full file, which may incidentally contain student names |
 
 We do not share data with advertisers, data brokers, or unrelated third parties. We may disclose data when legally required (court order, lawful government request) or to protect against fraud, abuse, or harm to users.
 
