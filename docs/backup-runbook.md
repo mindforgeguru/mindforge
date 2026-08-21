@@ -76,12 +76,34 @@ A check that cannot be made to fail has not been shown to work.
 `docker exec` against the compose containers. Production is different in both
 halves:
 
-**Postgres** is Railway-managed. It has its own snapshot mechanism — confirm in
-the Railway dashboard that snapshots are (a) enabled, (b) retained long enough
-to survive a problem noticed a week late, and (c) *restorable*, which needs the
-same rehearsal discipline: restore a snapshot into a scratch Railway database
-and compare counts. A snapshot nobody has restored has exactly the same standing
-as a dump nobody has restored.
+**Postgres** is Railway-managed, and there are two independent things to get
+right — Railway's own backups, and a restore you have personally verified.
+
+1. *Railway's built-in backups.* In the dashboard, open the Postgres service →
+   **Backups**. Confirm they are (a) enabled, (b) retained long enough to
+   survive a problem noticed a week late (30 days is the target), and (c) that
+   you know how to trigger a restore. This is your fast recovery path.
+
+2. *A restore you have proven yourself.* Railway's snapshots restore only into
+   Railway, so to actually rehearse one without paying for a second instance,
+   take a logical dump and rebuild it locally. That is what
+   `scripts/backup_railway.sh` does, in one command:
+
+   ```bash
+   # Railway → Postgres service → Connect → copy the "Postgres Connection URL"
+   export DATABASE_URL='postgres://USER:PASS@HOST:PORT/railway'
+   scripts/backup_railway.sh
+   ```
+
+   It dumps production (read-only — production is never written to), then
+   restores that dump into a throwaway database inside the local Docker Postgres
+   and compares row counts against a manifest, exactly like the local rehearsal.
+   Exit 0 means a real production backup was taken and rebuilt to matching
+   counts. The dump lands under `./backups/railway/` (gitignored) and holds
+   every student record — treat it as sensitive and delete it when done.
+
+   A snapshot nobody has restored has exactly the same standing as a dump nobody
+   has restored. This is how you stop guessing.
 
 **MinIO** is the sharper risk. Objects live on a Railway volume, and the
 register records this failure mode as one that has **already happened** —
