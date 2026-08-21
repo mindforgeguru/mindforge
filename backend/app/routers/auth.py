@@ -31,7 +31,12 @@ from app.schemas.user import (
     RefreshRequest, RefreshResponse, UserResponse, MfaCodeRequest, MfaDisableRequest,
 )
 from app.core.redis_client import redis_manager
-from app.core.account_state import login_block_reason, login_block_response
+from app.core.account_state import (
+    login_block_reason,
+    login_block_response,
+    self_delete_block_reason,
+    self_delete_block_response,
+)
 from app.core.security_events import note_failed_login
 from app.core.mfa import consume_recovery_code
 from app.core.totp import generate_secret, provisioning_uri, verify_totp
@@ -713,21 +718,15 @@ async def delete_my_account(
     """
     from app.models.user import UserRole
 
-    if current_user.role == UserRole.admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin accounts cannot be self-deleted. Use the admin tools.",
+    # Role policy (admin / student / owner may not self-delete) lives in
+    # app.core.account_state so it is unit-tested. Owner was previously missing
+    # here and fell through to soft-delete itself.
+    blocked = self_delete_block_reason(current_user.role)
+    if blocked:
+        logger.info(
+            "Self-delete blocked: role=%s user_id=%s", blocked, current_user.id,
         )
-
-    if current_user.role == UserRole.student:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Students cannot delete their own account. Ask your parent "
-                "to delete the account (your parent's deletion also removes "
-                "the linked student account), or contact the school admin."
-            ),
-        )
+        raise self_delete_block_response(blocked)
 
     # ── Parent role: find linked active student(s) and cascade ────────────────
     cascade_student: Optional[User] = None

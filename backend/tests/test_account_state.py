@@ -11,7 +11,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.account_state import login_block_reason, login_block_response
+from app.core.account_state import (
+    login_block_reason,
+    login_block_response,
+    self_delete_block_reason,
+    self_delete_block_response,
+)
 
 
 def _user(*, approved=True, active=True, deleted=False):
@@ -60,3 +65,36 @@ class TestResponse:
         assert exc.status_code == 401
         assert exc.detail == "Invalid username or MPIN."
         assert "delet" not in exc.detail.lower()
+
+
+class TestSelfDeletePolicy:
+    """Which roles may delete their own account. App-store policy needs a
+    self-delete path, but not for every role — and the platform owner in
+    particular must not be able to remove the only account that administers the
+    platform."""
+
+    def test_parent_and_teacher_may_self_delete(self):
+        assert self_delete_block_reason("parent") is None
+        assert self_delete_block_reason("teacher") is None
+
+    def test_admin_is_blocked(self):
+        assert self_delete_block_reason("admin") == "admin"
+
+    def test_student_is_blocked(self):
+        assert self_delete_block_reason("student") == "student"
+
+    def test_owner_is_blocked(self):
+        # The gap this fixed: before, an owner fell through delete_my_account
+        # and soft-deleted itself, orphaning the platform.
+        assert self_delete_block_reason("owner") == "owner"
+
+    def test_accepts_an_enum_role_not_just_a_string(self):
+        from app.models.user import UserRole
+        assert self_delete_block_reason(UserRole.owner) == "owner"
+        assert self_delete_block_reason(UserRole.parent) is None
+
+    def test_responses_are_403_with_role_specific_text(self):
+        assert self_delete_block_response("admin").status_code == 403
+        assert "admin tools" in self_delete_block_response("admin").detail.lower()
+        assert "parent" in self_delete_block_response("student").detail.lower()
+        assert "owner" in self_delete_block_response("owner").detail.lower()

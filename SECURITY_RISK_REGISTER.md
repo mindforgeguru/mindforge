@@ -165,7 +165,7 @@ goes wrong.
 | PII leaking into AI prompts | OPEN | The prompt sweep that found this clean predates the entire Claude pipeline. |
 | Policy not published | OPEN | Not hosted at a public URL, not reviewed by counsel, and `AppConstants.privacyPolicyUrl` is still empty. Blocks store submission. |
 | Data retention | OPEN | No defined retention or purge policy. Soft-deleted rows persist indefinitely. |
-| Account deletion completeness | STALE | Soft delete, JTI revocation, FCM clear and audit row — all verified by reading in May, before the owner role existed. Whether owner self-delete is blocked is an open question. |
+| Account deletion completeness | VERIFIED | The open question — *is owner self-delete blocked?* — was a real gap: `delete_my_account` blocked admin and student but let **owner fall through and soft-delete itself**, orphaning the platform. Fixed: the role policy is now `self_delete_block_reason` in `app.core.account_state` (admin/student/owner blocked; parent/teacher allowed, parent cascades to its one child), pinned by 14 tests and falsified — reverting the owner block fails the owner test. Deletion side-effects (soft-delete flags, access+refresh JTI revocation, FCM clear, audit row, parent→child cascade) remain verified by reading; an end-to-end deletion test is the remaining depth. |
 | PII reaching error-reporting vendors | STALE | Sentry runs `send_default_pii=False` plus a key scrubber. Not re-confirmed. |
 
 ## 11. AI pipeline
