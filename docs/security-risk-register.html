@@ -637,8 +637,8 @@
           <p class="note">Backend refuses to boot under <code>APP_ENV=production</code> if Postgres, Redis or MinIO are on built-in defaults.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Seeded default admin account</span>
           <p class="note">Removed from <code>init_db.sql</code> — provisioning is now only via the env-gated seed or Owner Console. <b>Production checked and closed 2026-08-21:</b> the leftover <code>admin</code> row had run there and was neutralised (<code>is_active=false</code>, <code>deleted_at</code> set) from the Railway console, so <code>admin</code>/<code>123456</code> can no longer sign in. Reversible; not hard-deleted for FK safety.<span class="flag new">Fixed</span></p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Firebase client keys unrestricted</span>
-          <p class="note">Documented in <code>SECURITY.md</code> with the exact restriction each key needs — never applied in the GCP console. Defence-in-depth; worst case is quota abuse.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Firebase client keys restricted</span>
+          <p class="note">Assumption corrected 2026-08-21 — the console shows all three keys already restricted (auto-created by Firebase, Apr 2026), confirmed by inspection: Android = package <code>com.mindforge.mindforge</code> + the release SHA-1; Web = referrers incl. <code>mindforge.guru/*</code>; iOS = iOS apps. Residual: add the Play App-Signing SHA-1 if the app ever ships via Play App Signing.<span class="flag new">Fixed</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Secrets committed to git history</span>
           <p class="note">gitleaks over all 231 commits: <b>zero real secrets</b>. The 8 hits are public-by-design Firebase client keys and one invalid JWT fixture, allowlisted by exact value and falsified. Now a CI job.<span class="flag new">Fixed</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Secrets in the working tree</span>
