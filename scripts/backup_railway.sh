@@ -86,27 +86,45 @@ echo "==> dumping production → $DUMP (read-only; production is not modified)"
 client 'pg_dump "$DBURL" -Fc' > "$DUMP"
 [ -s "$DUMP" ] || die "dump is empty — aborting rather than keeping a useless file"
 
-echo "==> reading row counts from production"
-# All counts over ONE connection. Firing a separate connection per table (the
-# earlier approach) let Railway's proxy refuse one of several rapid connections
-# and leave a table silently 'n/a' — unverified. A single UNION ALL closes that:
-# either every count comes back, or none do and we know the read failed.
-count_sql=""; i=0
+echo "==> checking which of the key tables this database actually has"
+# The count list is what a healthy schema *should* hold, but the target may be
+# on an older migration (production can lag the branch). Counting a table that
+# isn't there fails the whole read, so first ask the database which of these
+# tables exist, then count only those. A table that is expected but absent is
+# reported — loudly enough to notice, but it does not fail the backup, because a
+# schema difference is not a broken backup.
+in_list="$(printf "'%s'," "${COUNT_TABLES[@]}")"; in_list="${in_list%,}"
+export EXISTS_SQL="SELECT table_name FROM information_schema.tables
+                   WHERE table_schema='public' AND table_name IN ($in_list)
+                   ORDER BY table_name"
+present="$(docker run --rm -e DBURL -e EXISTS_SQL "$CLIENT_IMAGE" \
+  sh -c 'psql "$DBURL" -tAc "$EXISTS_SQL"' 2>/dev/null | tr -d '\r' | sed '/^$/d')" || present=""
+[ -n "$present" ] \
+  || die "could not list tables in this database (a read failure, not a backup
+       failure — the dump above is complete). Re-run to retry."
+
+absent=""
 for t in "${COUNT_TABLES[@]}"; do
+  printf '%s\n' "$present" | grep -qx "$t" || absent="${absent:+$absent, }$t"
+done
+[ -n "$absent" ] && echo "    NOTE: expected but not present, so not counted: $absent"
+
+echo "==> reading row counts (single connection, existing tables only)"
+count_sql=""; i=0
+while IFS= read -r t; do
+  [ -n "$t" ] || continue
   i=$((i + 1))
   [ -n "$count_sql" ] && count_sql="$count_sql UNION ALL "
   count_sql="$count_sql SELECT $i k, 'rows_${t}='||count(*) v FROM $t"
-done
+done <<< "$present"
 count_sql="$count_sql ORDER BY k"
 export COUNT_SQL="$count_sql"
 # DBURL and COUNT_SQL both travel by environment, so neither the credential nor
 # the query appears in any process list.
 counts_lines="$(docker run --rm -e DBURL -e COUNT_SQL "$CLIENT_IMAGE" \
   sh -c 'psql "$DBURL" -tA -F"|" -c "$COUNT_SQL"' 2>/dev/null | cut -d'|' -f2)" || counts_lines=""
-if [ -z "$counts_lines" ]; then
-  die "could not read row counts from production. This is a read failure, not a
-       backup failure — the dump above is complete. Re-run to retry the counts."
-fi
+[ -n "$counts_lines" ] \
+  || die "could not read row counts (read failure; the dump is complete). Re-run to retry."
 
 echo "==> writing manifest"
 {
@@ -116,6 +134,7 @@ echo "==> writing manifest"
   echo "engine_image=$CLIENT_IMAGE"
   echo "dump_sha256=$(shasum -a 256 "$DUMP" | awk '{print $1}')"
   echo "dump_bytes=$(wc -c < "$DUMP" | tr -d '[:space:]')"
+  [ -n "$absent" ] && echo "absent_tables=$absent"
   echo "$counts_lines"
 } > "$MANIFEST"
 grep -v '^dump_sha256=' "$MANIFEST" | sed 's/^/    /'
