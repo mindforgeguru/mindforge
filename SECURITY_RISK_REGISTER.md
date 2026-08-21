@@ -27,9 +27,9 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **40** |
+| Verified | **41** |
 | Stale | **24** |
-| Open | **26** |
+| Open | **25** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-20 (see [Verification log](#verification-log)).*
@@ -194,7 +194,7 @@ goes wrong.
 | Android release signing | VERIFIED | Signed with a release keystore; `key.properties` gitignored. |
 | Test suite writing to production | STALE | `tests/test_api.py` targeted the live database and was fired at it once by accident. A production guard now blocks it — but the suite itself is still stale. |
 | Code merging without CI | VERIFIED | Push trigger widened to `"**"`. Proven on run `32176217465` — the first push-triggered CI this branch has ever had, all 5 jobs green, `api-integration` correctly skipped. It caught a real break on its first attempt (see log). |
-| Toolchain drift | OPEN | CI pins Flutter 3.41.4; local is 3.44.0. A version-specific failure would not surface symmetrically. |
+| Toolchain drift | VERIFIED | CI and local both pin Flutter 3.44.0 / Dart 3.12.0 (stable), aligned 2026-08-21. Analyze (0 warnings), 87 unit and 38 widget tests were run on 3.44.0 locally — the same toolchain CI now uses — so "green on CI" and "works locally" are one claim. The pin carries a comment to bump both together. |
 | iOS release verification | OPEN | Blocked on Apple Developer Program enrolment. No IPA has ever been built or tested. |
 | Independent penetration test | OPEN | Every result in this register comes from self-testing. No external assessment, no DAST, no bug bounty. |
 

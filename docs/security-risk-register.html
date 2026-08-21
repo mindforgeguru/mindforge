@@ -771,8 +771,8 @@
           <p class="note"><code>tests/test_api.py</code> targeted the live database and was fired at it once by accident. A production guard now blocks it — but the suite itself is still stale.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Code merging without CI</span>
           <p class="note">Push trigger widened to <code>"**"</code>. Proven on the first push-triggered run this branch has ever had — all 5 jobs green, live-API job correctly skipped. It caught a real build break on its first attempt.<span class="flag new">Fixed</span></p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Toolchain drift</span>
-          <p class="note">CI pins Flutter 3.41.4; local is 3.44.0. A version-specific failure would not surface symmetrically.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Toolchain drift</span>
+          <p class="note">CI and local both pin Flutter 3.44.0 / Dart 3.12.0 (stable), aligned 2026-08-21 — analyze plus 87 unit and 38 widget tests were run on that exact toolchain locally, so “green on CI” and “works locally” are one claim.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">iOS release verification</span>
           <p class="note">Blocked on Apple Developer Program enrolment. No IPA has ever been built or tested.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Independent penetration test</span>

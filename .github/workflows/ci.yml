@@ -250,10 +250,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned to the exact version developed against locally (Flutter 3.44.0 /
+      # Dart 3.12.0, stable). Kept identical on purpose: when CI runs a
+      # different toolchain, "green on CI" and "works on my machine" are two
+      # different claims, and a version-specific analyzer or codegen change can
+      # pass one while failing the other. Bump this and the local install
+      # together, never one alone.
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.41.4"
+          flutter-version: "3.44.0"
           channel: stable
           cache: true
 
