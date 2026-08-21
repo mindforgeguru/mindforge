@@ -107,9 +107,23 @@ right — Railway's own backups, and a restore you have personally verified.
 
 **MinIO** is the sharper risk. Objects live on a Railway volume, and the
 register records this failure mode as one that has **already happened** —
-avatars and uploads blanked while the media proxy returned clean 404s. Confirm a
-volume is mounted at `/data`, then arrange an off-box copy: a volume is
-protection against a container restart, not against deletion or corruption.
+avatars and uploads blanked while the media proxy returned clean 404s.
+
+1. *Confirm a volume is mounted at `/data`* on the MinIO service. This is what
+   stops a container restart wiping every file — the exact past incident.
+
+2. *An off-box copy.* A volume protects against a restart, not against deletion
+   or corruption, so the objects need a copy that is not that volume. Two ways,
+   in order of least effort:
+   - **Railway volume backups.** The MinIO service has its own Backups tab, the
+     same as Postgres — enable scheduled volume backups and set retention. This
+     needs no public exposure.
+   - **An independent copy you control**, via `scripts/backup_minio.sh`. Given
+     the MinIO endpoint and keys it mirrors every bucket to a local folder and
+     proves the copy is complete (files on disk == objects in production). This
+     needs the MinIO endpoint reachable from your machine (a public TCP proxy),
+     so it adds a little attack surface — use it when you want a copy that does
+     not depend on Railway, not as the only measure.
 
 Suggested cadence once production is wired up:
 
