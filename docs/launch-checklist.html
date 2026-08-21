@@ -1,0 +1,640 @@
+<title>MindForge Launch Checklist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root {
+    --ground: #eff0ec;
+    --surface: #fbfbf9;
+    --surface-2: #f3f4f0;
+    --ink: #23262c;
+    --ink-2: #41454d;
+    --muted: #666a72;
+    --rule: #e1e2dc;
+    --rule-strong: #cccec6;
+    --accent: #3a3fae;
+    --accent-soft: #e7e8f7;
+
+    --block: #b0364a;
+    --block-soft: #f7e6e8;
+    --soon: #97650f;
+    --soon-soft: #f6eed9;
+    --quick: #2f7a52;
+    --quick-soft: #e2f0e7;
+
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --serif: "Spectral", Georgia, "Times New Roman", serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #141619;
+      --surface: #1b1e23;
+      --surface-2: #23262d;
+      --ink: #e7e8ea;
+      --ink-2: #c4c7cd;
+      --muted: #969aa2;
+      --rule: #2a2d34;
+      --rule-strong: #3a3e46;
+      --accent: #9ea2f0;
+      --accent-soft: #22243c;
+
+      --block: #e28794;
+      --block-soft: #331b20;
+      --soon: #d7a950;
+      --soon-soft: #2e2513;
+      --quick: #74c496;
+      --quick-soft: #16291f;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #141619;
+    --surface: #1b1e23;
+    --surface-2: #23262d;
+    --ink: #e7e8ea;
+    --ink-2: #c4c7cd;
+    --muted: #969aa2;
+    --rule: #2a2d34;
+    --rule-strong: #3a3e46;
+    --accent: #9ea2f0;
+    --accent-soft: #22243c;
+
+    --block: #e28794;
+    --block-soft: #331b20;
+    --soon: #d7a950;
+    --soon-soft: #2e2513;
+    --quick: #74c496;
+    --quick-soft: #16291f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 22px 88px;
+  }
+
+  /* ---------- header ---------- */
+
+  header { padding: 52px 0 30px; }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 16px;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(30px, 5.6vw, 44px);
+    line-height: 1.08;
+    letter-spacing: -.01em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+
+  .lede {
+    font-size: 16.5px;
+    color: var(--ink-2);
+    max-width: 60ch;
+    margin: 0;
+  }
+
+  .lede b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- legend ---------- */
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    margin: 28px 0 0;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+
+  .dot {
+    width: 9px; height: 9px;
+    border-radius: 999px;
+    flex: none;
+    transform: translateY(1px);
+  }
+  .dot.b { background: var(--block); }
+  .dot.s { background: var(--soon); }
+  .dot.q { background: var(--quick); }
+  .legend-item b { color: var(--ink-2); font-weight: 600; }
+
+  /* ---------- group headings ---------- */
+
+  .group {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 46px 0 18px;
+  }
+
+  .group h2 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: .02em;
+    margin: 0;
+    color: var(--ink);
+  }
+
+  .group .rule {
+    flex: 1;
+    height: 1px;
+    background: var(--rule-strong);
+  }
+
+  .group .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ---------- cards ---------- */
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--edge, var(--rule-strong));
+    border-radius: 8px;
+    padding: 20px 22px 18px;
+    margin: 0 0 14px;
+  }
+  .card.b { --edge: var(--block); }
+  .card.s { --edge: var(--soon); }
+  .card.q { --edge: var(--quick); }
+
+  .card-top {
+    display: flex;
+    align-items: baseline;
+    gap: 13px;
+    margin-bottom: 10px;
+  }
+
+  .num {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    transform: translateY(-1px);
+    flex: none;
+  }
+
+  .card h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 20px;
+    line-height: 1.25;
+    letter-spacing: -.005em;
+    margin: 0;
+    flex: 1;
+    text-wrap: balance;
+  }
+
+  .tag {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex: none;
+    transform: translateY(-1px);
+  }
+  .tag.b { background: var(--block-soft); color: var(--block); }
+  .tag.s { background: var(--soon-soft); color: var(--soon); }
+  .tag.q { background: var(--quick-soft); color: var(--quick); }
+
+  .why {
+    font-size: 14.5px;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  .why .lead {
+    color: var(--ink-2);
+    font-weight: 600;
+  }
+
+  .dolabel {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
+
+  ol.steps {
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+    counter-reset: s;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  ol.steps li {
+    counter-increment: s;
+    position: relative;
+    padding-left: 30px;
+    font-size: 14.5px;
+    color: var(--ink-2);
+  }
+  ol.steps li::before {
+    content: counter(s);
+    position: absolute;
+    left: 0; top: 0;
+    width: 20px; height: 20px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid var(--rule-strong);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  ol.steps code {
+    font-family: var(--mono);
+    font-size: .86em;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  .done {
+    display: flex;
+    gap: 9px;
+    align-items: baseline;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+  }
+  .done .check {
+    color: var(--quick);
+    font-weight: 700;
+    flex: none;
+  }
+  .done b { color: var(--ink); font-weight: 600; }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .03em;
+    color: var(--muted);
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 3px 11px;
+  }
+  .chip.help { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+
+  /* ---------- completed state ---------- */
+
+  .card.complete {
+    border-left-color: var(--quick);
+    background: var(--surface);
+    opacity: .78;
+  }
+  .card.complete h3 { text-decoration: line-through; text-decoration-color: var(--rule-strong); }
+  .tag.done { background: var(--quick-soft); color: var(--quick); }
+  .banner-done {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    font-size: 13.5px;
+    color: var(--quick);
+    background: var(--quick-soft);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    font-weight: 600;
+  }
+  .banner-done .check { font-weight: 700; flex: none; }
+  .banner-done span { color: var(--ink-2); font-weight: 400; }
+
+  /* ---------- footer note ---------- */
+
+  .foot {
+    margin: 44px 0 0;
+    padding: 20px 22px;
+    border: 1px dashed var(--rule-strong);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--muted);
+    background: transparent;
+  }
+  .foot b { color: var(--ink-2); font-weight: 600; }
+  .foot .store { color: var(--block); font-weight: 600; }
+
+  a { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    .card-top { flex-wrap: wrap; }
+    .tag { order: 3; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="kicker">MindForge · your to-do list before real schools use it</p>
+    <h1>What's left is yours, not the code's</h1>
+    <p class="lede">
+      The security and engineering work is in good shape. The seven things below are the ones
+      <b>only you can do</b> — a login to check, a policy to publish, a legal call to make, a phone
+      to test with. They're in order. Do the red ones before you launch; the rest can follow close behind.
+      Where I can take part of it off your plate, the card says so.
+    </p>
+
+    <div class="legend">
+      <span class="legend-item"><span class="dot b"></span><b>Blocker</b> — before you launch</span>
+      <span class="legend-item"><span class="dot s"></span><b>Safety net</b> — do soon after</span>
+      <span class="legend-item"><span class="dot q"></span><b>Quick win</b> — small, only you can</span>
+    </div>
+  </header>
+
+  <!-- ============ GROUP 1 ============ -->
+  <div class="group">
+    <h2>Before you launch</h2>
+    <span class="rule"></span>
+    <span class="meta">3 items</span>
+  </div>
+
+  <!-- 1 -->
+  <div class="card b complete">
+    <div class="card-top">
+      <span class="num">01</span>
+      <h3>Remove the leftover admin login from your live database</h3>
+      <span class="tag done">Done ✓</span>
+    </div>
+    <div class="banner-done">
+      <span class="check">✓</span>
+      <span><b style="color:var(--quick)">Completed 21 Aug 2026.</b>
+      The check found the leftover <code>admin</code> account really was in production — the old seed
+      had run there after all. Switched off and marked removed
+      (<code>is_active = false</code>, <code>deleted_at</code> set), so <code>admin</code>/<code>123456</code>
+      can no longer sign in. Reversible if ever needed.</span>
+    </div>
+    <p class="why">
+      Early versions of the app came with a built-in admin account — username <code>admin</code>,
+      PIN <code>123456</code>. It was still sitting in the live database. Anyone who had seen the app
+      could have signed in as a full admin; that door is now shut.
+    </p>
+    <div class="chips">
+      <span class="chip">You did it</span>
+      <span class="chip">~5 minutes</span>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div class="card b">
+    <div class="card-top">
+      <span class="num">02</span>
+      <h3>Put your privacy policy online and link it in the app</h3>
+      <span class="tag b">Blocker</span>
+    </div>
+    <p class="why">
+      <span class="lead">The app stores won't accept a children's app without one.</span>
+      Your policy is already written (<code>PRIVACY_POLICY.md</code>) but it isn't hosted anywhere,
+      and the app's "Privacy Policy" link is currently empty. It also needs one honest line: that the
+      documents teachers upload are sent to <b>Anthropic</b> (the company behind Claude) to generate
+      quizzes and slides.
+    </p>
+    <p class="dolabel">What you do</p>
+    <ol class="steps">
+      <li>Say the word and I'll add the Anthropic line to your policy text for you.</li>
+      <li>Host the policy at a public web address — a simple free page is fine.</li>
+      <li>Send me that link and I'll set it in the app (the <code>privacyPolicyUrl</code> that's blank today).</li>
+    </ol>
+    <div class="done">
+      <span class="check">✓</span>
+      <span><b>Done when:</b> the policy opens at a public link, and the app's "Privacy Policy" button opens that link.</span>
+    </div>
+    <div class="chips">
+      <span class="chip">You host it</span>
+      <span class="chip">~1–2 hours</span>
+      <span class="chip help">I can edit the text + wire the link</span>
+    </div>
+  </div>
+
+  <!-- 3 -->
+  <div class="card b">
+    <div class="card-top">
+      <span class="num">03</span>
+      <h3>Decide how you'll handle children's data</h3>
+      <span class="tag b">Blocker</span>
+    </div>
+    <p class="why">
+      <span class="lead">This is a legal call, not a coding one.</span>
+      Your app holds real records about minors. Different regions have rules about that — the US has
+      COPPA, Europe has GDPR-K, India has the DPDP Act — and they're mostly about getting proper
+      consent from parents. No code can answer this; it's a decision you make, ideally with someone
+      who knows the law where your first schools are.
+    </p>
+    <p class="dolabel">What you do</p>
+    <ol class="steps">
+      <li>Write down which countries or regions your first schools are in.</li>
+      <li>Ask a lawyer (or a legal-advice service) what those regions require for children's data and parental consent.</li>
+      <li>Keep a one-page written answer for each region — it's what a store reviewer or a school may ask to see.</li>
+    </ol>
+    <div class="done">
+      <span class="check">✓</span>
+      <span><b>Done when:</b> you have a written position for every region you'll operate in.</span>
+    </div>
+    <div class="chips">
+      <span class="chip">You + a lawyer</span>
+      <span class="chip">a few days (mostly waiting)</span>
+    </div>
+  </div>
+
+  <!-- ============ GROUP 2 ============ -->
+  <div class="group">
+    <h2>Safety nets — soon after</h2>
+    <span class="rule"></span>
+    <span class="meta">2 items</span>
+  </div>
+
+  <!-- 4 -->
+  <div class="card s complete">
+    <div class="card-top">
+      <span class="num">04</span>
+      <h3>Prove your backups can actually be restored</h3>
+      <span class="tag done">Done ✓</span>
+    </div>
+    <div class="banner-done">
+      <span class="check">✓</span>
+      <span><b style="color:var(--quick)">Completed 21 Aug 2026.</b>
+      Both data stores are now backed up daily, and the database was proven — not just assumed.</span>
+    </div>
+    <p class="why">
+      <b>Database:</b> Railway's daily backups are on, and you pulled a real production backup and
+      rebuilt it into a throwaway copy with every record matching (72 users, 3,406 attendance,
+      238 grades). <b>Files (MinIO):</b> confirmed on a volume, with daily volume backups now
+      scheduled — closing the store that had blanked once before.
+    </p>
+    <div class="done">
+      <span class="check">✓</span>
+      <span><b>Optional later:</b> rehearse restoring a MinIO backup too (Railway makes it a button), and/or keep an
+      independent copy with <code>scripts/backup_minio.sh</code>. Neither blocks launch.</span>
+    </div>
+    <div class="chips">
+      <span class="chip">You did it</span>
+      <span class="chip">database restore proven</span>
+    </div>
+  </div>
+
+  <!-- 5 -->
+  <div class="card s">
+    <div class="card-top">
+      <span class="num">05</span>
+      <h3>Lock down the Firebase keys</h3>
+      <span class="tag s">Safety net</span>
+    </div>
+    <p class="why">
+      <span class="lead">Low risk, pure clicking, no code.</span>
+      The Firebase keys inside the app are public by design and can't read your users' data — the worst
+      anyone could do is run up your usage quota. Restricting them is cheap insurance, and it's all
+      done in a web console.
+    </p>
+    <p class="dolabel">What you do</p>
+    <ol class="steps">
+      <li>Open <code>SECURITY.md</code> — it has the exact Google Cloud console link and the restriction each key needs.</li>
+      <li>Apply those restrictions in the console.</li>
+    </ol>
+    <div class="done">
+      <span class="check">✓</span>
+      <span><b>Done when:</b> each key shows an application restriction in the Google Cloud console.</span>
+    </div>
+    <div class="chips">
+      <span class="chip">You alone</span>
+      <span class="chip">~20 minutes</span>
+    </div>
+  </div>
+
+  <!-- ============ GROUP 3 ============ -->
+  <div class="group">
+    <h2>Quick wins only you can do</h2>
+    <span class="rule"></span>
+    <span class="meta">2 items</span>
+  </div>
+
+  <!-- 6 -->
+  <div class="card q">
+    <div class="card-top">
+      <span class="num">06</span>
+      <h3>Test two-factor sign-in with your own phone</h3>
+      <span class="tag q">Quick win</span>
+    </div>
+    <p class="why">
+      <span class="lead">The one thing I couldn't check myself.</span>
+      Two-factor login works, but every code in testing was made by the same code that checks it —
+      no real authenticator app has ever scanned it. One scan with your phone proves it works with
+      the real thing, and moves that item to fully verified.
+    </p>
+    <p class="dolabel">What you do</p>
+    <ol class="steps">
+      <li>Install Google Authenticator or Authy on your phone.</li>
+      <li>In the app, sign in as admin → <b>Profile</b> → <b>Set up two-factor</b>.</li>
+      <li>Scan the QR code with the app and type the 6-digit code it shows.</li>
+    </ol>
+    <div class="done">
+      <span class="check">✓</span>
+      <span><b>Done when:</b> the app accepts the code from your phone and switches two-factor on.</span>
+    </div>
+    <div class="chips">
+      <span class="chip">You alone</span>
+      <span class="chip">~5 minutes</span>
+    </div>
+  </div>
+
+  <!-- 7 -->
+  <div class="card q">
+    <div class="card-top">
+      <span class="num">07</span>
+      <h3>Switch the app's AI back on</h3>
+      <span class="tag q">Quick win</span>
+    </div>
+    <p class="why">
+      <span class="lead">Right now this part of the app is switched off.</span>
+      The feature that writes quizzes and slides from a document isn't working — the Gemini account is
+      over its monthly spending limit and there's no Claude key set. Until that's sorted, that feature
+      does nothing (and I can't run the last prompt-injection test either).
+    </p>
+    <p class="dolabel">What you do</p>
+    <ol class="steps">
+      <li>Add billing or raise the limit on the AI provider, or set a Claude API key.</li>
+      <li>Try generating a quiz or slides from a document to confirm it works.</li>
+    </ol>
+    <div class="done">
+      <span class="check">✓</span>
+      <span><b>Done when:</b> generating a quiz or slides from an uploaded document works again.</span>
+    </div>
+    <div class="chips">
+      <span class="chip">You set billing</span>
+      <span class="chip">~30 minutes</span>
+      <span class="chip help">I verify + run the last AI test</span>
+    </div>
+  </div>
+
+  <div class="foot">
+    <b>The short version.</b> Item 01 is done — the leftover admin login is closed. That leaves
+    <span class="store">02 and 03</span> standing between you and a real launch: publish the privacy
+    policy, and make the children's-data decision. Do those two next. Everything else makes the app
+    safer and steadier, but won't hold up your first schools. When you're ready to start on any one of
+    them, tell me the number and I'll take my half.
+  </div>
+
+</div>
