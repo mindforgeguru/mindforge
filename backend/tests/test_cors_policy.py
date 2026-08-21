@@ -65,13 +65,15 @@ class TestExplicitAllowlistIsAccepted:
 
 
 class TestShippedDefault:
+    # Exact-equality membership (any(o == ...)) rather than `X in origins`: the
+    # list holds exact origin strings and CORS matches them exactly, and the
+    # equality form also keeps CodeQL's URL-substring heuristic from misreading
+    # a list-membership check as a sanitizer.
     def test_default_is_an_explicit_allowlist_without_a_wildcard(self):
-        s = Settings()
-        assert "*" not in s.BACKEND_CORS_ORIGINS
-        assert "https://mindforge.guru" in s.BACKEND_CORS_ORIGINS
+        origins = Settings().BACKEND_CORS_ORIGINS
+        assert not any(o == "*" for o in origins)
+        assert any(o == "https://mindforge.guru" for o in origins)
 
     def test_default_does_not_allow_an_arbitrary_third_party_origin(self):
-        # The property that matters: a random site is not on the list.
-        s = Settings()
-        assert "https://evil.example" not in s.BACKEND_CORS_ORIGINS
-        assert "http://localhost" not in ["https://evil.example"]  # sanity of the check itself
+        origins = Settings().BACKEND_CORS_ORIGINS
+        assert not any(o == "https://evil.example" for o in origins)
