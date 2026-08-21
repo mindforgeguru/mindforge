@@ -618,8 +618,8 @@
           <p class="note"><code>FLAG_SECURE</code> via a native channel, reference-counted so nested secured screens don't unsecure each other; wired into the six fee and grade screens. Stale, not verified: no device has confirmed a screenshot is actually blocked, and iOS has no implementation yet. Timetables stay capturable on purpose.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Runtime tampering / hooking</span>
           <p class="note">No anti-debug or integrity checks. A hooked client can call any endpoint the user's token permits.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Deep-link and intent hijacking</span>
-          <p class="note">Exported activities and URL schemes have never been reviewed.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Deep-link and intent hijacking</span>
+          <p class="note">Reviewed 2026-08-21 — nothing inbound to hijack: Android declares only <code>MAIN</code>/<code>LAUNCHER</code> (no custom scheme, no App Links) and never reads <code>intent.data</code>; iOS registers no URL types or link handler; <code>taskAffinity=""</code> blocks task hijacking. The real surface is the web build, where every route is a URL — the guard sends logged-out users to login, bounces wrong-role users out of another role’s section, and validates path ids. Extracted to a pure <code>resolveRouteRedirect</code> with 10 unit tests, falsified by removing the guard. UX guard only; the enforced boundary is server-side authz.<span class="flag new">Fixed</span></p></div>
       </div>
       <p class="empty">No rows in this state.</p>
     </section>

@@ -77,72 +77,96 @@ CustomTransitionPage<void> _slidePage(Widget child) => CustomTransitionPage<void
 // A ChangeNotifier that tells GoRouter to re-run redirect whenever auth changes.
 // This keeps a single GoRouter instance alive (no more router recreation).
 
+/// Each role's home/dashboard route, used both for the post-login redirect
+/// and to bounce a user out of a section that doesn't belong to their role.
+/// An unknown or null role resolves to the login route — the guard fails
+/// closed rather than guessing a home.
+String _homeFor(String? role) {
+  switch (role) {
+    case 'teacher':
+      return RouteNames.teacherDashboard;
+    case 'student':
+      return RouteNames.studentDashboard;
+    case 'parent':
+      return RouteNames.parentDashboard;
+    case 'admin':
+      return RouteNames.adminDashboard;
+    case 'owner':
+      return RouteNames.ownerDashboard;
+    default:
+      return RouteNames.login;
+  }
+}
+
+/// Top-level path prefix owned by each role. Every authenticated route lives
+/// under exactly one of these, so a prefix check is enough to enforce
+/// role-based access for all nested routes.
+const Map<String, String> _sectionPrefixes = {
+  'teacher': RouteNames.teacherDashboard, // '/teacher'
+  'student': RouteNames.studentDashboard, // '/student'
+  'parent': RouteNames.parentDashboard, // '/parent'
+  'admin': RouteNames.adminDashboard, // '/admin'
+  'owner': RouteNames.ownerDashboard, // '/owner'
+};
+
+/// Pure routing policy: given the auth state and a location, return the path to
+/// redirect to, or null to allow the location as-is.
+///
+/// Extracted from [_RouterNotifier] so the access rules can be exercised
+/// without pumping the whole app (Firebase, the API client, every screen). On
+/// Flutter web every one of these paths is reachable by typing it into the URL
+/// bar, so this is the app's answer to a "deep link" — which is exactly why it
+/// is worth pinning with tests.
+///
+/// It is a UX guard, **not** the security boundary. Even if it let a student
+/// reach `/admin`, the admin screens call admin-only endpoints the backend
+/// rejects (see `get_current_admin` and the server-side authorization tests).
+/// Its job is to stop a logged-out or wrong-role user landing on a screen that
+/// would only render errors — and to keep that from regressing silently.
+String? resolveRouteRedirect({
+  required bool isLoggedIn,
+  required String? role,
+  required String location,
+}) {
+  final isLoginRoute = location == RouteNames.login;
+  final isSplash = location == RouteNames.splash;
+
+  // Let the splash screen handle its own navigation.
+  if (isSplash) return null;
+
+  if (!isLoggedIn && !isLoginRoute) return RouteNames.login;
+  if (isLoggedIn && isLoginRoute) return _homeFor(role);
+
+  // Role-based section guard: each role owns one top-level prefix. A logged-in
+  // user who lands on another role's section (e.g. a student typing
+  // /admin/users into the web URL bar) is bounced to their own home. The
+  // trailing-slash check avoids matching a hypothetical sibling route like
+  // /studentportal against the /student prefix.
+  if (isLoggedIn) {
+    for (final entry in _sectionPrefixes.entries) {
+      final inThisSection =
+          location == entry.value || location.startsWith('${entry.value}/');
+      if (inThisSection && role != entry.key) {
+        return _homeFor(role);
+      }
+    }
+  }
+  return null;
+}
+
 class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
   _RouterNotifier(this._ref) {
     _ref.listen<AuthState>(authProvider, (_, __) => notifyListeners());
   }
 
-  /// Each role's home/dashboard route, used both for the post-login redirect
-  /// and to bounce a user out of a section that doesn't belong to their role.
-  static String _homeFor(String? role) {
-    switch (role) {
-      case 'teacher':
-        return RouteNames.teacherDashboard;
-      case 'student':
-        return RouteNames.studentDashboard;
-      case 'parent':
-        return RouteNames.parentDashboard;
-      case 'admin':
-        return RouteNames.adminDashboard;
-      case 'owner':
-        return RouteNames.ownerDashboard;
-      default:
-        return RouteNames.login;
-    }
-  }
-
-  /// Top-level path prefix owned by each role. Every authenticated route lives
-  /// under exactly one of these, so a prefix check is enough to enforce
-  /// role-based access for all nested routes.
-  static const Map<String, String> _sectionPrefixes = {
-    'teacher': RouteNames.teacherDashboard, // '/teacher'
-    'student': RouteNames.studentDashboard, // '/student'
-    'parent': RouteNames.parentDashboard, // '/parent'
-    'admin': RouteNames.adminDashboard, // '/admin'
-    'owner': RouteNames.ownerDashboard, // '/owner'
-  };
-
   String? redirect(BuildContext context, GoRouterState state) {
     final authState = _ref.read(authProvider);
-    final isLoggedIn = authState.token != null;
-    final isLoginRoute = state.matchedLocation == RouteNames.login;
-    final isSplash = state.matchedLocation == RouteNames.splash;
-
-    // Let the splash screen handle its own navigation
-    if (isSplash) return null;
-
-    if (!isLoggedIn && !isLoginRoute) return RouteNames.login;
-    if (isLoggedIn && isLoginRoute) {
-      return _homeFor(authState.role);
-    }
-
-    // Role-based section guard: each role owns one top-level prefix. A
-    // logged-in user who lands on another role's section (e.g. a student
-    // typing /admin/users into the web URL bar) is bounced to their own home.
-    // The trailing-slash check avoids matching a hypothetical sibling route
-    // like /studentportal against the /student prefix.
-    if (isLoggedIn) {
-      final loc = state.matchedLocation;
-      for (final entry in _sectionPrefixes.entries) {
-        final inThisSection =
-            loc == entry.value || loc.startsWith('${entry.value}/');
-        if (inThisSection && authState.role != entry.key) {
-          return _homeFor(authState.role);
-        }
-      }
-    }
-    return null;
+    return resolveRouteRedirect(
+      isLoggedIn: authState.token != null,
+      role: authState.role,
+      location: state.matchedLocation,
+    );
   }
 }
 

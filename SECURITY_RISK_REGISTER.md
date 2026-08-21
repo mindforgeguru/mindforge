@@ -27,9 +27,9 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **41** |
+| Verified | **42** |
 | Stale | **24** |
-| Open | **25** |
+| Open | **24** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-20 (see [Verification log](#verification-log)).*
@@ -121,7 +121,7 @@ goes wrong.
 | Rooted / jailbroken device | OPEN | **Deliberately not built** (decided 2026-08-19). Defeated by anyone motivated, needs native code on both platforms, and does not address the actual threat here — a student after grades or a test edge would use a second device, which no client hardening touches. Revisit if the threat model changes. |
 | Screen capture of student records | STALE | `FLAG_SECURE` via a native MethodChannel, reference-counted so nested secured screens don't unsecure each other; wired into the six fee and grade screens. 5 tests. STALE not VERIFIED: no Android device or emulator has confirmed a screenshot is actually blocked, and iOS has no implementation (blocked on Apple enrolment). Attendance and timetables are deliberately left capturable. |
 | Runtime tampering / hooking | OPEN | No anti-debug or integrity checks. A hooked client can call any endpoint the user's token permits. |
-| Deep-link and intent hijacking | OPEN | Exported activities and URL schemes have never been reviewed. |
+| Deep-link and intent hijacking | VERIFIED | Reviewed 2026-08-21. **No inbound-link surface exists to hijack:** Android declares only the `MAIN`/`LAUNCHER` filter — no custom scheme, no `BROWSABLE`, no App Links — and `MainActivity` never reads `intent.data`; iOS declares no `CFBundleURLTypes` and no `open:url`/universal-link handler. `taskAffinity=""` additionally blocks task-affinity hijacking. The real addressable surface is the **web** build, where every go_router path is a URL: the guard redirects logged-out users to login, bounces wrong-role users out of another role's section, and rejects non-numeric path ids — now a pure `resolveRouteRedirect` with **10 unit tests**, falsified by removing the guard and watching them fail. This is a UX guard; the enforced boundary is server-side authz (§2), separately verified. |
 
 ## 7. Secrets & configuration
 
