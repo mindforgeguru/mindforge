@@ -86,7 +86,29 @@ echo "==> dumping production → $DUMP (read-only; production is not modified)"
 client 'pg_dump "$DBURL" -Fc' > "$DUMP"
 [ -s "$DUMP" ] || die "dump is empty — aborting rather than keeping a useless file"
 
-echo "==> writing manifest (row counts read from production)"
+echo "==> reading row counts from production"
+# All counts over ONE connection. Firing a separate connection per table (the
+# earlier approach) let Railway's proxy refuse one of several rapid connections
+# and leave a table silently 'n/a' — unverified. A single UNION ALL closes that:
+# either every count comes back, or none do and we know the read failed.
+count_sql=""; i=0
+for t in "${COUNT_TABLES[@]}"; do
+  i=$((i + 1))
+  [ -n "$count_sql" ] && count_sql="$count_sql UNION ALL "
+  count_sql="$count_sql SELECT $i k, 'rows_${t}='||count(*) v FROM $t"
+done
+count_sql="$count_sql ORDER BY k"
+export COUNT_SQL="$count_sql"
+# DBURL and COUNT_SQL both travel by environment, so neither the credential nor
+# the query appears in any process list.
+counts_lines="$(docker run --rm -e DBURL -e COUNT_SQL "$CLIENT_IMAGE" \
+  sh -c 'psql "$DBURL" -tA -F"|" -c "$COUNT_SQL"' 2>/dev/null | cut -d'|' -f2)" || counts_lines=""
+if [ -z "$counts_lines" ]; then
+  die "could not read row counts from production. This is a read failure, not a
+       backup failure — the dump above is complete. Re-run to retry the counts."
+fi
+
+echo "==> writing manifest"
 {
   echo "created_utc=$STAMP"
   echo "source=railway"
@@ -94,10 +116,7 @@ echo "==> writing manifest (row counts read from production)"
   echo "engine_image=$CLIENT_IMAGE"
   echo "dump_sha256=$(shasum -a 256 "$DUMP" | awk '{print $1}')"
   echo "dump_bytes=$(wc -c < "$DUMP" | tr -d '[:space:]')"
-  for t in "${COUNT_TABLES[@]}"; do
-    n=$(client "psql \"\$DBURL\" -tAc 'SELECT count(*) FROM $t;'" 2>/dev/null | tr -d '[:space:]') || n="n/a"
-    echo "rows_${t}=${n:-n/a}"
-  done
+  echo "$counts_lines"
 } > "$MANIFEST"
 grep -v '^dump_sha256=' "$MANIFEST" | sed 's/^/    /'
 
