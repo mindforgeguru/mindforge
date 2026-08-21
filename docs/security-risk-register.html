@@ -479,12 +479,12 @@
           <p class="note">Two layers, now pinned by 10 tests: per-(user, IP) lock after 5 fails, plus a per-user global backstop at 50 for distributed attacks. The anti-DoS property is tested directly — an attacker who locks themselves out from one IP leaves the real user, on another IP, able to log in — and each guard was falsified by breaking it. Fails open with no Redis. Known limit: attacker and victim behind one NAT share an IP.<span class="flag new">Verified</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Refresh-token rotation and JTI revocation</span>
           <p class="note">Rotate-on-use with old JTI blacklisted in Redis. Re-confirmed today: access token 401s after logout, rotated refresh token 401s on reuse.<span class="flag new">This session</span></p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Token lifetime and expiry handling</span>
-          <p class="note">60-min access, 30-day refresh, Dio auto-refresh interceptor. Not re-confirmed.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Token lifetime and expiry handling</span>
+          <p class="note">Eight tests: access carries exp at the configured lifetime + a unique jti + type=access; refresh is long-lived, typed, and outlives access; an expired token is rejected on decode (ExpiredSignatureError), proving expiry is enforced not just present. Falsified by dropping exp.<span class="flag new">Verified</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Deactivated, pending or deleted users signing in</span>
           <p class="note">Blocked in <code>auth.py</code>; last actually exercised 2026-05-19.</p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Weak / guessable MPIN</span>
-          <p class="note">Blocklist added 2026-07-07 at set and change time. Never manually re-tested.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Weak / guessable MPIN</span>
+          <p class="note">32 tests pin the guessability rule and the wiring that matters: weak PINs rejected at every set site (register, change, admin reset), accepted at login and current-PIN so a legacy weak-PIN user can still sign in and fix it. Falsified by swapping either boundary.<span class="flag new">Verified</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Multi-factor authentication</span>
           <p class="note">TOTP for admin and owner, opt-in, with an enrolment screen in the admin profile and owner console — QR plus typed key, single-use recovery codes, screen capture blocked while the secret is visible. Stale for one reason: no real authenticator app has scanned the QR, so every test code came from the same code that checks it.<span class="flag new">New</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Account enumeration</span>
