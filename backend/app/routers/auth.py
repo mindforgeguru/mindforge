@@ -31,6 +31,7 @@ from app.schemas.user import (
     RefreshRequest, RefreshResponse, UserResponse, MfaCodeRequest, MfaDisableRequest,
 )
 from app.core.redis_client import redis_manager
+from app.core.account_state import login_block_reason, login_block_response
 from app.core.security_events import note_failed_login
 from app.core.mfa import consume_recovery_code
 from app.core.totp import generate_secret, provisioning_uri, verify_totp
@@ -443,23 +444,15 @@ async def login(
             detail="Invalid username or MPIN.",
         )
 
-    if not user.is_approved:
+    # Account-state gate (approved / active / not-deleted). Decision is a pure,
+    # tested function in app.core.account_state; the logging and the raise stay
+    # here where the caller's IP is in scope.
+    block = login_block_reason(user)
+    if block:
         logger.warning(
-            "Login rejected: unapproved account user_id=%s ip=%s", user.id, ip,
+            "Login rejected: %s account user_id=%s ip=%s", block, user.id, ip,
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account is pending admin approval. Please wait.",
-        )
-
-    if not user.is_active:
-        logger.warning(
-            "Login rejected: deactivated account user_id=%s ip=%s", user.id, ip,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account has been deactivated.",
-        )
+        raise login_block_response(block)
 
     # ── Second factor ────────────────────────────────────────────────────────
     # Checked *after* the MPIN, deliberately. Answering "MFA required" before
