@@ -475,8 +475,8 @@
           <p class="note">Login <em>and</em> refresh both gated; owner exempt. <code>test_tenancy_wiring.py</code> 8/8.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Session bleed on account switch (shared device)</span>
           <p class="note">Cache-reset race let the next sign-in read the previous user's data. Found and fixed today — commit <code>2bbb630</code>.<span class="flag new">This session</span></p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Account lockout + lockout-DoS guard</span>
-          <p class="note">15-min lockout with a guard against locking someone out deliberately. Code present; not re-verified since May.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Account lockout + lockout-DoS guard</span>
+          <p class="note">Two layers, now pinned by 10 tests: per-(user, IP) lock after 5 fails, plus a per-user global backstop at 50 for distributed attacks. The anti-DoS property is tested directly — an attacker who locks themselves out from one IP leaves the real user, on another IP, able to log in — and each guard was falsified by breaking it. Fails open with no Redis. Known limit: attacker and victim behind one NAT share an IP.<span class="flag new">Verified</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Refresh-token rotation and JTI revocation</span>
           <p class="note">Rotate-on-use with old JTI blacklisted in Redis. Re-confirmed today: access token 401s after logout, rotated refresh token 401s on reuse.<span class="flag new">This session</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Token lifetime and expiry handling</span>

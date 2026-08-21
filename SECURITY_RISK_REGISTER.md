@@ -52,7 +52,7 @@ goes wrong.
 | JWT forgery, tampering, alg confusion | VERIFIED | HS256, no `none` acceptance. Probed by `test_jwt_security`. |
 | Suspended tenant still authenticating | VERIFIED | Login *and* refresh both gated; owner exempt. `test_tenancy_wiring.py` 8/8. |
 | Session bleed on account switch (shared device) | VERIFIED | Cache-reset race let the next sign-in read the previous user's data. Found and fixed 2026-08-18 — commit `2bbb630`. |
-| Account lockout + lockout-DoS guard | STALE | 15-min lockout with a guard against deliberate lockout of another user. Code present; not re-verified since May. |
+| Account lockout + lockout-DoS guard | VERIFIED | Two layers, now pinned by 10 tests (`test_account_lockout.py`): per-(user, IP) lock after 5 fails, plus a per-user global backstop at 50 for distributed attacks. The **anti-DoS** property is tested directly — an attacker locking themselves out from one IP leaves the real user, on another IP, able to log in — and each guard was falsified: breaking the IP scope, removing the backstop, or forgetting the global keys on success each fails the matching test. Fails open with no Redis. Known limit: attacker + victim behind one NAT share an IP, so the per-IP lock can catch both — inherent to any IP-based guard. |
 | Refresh-token rotation and JTI revocation | VERIFIED | Rotate-on-use with old JTI blacklisted in Redis. Re-confirmed 2026-08-18: `security_test_extended.py` §6 — access token 401s after logout, and a rotated refresh token 401s on reuse. |
 | Token lifetime and expiry handling | STALE | 60-min access, 30-day refresh, Dio auto-refresh interceptor. Not re-confirmed. |
 | Deactivated, pending or deleted users signing in | STALE | Blocked in `auth.py`; last actually exercised 2026-05-19. |
