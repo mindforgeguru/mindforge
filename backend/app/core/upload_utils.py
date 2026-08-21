@@ -7,6 +7,7 @@ Utilities for validating and sanitising user-uploaded images.
 """
 
 import io
+import zipfile
 
 from fastapi import HTTPException, UploadFile, status
 from PIL import Image
@@ -173,3 +174,79 @@ def validate_document(
         )
 
     return detected
+
+
+# ─── Zip / OOXML decompression-bomb guard ─────────────────────────────────────
+#
+# A .pptx is a ZIP archive. The size cap in presentations.py bounds the *file*,
+# not what it expands to: DEFLATE reaches ~1000:1 on repetitive data, so a 50 MB
+# upload that passes every byte check can still unpack to tens of gigabytes. The
+# _MAX_SLIDES cap in pptx_service runs only after python-pptx has opened and
+# buffered the archive, which is exactly the step a bomb blows up. This must run
+# before that.
+#
+# The check is cheap: a ZIP records each entry's uncompressed size in its
+# central directory, so summing them and looking at the compression ratio reads
+# metadata only — nothing is decompressed. That is also why it is trustworthy
+# for exactly one thing (spotting a bomb) and not another: the sizes are the
+# archive's own claims, so this proves an upload *isn't* absurd, never that a
+# small one is safe.
+
+# A genuine teaching deck is mostly already-compressed media (JPEG/PNG barely
+# shrink) plus small XML, so its overall ratio sits in single digits. A bomb is
+# runs of zeros or repeated bytes and inflates by three orders of magnitude, so
+# ratio is the discriminating signal and the absolute cap is the backstop for a
+# bomb spread thinly across many low-ratio entries.
+_MAX_UNCOMPRESSED_BYTES = 300 * 1024 * 1024  # 300 MB unpacked, summed
+_MAX_COMPRESSION_RATIO = 120                  # per entry, above a size floor
+_RATIO_FLOOR_BYTES = 1 * 1024 * 1024          # ignore ratio on tiny entries
+
+
+def reject_if_zip_bomb(
+    raw: bytes,
+    *,
+    max_uncompressed: int = _MAX_UNCOMPRESSED_BYTES,
+    max_ratio: int = _MAX_COMPRESSION_RATIO,
+) -> None:
+    """Reject a ZIP/OOXML upload that would expand to an unreasonable size.
+
+    Reads the archive's central directory only — no entry is decompressed.
+    Raises 413 when the declared unpacked total exceeds ``max_uncompressed`` or
+    any entry above a 1 MB floor claims a compression ratio over ``max_ratio``.
+    Raises 415 when the bytes are not a readable ZIP at all, so a mislabelled or
+    truncated upload fails here with a clean status rather than deeper in the
+    parser.
+
+    The ratio floor matters: a few hundred bytes of XML that compress 500:1 is
+    normal and harmless, so the ratio rule only applies once an entry is large
+    enough for that ratio to represent real unpacked bytes.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            infos = zf.infolist()
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(
+            status_code=415,
+            detail="That file isn't a readable PowerPoint (.pptx). "
+                   "Check the file and try again.",
+        ) from exc
+
+    total_uncompressed = 0
+    for info in infos:
+        total_uncompressed += info.file_size
+        if total_uncompressed > max_uncompressed:
+            # Message names a size, never the ratio or the offending entry: the
+            # entry name is attacker-controlled and the ratio is a free oracle
+            # for tuning a bomb that just squeaks under the limit.
+            raise HTTPException(
+                status_code=413,
+                detail="That PowerPoint file unpacks to far more than expected "
+                       "and was rejected.",
+            )
+        if info.file_size >= _RATIO_FLOOR_BYTES and info.compress_size > 0:
+            if info.file_size // info.compress_size > max_ratio:
+                raise HTTPException(
+                    status_code=413,
+                    detail="That PowerPoint file unpacks to far more than "
+                           "expected and was rejected.",
+                )

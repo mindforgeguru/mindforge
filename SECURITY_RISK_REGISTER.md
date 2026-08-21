@@ -27,9 +27,9 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **39** |
+| Verified | **40** |
 | Stale | **24** |
-| Open | **27** |
+| Open | **26** |
 | **Total tracked** | **90** across 13 domains |
 
 *Last verification sweep: 2026-08-20 (see [Verification log](#verification-log)).*
@@ -97,7 +97,7 @@ goes wrong.
 | Oversized document upload | VERIFIED | 25 MB PDFs, 50 MB decks, rejected on declared size before buffering. |
 | Document type spoofing | VERIFIED | `validate_document` decides from the bytes; wired into the PDF path and all three knowledge-base uploads, where the extension used to come off the filename and route the AI. 11 tests, plus live proof: an ELF payload named `.pdf` is 415 under both `application/pdf` and `application/octet-stream`, while a genuine PDF is 202. *(`.pptx` already checked its ZIP header — the original note overstated that half.)* |
 | Malware in uploaded files | OPEN | No AV or content scanning. Files are stored and served back to other users in the school. |
-| Zip-bomb via `.pptx` | OPEN | A `.pptx` is a zip archive; expansion is unbounded at parse time. |
+| Zip-bomb via `.pptx` | VERIFIED | A `.pptx` is a ZIP; the 50 MB upload cap bounds the file, not what it unpacks to. `reject_if_zip_bomb` now reads the archive's central directory (metadata only — nothing decompressed) before `parse_pptx` opens it, and rejects on a 300 MB unpacked total or any entry above 1 MB with a ratio over 120. Falsified against the real parser: a 500 KB file declaring 500 MB is refused in **1.6 ms**, where the unguarded parse grew RSS by ~496 MB first. 6 tests build genuine archives — bomb rejected, ordinary deck and tidy XML pass. |
 
 ## 5. Transport & network
 

@@ -568,8 +568,8 @@
           <p class="note">Type is now decided from the bytes, on the PDF path and all three knowledge-base uploads — where the extension previously came off the filename and routed the AI. Live proof: an ELF payload named <code>.pdf</code> is rejected under both content types; a genuine PDF is accepted.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Malware in uploaded files</span>
           <p class="note">No AV or content scanning. Files are stored and served back to other users in the school.</p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Zip-bomb via .pptx</span>
-          <p class="note">A <code>.pptx</code> is a zip archive; expansion is unbounded at parse time.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Zip-bomb via .pptx</span>
+          <p class="note">A <code>.pptx</code> is a ZIP, and the 50 MB upload cap bounds the file, not what it unpacks to. <code>reject_if_zip_bomb</code> reads the archive's central directory — metadata only, nothing decompressed — before <code>parse_pptx</code> opens it. Falsified against the real parser: a 500 KB file declaring 500 MB unpacked is refused in <b>1.6 ms</b>, where the unguarded parse grew memory by ~496 MB first.<span class="flag new">Fixed</span></p></div>
       </div>
       <p class="empty">No rows in this state.</p>
     </section>

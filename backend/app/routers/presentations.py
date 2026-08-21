@@ -31,7 +31,11 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.redis_client import redis_manager
 from app.core.security import get_current_user
-from app.core.upload_utils import reject_if_oversize, validate_document
+from app.core.upload_utils import (
+    reject_if_oversize,
+    reject_if_zip_bomb,
+    validate_document,
+)
 from app.models.database_models import ChapterDocument
 from app.models.presentation import (
     ChapterPresentation,
@@ -521,6 +525,14 @@ async def upload_deck(
             detail=("That doesn't look like a .pptx file. In Google Slides use "
                     "File → Download → Microsoft PowerPoint (.pptx)."),
         )
+
+    # The 50 MB cap above bounds the *upload*, not what it unpacks to. A ZIP can
+    # reach ~1000:1 on repetitive data, so a deck that passed every check so far
+    # can still expand to tens of gigabytes and exhaust memory the moment
+    # python-pptx opens it. This reads the archive's declared sizes only — no
+    # entry is decompressed — and must run before parse_pptx, which is the step
+    # that would blow up.
+    reject_if_zip_bomb(data)
 
     # Parse first so a bad deck fails fast without leaving an orphan upload.
     try:
