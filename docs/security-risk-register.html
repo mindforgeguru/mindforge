@@ -589,8 +589,8 @@
           <p class="note">JWT required, <code>sub</code> matched to the path user id, revoked JTIs rejected. 5/5 in <code>test_websocket_auth.py</code>.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Man-in-the-middle on mobile</span>
           <p class="note">CA-level pinning to Let's Encrypt is implemented and code-reviewed, but the mitmproxy test that would prove it is still an unticked release-QA item.</p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Permissive CORS</span>
-          <p class="note">Wildcard origin removed 2026-06-23; not re-verified since.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Permissive CORS</span>
+          <p class="note">CORS runs credentialed (allow_credentials=True), where a <code>*</code> origin would reflect any site back with credentials — so a settings validator refuses to boot if the origin list contains <code>*</code>, forcing an explicit allowlist. 8 tests pin it: bare, whitespaced, and comma-hidden wildcards all rejected; comma/JSON strings parse to a list; the shipped default is an explicit allowlist with no wildcard. Falsified by removing the guard.<span class="flag new">Verified</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Pinning bypass on a rooted device</span>
           <p class="note">No Frida / objection testing. Pinning stops a network attacker, not someone who owns the handset.</p></div>
       </div>

@@ -107,7 +107,7 @@ goes wrong.
 | Missing security headers | VERIFIED | All four present on success *and* error responses: nosniff, `X-Frame-Options: DENY`, CSP `default-src 'none'`, HSTS. |
 | WebSocket authentication | VERIFIED | JWT required, `sub` matched to the path user id, revoked JTIs rejected. 5/5 in `test_websocket_auth.py`. |
 | Man-in-the-middle on mobile | STALE | CA-level pinning to Let's Encrypt is implemented and code-reviewed, but the mitmproxy test that would prove it is still an unticked release-QA item. |
-| Permissive CORS | STALE | Wildcard origin removed 2026-06-23; not re-verified since. |
+| Permissive CORS | VERIFIED | The app runs credentialed CORS (`allow_credentials=True`), where a `*` origin would reflect **any** site back with credentials allowed — so a settings validator refuses to start if the origin list contains `*`, forcing an explicit allowlist. 8 tests (`test_cors_policy.py`, real config loaded past conftest's stub) pin it: bare `*`, whitespaced ` * `, and a wildcard hidden in a comma string are all rejected; comma and JSON strings parse to a list; the shipped default is an explicit allowlist (mindforge.guru present, no wildcard). Falsified: removing the guard fails all three wildcard tests. |
 | Pinning bypass on a rooted device | OPEN | No Frida / objection testing. Pinning stops a network attacker, not someone who owns the handset. |
 
 ## 6. Mobile & client hardening
