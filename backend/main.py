@@ -37,23 +37,9 @@ if settings.SENTRY_DSN:
     from sentry_sdk.integrations.fastapi import FastApiIntegration
     from sentry_sdk.integrations.starlette import StarletteIntegration
 
-    _SCRUB_KEYS = {
-        "mpin", "password", "token", "refresh_token", "mpin_hash",
-        "access_token", "authorization", "cookie",
-    }
-
-    def _scrub_event(event, hint):
-        try:
-            req = event.get("request") or {}
-            for section in ("data", "headers", "cookies"):
-                bucket = req.get(section)
-                if isinstance(bucket, dict):
-                    for k in list(bucket.keys()):
-                        if k.lower() in _SCRUB_KEYS:
-                            bucket[k] = "[scrubbed]"
-        except Exception:
-            pass
-        return event
+    # Scrubber extracted to app.core.sentry_scrub so it is unit-tested
+    # (test_sentry_scrub.py) rather than only living behind a live DSN.
+    from app.core.sentry_scrub import scrub_event
 
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
@@ -64,7 +50,7 @@ if settings.SENTRY_DSN:
         ],
         traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
         send_default_pii=False,
-        before_send=_scrub_event,
+        before_send=scrub_event,
     )
     logger.info(f"Sentry initialized (env={settings.APP_ENV})")
 

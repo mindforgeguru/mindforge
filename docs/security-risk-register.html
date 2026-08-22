@@ -712,8 +712,8 @@
           <p class="note">No defined retention or purge policy. Soft-deleted rows persist indefinitely.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Account deletion completeness</span>
           <p class="note">The open question — is owner self-delete blocked? — was a real gap: the handler blocked admin and student but let owner fall through and soft-delete itself, orphaning the platform. Fixed: the role policy is now a tested <code>self_delete_block_reason</code> (admin/student/owner blocked; parent/teacher allowed), 14 tests, falsified by reverting the owner block. Deletion side-effects (soft-delete, JTI revocation, FCM clear, audit, parent→child cascade) remain read-verified; an end-to-end test is the remaining depth.<span class="flag new">Bug fixed</span></p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">PII reaching error-reporting vendors</span>
-          <p class="note">Sentry runs <code>send_default_pii=False</code> plus a key scrubber. Not re-confirmed.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">PII reaching error-reporting vendors</span>
+          <p class="note">Sentry runs <code>send_default_pii=False</code> plus a before_send scrubber, now extracted to <code>app.core.sentry_scrub</code> and pinned by 8 tests. Redacts credentials (mpin, tokens, authorization, cookie) and a minor’s direct identifiers (phone, parent_phone, email) from request data/headers/cookies — hardened, since a child’s contact details could ride a body into a 500. Case-insensitive, recurses nested bodies and lists, never raises. Falsified by dropping the PII keys or the recursion.<span class="flag new">Verified</span></p></div>
       </div>
       <p class="empty">No rows in this state.</p>
     </section>
