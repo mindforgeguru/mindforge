@@ -586,10 +586,11 @@
       <span class="tag q">Quick win</span>
     </div>
     <p class="why">
-      <span class="lead">The one thing I couldn't check myself.</span>
-      Two-factor login works, but every code in testing was made by the same code that checks it —
-      no real authenticator app has ever scanned it. One scan with your phone proves it works with
-      the real thing, and moves that item to fully verified.
+      <span class="lead">Now optional — nice to see, not required.</span>
+      This used to be the one thing I couldn't check. It's now covered a different way: a
+      separate, independent implementation of the two-factor code (checked against the official
+      standard) agrees with your app, using the exact secret from the real QR — so any authenticator
+      app will work. Scanning with your own phone is a pleasant confirmation, not a correctness gap.
     </p>
     <p class="dolabel">What you do</p>
     <ol class="steps">
@@ -599,11 +600,12 @@
     </ol>
     <div class="done">
       <span class="check">✓</span>
-      <span><b>Done when:</b> the app accepts the code from your phone and switches two-factor on.</span>
+      <span><b>Optional:</b> for your own peace of mind, sign in as admin → Profile → Set up
+      two-factor, scan with Google Authenticator or Authy, and confirm it accepts the code.</span>
     </div>
     <div class="chips">
-      <span class="chip">You alone</span>
-      <span class="chip">~5 minutes</span>
+      <span class="chip">Optional</span>
+      <span class="chip">interop already proven</span>
     </div>
   </div>
 
