@@ -123,55 +123,20 @@ class _MfaSetupScreenState extends ConsumerState<MfaSetupScreen>
   }
 
   Future<void> _disable() async {
-    final mpinController = TextEditingController();
-    final codeController = TextEditingController();
-
-    final ok = await showDialog<bool>(
+    // The dialog owns its own text controllers (see _DisableTwoFactorDialog).
+    // Creating them here and disposing them right after `showDialog` returned
+    // crashed the close animation: the dialog rebuilds its TextFields while
+    // animating out, and by then the controllers were already disposed
+    // ("TextEditingController used after being disposed", then a huge overflow
+    // where the broken field should be). A StatefulWidget dialog disposes them
+    // only when the route is fully gone.
+    final result = await showDialog<({String mpin, String code})>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Turn off two-factor?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Your account will be protected by your MPIN alone. Confirm with '
-              'your MPIN and a current code.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: mpinController,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Your MPIN', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: codeController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: '6-digit code (or a recovery code)',
-                border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Turn off')),
-        ],
-      ),
+      builder: (_) => const _DisableTwoFactorDialog(),
     );
-
-    final mpin = mpinController.text.trim();
-    final code = codeController.text.trim();
-    mpinController.dispose();
-    codeController.dispose();
-    if (ok != true || !mounted) return;
+    if (result == null || !mounted) return;
+    final mpin = result.mpin;
+    final code = result.code;
 
     setState(() { _busy = true; _error = null; });
     try {
@@ -417,5 +382,76 @@ class _CopyableSecret extends StatelessWidget {
         },
       ),
     ]);
+  }
+}
+
+
+/// Confirmation dialog for turning two-factor off. It owns the MPIN + code
+/// controllers so their lifetime matches the dialog's own — disposed only when
+/// the route is fully removed, not the instant `showDialog` returns, which used
+/// to crash the close animation. Returns `(mpin, code)` on confirm, null on
+/// cancel/dismiss.
+class _DisableTwoFactorDialog extends StatefulWidget {
+  const _DisableTwoFactorDialog();
+
+  @override
+  State<_DisableTwoFactorDialog> createState() =>
+      _DisableTwoFactorDialogState();
+}
+
+class _DisableTwoFactorDialogState extends State<_DisableTwoFactorDialog> {
+  final _mpin = TextEditingController();
+  final _code = TextEditingController();
+
+  @override
+  void dispose() {
+    _mpin.dispose();
+    _code.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Turn off two-factor?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Your account will be protected by your MPIN alone. Confirm with '
+            'your MPIN and a current code.',
+            style: TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _mpin,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Your MPIN', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _code,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '6-digit code (or a recovery code)',
+              border: OutlineInputBorder()),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(
+            (mpin: _mpin.text.trim(), code: _code.text.trim()),
+          ),
+          child: const Text('Turn off'),
+        ),
+      ],
+    );
   }
 }

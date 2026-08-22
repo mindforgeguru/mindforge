@@ -210,4 +210,59 @@ void main() {
       expect(find.text('Two-factor is on'), findsOneWidget);
     });
   });
+
+  group('turning two-factor off', () {
+    setUp(() {
+      when(() => api.mfaStatus()).thenAnswer(
+          (_) async => {'eligible': true, 'enabled': true,
+                        'recovery_codes_remaining': 8});
+    });
+
+    testWidgets('the turn-off dialog opens and closes without a disposed-'
+        'controller crash', (tester) async {
+      // Regression: the dialog used to create its TextEditingControllers in the
+      // caller and dispose them the instant showDialog returned. The close
+      // animation then rebuilt the dialog's TextFields against disposed
+      // controllers — "used after being disposed", followed by a ~99,560px
+      // overflow. Found on the iOS simulator, not by the earlier tests. The
+      // pumpAndSettle below is the frame that used to throw.
+      await tester.pumpWidget(wrap());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Turn off two-factor'));
+      await tester.pumpAndSettle();
+      expect(find.text('Turn off two-factor?'), findsOneWidget);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();  // runs the close animation
+
+      expect(find.text('Turn off two-factor?'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('confirming sends the entered MPIN and code', (tester) async {
+      when(() => api.mfaDisable(
+            mpin: any(named: 'mpin'),
+            code: any(named: 'code'),
+            recoveryCode: any(named: 'recoveryCode'),
+          )).thenAnswer((_) async {});
+
+      await tester.pumpWidget(wrap());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Turn off two-factor'));
+      await tester.pumpAndSettle();
+
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), '847362');   // MPIN
+      await tester.enterText(fields.at(1), '123456');   // current code
+      await tester.tap(find.text('Turn off'));
+      await tester.pumpAndSettle();
+
+      // A 6-digit code goes in `code`; recovery (with a dash) would go in
+      // recoveryCode. Here it is a plain code.
+      verify(() => api.mfaDisable(
+            mpin: '847362', code: '123456', recoveryCode: null)).called(1);
+      expect(tester.takeException(), isNull);
+    });
+  });
 }
