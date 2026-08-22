@@ -541,8 +541,8 @@
           <p class="note">Static sweep clean: no <code>eval</code>, <code>exec</code>, <code>os.system</code>, <code>shell=True</code>, <code>pickle.loads</code> or <code>yaml.load</code>.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Path traversal</span>
           <p class="note">Covered in <code>security_test_extended.py</code>.</p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Cross-site scripting (web build)</span>
-          <p class="note">CSP meta tag on the Flutter web entry, and canvas rendering limits DOM surface. Never actively probed.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Cross-site scripting (web build)</span>
+          <p class="note">Flutter's canvas rendering removes the usual XSS sinks (no innerHTML), so the CSP is the remaining defence — and it is strong: default-src 'self', frame-ancestors 'none', base-uri 'self', form-action 'self', connect-src scoped to the app's own API origins, no bare wildcard. Pinned by 6 tests parsing web/index.html, so weakening it fails CI. Falsified by default-src * or dropping frame-ancestors. unsafe-inline/eval/blob left unpinned — Flutter's bootstrap needs them.<span class="flag new">Verified</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Prompt injection through uploaded documents</span>
           <p class="note">The three prompts that read uploaded files now frame the document as data and tell the model to ignore instructions inside it — there was previously no defence at all. Stale on purpose: the tests prove the wording is there, not that a model obeys it, and no provider was reachable to check.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Fuzzing beyond the happy path</span>
