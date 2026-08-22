@@ -767,8 +767,8 @@
       <div class="rows">
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Android release signing</span>
           <p class="note">Signed with a release keystore; <code>key.properties</code> gitignored.</p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Test suite writing to production</span>
-          <p class="note"><code>tests/test_api.py</code> targeted the live database and was fired at it once by accident. A production guard now blocks it — but the suite itself is still stale.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Test suite writing to production</span>
+          <p class="note">The integration suite writes to whatever host it targets and defaults to production; it once wrote to the live DB by accident. The guard — refuse production unless MF_API_ALLOW_PROD=1, exact match — is now a pure <code>tests/prod_guard.py</code> with 24 tests: every prod URL form blocked without the override, allowed only with exact "1", local/staging never blocked. Falsified by disabling or weakening it. The suite still needs a multi-tenancy rework to pass (a quality TODO, not a prod-write risk).<span class="flag new">Verified</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Code merging without CI</span>
           <p class="note">Push trigger widened to <code>"**"</code>. Proven on the first push-triggered run this branch has ever had — all 5 jobs green, live-API job correctly skipped. It caught a real build break on its first attempt.<span class="flag new">Fixed</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Toolchain drift</span>

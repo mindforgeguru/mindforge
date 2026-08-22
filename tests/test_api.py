@@ -28,11 +28,12 @@ TIMEOUT   = 20
 # `python tests/test_api.py` (or `pytest tests/test_api.py`) from writing to
 # prod — which is exactly how run 30118897312 ended up registering against the
 # live database. Refuse to run against a production host unless someone sets
-# MF_API_ALLOW_PROD=1, so the mistake can't be made by accident.
-def _is_production(url: str) -> bool:
-    return "mindforge.guru" in url
+# MF_API_ALLOW_PROD=1, so the mistake can't be made by accident. The decision
+# lives in tests/prod_guard.py so it can be unit-tested (test_prod_guard.py)
+# without importing this suite and tripping the module-level skip below.
+from prod_guard import should_block as _should_block  # noqa: E402
 
-if _is_production(BASE_URL) and os.getenv("MF_API_ALLOW_PROD") != "1":
+if _should_block(BASE_URL, os.getenv("MF_API_ALLOW_PROD")):
     pytest.skip(
         f"Refusing to run the write-heavy API suite against production "
         f"({BASE_URL}). Point it at a local/staging stack with "
