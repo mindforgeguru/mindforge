@@ -606,8 +606,8 @@
       <div class="rows">
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Android backup exfiltration</span>
           <p class="note"><code>android:allowBackup="false"</code> set in the manifest.</p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Token at rest on device</span>
-          <p class="note">Refresh tokens go to <code>flutter_secure_storage</code> (Keychain / Keystore). Not re-verified.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Token at rest on device</span>
+          <p class="note">Tokens go to <code>flutter_secure_storage</code>. Verified on the iOS simulator 2026-08-22: a JWT is grep-absent from the app's entire on-disk container and not readable in plaintext in the keychain DB, yet a force-quit + relaunch restores the session — proving it is persisted at rest in the encrypted Keychain and read back, not in memory or a plaintext file. Logout-clears-storage is pinned by auth_notifier_test.dart. Android Keystore uses the same backend but wasn't separately observed.<span class="flag new">Verified</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Token at rest in the browser</span>
           <p class="note">App-level contract pinned by 6 tests in <code>auth_notifier_test.dart</code>: login persists the JWT + refresh token, logout calls <code>deleteAll()</code> (wipes every mindforge_* key), session restores from storage, stays logged out when empty, and clears in-memory tokens even if the store throws. On web these map to localStorage. Live in Chrome 2026-08-22 the logged-out browser held no tokens and no cookies. Full populate→clear cycle not re-driven live (the web splash hangs on the unwired FCM-on-web path — a boot quirk, not storage), but the logic is now regression-guarded.<span class="flag new">Verified</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Reverse engineering the release binary</span>
