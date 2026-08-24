@@ -744,8 +744,8 @@
         <span class="sec-tally"></span>
       </div>
       <div class="rows">
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Audit logging</span>
-          <p class="note">An <code>AuditLog</code> table exists and survives its author. No review process, and coverage across sensitive actions is unmapped.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Audit logging</span>
+          <p class="note">Coverage mapped and pinned. Live 2026-08-24: an admin deactivate→reactivate on the simulator produced deactivate_user + activate_user rows, each correctly attributed (actor, target, before/after details, timestamp, school-scoped). Coverage is 15+ actions — user lifecycle, teacher bio/photo, fees, feedback — guarded by test_audit_coverage.py: the user-lifecycle actions must each be emitted from an _audit/AuditLog call, with a floor so coverage can't shrink. Falsified by deleting an audit line. Residual: append-only but not cryptographically tamper-evident, and no periodic human review.<span class="flag new">Verified</span></p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Error visibility</span>
           <p class="note">Sentry on the backend, Crashlytics on the client. Both wired; neither verified end-to-end recently.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Security alerting</span>
