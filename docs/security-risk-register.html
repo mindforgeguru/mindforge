@@ -749,7 +749,7 @@
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Error visibility</span>
           <p class="note">Sentry on the backend, Crashlytics on the client. Both wired; neither verified end-to-end recently.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Security alerting</span>
-          <p class="note">Credential-spray detection: distinct usernames per IP, escalating to ERROR so Sentry sees an event rather than a breadcrumb. Verified live in both directions. Stale because only this one pattern is covered, and no alert route is configured to reach a human.</p></div>
+          <p class="note">Credential-spray detection (distinct usernames per IP over 15 min, ERROR at 8). Pipeline now pinned by test_alerting.py (4 tests): an ERROR log becomes a Sentry event, a warning stays a breadcrumb, and the spray alert ships only IP + count, never the targeted accounts (falsified by leaking a username or making warnings alert). Stays stale on two things the code can't supply: only this one pattern is watched, and no Sentry notification route is configured — so the alert reaches Sentry but pages no human. The route is a user task.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Incident response</span>
           <p class="note">No runbook for a breach: no containment steps, no notification path, no mass token-revocation procedure.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Responsible disclosure</span>
