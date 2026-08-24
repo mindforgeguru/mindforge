@@ -43,9 +43,12 @@ minio_data/
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+# Environment files — every variant holds real secrets except the committed
+# template. Ignore .env and any .env.<suffix> (.env.local, .env.production,
+# .env.staging, per-service, …); keep only .env.example tracked.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Database dumps and object-store copies produced by scripts/backup.sh.
 # These contain every student record in plaintext — never commit them.
