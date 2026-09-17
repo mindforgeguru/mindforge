@@ -5,8 +5,9 @@ Pydantic schemas for Attendance.
 from datetime import date, datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
+from app.core.attendance_window import attendance_date_reason
 from app.models.attendance import AttendanceStatus
 
 
@@ -24,6 +25,17 @@ class AttendanceBulkCreate(BaseModel):
     period: int
     date: date
     records: List[AttendanceCreate]
+
+    @field_validator("date")
+    @classmethod
+    def _within_correction_window(cls, v: date) -> date:
+        # Reject future dates and anything older than the backdate window, so a
+        # teacher cannot mark attendance for a day that hasn't happened or
+        # silently rewrite an old record. See core/attendance_window.py.
+        reason = attendance_date_reason(v, date.today())
+        if reason:
+            raise ValueError(reason)
+        return v
 
 
 class AttendanceUpdate(BaseModel):
