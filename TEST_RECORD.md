@@ -1,6 +1,6 @@
 # Mindforge — Testing Record
 
-**Last updated:** 2026-07-25
+**Last updated:** 2026-09-13
 **Maintainer:** chinmay1975@gmail.com
 **Scope:** Reference document for every kind of testing performed on the Mindforge app — automated tests, security/privacy verification, and manual QA. Update this file every time a significant test session is run.
 
@@ -61,71 +61,54 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-07-24 / 25
-**Branch:** `create_school`
-**Environment:** macOS (darwin 25.5.0), Flutter 3.44.0 (stable), Python 3.14
+**Date:** 2026-09-13
+**Branch:** `create_school`, **with uncommitted work in the tree** (attendance date window, homework review gate, 31 screen files)
+**Environment:** macOS (darwin 25.6.0), local Docker stack up (`/api/health` 200); backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
-### 2.1 Backend — each file in its own pytest process (mirrors CI)
+> **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-| Suite | Result |
-|---|---|
-| `tests/test_unit.py` | **PASS — 34/34** |
-| `tests/test_logout_handler.py` | **PASS — 3/3** |
-| `tests/test_websocket_auth.py` | **PASS — 5/5** |
-| `tests/test_schema_invariants.py` | **PASS — 4/4** |
-| `tests/test_tenancy.py` | **PASS — 19/19** |
-| `tests/test_tenancy_wiring.py` | **PASS — 8/8** |
-| `tests/test_realtime_fanout.py` | **PASS — 8/8** (new this session) |
-| **Whole suite in one session** (`pytest tests`) | **PASS — 81/81** |
-| `tests_integration/` (stack up, upgraded deps) | **PASS — 36/36** — 32 tenant-isolation + 4 new realtime-delivery |
-
-The one-session run passing is worth noting: the per-file split in CI was introduced because `test_logout_handler.py` and `test_websocket_auth.py` install module-level `sys.modules` stubs. That ordering hazard has not resurfaced, but the split is still the safer default. See §10 item 4.
-
-### 2.2 Frontend
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI)
 
 | Suite | Result |
 |---|---|
-| `flutter test test/unit/` | **PASS — 78/78** |
-| `flutter test test/widget/` | **PASS — 26/26** (+5 new `realtime_sync_test.dart`) |
-| `flutter test` (everything) | **PASS — 104/104** |
-| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 6 style infos** |
+| 28 files in the container | **PASS — all green**, file-by-file |
+| `test_prod_guard.py` (host) | **PASS — 24/24** |
+| `test_secrets_gitignore.py` (host) | **PASS — 12/12** |
+| `test_attendance_window.py` *(new, uncommitted)* | **PASS — 9/9** |
+| **Whole suite in one session** (container, `--ignore` prod_guard) | **PASS — 295 passed, 12 skipped** (the 12 skips are the gitignore tests, green on host) |
 
-The 3 infos: one `prefer_const_declarations` in `lib/features/teacher/screens/homework_screen.dart:741`, two `no_leading_underscores_for_local_identifiers` in `test/unit/auth_notifier_test.dart`. CI runs `flutter analyze --no-fatal-infos`, so none of the three break the build.
+Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-`test/widget/realtime_sync_test.dart` now drives **all 22** event names across all three role branches (was 5), asserting the exact provider set each invalidates; falsified against a typo'd case and an over-broad invalidate.
+### 2.2 Backend integration (live local stack)
 
-**Flutter integration — `app_test.dart`: PASS 5/5** on iPhone 17 Pro against the local stack (`--dart-define=LOCAL_DEV=true`), in 61 s. Was 2/5 at the start of the session.
-
-**Flutter integration — `all_screens_test.dart`: 26 pass / 3 fail.** Was `+0 -15`. Two fixes moved it: the WebSocket disposed-container bug (§9) took it to `+19 -10`, and a working teacher account cleared 7 more.
-
-Five layered problems were fixed across the two files, each only visible once the one above it was:
-
-1. The login form's school picker (multi-tenancy, 2026-07-22) was never set, so `login_screen.dart` bailed with "Please select your school." and never called the API.
-2. The taller form pushed the Login button 0.3 px off-screen; `tap()` only *warns* on a missed hit, so the run hung rather than failing.
-3. `main()` is async, so `MaterialApp` was not mounted when test 1 asserted on it.
-4. **`main()` installs Crashlytics as `FlutterError.onError` / `PlatformDispatcher.onError` before `runApp`.** In a widget test that displaces the binding's reporter, so real failures went to Crashlytics and the binding reported only `_pendingExceptionDetails != null`. Suite-wide, and had masked every framework error since these tests were written — §10 item 14.
-5. Seeded credentials were stale: three of the four accounts in `seed_integration_test_users.py` now 401 — §10 item 15.
-
-`pumpAndSettle` is bounded to 20 s in both files; the 10-minute default turned failures into silent stalls that made diagnosis unaffordable.
-
-**The 3 remaining failures are pre-existing app bugs, not test rot** — and were invisible until the tests reclaimed error handling:
-
-| Test | Defect |
+| Suite | Result |
 |---|---|
-| Admin Timetable, Teacher Tests | Framework assertion: a `ListTile` inside a colour-filled `DecoratedBox` (`mindForgeCardDecoration()`) hides its own background and ink splashes, so tap feedback does not render. Fix is to wrap the tile in its own `Material`, or drop the colour from the intermediate box. |
-| Parent Fees | `RenderFlex overflowed by 13 pixels on the bottom` at a 390 px-wide viewport. |
+| `test_tenant_isolation.py` | **PASS — 24/24** |
+| `test_tenant_isolation_finance.py` | **PASS — 13/13** |
+| `test_parent_child_linking.py` | **PASS — 12/12** |
+| `test_realtime_delivery.py` | **PASS — 6/6** |
+| `test_homework_review_gate.py` *(new, uncommitted)* | **PASS — 3/3** |
+| **`tests_integration/` total** | **PASS — 58/58** in 131 s |
 
-Both are debug-mode assertions and do **not** crash release builds. Deliberately left unfixed: the `ListTile` pattern comes from a shared card decoration used across 12+ screens, so correcting it is a visual change wanting review, not a test fix.
+### 2.3 Frontend
 
-### 2.3 Not run this session
-
-| Suite | Why |
+| Suite | Result |
 |---|---|
-| `pip-audit` on a CI runner | Green locally in a Python 3.12 venv; the runner has never executed the fixed workflow (see §8) |
-| `tests/security_test.py`, `security_test_extended.py` | Not run — no longer blocked (the stack is up), just out of scope for this session. Point them at the **local** stack only; they include login rate-limit probes |
-| `tests/performance_test.py` | Same |
+| `flutter test test/unit/` | **PASS — 103/103** |
+| `flutter test test/widget/` | **PASS — 40/40** |
+| `flutter test` (everything) | **PASS — 143/143** |
+| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (was 6) |
 
-`pip-audit` **was** run locally this session (Python 3.12 venv, since `pymupdf` won't build on the default 3.14) and is now green — see §10 item 1.
+The infos: 33 `prefer_const_constructors` across the role screens (the uncommitted screen edits), 4 `no_leading_underscores_for_local_identifiers`, 1 `prefer_const_declarations`, 1 `dangling_library_doc_comments`. CI runs `--no-fatal-infos`, so none break the build.
+
+### 2.4 Not run this session
+
+| Suite | Why / last result |
+|---|---|
+| Flutter integration — `app_test.dart`, `all_screens_test.dart` | Needs a simulator. Last: 5/5 and 26 pass / 3 fail (2026-07-24/25, see §9) — the 31 changed screens are **unverified on-device** |
+| `tests/security_test.py`, `security_test_extended.py`, `tests/performance_test.py` | Not run. Point at the **local** stack only; they include login rate-limit probes |
+| `pip-audit` | Not run this session |
+| Manual QA (§5) | 92 items unticked |
 
 ---
 
@@ -450,6 +433,79 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-09-13 (full automated re-run)
+- Backend unit **331 PASS**, integration **58/58 PASS**, Flutter **143/143 PASS**, analyze 0 errors / 0 warnings. Full detail in §2.
+- New uncommitted tests green: `test_attendance_window.py` 9/9, `test_homework_review_gate.py` 3/3.
+- Found: the host `python3.12` cannot run 3 backend files (missing `sentry_sdk`, `google-genai`); the container cannot run 2 (no repo root, no git). Run the suite split accordingly until one environment covers both.
+
+### 2026-07-24 / 25 (previous §2 — superseded by 2026-09-13)
+
+**Date:** 2026-07-24 / 25
+**Branch:** `create_school`
+**Environment:** macOS (darwin 25.5.0), Flutter 3.44.0 (stable), Python 3.14
+
+#### 2.1 Backend — each file in its own pytest process (mirrors CI)
+
+| Suite | Result |
+|---|---|
+| `tests/test_unit.py` | **PASS — 34/34** |
+| `tests/test_logout_handler.py` | **PASS — 3/3** |
+| `tests/test_websocket_auth.py` | **PASS — 5/5** |
+| `tests/test_schema_invariants.py` | **PASS — 4/4** |
+| `tests/test_tenancy.py` | **PASS — 19/19** |
+| `tests/test_tenancy_wiring.py` | **PASS — 8/8** |
+| `tests/test_realtime_fanout.py` | **PASS — 8/8** (new this session) |
+| **Whole suite in one session** (`pytest tests`) | **PASS — 81/81** |
+| `tests_integration/` (stack up, upgraded deps) | **PASS — 36/36** — 32 tenant-isolation + 4 new realtime-delivery |
+
+The one-session run passing is worth noting: the per-file split in CI was introduced because `test_logout_handler.py` and `test_websocket_auth.py` install module-level `sys.modules` stubs. That ordering hazard has not resurfaced, but the split is still the safer default. See §10 item 4.
+
+#### 2.2 Frontend
+
+| Suite | Result |
+|---|---|
+| `flutter test test/unit/` | **PASS — 78/78** |
+| `flutter test test/widget/` | **PASS — 26/26** (+5 new `realtime_sync_test.dart`) |
+| `flutter test` (everything) | **PASS — 104/104** |
+| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 6 style infos** |
+
+The 3 infos: one `prefer_const_declarations` in `lib/features/teacher/screens/homework_screen.dart:741`, two `no_leading_underscores_for_local_identifiers` in `test/unit/auth_notifier_test.dart`. CI runs `flutter analyze --no-fatal-infos`, so none of the three break the build.
+
+`test/widget/realtime_sync_test.dart` now drives **all 22** event names across all three role branches (was 5), asserting the exact provider set each invalidates; falsified against a typo'd case and an over-broad invalidate.
+
+**Flutter integration — `app_test.dart`: PASS 5/5** on iPhone 17 Pro against the local stack (`--dart-define=LOCAL_DEV=true`), in 61 s. Was 2/5 at the start of the session.
+
+**Flutter integration — `all_screens_test.dart`: 26 pass / 3 fail.** Was `+0 -15`. Two fixes moved it: the WebSocket disposed-container bug (§9) took it to `+19 -10`, and a working teacher account cleared 7 more.
+
+Five layered problems were fixed across the two files, each only visible once the one above it was:
+
+1. The login form's school picker (multi-tenancy, 2026-07-22) was never set, so `login_screen.dart` bailed with "Please select your school." and never called the API.
+2. The taller form pushed the Login button 0.3 px off-screen; `tap()` only *warns* on a missed hit, so the run hung rather than failing.
+3. `main()` is async, so `MaterialApp` was not mounted when test 1 asserted on it.
+4. **`main()` installs Crashlytics as `FlutterError.onError` / `PlatformDispatcher.onError` before `runApp`.** In a widget test that displaces the binding's reporter, so real failures went to Crashlytics and the binding reported only `_pendingExceptionDetails != null`. Suite-wide, and had masked every framework error since these tests were written — §10 item 14.
+5. Seeded credentials were stale: three of the four accounts in `seed_integration_test_users.py` now 401 — §10 item 15.
+
+`pumpAndSettle` is bounded to 20 s in both files; the 10-minute default turned failures into silent stalls that made diagnosis unaffordable.
+
+**The 3 remaining failures are pre-existing app bugs, not test rot** — and were invisible until the tests reclaimed error handling:
+
+| Test | Defect |
+|---|---|
+| Admin Timetable, Teacher Tests | Framework assertion: a `ListTile` inside a colour-filled `DecoratedBox` (`mindForgeCardDecoration()`) hides its own background and ink splashes, so tap feedback does not render. Fix is to wrap the tile in its own `Material`, or drop the colour from the intermediate box. |
+| Parent Fees | `RenderFlex overflowed by 13 pixels on the bottom` at a 390 px-wide viewport. |
+
+Both are debug-mode assertions and do **not** crash release builds. Deliberately left unfixed: the `ListTile` pattern comes from a shared card decoration used across 12+ screens, so correcting it is a visual change wanting review, not a test fix.
+
+#### 2.3 Not run this session
+
+| Suite | Why |
+|---|---|
+| `pip-audit` on a CI runner | Green locally in a Python 3.12 venv; the runner has never executed the fixed workflow (see §8) |
+| `tests/security_test.py`, `security_test_extended.py` | Not run — no longer blocked (the stack is up), just out of scope for this session. Point them at the **local** stack only; they include login rate-limit probes |
+| `tests/performance_test.py` | Same |
+
+`pip-audit` **was** run locally this session (Python 3.12 venv, since `pymupdf` won't build on the default 3.14) and is now green — see §10 item 1.
 
 ### 2026-07-24 (automated re-run + record rewrite)
 - Re-ran every automated suite. **Backend 81/81 PASS** (7 files, also green file-by-file). **Flutter 99/99 PASS** (78 unit + 21 widget). `flutter analyze lib test` clean — 0 errors, 0 warnings, 3 style infos.

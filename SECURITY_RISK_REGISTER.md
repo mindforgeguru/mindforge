@@ -27,12 +27,12 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **42** |
-| Stale | **24** |
-| Open | **24** |
+| Verified | **60** |
+| Stale | **8** |
+| Open | **22** |
 | **Total tracked** | **90** across 13 domains |
 
-*Last verification sweep: 2026-08-20 (see [Verification log](#verification-log)).*
+*Last verification sweep: 2026-09-17 (see [Verification log](#verification-log)).*
 
 **The shape of it.** Multi-tenancy and authentication are genuinely strong — that is
 where the tests are, and it shows. The open items cluster in three places instead:
@@ -59,7 +59,7 @@ goes wrong.
 | Weak / guessable MPIN | VERIFIED | 32 tests (`test_weak_mpin.py`) pin the guessability rule (all-same, runs, half-repeats, keypad shapes) and — the part that matters — the **wiring**: weak PINs are rejected at every set site (register, change `new_mpin`, admin reset) and accepted at login and `current_mpin`, so a legacy weak-PIN user can still sign in and fix it. Falsified: making login strict or register lenient each fails the matching wiring test. |
 | Multi-factor authentication | VERIFIED | TOTP (RFC 6238, stdlib) for **admin and owner**, opt-in: enrolment screen (admin profile + owner console) with QR plus typed key, single-use recovery codes, screen-capture blocked while the secret shows; two-step enrolment so an abandoned setup can't lock the account; disable needs MPIN *and* a factor. **The 'marking your own homework' gap is now closed:** beyond the six official RFC vectors, `test_totp_interop.py` carries a from-scratch second implementation (anchored to the RFC vector) that agrees with the app both ways *and* on the secret parsed out of the actual `otpauth://` QR — which is spec-compliant SHA1/6-digit/30s. A real authenticator app is one more RFC-6238 implementation of that same URI, so a physical phone scan (checklist 06) is now a formality, not an open correctness risk. Falsified: a 60s step or a mangled QR secret breaks the interop tests. Other roles keep a single factor by design. |
 | Account enumeration | VERIFIED | **Was exploitable.** Bodies always matched, but `login()` short-circuited past bcrypt for an unknown username: 238.7 ms vs 3.9 ms, a 61x tell. Closed with `verify_mpin_constant_time`, which always hashes; re-measured at 240.6 vs 239.7 ms (1.00x). 5 tests. |
-| Forgot-MPIN / recovery flow abuse | OPEN | The login screen offers "Forgot your MPIN?" — that flow has no security test at all. |
+| Forgot-MPIN / recovery flow abuse | VERIFIED | There is no self-service reset: "Forgot your MPIN?" only tells the user to ask their admin, so recovery means an admin reset or a self change. **Was exploitable:** neither ended an existing session. After an admin reset, the old access token still worked and the old refresh token kept rotating for its full 30 days, so the reset locked out nobody; a revoked token could still open a realtime socket too. Fixed with `users.tokens_valid_after` (migration 037): an admin reset or any of the four self-service changes stamps it, and `_get_current_user`, `/auth/refresh` and the `/ws` handshake reject tokens whose sub-second `iat` predates it. Self changes return a fresh pair and the client stores it (`_adoptReissuedSession`), so the user who changed their MPIN stays signed in. 9 integration tests (`test_session_revocation.py`): old access, refresh and socket all refused after a reset, other sessions killed by a self change, re-login with the new MPIN works, a non-MPIN edit revokes nothing, a cross-school reset 404s and revokes nothing, and a weak reset MPIN 422s. Plus 1 unit test on the socket gate and 4 Flutter tests on token adoption. Falsified: dropping the refresh check or the access check each fails 2 tests; without the client change all 4 Flutter tests fail. |
 | Session fixation | OPEN | Not assessed. |
 
 ## 2. Authorization & tenant isolation
@@ -74,7 +74,7 @@ goes wrong.
 | Realtime events crossing tenants | VERIFIED | Two separate leaks found and fixed (fan-out, then `admin.py` config events). Tests falsified against the unfixed code. |
 | Cross-school foreign keys accepted on write | VERIFIED | Timetable `teacher_id` now validated against the caller's school; commit `25451eb`. |
 | Unauthenticated media proxy | STALE | Bucket allowlist and path traversal re-probed 2026-08-18 — 5/5 rejected, including double-encoded and null-byte keys. Still STALE because the actual risk is different: the endpoint stays open by design and leans on object keys being *unguessable*, which no probe tests. |
-| Business-logic abuse | STALE | Score is server-computed by `_grade_submission` against the test key; `/save` and `/submit` both 409 once `is_finalized` is set. 9 tests pin the submission surface as exactly `{answers, auto_submitted}`, so a score-bearing field cannot be added silently. STALE: teacher-side abuse — backdating attendance, editing a published grade — is still untested. |
+| Business-logic abuse | VERIFIED | Student side: score is server-computed by `_grade_submission` against the test key; `/save` and `/submit` both 409 once `is_finalized`; 9 tests pin the submission surface as exactly `{answers, auto_submitted}`. Teacher side, now closed: **attendance dates were entirely unvalidated** — a teacher could POST (and overwrite) attendance for any date, future or long past. Added a date-window guard (`core/attendance_window.py`): future dates rejected, backdating capped at a 14-day correction window; enforced in the sole write path (`AttendanceBulkCreate`), 9 falsified tests (`test_attendance_window.py`). Grades: both write paths (`create_grade`, `save_offline_grades`) re-check the student's `school_id` (404 cross-school), `save_offline_grades` also enforces test-owner + offline-only + marks∈[0,total]; grades are append-only (no edit endpoint), so a "published grade" cannot be silently rewritten. Every attendance/grade write stamps `teacher_id`. Residual: the 14-day window is a product choice; corrections beyond it are a new row, attributable via `teacher_id`+`created_at`. |
 | Parent–child link tampering | VERIFIED | Structurally prevented: `parent_user_id` is written only in `admin.py`, the parent router is read-only, and `_get_child_profile` resolves the child from the authenticated parent's id — there is no id in the request to swap. Both admin link paths scope to `current_admin.school_id`. 12 integration tests, including that another school's student id cannot redirect the read. |
 
 ## 3. Injection & input handling
@@ -171,10 +171,10 @@ goes wrong.
 
 | Risk | Status | Evidence / note |
 |---|---|---|
-| Provider fallback reliability | STALE | Claude → Gemini → Groq. Understood operationally, but no test asserts the chain degrades correctly when the primary fails. |
+| Provider fallback reliability | VERIFIED | There are five chains, not one: test generation and auto-quiz (Claude → Gemini → Groq), slide decks (Claude → Gemini), and document and syllabus scans (Gemini → Groq, which never try Claude). 23 tests (`test_ai_fallback_chain.py`) fake each provider at its lowest seam, so ordering, key checks, parsing and error reporting run for real. They pin that success stops the chain, a failure moves on, a missing key skips a provider without calling it, and an all-fail raises with every provider's reason in order (scans fall back to empty metadata). **Three defects found and fixed:** (1) an answer with no usable questions (`[]`, or everything removed by the link filter) ended the chain, so a teacher could get an empty test while Gemini and Groq were never tried; (2) empty Claude text for a slide deck skipped the Gemini fallback and failed later at the JSON parse; (3) see the next row but one. Written first and run red: 6 failed, 17 passed. **Hangs, added the same day:** each chain now has a time budget sized to how long the caller waits (test generation 170s, since the app gives up at 180s; scans 40s per file). Each provider gets a cap within that budget, and the same timeout goes to the SDK so its worker thread stops too. 9 more tests (32 in total). Falsified: removing the deadline fails 3, and dropping the SDK timeouts fails 2. Against a local socket that never replies, the real Anthropic, Groq and Gemini SDKs each gave up at 2.0s. |
 | Trusting generated content | VERIFIED | Auto-quizzes are created unpublished and reach students only when a teacher publishes — the same gate manual tests already passed through, which auto-quizzes were setting `is_published=True` on themselves to skip. The 48h attempt window now starts at publish, so review time is not taken out of the students'. Verified live: a student cannot see the quiz before publish, can after, and the window is 48h from approval. |
 | Cross-tenant contamination in AI context | OPEN | Nothing verifies that one school's uploaded material can't surface in another school's generated output. |
-| Uploaded documents retained by third parties | OPEN | Files sent through the Anthropic Files API — retention and deletion on the vendor side is undocumented here. |
+| Uploaded documents retained by third parties | OPEN | Files sent through the Anthropic Files API — retention and deletion on the vendor side is undocumented here. **Found 2026-09-17:** both Gemini scan paths deleted the uploaded school document only when the call *succeeded*, so every failure (e.g. the spending cap) left the file in Google's storage. It is now deleted either way, pinned by 2 tests in `test_ai_fallback_chain.py`. Still OPEN: vendor-side retention after deletion is undocumented. |
 
 ## 12. Detection & response
 
@@ -183,7 +183,7 @@ goes wrong.
 | Audit logging | VERIFIED | Coverage mapped and pinned. Verified **live** 2026-08-24: an admin deactivate→reactivate on the simulator produced `deactivate_user` + `activate_user` rows, each correctly attributed (actor `demo_admin`, target, before/after details, timestamp, school-scoped). Coverage across the routers is **15+ actions** — user lifecycle (approve/edit/activate/deactivate/delete-pending/revoke/self-delete + child cascade), teacher bio/photo, fee record/update/delete, feedback — now guarded by `test_audit_coverage.py` (3 tests): the security-relevant user-lifecycle actions must each be emitted from an `_audit`/`AuditLog` call, with a floor so coverage can't silently shrink. Falsified: deleting an audit line drops that action and fails. Residual: the trail is append-only but not cryptographically tamper-evident (see 'Log injection'), and no periodic human review process exists. |
 | Error visibility | STALE | Sentry on the backend, Crashlytics on the client. Both wired; neither verified end-to-end recently. |
 | Security alerting | STALE | Credential-spray detection (distinct usernames per IP over 15 min, ERROR at 8). **Pipeline now pinned by `test_alerting.py` (4 tests):** an ERROR log becomes a Sentry event, a warning stays a breadcrumb (so the channel isn't drowned), and the spray alert ships only the IP + count — never the targeted accounts (falsified: leaking a username, or making warnings alert, each fails). STALE for two reasons the code can't supply: only this one pattern is watched (impossible travel, mass data access are not), and **no Sentry notification route is configured** — so the alert reaches Sentry but pages no human. The route is a user task; see [[project_user_owned_security_todos]]. |
-| Incident response | OPEN | No runbook for a breach: no containment steps, no notification path, no mass token-revocation procedure. |
+| Incident response | OPEN | No runbook for a breach: no containment steps and no notification path. A per-user "end all sessions" primitive now exists (`revoke_all_sessions`, 2026-09-17), and an admin MPIN reset triggers it. Still missing: revoking every user in a school or on the platform at once (e.g. after a `JWT_SECRET` leak, rotating the secret is the only way). |
 | Responsible disclosure | OPEN | No `security.txt`, no contact route for someone who finds a flaw. |
 
 ## 13. Build & release pipeline
@@ -586,6 +586,130 @@ Both workflows lint clean under `actionlint` before push.
 write access to read, so unfixed findings are not published. But code scanning
 annotations **on a pull request** are visible to anyone. A PR carrying a live
 finding advertises it for as long as it is open.
+
+---
+
+### 2026-09-17 — MPIN recovery did not end the intruder's session
+
+**Found by testing, and exploitable.** Recovery is admin-mediated: a student
+whose MPIN leaks asks the admin for a new one. Before this fix the reset
+changed the hash and nothing else. Token revocation was per-JTI only (logout,
+refresh rotation), so nothing could end *every* session a user had. Measured
+on the local stack, straight after an admin reset:
+
+- the access token minted with the old MPIN: **200** on `/api/student/profile`
+- the refresh token minted with the old MPIN: **200** on `/api/auth/refresh`, a
+  fresh 30-day pair each time, indefinitely
+- the same old access token: **opened `/ws`** and answered a ping, because the
+  handshake never looked the user up
+
+A student changing their own MPIN because they suspected a leak did no better.
+
+**Fix.** A nullable `users.tokens_valid_after` (migration 037). Every token now
+carries a sub-second `iat`; whole seconds would let a token minted in the same
+second as the reset survive it. Tokens issued before the stamp are refused by
+the HTTP dependency, `/auth/refresh` and the socket handshake. The handshake
+now also refuses deleted and unapproved accounts, which it had never checked.
+An admin reset stamps it. A self change stamps it and returns a new pair, and
+the client adopts that pair, so the person changing their MPIN is not logged
+out along with the intruder.
+
+**Tests.** `tests_integration/test_session_revocation.py` (9), written first and
+run red (5 failed for the right reason) before any code changed.
+`tests/test_websocket_auth.py` gains a gate test.
+`frontend/test/unit/api_client_mpin_change_test.dart` (4, one per role).
+Falsification: disabling the refresh check fails the refresh-reset and
+self-change tests, disabling the access check fails the access-reset and
+self-change tests, and reverting the client change fails all 4 Flutter tests.
+Full suites after: backend unit 332, integration 67, all passing.
+
+**Also corrected:** the posture counts above had drifted from the rows (they
+read 42/24/24; the rows said 58/9/23 before this change). Now recounted from
+the tables.
+
+**Not covered:** revoking every user in a school or on the platform at once.
+Incident response stays OPEN for that reason.
+
+**Not live:** production runs the pre-multi-tenancy branch, so this protects
+nobody until `create_school` is deployed.
+
+### 2026-09-17 — The AI fallback chains, tested
+
+The register said "Claude → Gemini → Groq". The code has **five** chains, and
+two never try Claude:
+
+| Chain | Order |
+|---|---|
+| `generate_test_questions` (teacher builds a test) | Claude → Gemini → Groq |
+| `generate_mcqs_from_text` (auto-quiz from slides) | Claude → Gemini → Groq |
+| presentation `_generate_text` (slide decks) | Claude → Gemini |
+| `scan_document_metadata` (database upload) | Gemini → Groq |
+| `scan_syllabus` | Gemini → Groq |
+
+`tests/test_ai_fallback_chain.py` (23 tests) fakes each provider at the lowest
+seam its chain calls: the per-provider generator, the SDK client, or
+`claude_generate`. Parsing and the chain logic run unmodified. Run before any
+fix: **17 passed, 6 failed.** The 17 confirm that ordering, short-circuiting,
+key-skipping and ordered all-fail error messages already worked. The 6 were
+real:
+
+1. **An empty answer counted as success** (2 chains, 3 tests). If a provider
+   returned `[]`, or questions the link filter removed, the chain stopped
+   there. A teacher got a test with no questions while two providers went
+   untried. Fix: `_require_questions` raises inside each provider's `try`.
+2. **Empty Claude text for a deck skipped Gemini.** The empty string was
+   returned, failed the JSON parse one level up, and the deck was marked
+   failed. Fix: raise inside the `try`.
+3. **Failed Gemini scans left the document at Google** (2 tests). The delete
+   ran only after a successful generation. Fix: `_delete_gemini_upload` in
+   `finally`.
+
+After: 23/23; full unit suite 355 passed.
+
+**Hangs, fixed the same day.** No chain had a timeout of its own, so a provider
+that stalled instead of erroring held the request for the SDK default (up to 10
+minutes for Anthropic). The app had long since given up (180s for test
+generation, 120s for uploads), and the fallback never ran. Every chain now
+runs on a `_ChainClock`:
+
+| Chain | Budget | Per provider |
+|---|---|---|
+| test generation (request) | 170s | Claude 110, Gemini 45, Groq 25 |
+| auto-quiz (background) | 480s | Claude 240, Gemini 150, Groq 60 |
+| scans (request, per file) | 40s | Gemini 25, Groq 12 |
+| deck (background, per call) | 900s | Claude 600, Gemini 300 |
+
+Each attempt gets `min(cap, budget left)` and is skipped when less than 10% of
+its cap remains. The same number goes to the SDK call (`timeout=` for
+Anthropic and Groq, `http_options.timeout` for Gemini). Cancelling the await
+cannot stop a worker thread that is still streaming, and still billing. 9 tests,
+run red first. Falsified: removing `wait_for` fails the 3 hang tests; dropping
+the SDK timeouts fails the 2 that inspect them. The SDK side was also checked
+against a local socket that accepts and never replies: the real Anthropic, Groq
+and Gemini clients each raised a timeout at 2.0s, so none of them rejects the
+argument. Rejection would matter, because the chain swallows errors and would
+silently skip that provider.
+
+**Unverified assumption:** the 110s Claude cap for test generation. No timing
+data exists for real Claude generations (no key locally). If they often run
+longer, tests will quietly come from Gemini instead. The logs will show
+`Claude: timed out after 110s` if so.
+
+**Old-paper uploads, fixed the same day.** Uploading several old papers used
+to scan them one after another inside the request (40s budget each), while the
+app gave up on the whole upload of up to 20 files at 120s. The upload now
+stores the files and returns. Classification runs in a background task, one
+paper at a time: a failed scan or write leaves that paper unclassified and
+moves on, and a paper deleted in the meantime is skipped. After each paper,
+an `old_test_papers_classified` event goes to that teacher, which refreshes
+their list. Tests: 6 unit tests (the in-request scan was put back to confirm
+the key one fails), 1 widget-mapping test, and 2 integration tests on the
+real stack (background task notifies the uploading teacher only, never another
+school's). Manual check with a real PDF and real Gemini: upload answered in
+0.04s, and grade/subject/chapter appeared 10s later.
+
+**Also noted, not changed:** when both deck providers fail, the teacher sees
+Gemini's error, while Claude's reason goes only to the logs.
 
 ---
 

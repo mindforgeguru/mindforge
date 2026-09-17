@@ -489,8 +489,8 @@
           <p class="note">TOTP (RFC 6238, stdlib) for admin and owner, opt-in: enrolment screen with QR + typed key, single-use recovery codes, screen capture blocked while the secret shows, two-step enrolment, disable needs MPIN + a factor. The "marking your own homework" gap is closed: beyond the six RFC vectors, an independent from-scratch implementation (anchored to the RFC vector) agrees with the app both ways and on the secret parsed from the actual otpauth:// QR (spec-compliant SHA1/6/30s). A real authenticator app is one more RFC-6238 reader of that URI, so a physical scan is now a formality. Falsified by a 60s step or a mangled QR secret. Other roles keep one factor by design.<span class="flag new">Verified</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Account enumeration</span>
           <p class="note"><b>Was exploitable.</b> Bodies always matched, but login short-circuited past bcrypt for an unknown username — 239 ms vs 4 ms, a 61x tell. Now always hashes; re-measured at 1.00x.<span class="flag new">Fixed</span></p></div>
-        <div class="row s-gap"><span class="chip">Open</span><span class="risk">Forgot-MPIN / recovery flow abuse</span>
-          <p class="note">The login screen offers "Forgot your MPIN?" — that flow has no security test at all.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Forgot-MPIN / recovery flow abuse</span>
+          <p class="note">Recovery goes through an admin reset or a self change. <em>Neither ended existing sessions</em>: after a reset, the old access token still worked, the old refresh token kept rotating for 30 days, and a revoked token could still open a realtime socket. Fixed with a per-user <code>tokens_valid_after</code> checked on every request, on refresh and on the socket handshake. Self changes hand back a fresh session so the user stays signed in. 9 integration tests plus client tests, each check falsified.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Session fixation</span>
           <p class="note">Not assessed.</p></div>
       </div>
@@ -520,8 +520,8 @@
           <p class="note">Timetable <code>teacher_id</code> now validated against the caller's school; commit <code>25451eb</code>.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Unauthenticated media proxy</span>
           <p class="note">Bucket allowlist and path traversal re-probed today — 5/5 rejected, including double-encoded and null-byte keys. Still stale because the real risk is different: the endpoint stays open by design and leans on object keys being <em>unguessable</em>, which no probe tests.</p></div>
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Business-logic abuse</span>
-          <p class="note">Score is computed server-side against the test key, and both write paths 409 once finalized. 9 tests pin the submission surface so a score field cannot be added silently. Stale: teacher-side abuse — backdating attendance, editing a published grade — is still untested.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Business-logic abuse</span>
+          <p class="note">Student side: score is computed server-side against the test key, and both write paths 409 once finalized (9 tests). Teacher side, now closed: attendance dates were <em>entirely unvalidated</em> — a teacher could mark or overwrite attendance for any date, future or long past. Added a date-window guard (future rejected, backdating capped at a 14-day correction window) on the sole write path, with 9 falsified tests. Grades: both write paths re-check the student's school (404 cross-school), offline grades also enforce test-owner + offline-only + marks∈[0,total], and grades are append-only — no edit endpoint, so a published grade can't be silently rewritten. Every write stamps <code>teacher_id</code>.<span class="flag new">Fixed</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Parent–child link tampering</span>
           <p class="note">Structurally prevented: the link is written only by an admin, the parent router is read-only, and the child is resolved from the token — there is no id in the request to swap. 12 integration tests.<span class="flag new">Fixed</span></p></div>
       </div>
@@ -725,14 +725,14 @@
         <span class="sec-tally"></span>
       </div>
       <div class="rows">
-        <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Provider fallback reliability</span>
-          <p class="note">Claude → Gemini → Groq. Understood operationally, but no test asserts the chain degrades correctly when the primary fails.</p></div>
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Provider fallback reliability</span>
+          <p class="note">Five chains, not one; the document and syllabus scans never try Claude. 23 tests with every provider faked pin ordering, skipping on a missing key, and all-fail errors. Two defects fixed: an answer with no usable questions ended the chain (a teacher could get an empty test while two providers went untried), and empty Claude text for a deck skipped the Gemini fallback. Hangs now covered too: every chain has a time budget sized to how long the caller waits, and the same timeout is passed to each SDK (checked against the real clients).<span class="flag new">Fixed</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Trusting generated content</span>
           <p class="note">Auto-quizzes are created unpublished and reach students only when a teacher publishes — the gate manual tests already used, which auto-quizzes were skipping by publishing themselves. The 48h window now starts at approval, so review time is not taken from the students. Verified live in both directions.<span class="flag new">Fixed</span></p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Cross-tenant contamination in AI context</span>
           <p class="note">Nothing verifies that one school's uploaded material can't surface in another school's generated output.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Uploaded documents retained by third parties</span>
-          <p class="note">Files sent through the Anthropic Files API — retention and deletion on the vendor side is undocumented here.</p></div>
+          <p class="note">Files sent through the Anthropic Files API — retention and deletion on the vendor side is undocumented here. Found and fixed: a failed Gemini scan left the school's document in Google's storage; it's now deleted either way (2 tests). Vendor-side retention is still undocumented.</p></div>
       </div>
       <p class="empty">No rows in this state.</p>
     </section>
@@ -751,7 +751,7 @@
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Security alerting</span>
           <p class="note">Credential-spray detection (distinct usernames per IP over 15 min, ERROR at 8). Pipeline now pinned by test_alerting.py (4 tests): an ERROR log becomes a Sentry event, a warning stays a breadcrumb, and the spray alert ships only IP + count, never the targeted accounts (falsified by leaking a username or making warnings alert). Stays stale on two things the code can't supply: only this one pattern is watched, and no Sentry notification route is configured — so the alert reaches Sentry but pages no human. The route is a user task.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Incident response</span>
-          <p class="note">No runbook for a breach: no containment steps, no notification path, no mass token-revocation procedure.</p></div>
+          <p class="note">No runbook for a breach: no containment steps and no notification path. Ending all of one user's sessions now exists (an MPIN reset does it); revoking a whole school or the whole platform at once still does not.</p></div>
         <div class="row s-gap"><span class="chip">Open</span><span class="risk">Responsible disclosure</span>
           <p class="note">No <code>security.txt</code>, no contact route for someone who finds a flaw.</p></div>
       </div>
