@@ -1,9 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_theme.dart';
+import 'school_logo.dart';
 
 /// Width of the fixed vertical sidebar shown on wide (web/desktop) layouts.
 const double kSideNavWidth = 224;
@@ -110,15 +110,15 @@ class SideNav extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          // Per-school badge (initial) — replaces the old hard-coded single-
-          // school logo so every tenant is branded correctly.
-          if (school != null && school.isNotEmpty) _schoolBadge(school),
-          if (school != null && school.isNotEmpty) const SizedBox(height: 12),
-          // (logo badge sits directly above the MindForge logo below)
-          _logoBox('assets/images/logo.png', 10, 84),
+          // School logo (falls back to the MindForge logo when the school
+          // hasn't uploaded one) — the app-wide branding is the school's.
+          _logoBox(const SchoolLogo(fit: BoxFit.contain), 10, 84),
           const SizedBox(height: 14),
           Text(
-            'MIND FORGE',
+            (school != null && school.isNotEmpty) ? school : 'MIND FORGE',
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.poppins(
               fontSize: 15,
               fontWeight: FontWeight.w800,
@@ -126,67 +126,12 @@ class SideNav extends StatelessWidget {
               letterSpacing: 1.5,
             ),
           ),
-          if (school != null && school.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              school,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.poppins(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.accentLight,
-                height: 1.2,
-              ),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _schoolBadge(String school) {
-    final logoUrl = schoolLogoUrl;
-    return Container(
-      width: 84,
-      height: 84,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 6, offset: const Offset(0, 2)),
-        ],
-      ),
-      padding: logoUrl != null ? const EdgeInsets.all(8) : EdgeInsets.zero,
-      child: logoUrl != null
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: CachedNetworkImage(
-                imageUrl: logoUrl,
-                fit: BoxFit.contain,
-                // Fall back to the school initial if the image fails to load.
-                errorWidget: (_, __, ___) => _badgeInitial(school),
-              ),
-            )
-          : _badgeInitial(school),
-    );
-  }
-
-  Widget _badgeInitial(String school) {
-    return Center(
-      child: Text(
-        school[0].toUpperCase(),
-        style: GoogleFonts.poppins(
-          fontSize: 40,
-          fontWeight: FontWeight.w800,
-          color: AppColors.primary,
-        ),
-      ),
-    );
-  }
-
-  Widget _logoBox(String asset, double pad, double size) {
+  Widget _logoBox(Widget child, double pad, double size) {
     return Container(
       width: size,
       height: size,
@@ -198,7 +143,7 @@ class SideNav extends StatelessWidget {
         ],
       ),
       padding: EdgeInsets.all(pad),
-      child: Image.asset(asset, fit: BoxFit.contain),
+      child: child,
     );
   }
 

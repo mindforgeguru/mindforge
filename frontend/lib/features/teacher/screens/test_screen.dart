@@ -18,6 +18,7 @@ import '../providers/teacher_provider.dart';
 import '../providers/database_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 import 'test_detail_screen.dart';
+import '../../../core/widgets/school_logo.dart';
 
 class TeacherTestScreen extends ConsumerStatefulWidget {
   const TeacherTestScreen({super.key});
@@ -54,7 +55,7 @@ class _TeacherTestScreenState extends ConsumerState<TeacherTestScreen>
               width: 32, height: 32,
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
 
 class AdminTimetableScreen extends ConsumerStatefulWidget {
   const AdminTimetableScreen({super.key});
@@ -201,7 +202,7 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
               width: 32, height: 32,
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
 
 class StudentFacultyScreen extends ConsumerWidget {
   const StudentFacultyScreen({super.key});
@@ -36,8 +37,7 @@ class StudentFacultyScreen extends ConsumerWidget {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png',
-                  fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

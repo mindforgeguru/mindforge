@@ -10,6 +10,7 @@ import '../../../core/utils/image_pick.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
 
 class AdminTeachersScreen extends ConsumerWidget {
   const AdminTeachersScreen({super.key});
@@ -38,8 +39,7 @@ class AdminTeachersScreen extends ConsumerWidget {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png',
-                  fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

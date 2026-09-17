@@ -11,6 +11,7 @@ import '../../../core/widgets/shimmer_list.dart';
 import '../providers/parent_provider.dart';
 import '../widgets/parent_scaffold.dart';
 import '../widgets/parent_error_widget.dart';
+import '../../../core/widgets/school_logo.dart';
 
 // ─── Responsive helpers ───────────────────────────────────────────────────────
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
@@ -92,7 +93,7 @@ class _ParentAttendanceScreenState
               width: 32, height: 32,
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

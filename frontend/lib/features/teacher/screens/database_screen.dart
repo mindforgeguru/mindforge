@@ -12,6 +12,7 @@ import '../providers/database_provider.dart';
 import '../providers/presentation_provider.dart';
 import '../widgets/old_paper_details_dialog.dart';
 import '../widgets/teacher_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
 
 class TeacherDatabaseScreen extends ConsumerStatefulWidget {
   const TeacherDatabaseScreen({super.key});
@@ -50,7 +51,7 @@ class _TeacherDatabaseScreenState extends ConsumerState<TeacherDatabaseScreen>
               decoration: BoxDecoration(
                   color: Colors.white, borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

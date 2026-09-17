@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
 
 // Responsive scale: baseline 360 logical pixels wide
 double _sp(BuildContext context, double size) {
@@ -135,7 +136,7 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
                   borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
               child:
-                  Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                  SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

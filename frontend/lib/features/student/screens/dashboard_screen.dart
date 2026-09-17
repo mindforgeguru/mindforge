@@ -28,6 +28,7 @@ import '../providers/xp_provider.dart';
 import '../widgets/level_up_dialog.dart';
 import '../widgets/student_scaffold.dart';
 import '../widgets/xp_progress_bar.dart';
+import '../../../core/widgets/school_logo.dart';
 
 // File-level DateFormat cache — avoids repeated object allocations in build().
 final _fmtYMD     = DateFormat('yyyy-MM-dd');
@@ -334,18 +335,18 @@ class _StudentDashboardScreenState
                                 borderRadius: BorderRadius.circular(logoH * 0.15),
                               ),
                               padding: EdgeInsets.all(logoH * 0.08),
-                              child: Image.asset(
-                                'assets/images/logo.png',
-                                fit: BoxFit.contain,
-                              ),
+                              child: SchoolLogo(fit: BoxFit.contain),
                             ),
                             SizedBox(width: _s(context, 10, min: 6, max: 14)),
-                            Column(
+                            Flexible(
+                              child: Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'MIND FORGE',
+                                  auth.schoolName ?? 'MIND FORGE',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.poppins(
                                     fontSize: titleFs,
                                     fontWeight: FontWeight.w800,
@@ -365,6 +366,7 @@ class _StudentDashboardScreenState
                                   ),
                                 ),
                               ],
+                            ),
                             ),
                           ],
                         ),

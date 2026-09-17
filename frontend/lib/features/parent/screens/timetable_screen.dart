@@ -10,6 +10,7 @@ import '../../../core/utils/responsive.dart';
 import '../providers/parent_provider.dart';
 import '../widgets/parent_scaffold.dart';
 import '../widgets/parent_error_widget.dart';
+import '../../../core/widgets/school_logo.dart';
 
 class ParentTimetableScreen extends ConsumerStatefulWidget {
   const ParentTimetableScreen({super.key});
@@ -72,7 +73,7 @@ class _ParentTimetableScreenState
               width: 32, height: 32,
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

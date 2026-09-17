@@ -7,6 +7,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../providers/xp_provider.dart';
 import '../widgets/leaderboard_tile.dart';
 import '../widgets/student_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
 
 /// Leaderboard screen with three tabs:
 ///   - **Class** — ranking within the viewer's grade
@@ -126,7 +127,7 @@ class LeaderboardScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 padding: const EdgeInsets.all(3),
-                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                child: SchoolLogo(fit: BoxFit.contain),
               ),
             ),
           ],

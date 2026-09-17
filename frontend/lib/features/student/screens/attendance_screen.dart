@@ -13,6 +13,7 @@ import '../../../core/widgets/shimmer_list.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
 
 // Responsive scale helper — base ref width 390 px
 double _s(BuildContext ctx, double base,
@@ -178,7 +179,7 @@ class _StudentAttendanceScreenState
                 width: 32, height: 32,
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
                 padding: const EdgeInsets.all(3),
-                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                child: SchoolLogo(fit: BoxFit.contain),
               ),
             ),
           ],
@@ -329,7 +330,7 @@ class _StudentAttendanceScreenState
               width: 32, height: 32,
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],

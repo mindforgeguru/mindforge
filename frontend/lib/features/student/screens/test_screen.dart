@@ -11,6 +11,7 @@ import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
 
 class StudentTestScreen extends ConsumerWidget {
   const StudentTestScreen({super.key});
@@ -86,7 +87,7 @@ class StudentTestScreen extends ConsumerWidget {
                 width: 32, height: 32,
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
                 padding: const EdgeInsets.all(3),
-                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                child: SchoolLogo(fit: BoxFit.contain),
               ),
             ),
           ],

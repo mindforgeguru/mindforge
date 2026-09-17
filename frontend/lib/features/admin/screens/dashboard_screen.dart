@@ -15,6 +15,7 @@ import '../../../core/models/user.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 import '../widgets/setup_road_card.dart';
+import '../../../core/widgets/school_logo.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -214,20 +215,17 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                             borderRadius: BorderRadius.circular(8),
                           ),
                           padding: const EdgeInsets.all(4),
-                          child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                          child: SchoolLogo(fit: BoxFit.contain),
                         ),
                         const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('MIND', style: GoogleFonts.poppins(
+                        Flexible(
+                          child: Text(
+                            auth.schoolName ?? 'MIND FORGE',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
                                 fontSize: 20, fontWeight: FontWeight.w800,
                                 color: Colors.white, height: 1.1, letterSpacing: 1)),
-                            Text('FORGE', style: GoogleFonts.poppins(
-                                fontSize: 20, fontWeight: FontWeight.w800,
-                                color: Colors.white, height: 1.1, letterSpacing: 1)),
-                          ],
                         ),
                         const Spacer(),
                         IconButton(

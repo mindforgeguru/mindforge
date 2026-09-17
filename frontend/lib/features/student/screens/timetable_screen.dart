@@ -10,6 +10,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_scaffold.dart';
+import '../../../core/widgets/school_logo.dart';
 
 class StudentTimetableScreen extends ConsumerStatefulWidget {
   const StudentTimetableScreen({super.key});
@@ -308,7 +309,7 @@ class _StudentTimetableScreenState
               width: 32, height: 32,
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
               padding: const EdgeInsets.all(3),
-              child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              child: SchoolLogo(fit: BoxFit.contain),
             ),
           ),
         ],
