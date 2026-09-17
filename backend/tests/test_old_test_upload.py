@@ -237,3 +237,36 @@ class TestClassifyInBackground:
             session_factory=factory,
         ))
         assert factory.committed == [2]
+
+
+class TestClassifyKeepsDataUsable:
+    def test_ai_output_is_normalized_onto_the_app_lists(self, monkeypatch):
+        papers = {1: Paper(1, "k1")}
+
+        async def scan(data, ext):
+            return {"grade": "8", "subject": "Math", "chapter": "Algebra"}
+
+        _run_classify(monkeypatch, papers, scan)
+        assert (papers[1].grade, papers[1].subject) == (8, "Mathematics")
+
+    def test_unrecognised_ai_values_stay_unclassified(self, monkeypatch):
+        papers = {1: Paper(1, "k1")}
+
+        async def scan(data, ext):
+            return {"grade": 12, "subject": "Sanskrit"}
+
+        _run_classify(monkeypatch, papers, scan)
+        assert papers[1].grade is None and papers[1].subject is None
+
+    def test_details_set_by_the_teacher_are_not_overwritten(self, monkeypatch):
+        """The teacher can set details while the AI is still working. The AI
+        finishing afterwards must not replace what the teacher chose."""
+        paper = Paper(1, "k1")
+        paper.grade, paper.subject, paper.chapter = 9, "Chemistry", "Acids"
+        papers = {1: paper}
+
+        async def scan(data, ext):
+            return dict(META)
+
+        factory, _ = _run_classify(monkeypatch, papers, scan)
+        assert (paper.grade, paper.subject, paper.chapter) == (9, "Chemistry", "Acids")

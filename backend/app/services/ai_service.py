@@ -275,7 +275,7 @@ Respond ONLY with a valid JSON object — no markdown, no explanation.
 
 {
   "grade": <integer 8, 9, or 10, or null if not determinable>,
-  "subject": "<one of: Math, Physics, Chemistry, Biology, History & Civics, Geography, English 1, English 2, Computer Applications, Economics, Environmental Science, Artificial Intelligence — or null>",
+  "subject": "<exactly one of: Mathematics, Physics, Chemistry, Biology, History & Civics, Geography, English 1, English 2, Computer Applications, Economics, Environmental Science, Artificial Intelligence — or null>",
   "chapter": "<chapter or topic name — or null>",
   "title": "<descriptive title for this document — or null>",
   "summary": "<1-2 sentence summary of what this document covers>"

@@ -622,6 +622,18 @@ class ApiClient {
     await _dio.delete('/teacher/database/old-tests/$id');
   }
 
+  /// Set an old test paper's details by hand. Grade and subject must come from
+  /// [AppConstants.grades] / [AppConstants.subjects]; the server rejects others.
+  Future<Map<String, dynamic>> updateOldTestPaper(
+      int id, {required int grade, required String subject, String? chapter}) async {
+    final res = await _dio.patch('/teacher/database/old-tests/$id', data: {
+      'grade': grade,
+      'subject': subject,
+      'chapter': chapter,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
   Future<List<Map<String, dynamic>>> listChapterNames(int grade, String subject) async {
     final res = await _dio.get('/teacher/database/chapters/names',
         queryParameters: {'grade': grade, 'subject': subject});

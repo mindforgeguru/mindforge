@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../providers/database_provider.dart';
 import '../providers/presentation_provider.dart';
+import '../widgets/old_paper_details_dialog.dart';
 import '../widgets/teacher_scaffold.dart';
 
 class TeacherDatabaseScreen extends ConsumerStatefulWidget {
@@ -152,6 +153,22 @@ class _OldTestsTabState extends ConsumerState<_OldTestsTab> {
     }
   }
 
+  Future<void> _editDetails(OldTestPaperModel p) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => OldPaperDetailsDialog(
+        paperName: p.title ?? p.originalFilename,
+        grade: p.grade,
+        subject: p.subject,
+        chapter: p.chapter,
+        onSave: (grade, subject, chapter) => ref
+            .read(apiClientProvider)
+            .updateOldTestPaper(p.id, grade: grade, subject: subject, chapter: chapter),
+      ),
+    );
+    if (saved == true) ref.invalidate(oldTestPapersProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final papersAsync = ref.watch(oldTestPapersProvider((null, null)));
@@ -219,6 +236,7 @@ class _OldTestsTabState extends ConsumerState<_OldTestsTab> {
                     chapter: p.chapter,
                     title: p.title,
                     summary: p.aiSummary,
+                    onEdit: () => _editDetails(p),
                     onDelete: () => _delete(p.id),
                   );
                 },
@@ -238,6 +256,7 @@ class _PaperCard extends StatelessWidget {
   final String? chapter;
   final String? title;
   final String? summary;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _PaperCard({
@@ -247,12 +266,16 @@ class _PaperCard extends StatelessWidget {
     this.chapter,
     this.title,
     this.summary,
+    required this.onEdit,
     required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final bool classified = grade != null || subject != null;
+    // Test generation matches on grade AND subject, so a paper missing either
+    // is never used — say so and offer the fix.
+    final bool needsDetails = grade == null || subject == null;
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -290,10 +313,29 @@ class _PaperCard extends StatelessWidget {
                         if (subject != null) _Tag(subject!, AppColors.accent),
                         if (chapter != null) _Tag(chapter!, AppColors.secondary),
                       ],
-                    )
-                  else
-                    const Text('AI classification pending...',
-                        style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                    ),
+                  if (needsDetails) ...[
+                    if (classified) const SizedBox(height: 4),
+                    Text(
+                      classified
+                          ? 'Missing ${grade == null ? 'grade' : 'subject'} — not used for tests yet.'
+                          : 'Not classified yet. The AI may still be working, or you can set it yourself.',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.edit_outlined, size: 14),
+                        label: const Text('Set details'),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
                   if (summary != null) ...[
                     const SizedBox(height: 4),
                     Text(summary!,
@@ -304,6 +346,12 @@ class _PaperCard extends StatelessWidget {
                 ],
               ),
             ),
+            if (!needsDetails)
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.textSecondary),
+                onPressed: onEdit,
+                tooltip: 'Edit details',
+              ),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.error),
               onPressed: onDelete,

@@ -14,9 +14,11 @@ from typing import List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel, field_validator
 
 from app.core.database import get_db
 from app.core.security import get_current_teacher
+from app.core.subjects import GRADES, SUBJECTS, normalize_grade, normalize_subject
 from app.core.upload_utils import reject_if_oversize, validate_document
 from app.models.user import User
 from app.models.database_models import OldTestPaper, ChapterDocument, SyllabusEntry
@@ -150,8 +152,13 @@ async def classify_old_test_papers(
                 record = await db.get(OldTestPaper, paper_id)
                 if record is None:
                     continue
-                record.grade = meta.get("grade")
-                record.subject = meta.get("subject")
+                if record.grade is not None and record.subject is not None:
+                    # The teacher set the details while the scan was running.
+                    continue
+                # Off-list values would look classified but never match the
+                # exact grade + subject filter test generation uses.
+                record.grade = normalize_grade(meta.get("grade"))
+                record.subject = normalize_subject(meta.get("subject"))
                 record.chapter = meta.get("chapter")
                 record.title = meta.get("title") or record.title
                 record.ai_summary = meta.get("summary")
@@ -206,6 +213,62 @@ async def delete_old_test_paper(
         pass
     await db.delete(record)
     await db.commit()
+
+
+class OldTestPaperDetails(BaseModel):
+    """Details a teacher sets by hand. Grade and subject are required: without
+    both, test generation never selects the paper."""
+
+    grade: int
+    subject: str
+    chapter: Optional[str] = None
+
+    @field_validator("grade")
+    @classmethod
+    def _grade(cls, v: int) -> int:
+        if v not in GRADES:
+            raise ValueError(f"grade must be one of {list(GRADES)}")
+        return v
+
+    @field_validator("subject")
+    @classmethod
+    def _subject(cls, v: str) -> str:
+        if v not in SUBJECTS:
+            raise ValueError("subject must be one of the app's subjects")
+        return v
+
+    @field_validator("chapter")
+    @classmethod
+    def _chapter(cls, v: Optional[str]) -> Optional[str]:
+        v = (v or "").strip() or None
+        if v is not None and len(v) > 200:
+            raise ValueError("chapter must be at most 200 characters")
+        return v
+
+
+@router.patch("/old-tests/{paper_id}")
+async def update_old_test_paper(
+    paper_id: int,
+    payload: OldTestPaperDetails,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_teacher),
+):
+    """Set a paper's grade, subject and chapter by hand — for papers the AI
+    couldn't classify, or classified wrongly."""
+    result = await db.execute(
+        select(OldTestPaper).where(
+            OldTestPaper.id == paper_id,
+            OldTestPaper.teacher_id == current_user.id,
+        )
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="Not found.")
+    record.grade = payload.grade
+    record.subject = payload.subject
+    record.chapter = payload.chapter
+    await db.commit()
+    return _paper_dict(record)
 
 
 def _paper_dict(r: OldTestPaper) -> dict:
