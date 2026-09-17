@@ -11,7 +11,7 @@ import logging
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from app.core.upload_utils import reject_if_oversize, validate_document
 from app.models.user import User
 from app.models.database_models import OldTestPaper, ChapterDocument, SyllabusEntry
 from app.services import ai_service, storage_service
+from app.services.realtime_service import publish_to_users
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -63,13 +64,19 @@ def _enforce_size(file: UploadFile, data: bytes) -> None:
 
 @router.post("/old-tests/upload")
 async def upload_old_test_paper(
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_teacher),
 ):
     """
     Upload one or more old test paper files.
-    AI scans each file to extract grade/subject/chapter metadata.
+
+    Stores them and returns straight away; AI classification (grade, subject,
+    chapter) runs in the background and fills the rows in. Scanning inside the
+    request took up to 40s per file against an app that gives up at 120s, so a
+    batch of more than a few papers timed out. The app already shows
+    "AI classification pending..." until a paper's metadata arrives.
     """
     if len(files) > _MAX_FILES_PER_UPLOAD:
         raise HTTPException(
@@ -77,7 +84,8 @@ async def upload_old_test_paper(
             detail=f"Too many files (max {_MAX_FILES_PER_UPLOAD} per upload).",
         )
 
-    results = []
+    records = []
+    to_classify = []
     for file in files:
         reject_if_oversize(file, _MAX_DOC_BYTES)
         data = await file.read()
@@ -86,13 +94,6 @@ async def upload_old_test_paper(
         # off the filename and hand it to the AI scanner, so the caller
         # chose how their upload was parsed.
         ext = validate_document(data, file.filename or "", _ALLOWED_DOC_EXTS)
-
-        # AI scan
-        try:
-            meta = await ai_service.scan_document_metadata(data, ext)
-        except Exception as e:
-            logger.warning(f"AI scan failed for {file.filename}: {e}")
-            meta = {}
 
         # Store in MinIO
         key = f"old-tests/{current_user.id}/{uuid.uuid4()}.{ext}"
@@ -106,19 +107,65 @@ async def upload_old_test_paper(
             teacher_id=current_user.id,
             file_key=key,
             original_filename=file.filename or "unknown",
-            grade=meta.get("grade"),
-            subject=meta.get("subject"),
-            chapter=meta.get("chapter"),
-            title=meta.get("title") or file.filename,
-            ai_summary=meta.get("summary"),
+            title=file.filename,
             school_id=current_user.school_id,
         )
         db.add(record)
         await db.flush()
-        results.append(_paper_dict(record))
+        records.append(record)
+        to_classify.append((record.id, key, ext))
 
     await db.commit()
-    return results
+    background_tasks.add_task(
+        classify_old_test_papers, teacher_id=current_user.id, items=to_classify,
+    )
+    return [_paper_dict(r) for r in records]
+
+
+async def classify_old_test_papers(
+    teacher_id: int,
+    items: List[tuple],
+    session_factory=None,
+) -> None:
+    """Scan each uploaded paper and fill in its metadata.
+
+    `items` is `(paper_id, file_key, ext)`. One paper at a time, each in its own
+    session: a scan or a write failing for one paper leaves it unclassified and
+    moves on. A paper deleted before its turn is skipped. The teacher is told
+    after each one so their list fills in as papers finish.
+    """
+    if session_factory is None:
+        from app.core.database import AsyncSessionLocal
+        session_factory = AsyncSessionLocal
+
+    for paper_id, key, ext in items:
+        try:
+            data = await storage_service.download_file(BUCKET, key)
+            meta = await ai_service.scan_document_metadata(data, ext) or {}
+        except Exception as e:
+            logger.warning("Old test paper %s: AI scan failed: %s", paper_id, e)
+            continue
+        async with session_factory() as db:
+            try:
+                record = await db.get(OldTestPaper, paper_id)
+                if record is None:
+                    continue
+                record.grade = meta.get("grade")
+                record.subject = meta.get("subject")
+                record.chapter = meta.get("chapter")
+                record.title = meta.get("title") or record.title
+                record.ai_summary = meta.get("summary")
+                await db.commit()
+            except Exception as e:
+                await db.rollback()
+                logger.warning("Old test paper %s: saving metadata failed: %s", paper_id, e)
+                continue
+        try:
+            await publish_to_users([teacher_id], {
+                "event": "old_test_papers_classified", "paper_id": paper_id,
+            })
+        except Exception as e:
+            logger.warning("Old test paper %s: realtime notify failed: %s", paper_id, e)
 
 
 @router.get("/old-tests")

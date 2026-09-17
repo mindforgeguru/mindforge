@@ -11,6 +11,7 @@ import 'package:mindforge/features/auth/providers/auth_provider.dart';
 import 'package:mindforge/features/parent/providers/parent_provider.dart';
 import 'package:mindforge/features/student/providers/student_provider.dart';
 import 'package:mindforge/features/student/providers/xp_provider.dart';
+import 'package:mindforge/features/teacher/providers/database_provider.dart';
 import 'package:mindforge/features/teacher/providers/presentation_provider.dart';
 import 'package:mindforge/features/teacher/providers/teacher_provider.dart';
 
@@ -264,7 +265,7 @@ void main() {
     final c = _Counters();
     const tracked = {
       'broadcasts', 'tests', 'homework',
-      'attendance', 'grades', 'presentation', 'timetable',
+      'attendance', 'grades', 'presentation', 'timetable', 'oldPapers',
     };
 
     final rig = await _pumpRole(
@@ -304,8 +305,13 @@ void main() {
           c.bump('timetable');
           _stub();
         }),
+        oldTestPapersProvider.overrideWith((ref, _) async {
+          c.bump('oldPapers');
+          _stub();
+        }),
       ],
       listen: (container) => [
+        container.listen(oldTestPapersProvider((null, null)), (_, __) {}),
         container.listen(teacherDashboardSummaryProvider, (_, __) {}),
         container.listen(teacherBroadcastsProvider, (_, __) {}),
         container.listen(teacherTestsProvider((null, 20)), (_, __) {}),
@@ -332,6 +338,8 @@ void main() {
       'presentation_ready': {'presentation'},
       'timetable_updated': {'timetable'},
       'timetable_config_updated': {'timetable'},
+      // Background AI classification of an uploaded old test paper finished.
+      'old_test_papers_classified': {'oldPapers'},
     };
 
     for (final entry in expected.entries) {

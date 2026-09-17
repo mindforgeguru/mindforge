@@ -10,6 +10,7 @@ import '../../features/auth/providers/auth_provider.dart';
 import '../../features/parent/providers/parent_provider.dart';
 import '../../features/student/providers/student_provider.dart';
 import '../../features/student/providers/xp_provider.dart';
+import '../../features/teacher/providers/database_provider.dart';
 import '../../features/teacher/providers/presentation_provider.dart';
 import '../../features/teacher/providers/teacher_provider.dart';
 
@@ -259,6 +260,10 @@ class _RealtimeSyncState extends ConsumerState<RealtimeSync>
         ref.invalidate(presentationListProvider);
         ref.invalidate(presentationDetailProvider);
         ref.invalidate(presentationLibraryProvider);
+        break;
+      // An uploaded old test paper finished its background AI classification.
+      case 'old_test_papers_classified':
+        ref.invalidate(oldTestPapersProvider);
         break;
       case 'timetable_updated':
       case 'timetable_config_updated':
