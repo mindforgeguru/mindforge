@@ -19,12 +19,19 @@ has to move on rather than hand a teacher an empty test.
 
 import asyncio
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
 
 from app.schemas.test import TestGenerationParams
 from app.services import ai_service, presentation_service
+
+# A scripted outcome meaning "never answers". Async fakes sleep far past any
+# cap; sync fakes (SDK calls run in a worker thread) sleep briefly, since
+# asyncio.run waits for worker threads on exit.
+HANG = object()
+SYNC_HANG_SECONDS = 1.5
 
 QUESTIONS = [{"type": "mcq", "question": "What is force?",
               "options": {"A": "push", "B": "colour"}, "answer": "A"}]
@@ -48,6 +55,29 @@ def keys(monkeypatch):
 class Recorder:
     def __init__(self):
         self.calls = []
+        self.kwargs = {}
+
+
+def _timed(coro):
+    """Run `coro`, returning (result or exception, seconds until the chain
+    itself returned). Measured inside the loop: asyncio.run also waits for any
+    worker thread still stuck in a fake SDK call, which isn't the chain's time."""
+    async def main():
+        start = time.monotonic()
+        try:
+            result = await coro
+        except Exception as exc:  # noqa: BLE001 - returned for the test to inspect
+            result = exc
+        return result, time.monotonic() - start
+    return asyncio.run(main())
+
+
+@pytest.fixture
+def budgets(monkeypatch):
+    """Shrink every chain's time budget to test scale."""
+    def set_budget(chain, **values):
+        monkeypatch.setitem(ai_service._TIME_BUDGETS, chain, values)
+    return set_budget
 
 
 # ── Chain 1: generate_test_questions ─────────────────────────────────────────
@@ -61,9 +91,12 @@ def providers(monkeypatch):
     script = {"claude": QUESTIONS, "gemini": QUESTIONS, "groq": QUESTIONS}
 
     def fake(name):
-        async def gen(*_args, **_kwargs):
+        async def gen(*_args, **kwargs):
             rec.calls.append(name)
+            rec.kwargs[name] = kwargs
             outcome = script[name]
+            if outcome is HANG:
+                await asyncio.sleep(60)
             if isinstance(outcome, Exception):
                 raise outcome
             return outcome
@@ -142,8 +175,12 @@ class FakeGemini:
         self.files = SimpleNamespace(upload=self._upload, delete=self._delete)
         self.deleted = []
 
-    def _generate(self, **_kwargs):
+    def _generate(self, **kwargs):
         self.rec.calls.append("gemini")
+        self.rec.kwargs["gemini"] = kwargs
+        if self.outcome is HANG:
+            time.sleep(SYNC_HANG_SECONDS)
+            raise RuntimeError("fake SDK timeout")
         if isinstance(self.outcome, Exception):
             raise self.outcome
         return SimpleNamespace(text=self.outcome, candidates=[])
@@ -160,8 +197,12 @@ class FakeGroq:
         self.rec, self.outcome = rec, outcome
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
-    def _create(self, **_kwargs):
+    def _create(self, **kwargs):
         self.rec.calls.append("groq")
+        self.rec.kwargs["groq"] = kwargs
+        if self.outcome is HANG:
+            time.sleep(SYNC_HANG_SECONDS)
+            raise RuntimeError("fake SDK timeout")
         if isinstance(self.outcome, Exception):
             raise self.outcome
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self.outcome))])
@@ -174,9 +215,12 @@ def raw_providers(monkeypatch):
     good = json.dumps(QUESTIONS)
     rec.script = {"claude": good, "gemini": good, "groq": good}
 
-    async def claude(*_args, **_kwargs):
+    async def claude(*_args, **kwargs):
         rec.calls.append("claude")
+        rec.kwargs["claude"] = kwargs
         outcome = rec.script["claude"]
+        if outcome is HANG:
+            await asyncio.sleep(60)
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
@@ -237,16 +281,22 @@ def deck_providers(monkeypatch):
     rec = Recorder()
     rec.script = {"claude": "claude text", "gemini": "gemini text"}
 
-    async def claude(*_args, **_kwargs):
+    async def claude(*_args, **kwargs):
         rec.calls.append("claude")
+        rec.kwargs["claude"] = kwargs
         outcome = rec.script["claude"]
+        if outcome is HANG:
+            await asyncio.sleep(60)
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
 
-    async def gemini(*_args, **_kwargs):
+    async def gemini(*_args, **kwargs):
         rec.calls.append("gemini")
+        rec.kwargs["gemini"] = kwargs
         outcome = rec.script["gemini"]
+        if outcome is HANG:
+            await asyncio.sleep(60)
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
@@ -327,3 +377,101 @@ class TestScans:
         raw_providers.script["groq"] = "[]"
         asyncio.run(ai_service.scan_syllabus(b"%PDF", "pdf", 8, "Physics"))
         assert raw_providers.gemini.deleted == ["files/abc"]
+
+
+# ── Timeouts: a provider that hangs instead of failing ───────────────────────
+#
+# Without a deadline of our own, a stalled provider holds the request for the
+# SDK default (10 minutes for Anthropic) — long after the app stopped waiting
+# (180s for test generation, 120s for uploads) — and the fallback never runs.
+
+
+class TestTimeouts:
+    def test_hanging_claude_falls_to_gemini_within_its_cap(self, keys, providers, budgets):
+        budgets("test", budget=2.0, claude=0.2, gemini=0.5, groq=0.5)
+        providers.script["claude"] = HANG
+        result, elapsed = _timed(ai_service.generate_test_questions([], [], [], _params()))
+        assert result == QUESTIONS
+        assert providers.calls == ["claude", "gemini"]
+        assert elapsed < 0.6
+
+    def test_timeout_is_reported_with_its_duration(self, keys, providers, budgets):
+        budgets("test", budget=2.0, claude=0.1, gemini=0.1, groq=0.1)
+        for name in ("claude", "gemini", "groq"):
+            providers.script[name] = HANG
+        result, _ = _timed(ai_service.generate_test_questions([], [], [], _params()))
+        assert isinstance(result, RuntimeError)
+        assert "Claude: timed out after" in str(result)
+        assert "Groq: timed out after" in str(result)
+
+    def test_chain_stops_when_its_budget_is_spent(self, keys, providers, budgets):
+        """The budget is what the caller will wait. Once it's gone, starting
+        another provider only produces a result nobody receives."""
+        budgets("test", budget=0.5, claude=0.3, gemini=0.3, groq=0.3)
+        for name in ("claude", "gemini", "groq"):
+            providers.script[name] = HANG
+        result, elapsed = _timed(ai_service.generate_test_questions([], [], [], _params()))
+        assert isinstance(result, RuntimeError)
+        assert elapsed < 0.7
+        assert providers.calls == ["claude", "gemini"]
+        assert "Groq: skipped" in str(result)
+
+    def test_each_provider_is_handed_its_timeout(self, keys, providers, budgets):
+        """The same deadline goes to the SDK call, so the worker thread stops too
+        instead of streaming on (and billing) after the chain has moved on."""
+        budgets("test", budget=100, claude=40, gemini=20, groq=10)
+        providers.script["claude"] = RuntimeError("down")
+        providers.script["gemini"] = RuntimeError("down")
+        _generate()
+        assert 39 < providers.kwargs["claude"]["timeout"] <= 40
+        assert 19 < providers.kwargs["gemini"]["timeout"] <= 20
+        assert 9 < providers.kwargs["groq"]["timeout"] <= 10
+
+    def test_quiz_chain_times_out_claude_and_passes_sdk_timeouts(
+        self, keys, raw_providers, budgets
+    ):
+        budgets("quiz", budget=100, claude=0.2, gemini=30, groq=15)
+        raw_providers.script["claude"] = HANG
+        raw_providers.script["gemini"] = RuntimeError("spending cap")
+        result, elapsed = _timed(ai_service.generate_mcqs_from_text("slides", _params()))
+        assert result and not isinstance(result, Exception)
+        assert elapsed < 0.6
+        assert raw_providers.calls == ["claude", "gemini", "groq"]
+        gemini_ms = raw_providers.kwargs["gemini"]["config"].http_options.timeout
+        assert 29_000 < gemini_ms <= 30_000
+        assert 14 < raw_providers.kwargs["groq"]["timeout"] <= 15
+
+    def test_scan_times_out_a_stuck_gemini_call_and_uses_groq(
+        self, keys, raw_providers, budgets
+    ):
+        budgets("scan", budget=5, gemini=0.2, groq=2)
+        raw_providers.script["gemini"] = HANG
+        raw_providers.script["groq"] = json.dumps(META)
+        result, elapsed = _timed(ai_service.scan_document_metadata(b"%PDF", "pdf"))
+        assert result == META
+        assert elapsed < SYNC_HANG_SECONDS - 0.5
+        assert raw_providers.kwargs["gemini"]["config"].http_options.timeout <= 200
+
+    def test_syllabus_scan_times_out_a_stuck_gemini_call(self, keys, raw_providers, budgets):
+        budgets("scan", budget=5, gemini=0.2, groq=2)
+        raw_providers.script["gemini"] = HANG
+        raw_providers.script["groq"] = '["Force"]'
+        result, elapsed = _timed(ai_service.scan_syllabus(b"%PDF", "pdf", 8, "Physics"))
+        assert result == ["Force"]
+        assert elapsed < SYNC_HANG_SECONDS - 0.5
+
+    def test_deck_hanging_claude_falls_to_gemini(self, deck_providers, budgets):
+        budgets("deck", budget=5, claude=0.2, gemini=3)
+        deck_providers.script["claude"] = HANG
+        result, elapsed = _timed(
+            presentation_service._generate_text(b"%PDF", "pdf", "prompt")
+        )
+        assert result == "gemini text"
+        assert elapsed < 0.6
+        assert 2 < deck_providers.kwargs["gemini"]["timeout"] <= 3
+
+    def test_deck_timeout_is_shown_to_the_teacher_in_plain_words(self):
+        reason = presentation_service._friendly_failure_reason(
+            TimeoutError("timed out after 300s")
+        )
+        assert "too long" in reason

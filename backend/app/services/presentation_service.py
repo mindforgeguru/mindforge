@@ -199,6 +199,10 @@ def _friendly_failure_reason(exc: Exception) -> str:
     """
     msg = str(exc)
     low = msg.lower()
+    # First: "timed out after 400s" would otherwise match the "400" check below.
+    if "timed out" in low or "time budget" in low:
+        return ("The AI took too long to respond. Please try generating "
+                "again in a few minutes.")
     if "unsupported mime type" in low:
         return ("The chapter file isn't in a format the AI can read. "
                 "Please re-upload the chapter as a standard PDF.")
@@ -221,7 +225,7 @@ def _clamp(value: int, lo: int, hi: int) -> int:
 
 
 async def _gemini_call(file_bytes: Optional[bytes], ext: Optional[str],
-                       prompt: str) -> str:
+                       prompt: str, timeout: Optional[float] = None) -> str:
     """Run a single Gemini call. Uploads the file once if provided."""
     loop = asyncio.get_running_loop()
     client = ai_service._get_gemini_client()
@@ -239,7 +243,7 @@ async def _gemini_call(file_bytes: Optional[bytes], ext: Optional[str],
             lambda: client.models.generate_content(
                 model=settings.GEMINI_MODEL,
                 contents=contents,
-                config=_PRESENTATION_GEN_CONFIG,
+                config=ai_service._gemini_config(_PRESENTATION_GEN_CONFIG, timeout),
             ),
         )
         return response.text
@@ -267,12 +271,14 @@ async def _generate_text(
     ANTHROPIC_API_KEY is unset or the Claude call fails, falls back to the
     existing Gemini path so deck generation keeps working.
     """
+    clock = ai_service._ChainClock("deck")
     if settings.ANTHROPIC_API_KEY:
         try:
             files = [(file_bytes, ext)] if (file_bytes and ext) else None
-            text = await ai_service.claude_generate(
+            text = await clock.attempt("claude", lambda t: ai_service.claude_generate(
                 prompt, files=files, max_tokens=max_tokens, use_thinking=use_thinking,
-            )
+                timeout=t,
+            ))
             # Empty text only fails the JSON parse one level up, after the
             # chance to fall back has passed — so treat it as a failure here.
             if not (text or "").strip():
@@ -280,7 +286,8 @@ async def _generate_text(
             return text
         except Exception as exc:
             logger.warning("Claude presentation gen failed: %s. Falling back to Gemini.", exc)
-    return await _gemini_call(file_bytes, ext, prompt)
+    return await clock.attempt(
+        "gemini", lambda t: _gemini_call(file_bytes, ext, prompt, timeout=t))
 
 
 # ── Public API ───────────────────────────────────────────────────────────────

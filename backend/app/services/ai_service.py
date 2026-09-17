@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import anthropic
@@ -38,6 +39,55 @@ _GEMINI_GENERATION_CONFIG = genai_types.GenerateContentConfig(
 _groq_client = None
 
 _anthropic_client: Optional["anthropic.Anthropic"] = None
+
+# ─── Time budgets ─────────────────────────────────────────────────────────────
+# Seconds. `budget` is the whole chain; each provider attempt gets its own cap,
+# clamped to whatever budget is left. Without these a provider that stalls
+# instead of erroring holds the call for the SDK default (10 min for Anthropic)
+# and the fallback never runs.
+_TIME_BUDGETS: Dict[str, Dict[str, float]] = {
+    # A teacher waits on this request; the app gives up at 180s.
+    "test": {"budget": 170, "claude": 110, "gemini": 45, "groq": 25},
+    # Auto-quiz after a period log — background, nobody waits on it.
+    "quiz": {"budget": 480, "claude": 240, "gemini": 150, "groq": 60},
+    # Per uploaded file, inside a request the app gives up on at 120s.
+    "scan": {"budget": 40, "gemini": 25, "groq": 12},
+    # Deck generation, per call (outline, then each slide chunk) — background.
+    "deck": {"budget": 900, "claude": 600, "gemini": 300},
+}
+
+
+class _ChainClock:
+    """Deadline for one pass down a fallback chain."""
+
+    def __init__(self, chain: str):
+        self.limits = _TIME_BUDGETS[chain]
+        self.deadline = time.monotonic() + self.limits["budget"]
+
+    async def attempt(self, provider: str, make_call):
+        """Run `make_call(timeout)` under this provider's share of the budget.
+
+        The timeout is also handed to the call so the SDK request stops too:
+        cancelling the await can't stop a worker thread that is still streaming.
+        """
+        cap = self.limits[provider]
+        timeout = min(cap, self.deadline - time.monotonic())
+        # A sliver of budget can't produce an answer anyone will receive.
+        if timeout < 0.1 * cap:
+            raise TimeoutError("skipped, the chain's time budget is spent")
+        try:
+            return await asyncio.wait_for(make_call(timeout), timeout)
+        except TimeoutError:
+            raise TimeoutError(f"timed out after {timeout:.0f}s") from None
+
+
+def _gemini_config(base: "genai_types.GenerateContentConfig", timeout: Optional[float]):
+    """`base` with a request timeout (the SDK takes milliseconds)."""
+    if timeout is None:
+        return base
+    return base.model_copy(
+        update={"http_options": genai_types.HttpOptions(timeout=int(timeout * 1000))}
+    )
 
 # Beta header required to reference uploaded files by file_id in a message.
 _CLAUDE_FILES_BETA = "files-api-2025-04-14"
@@ -102,6 +152,7 @@ def _claude_stream_text(
     content_blocks: List[Any],
     max_tokens: int,
     use_thinking: bool,
+    timeout: Optional[float] = None,
 ) -> str:
     """Synchronous streaming Messages call → concatenated text.
 
@@ -118,6 +169,8 @@ def _claude_stream_text(
     )
     if use_thinking:
         kwargs["thinking"] = {"type": "adaptive"}
+    if timeout is not None:
+        kwargs["timeout"] = timeout
     with client.beta.messages.stream(**kwargs) as stream:
         msg = stream.get_final_message()
     return "".join(b.text for b in msg.content if b.type == "text")
@@ -128,6 +181,7 @@ async def claude_generate(
     files: Optional[List[Tuple[bytes, str]]] = None,
     max_tokens: int = 16000,
     use_thinking: bool = True,
+    timeout: Optional[float] = None,
 ) -> str:
     """One Claude call: upload any files, append the prompt, stream, return text.
 
@@ -151,7 +205,7 @@ async def claude_generate(
             content.append(block)
         content.append({"type": "text", "text": prompt})
         return await loop.run_in_executor(
-            None, lambda: _claude_stream_text(content, max_tokens, use_thinking)
+            None, lambda: _claude_stream_text(content, max_tokens, use_thinking, timeout)
         )
     finally:
         for fid in uploaded_ids:
@@ -245,6 +299,23 @@ async def _delete_gemini_upload(loop, uploaded) -> None:
         logger.warning("Gemini scan upload cleanup failed: %s", exc)
 
 
+async def _gemini_scan(loop, file_bytes: bytes, ext: str, prompt: str,
+                       timeout: float, uploaded: list):
+    """Upload + one Gemini call for a scan. The upload is appended to `uploaded`
+    as soon as it exists, so the caller can delete it even after a timeout."""
+    file = await loop.run_in_executor(None, lambda: _upload_file_to_gemini(file_bytes, ext))
+    uploaded.append(file)
+    client = _get_gemini_client()
+    return await loop.run_in_executor(
+        None,
+        lambda: client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=[file, prompt],
+            config=_gemini_config(_GEMINI_GENERATION_CONFIG, timeout),
+        ),
+    )
+
+
 async def scan_document_metadata(
     file_bytes: bytes,
     ext: str,
@@ -254,23 +325,13 @@ async def scan_document_metadata(
     Falls back to empty metadata if AI is unavailable.
     """
     loop = asyncio.get_running_loop()
+    clock = _ChainClock("scan")
 
     if settings.GEMINI_API_KEY:
-        uploaded = None
+        uploaded: list = []
         try:
-            uploaded = await loop.run_in_executor(
-                None, lambda: _upload_file_to_gemini(file_bytes, ext)
-            )
-            prompt = _build_scan_prompt()
-            client = _get_gemini_client()
-            response = await loop.run_in_executor(
-                None,
-                lambda: client.models.generate_content(
-                    model=settings.GEMINI_MODEL,
-                    contents=[uploaded, prompt],
-                    config=_GEMINI_GENERATION_CONFIG,
-                ),
-            )
+            response = await clock.attempt(
+                "gemini", lambda t: _gemini_scan(loop, file_bytes, ext, _build_scan_prompt(), t, uploaded))
             raw = response.text.strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
@@ -278,7 +339,7 @@ async def scan_document_metadata(
         except Exception as e:
             logger.warning(f"Gemini scan failed: {e}")
         finally:
-            await _delete_gemini_upload(loop, uploaded)
+            await _delete_gemini_upload(loop, uploaded[0] if uploaded else None)
 
     if settings.GROQ_API_KEY:
         try:
@@ -288,15 +349,16 @@ async def scan_document_metadata(
             prompt = _build_scan_prompt()
             full_prompt = f"SOURCE TEXT:\n---\n{source_text[:8000]}\n---\n\n{prompt}"
             client = _get_groq_client()
-            response = await loop.run_in_executor(
+            response = await clock.attempt("groq", lambda t: loop.run_in_executor(
                 None,
                 lambda: client.chat.completions.create(
                     model=settings.GROQ_MODEL,
                     messages=[{"role": "user", "content": full_prompt}],
                     temperature=0.2,
                     max_tokens=512,
+                    timeout=t,
                 )
-            )
+            ))
             raw = response.choices[0].message.content.strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
@@ -336,22 +398,13 @@ async def scan_syllabus(
     """
     loop = asyncio.get_running_loop()
     prompt = _build_syllabus_prompt(grade, subject)
+    clock = _ChainClock("scan")
 
     if settings.GEMINI_API_KEY:
-        uploaded = None
+        uploaded: list = []
         try:
-            uploaded = await loop.run_in_executor(
-                None, lambda: _upload_file_to_gemini(file_bytes, ext)
-            )
-            client = _get_gemini_client()
-            response = await loop.run_in_executor(
-                None,
-                lambda: client.models.generate_content(
-                    model=settings.GEMINI_MODEL,
-                    contents=[uploaded, prompt],
-                    config=_GEMINI_GENERATION_CONFIG,
-                ),
-            )
+            response = await clock.attempt(
+                "gemini", lambda t: _gemini_scan(loop, file_bytes, ext, prompt, t, uploaded))
             raw = response.text.strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
@@ -361,7 +414,7 @@ async def scan_syllabus(
         except Exception as e:
             logger.warning(f"Gemini syllabus scan failed: {e}")
         finally:
-            await _delete_gemini_upload(loop, uploaded)
+            await _delete_gemini_upload(loop, uploaded[0] if uploaded else None)
 
     if settings.GROQ_API_KEY:
         try:
@@ -370,15 +423,16 @@ async def scan_syllabus(
             )
             full_prompt = f"SOURCE TEXT:\n---\n{source_text[:8000]}\n---\n\n{prompt}"
             client = _get_groq_client()
-            response = await loop.run_in_executor(
+            response = await clock.attempt("groq", lambda t: loop.run_in_executor(
                 None,
                 lambda: client.chat.completions.create(
                     model=settings.GROQ_MODEL,
                     messages=[{"role": "user", "content": full_prompt}],
                     temperature=0.1,
                     max_tokens=1024,
+                    timeout=t,
                 )
-            )
+            ))
             raw = response.choices[0].message.content.strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
@@ -689,6 +743,7 @@ async def _generate_with_claude(
     old_paper_files: List[Tuple[bytes, str]],
     syllabus_chapters: List[str],
     params: Any,
+    timeout: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """Generate test questions with Claude.
 
@@ -757,7 +812,7 @@ async def _generate_with_claude(
                         "text": _build_prompt(params, syllabus_chapters=syllabus_chapters)})
 
         raw_text = await loop.run_in_executor(
-            None, lambda: _claude_stream_text(content, 16000, True)
+            None, lambda: _claude_stream_text(content, 16000, True, timeout)
         )
         if not raw_text:
             raise ValueError("Claude returned an empty response.")
@@ -804,6 +859,7 @@ async def _generate_with_gemini(
     old_paper_files: List[Tuple[bytes, str]],
     syllabus_chapters: List[str],
     params: Any,
+    timeout: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     loop = asyncio.get_running_loop()
     all_uploaded: List[Any] = []
@@ -876,7 +932,7 @@ async def _generate_with_gemini(
             lambda: client.models.generate_content(
                 model=settings.GEMINI_MODEL,
                 contents=content_parts,
-                config=_GEMINI_GENERATION_CONFIG,
+                config=_gemini_config(_GEMINI_GENERATION_CONFIG, timeout),
             ),
         )
         # response.text raises ValueError if the response was blocked by safety
@@ -915,6 +971,7 @@ async def _generate_with_groq(
     old_paper_files: List[Tuple[bytes, str]],
     syllabus_chapters: List[str],
     params: Any,
+    timeout: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     loop = asyncio.get_running_loop()
 
@@ -951,6 +1008,7 @@ async def _generate_with_groq(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
             max_tokens=16384,
+            timeout=timeout,
         )
     )
     raw = response.choices[0].message.content
@@ -986,10 +1044,13 @@ async def generate_test_questions(
     of silently receiving stub questions.
     """
     errors: List[str] = []
+    clock = _ChainClock("test")
+    sources = (chapter_files, old_paper_files, syllabus_chapters, params)
 
     if settings.ANTHROPIC_API_KEY:
         try:
-            return _require_questions(await _generate_with_claude(chapter_files, old_paper_files, syllabus_chapters, params))
+            return _require_questions(await clock.attempt(
+                "claude", lambda t: _generate_with_claude(*sources, timeout=t)))
         except Exception as e:
             msg = f"Claude: {e}"
             logger.warning(f"{msg}. Trying Gemini...")
@@ -999,7 +1060,8 @@ async def generate_test_questions(
 
     if settings.GEMINI_API_KEY:
         try:
-            return _require_questions(await _generate_with_gemini(chapter_files, old_paper_files, syllabus_chapters, params))
+            return _require_questions(await clock.attempt(
+                "gemini", lambda t: _generate_with_gemini(*sources, timeout=t)))
         except Exception as e:
             msg = f"Gemini: {e}"
             logger.warning(f"{msg}. Trying Groq...")
@@ -1009,7 +1071,8 @@ async def generate_test_questions(
 
     if settings.GROQ_API_KEY:
         try:
-            return _require_questions(await _generate_with_groq(chapter_files, old_paper_files, syllabus_chapters, params))
+            return _require_questions(await clock.attempt(
+                "groq", lambda t: _generate_with_groq(*sources, timeout=t)))
         except Exception as e:
             msg = f"Groq: {e}"
             logger.error(msg)
@@ -1034,10 +1097,12 @@ async def generate_mcqs_from_text(
     prompt = _build_prompt(params, chapter_text=chapter_text)
     errors: List[str] = []
     loop = asyncio.get_running_loop()
+    clock = _ChainClock("quiz")
 
     if settings.ANTHROPIC_API_KEY:
         try:
-            raw_text = await claude_generate(prompt, max_tokens=16000)
+            raw_text = await clock.attempt(
+                "claude", lambda t: claude_generate(prompt, max_tokens=16000, timeout=t))
             if not raw_text:
                 raise ValueError("Claude returned an empty response.")
             questions = _parse_questions(raw_text, params)
@@ -1053,14 +1118,14 @@ async def generate_mcqs_from_text(
     if settings.GEMINI_API_KEY:
         try:
             client = _get_gemini_client()
-            response = await loop.run_in_executor(
+            response = await clock.attempt("gemini", lambda t: loop.run_in_executor(
                 None,
                 lambda: client.models.generate_content(
                     model=settings.GEMINI_MODEL,
                     contents=[prompt],
-                    config=_GEMINI_GENERATION_CONFIG,
+                    config=_gemini_config(_GEMINI_GENERATION_CONFIG, t),
                 ),
-            )
+            ))
             try:
                 raw_text = response.text
             except ValueError as ve:
@@ -1086,15 +1151,16 @@ async def generate_mcqs_from_text(
     if settings.GROQ_API_KEY:
         try:
             client = _get_groq_client()
-            response = await loop.run_in_executor(
+            response = await clock.attempt("groq", lambda t: loop.run_in_executor(
                 None,
                 lambda: client.chat.completions.create(
                     model=settings.GROQ_MODEL,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.4,
                     max_tokens=16384,
+                    timeout=t,
                 ),
-            )
+            ))
             raw = response.choices[0].message.content
             questions = _parse_questions(raw, params)
             logger.info(f"Groq generated {len(questions)} questions from text")
