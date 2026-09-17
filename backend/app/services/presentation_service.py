@@ -270,9 +270,14 @@ async def _generate_text(
     if settings.ANTHROPIC_API_KEY:
         try:
             files = [(file_bytes, ext)] if (file_bytes and ext) else None
-            return await ai_service.claude_generate(
+            text = await ai_service.claude_generate(
                 prompt, files=files, max_tokens=max_tokens, use_thinking=use_thinking,
             )
+            # Empty text only fails the JSON parse one level up, after the
+            # chance to fall back has passed — so treat it as a failure here.
+            if not (text or "").strip():
+                raise ValueError("Claude returned an empty response.")
+            return text
         except Exception as exc:
             logger.warning("Claude presentation gen failed: %s. Falling back to Gemini.", exc)
     return await _gemini_call(file_bytes, ext, prompt)

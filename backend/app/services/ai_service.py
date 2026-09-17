@@ -230,6 +230,21 @@ Respond ONLY with a valid JSON object — no markdown, no explanation.
 JSON:"""
 
 
+async def _delete_gemini_upload(loop, uploaded) -> None:
+    """Delete a scan's uploaded file whether or not the call using it worked.
+
+    The school's document is already in Google's storage by then; a failed
+    generation is no reason to leave it there.
+    """
+    if uploaded is None:
+        return
+    try:
+        client = _get_gemini_client()
+        await loop.run_in_executor(None, lambda: client.files.delete(name=uploaded.name))
+    except Exception as exc:
+        logger.warning("Gemini scan upload cleanup failed: %s", exc)
+
+
 async def scan_document_metadata(
     file_bytes: bytes,
     ext: str,
@@ -241,6 +256,7 @@ async def scan_document_metadata(
     loop = asyncio.get_running_loop()
 
     if settings.GEMINI_API_KEY:
+        uploaded = None
         try:
             uploaded = await loop.run_in_executor(
                 None, lambda: _upload_file_to_gemini(file_bytes, ext)
@@ -255,15 +271,14 @@ async def scan_document_metadata(
                     config=_GEMINI_GENERATION_CONFIG,
                 ),
             )
-            await loop.run_in_executor(
-                None, lambda: client.files.delete(name=uploaded.name)
-            )
             raw = response.text.strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
             return json.loads(raw)
         except Exception as e:
             logger.warning(f"Gemini scan failed: {e}")
+        finally:
+            await _delete_gemini_upload(loop, uploaded)
 
     if settings.GROQ_API_KEY:
         try:
@@ -323,6 +338,7 @@ async def scan_syllabus(
     prompt = _build_syllabus_prompt(grade, subject)
 
     if settings.GEMINI_API_KEY:
+        uploaded = None
         try:
             uploaded = await loop.run_in_executor(
                 None, lambda: _upload_file_to_gemini(file_bytes, ext)
@@ -336,9 +352,6 @@ async def scan_syllabus(
                     config=_GEMINI_GENERATION_CONFIG,
                 ),
             )
-            await loop.run_in_executor(
-                None, lambda: client.files.delete(name=uploaded.name)
-            )
             raw = response.text.strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
@@ -347,6 +360,8 @@ async def scan_syllabus(
                 return [str(c) for c in result if c]
         except Exception as e:
             logger.warning(f"Gemini syllabus scan failed: {e}")
+        finally:
+            await _delete_gemini_upload(loop, uploaded)
 
     if settings.GROQ_API_KEY:
         try:
@@ -946,6 +961,18 @@ async def _generate_with_groq(
 
 # ─── Main entry point ─────────────────────────────────────────────────────────
 
+def _require_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Treat an answer with nothing usable in it as a provider failure.
+
+    `_parse_questions` drops blank and link-bearing questions, so a provider can
+    return well-formed JSON that yields none. Raising here lets the chain try the
+    next provider instead of saving a test with no questions.
+    """
+    if not questions:
+        raise ValueError("returned no usable questions")
+    return questions
+
+
 async def generate_test_questions(
     chapter_files: List[Tuple[bytes, str]],
     old_paper_files: List[Tuple[bytes, str]],
@@ -962,7 +989,7 @@ async def generate_test_questions(
 
     if settings.ANTHROPIC_API_KEY:
         try:
-            return await _generate_with_claude(chapter_files, old_paper_files, syllabus_chapters, params)
+            return _require_questions(await _generate_with_claude(chapter_files, old_paper_files, syllabus_chapters, params))
         except Exception as e:
             msg = f"Claude: {e}"
             logger.warning(f"{msg}. Trying Gemini...")
@@ -972,7 +999,7 @@ async def generate_test_questions(
 
     if settings.GEMINI_API_KEY:
         try:
-            return await _generate_with_gemini(chapter_files, old_paper_files, syllabus_chapters, params)
+            return _require_questions(await _generate_with_gemini(chapter_files, old_paper_files, syllabus_chapters, params))
         except Exception as e:
             msg = f"Gemini: {e}"
             logger.warning(f"{msg}. Trying Groq...")
@@ -982,7 +1009,7 @@ async def generate_test_questions(
 
     if settings.GROQ_API_KEY:
         try:
-            return await _generate_with_groq(chapter_files, old_paper_files, syllabus_chapters, params)
+            return _require_questions(await _generate_with_groq(chapter_files, old_paper_files, syllabus_chapters, params))
         except Exception as e:
             msg = f"Groq: {e}"
             logger.error(msg)
@@ -1015,7 +1042,7 @@ async def generate_mcqs_from_text(
                 raise ValueError("Claude returned an empty response.")
             questions = _parse_questions(raw_text, params)
             logger.info(f"Claude generated {len(questions)} questions from text")
-            return questions
+            return _require_questions(questions)
         except Exception as e:
             msg = f"Claude: {e}"
             logger.warning(f"{msg}. Trying Gemini...")
@@ -1048,7 +1075,7 @@ async def generate_mcqs_from_text(
                 raise ValueError("Gemini returned an empty response.")
             questions = _parse_questions(raw_text, params)
             logger.info(f"Gemini generated {len(questions)} questions from text")
-            return questions
+            return _require_questions(questions)
         except Exception as e:
             msg = f"Gemini: {e}"
             logger.warning(f"{msg}. Trying Groq...")
@@ -1071,7 +1098,7 @@ async def generate_mcqs_from_text(
             raw = response.choices[0].message.content
             questions = _parse_questions(raw, params)
             logger.info(f"Groq generated {len(questions)} questions from text")
-            return questions
+            return _require_questions(questions)
         except Exception as e:
             msg = f"Groq: {e}"
             logger.error(msg)
