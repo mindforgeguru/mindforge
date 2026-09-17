@@ -163,14 +163,19 @@ async def change_admin_mpin(
     current_admin: User = Depends(get_current_admin),
 ):
     """Change the admin's MPIN after verifying the current one."""
-    from app.core.security import hash_mpin, verify_mpin
+    from app.core.security import (
+        hash_mpin, issue_session, revoke_all_sessions, verify_mpin,
+    )
     if not verify_mpin(payload.current_mpin, current_admin.mpin_hash):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
     result = await db.execute(select(User).where(User.id == current_admin.id))
     admin_user = result.scalar_one()
     admin_user.mpin_hash = hash_mpin(payload.new_mpin)
+    # End every session, including this one, then hand the caller a new pair —
+    # changing a suspected-leaked MPIN has to kick whoever else holds a token.
+    revoke_all_sessions(admin_user)
     await db.commit()
-    return {"message": "MPIN updated successfully."}
+    return {"message": "MPIN updated successfully.", **issue_session(admin_user)}
 
 
 # ─── User Management ──────────────────────────────────────────────────────────
@@ -341,8 +346,10 @@ async def edit_user(
 
     # Reset MPIN
     if payload.new_mpin:
-        from app.core.security import hash_mpin
+        from app.core.security import hash_mpin, revoke_all_sessions
         user.mpin_hash = hash_mpin(payload.new_mpin)
+        # A reset is how a leaked MPIN is recovered; the sessions it opened go too.
+        revoke_all_sessions(user)
 
     # Handle role change — migrate profiles as needed
     old_role = user.role

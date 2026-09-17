@@ -329,6 +329,29 @@ app.include_router(presentations.router, prefix="/api/presentations", tags=["Aut
 
 
 # ─── WebSocket endpoint ───────────────────────────────────────────────────────
+async def _ws_account_allows(user_id: int, payload: dict) -> bool:
+    """The account checks the HTTP dependency makes on every request.
+
+    The socket authenticates on its own, so without these a deleted user, or a
+    session ended by an MPIN reset, keeps receiving live events for the rest of
+    the token's lifetime.
+    """
+    from sqlalchemy import select
+    from app.core.database import AsyncSessionLocal
+    from app.core.security import token_predates_revocation
+    from app.models.user import User
+
+    async with AsyncSessionLocal() as db:
+        user = (await db.execute(
+            select(User).where(User.id == user_id, User.deleted_at.is_(None))
+        )).scalar_one_or_none()
+    return (
+        user is not None
+        and user.is_approved
+        and not token_predates_revocation(payload, user)
+    )
+
+
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -373,6 +396,10 @@ async def websocket_endpoint(
 
     jti = payload.get("jti")
     if jti and await redis_manager.is_access_jti_revoked(jti):
+        await websocket.close(code=POLICY_VIOLATION)
+        return
+
+    if not await _ws_account_allows(user_id, payload):
         await websocket.close(code=POLICY_VIOLATION)
         return
 

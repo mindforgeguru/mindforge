@@ -7,7 +7,9 @@ Verifies that the WebSocket endpoint:
   3. Rejects a refresh token (wrong `type` claim).
   4. Rejects a valid access token whose `sub` does not match the URL user_id.
   5. Rejects a valid token whose JTI has been blacklisted (logout / delete).
-  6. ACCEPTS a valid access token whose `sub` matches user_id and is not revoked.
+  6. Rejects when the account fails the DB checks (deleted, unapproved, or
+     the token predates an MPIN reset).
+  7. ACCEPTS a valid access token whose `sub` matches user_id and is not revoked.
 
 We call websocket_endpoint() directly with a mock WebSocket. No real socket,
 no DB, no Redis required — same pattern as test_logout_handler.py.
@@ -99,14 +101,15 @@ def _fake_ws():
     return ws
 
 
-async def _call_endpoint(token: str, user_id: int):
+async def _call_endpoint(token: str, user_id: int, account_ok: bool = True):
     """Invoke the endpoint function with a mock WS and given args."""
     # Import lazily so all stubs are in place
     from main import websocket_endpoint
     ws = _fake_ws()
     # ws_manager is referenced inside the function via module-level import;
     # patch it to a no-op so the success path doesn't try real Redis pubsub.
-    with patch("main.ws_manager") as wsm:
+    with patch("main.ws_manager") as wsm, \
+         patch("main._ws_account_allows", AsyncMock(return_value=account_ok)):
         wsm.connect = AsyncMock()
         wsm.disconnect = AsyncMock()
         await websocket_endpoint(websocket=ws, user_id=user_id, token=token)
@@ -166,3 +169,12 @@ def test_valid_matching_token_is_accepted():
         assert kwargs.get("code") != POLICY_VIOLATION, (
             "Valid token was rejected by the auth gate — this is a regression."
         )
+
+
+def test_account_that_fails_db_checks_is_rejected_with_1008():
+    """A cryptographically valid token for a deleted user, or one issued before
+    an MPIN reset, must not open a socket. The DB side is covered end to end by
+    tests_integration/test_session_revocation.py."""
+    token = create_access_token(data={"sub": "42", "role": "student"})
+    ws = asyncio.run(_call_endpoint(token=token, user_id=42, account_ok=False))
+    ws.close.assert_awaited_once_with(code=POLICY_VIOLATION)

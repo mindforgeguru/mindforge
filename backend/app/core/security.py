@@ -77,7 +77,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     expire = datetime.now(timezone.utc) + (
         expires_delta if expires_delta else timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     )
-    to_encode.update({"exp": expire, "type": "access", "jti": str(uuid.uuid4())})
+    to_encode.update({
+        "exp": expire, "iat": _issued_at(), "type": "access", "jti": str(uuid.uuid4()),
+    })
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -87,8 +89,51 @@ def create_refresh_token(data: dict) -> str:
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
-    to_encode.update({"exp": expire, "type": "refresh", "jti": str(uuid.uuid4())})
+    to_encode.update({
+        "exp": expire, "iat": _issued_at(), "type": "refresh", "jti": str(uuid.uuid4()),
+    })
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
+def _issued_at() -> float:
+    # Sub-second on purpose: a whole-second iat would let a token minted in the
+    # same second as a revocation survive it.
+    return datetime.now(timezone.utc).timestamp()
+
+
+def revoke_all_sessions(user) -> None:
+    """End every session `user` has — each token issued before now stops working.
+
+    The caller commits. Use on an MPIN change or reset: a leaked MPIN's sessions
+    must not outlive the MPIN.
+    """
+    user.tokens_valid_after = datetime.now(timezone.utc)
+
+
+def issue_session(user) -> dict:
+    """A fresh access + refresh pair for `user`, e.g. to keep the caller signed
+    in after revoke_all_sessions ended their own session along with the rest."""
+    data = {"sub": str(user.id), "role": user.role, "school_id": user.school_id}
+    return {
+        "access_token": create_access_token(data=data),
+        "refresh_token": create_refresh_token(data=data),
+        "token_type": "bearer",
+    }
+
+
+def token_predates_revocation(payload: dict, user) -> bool:
+    """True when the token was issued before the user's sessions were revoked.
+
+    A token with no iat predates this mechanism, so it counts as issued at 0 and
+    is rejected once any revocation has happened.
+    """
+    if user.tokens_valid_after is None:
+        return False
+    try:
+        issued = float(payload.get("iat") or 0)
+    except (TypeError, ValueError):
+        issued = 0.0
+    return issued < user.tokens_valid_after.timestamp()
 
 
 def decode_access_token(token: str) -> dict:
@@ -140,7 +185,7 @@ async def _get_current_user(
         select(User).where(User.id == user_id, User.deleted_at.is_(None))
     )
     user = result.scalar_one_or_none()
-    if user is None:
+    if user is None or token_predates_revocation(payload, user):
         raise credentials_exception
     if not user.is_approved:
         raise HTTPException(

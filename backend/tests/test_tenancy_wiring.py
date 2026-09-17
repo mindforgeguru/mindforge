@@ -41,6 +41,7 @@ class _FakeUser:
         self.is_approved = True
         self.is_active = True
         self.deleted_at = None
+        self.tokens_valid_after = None
 
 
 def _db_returning(user):

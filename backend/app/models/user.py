@@ -72,6 +72,11 @@ class User(Base):
     fcm_token: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     # Soft delete: set to timestamp when user is revoked/deleted
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Tokens issued before this are rejected — set on an MPIN change or reset
+    # to end every existing session (see migration 037).
+    tokens_valid_after: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # ── MFA (admin and owner only; see migration 036) ─────────────────────────
     # mfa_secret is stored as-is because TOTP verification needs the original

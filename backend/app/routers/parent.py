@@ -47,7 +47,9 @@ async def change_parent_mpin(
     ``AdminMpinUpdate`` validates the shape of ``current_mpin`` and enforces the
     weak-MPIN blocklist on ``new_mpin`` (422 on a predictable PIN) — the same
     strength gate registration and admin resets use."""
-    from app.core.security import hash_mpin, verify_mpin
+    from app.core.security import (
+        hash_mpin, issue_session, revoke_all_sessions, verify_mpin,
+    )
 
     # current_mpin is already shape-validated (6 digits) by the schema, so the
     # bcrypt call can't overflow.
@@ -57,8 +59,11 @@ async def change_parent_mpin(
     result = await db.execute(select(User).where(User.id == current_parent.id))
     parent_user = result.scalar_one()
     parent_user.mpin_hash = hash_mpin(payload.new_mpin)
+    # End every session, including this one, then hand the caller a new pair —
+    # changing a suspected-leaked MPIN has to kick whoever else holds a token.
+    revoke_all_sessions(parent_user)
     await db.commit()
-    return {"message": "MPIN updated successfully."}
+    return {"message": "MPIN updated successfully.", **issue_session(parent_user)}
 
 
 async def _get_child_profile(parent: User, db: AsyncSession) -> StudentProfile:

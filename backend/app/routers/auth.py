@@ -21,7 +21,7 @@ from app.core.config import settings
 from app.core.security import (
     hash_mpin, verify_mpin, verify_mpin_constant_time,
     create_access_token, create_refresh_token,
-    decode_access_token, get_current_user
+    decode_access_token, get_current_user, token_predates_revocation,
 )
 from app.models.academic_year import AcademicYear
 from app.models.school import School
@@ -559,6 +559,10 @@ async def refresh_access_token(
     )
     user = result.scalar_one_or_none()
     if user is None or not user.is_approved or not user.is_active:
+        raise credentials_exception
+    # An MPIN change or reset since this token was issued ends it — otherwise
+    # rotation would keep a leaked MPIN's session alive for the full 30 days.
+    if token_predates_revocation(data, user):
         raise credentials_exception
     # Refuse to mint a new session for a suspended school. Without this the
     # rotation below would hand out a fresh 30-day refresh token, letting a

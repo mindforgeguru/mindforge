@@ -57,6 +57,23 @@ class ApiClient {
     if (refreshToken != null) _cachedRefreshToken = refreshToken;
   }
 
+  /// An MPIN change ends every session server-side, this one included, and
+  /// the response carries a replacement pair. Without storing it the next
+  /// request 401s and the user is logged out for changing their MPIN.
+  Future<void> _adoptReissuedSession(dynamic body) async {
+    if (body is! Map) return;
+    final token = body['access_token'] as String?;
+    final refresh = body['refresh_token'] as String?;
+    if (token == null) return;
+    setCachedTokens(token: token, refreshToken: refresh);
+    try {
+      await _storage.write(key: AppConstants.tokenStorageKey, value: token);
+      if (refresh != null) {
+        await _storage.write(key: AppConstants.refreshTokenStorageKey, value: refresh);
+      }
+    } catch (_) {}
+  }
+
   /// Clear the cache on logout.
   void clearCachedTokens() {
     _cachedToken = null;
@@ -456,10 +473,11 @@ class ApiClient {
 
   Future<void> changeAdminMpin(
       String currentMpin, String newMpin) async {
-    await _dio.put('/admin/profile/mpin', data: {
+    final res = await _dio.put('/admin/profile/mpin', data: {
       'current_mpin': currentMpin,
       'new_mpin': newMpin,
     });
+    await _adoptReissuedSession(res.data);
   }
 
   Future<void> editAdminUsername(String newUsername) async {
@@ -479,10 +497,11 @@ class ApiClient {
 
   Future<void> changeTeacherMpin(
       String currentMpin, String newMpin) async {
-    await _dio.put('/teacher/profile/mpin', data: {
+    final res = await _dio.put('/teacher/profile/mpin', data: {
       'current_mpin': currentMpin,
       'new_mpin': newMpin,
     });
+    await _adoptReissuedSession(res.data);
   }
 
   Future<List<dynamic>> getStudentsInGrade(int grade) async {
@@ -724,18 +743,20 @@ class ApiClient {
 
   Future<void> changeStudentMpin(
       String currentMpin, String newMpin) async {
-    await _dio.put('/student/profile/mpin', data: {
+    final res = await _dio.put('/student/profile/mpin', data: {
       'current_mpin': currentMpin,
       'new_mpin': newMpin,
     });
+    await _adoptReissuedSession(res.data);
   }
 
   Future<void> changeParentMpin(
       String currentMpin, String newMpin) async {
-    await _dio.put('/parent/profile/mpin', data: {
+    final res = await _dio.put('/parent/profile/mpin', data: {
       'current_mpin': currentMpin,
       'new_mpin': newMpin,
     });
+    await _adoptReissuedSession(res.data);
   }
 
   Future<Map<String, dynamic>> getStudentProfile() async {
