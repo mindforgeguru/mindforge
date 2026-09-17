@@ -37,7 +37,7 @@ import pytest
 import websockets
 from jose import jwt
 
-from .conftest import BASE_URL, DB_DSN, PREFIX, TEST_MPIN, auth, login
+from .conftest import BASE_URL, DB_DSN, PREFIX, auth
 
 WS_BASE = BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
 

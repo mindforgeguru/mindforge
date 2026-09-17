@@ -22,7 +22,6 @@ import uuid
 import asyncpg
 import httpx
 import pytest
-import pytest_asyncio
 
 BASE_URL = os.environ.get("MF_TEST_BASE_URL", "http://127.0.0.1:8000")
 DB_DSN = os.environ.get(
