@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.mask_utils import mask_phone, mask_email
 from app.core.redis_client import redis_manager
+from app.core.school_time import school_day_start, school_today
 from app.core.security import get_current_teacher
 from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.models.attendance import Attendance, AttendanceStatus
@@ -1513,10 +1514,10 @@ async def _pending_hw_review_ids(
 
     Returns [] when the most recent HW is fully reviewed, when no HW has
     ever been created for this grade, or when the grade has no roster.
+
+    `today` is the school-local date (see core/school_time.py).
     """
-    today_start = datetime.combine(
-        today, datetime.min.time(), tzinfo=timezone.utc
-    )
+    today_start = school_day_start(today)
 
     latest = (await db.execute(
         select(Homework)
@@ -1559,6 +1560,30 @@ async def _pending_hw_review_ids(
     return [latest.id]
 
 
+async def _attendance_required(
+    grade: int,
+    school_id: int,
+    day: date,
+    db: AsyncSession,
+) -> bool:
+    """Whether attendance can be (and so must be) taken for this grade on
+    `day`: true iff the grade has at least one non-holiday period scheduled.
+
+    Same rule as `attendance_applicable` in the daily workflow. On a holiday,
+    or a day the grade has no lessons, nobody takes attendance — demanding it
+    before homework review would leave the review unrecordable, and the
+    review gate on new homework closed, for the whole day.
+    """
+    return (await db.execute(
+        select(TimetableSlot.id).where(
+            TimetableSlot.grade == grade,
+            TimetableSlot.school_id == school_id,
+            TimetableSlot.slot_date == day,
+            TimetableSlot.is_holiday == False,  # noqa: E712
+        ).limit(1)
+    )).scalar_one_or_none() is not None
+
+
 @router.post("/homework", response_model=HomeworkResponse, status_code=status.HTTP_201_CREATED)
 async def create_homework(
     payload: HomeworkCreate,
@@ -1567,12 +1592,12 @@ async def create_homework(
 ):
     """Create a homework assignment for a grade.
 
-    Workflow gate: refuses (409) if this teacher has any homework for the
-    same grade due on/before today whose completion review is unfinished.
-    The teacher must close out yesterday's review before assigning the next
-    day's work.
+    Workflow gate: refuses (409) if the grade's most recent homework from a
+    previous day has an unfinished completion review (see
+    _pending_hw_review_ids). The teacher must close out yesterday's review
+    before assigning the next day's work.
     """
-    today = datetime.now(timezone.utc).date()
+    today = school_today()
     pending = await _pending_hw_review_ids(
         payload.grade, current_teacher.school_id, today, db
     )
@@ -1636,7 +1661,7 @@ async def mark_no_homework(
     student-facing assignment. Subject to the same review gate as a real
     assignment — yesterday's review must be closed out first.
     """
-    today = datetime.now(timezone.utc).date()
+    today = school_today()
     pending = await _pending_hw_review_ids(
         payload.grade, current_teacher.school_id, today, db
     )
@@ -1801,8 +1826,12 @@ async def _build_completions_response(
     # to class, so we lock them as Incomplete on the teacher screen.
     # The HW's due_date is informational only — actual review happens on
     # whatever day the teacher next takes attendance, which may be days
-    # later if there have been holidays in between.
-    attendance_date = datetime.now(timezone.utc).date()
+    # later if there have been holidays in between. On a holiday / no-class
+    # day there is no attendance to take, so it isn't required.
+    attendance_date = school_today()
+    attendance_required = await _attendance_required(
+        hw.grade, teacher.school_id, attendance_date, db
+    )
     att_rows = (await db.execute(
         select(Attendance).where(
             Attendance.grade == hw.grade,
@@ -1833,6 +1862,7 @@ async def _build_completions_response(
     return HomeworkCompletionsResponse(
         attendance_date=attendance_date.isoformat(),
         attendance_recorded=attendance_recorded,
+        attendance_required=attendance_required,
         students=students_out,
     )
 
@@ -1869,7 +1899,9 @@ async def upsert_homework_completions(
     them):
       1. Attendance for today must be recorded for this grade first —
          otherwise return 400. Workflow tasks are sequential: HW review
-         depends on attendance.
+         depends on attendance. Not applied on a holiday or a day the grade
+         has no lessons (see _attendance_required) — there is no attendance
+         to take, and requiring it would deadlock the review gate.
       2. Students marked absent today are forced to completed=False
          regardless of payload. They couldn't have done the homework.
 
@@ -1913,7 +1945,7 @@ async def upsert_homework_completions(
             ),
         )
 
-    attendance_date = datetime.now(timezone.utc).date()
+    attendance_date = school_today()
     att_rows = (await db.execute(
         select(Attendance).where(
             Attendance.grade == hw.grade,
@@ -1921,7 +1953,9 @@ async def upsert_homework_completions(
             Attendance.date == attendance_date,
         )
     )).scalars().all()
-    if not att_rows:
+    if not att_rows and await _attendance_required(
+        hw.grade, current_teacher.school_id, attendance_date, db
+    ):
         raise HTTPException(
             status_code=400,
             detail=(
@@ -1974,8 +2008,7 @@ async def upsert_homework_completions(
 
     # Award homework XP — on time if marked on or before due_date, late
     # otherwise. No due_date counts as on-time.
-    today_date = datetime.now(timezone.utc).date()
-    is_on_time = (hw.due_date is None) or (today_date <= hw.due_date)
+    is_on_time = (hw.due_date is None) or (attendance_date <= hw.due_date)
     hw_reason = XPReason.HOMEWORK_ON_TIME if is_on_time else XPReason.HOMEWORK_LATE
     hw_amount = (
         xp_service.HOMEWORK_ON_TIME_XP if is_on_time
@@ -2041,11 +2074,9 @@ async def get_today_workflow(
     been created and every slot is flagged as a holiday — a grade with
     no slots today is "timetable not created yet", not a holiday.
     """
-    today = datetime.now(timezone.utc).date()
+    today = school_today()
     lookback = today - timedelta(days=14)
-    today_start = datetime.combine(
-        today, datetime.min.time(), tzinfo=timezone.utc
-    )
+    today_start = school_day_start(today)
 
     # Today's slots across all teachers — workflow is grade-wide, so
     # any teacher's slot for the grade satisfies "timetable created".

@@ -12,7 +12,7 @@ Falsified: widen the window to `timedelta(days=0)` (reject the far-past line) or
 drop the `> today` check and the corresponding test flips.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -20,6 +20,8 @@ from app.core.attendance_window import (
     ATTENDANCE_BACKDATE_LIMIT_DAYS as WINDOW,
     attendance_date_reason,
 )
+from app.core import school_time
+from app.core.school_time import school_today
 from app.schemas.attendance import AttendanceBulkCreate
 
 TODAY = date(2026, 8, 24)
@@ -64,18 +66,28 @@ def _bulk(d: date) -> AttendanceBulkCreate:
 
 
 def test_schema_accepts_today():
-    # Uses the real clock: today must always parse.
-    assert _bulk(date.today()).date == date.today()
+    # Uses the real clock: the school's today must always parse.
+    assert _bulk(school_today()).date == school_today()
 
 
 def test_schema_rejects_a_future_date():
     with pytest.raises(ValueError):
-        _bulk(date.today() + timedelta(days=1))
+        _bulk(school_today() + timedelta(days=1))
 
 
 def test_schema_rejects_far_backdating():
     with pytest.raises(ValueError):
-        _bulk(date.today() - timedelta(days=WINDOW + 5))
+        _bulk(school_today() - timedelta(days=WINDOW + 5))
+
+
+def test_schema_accepts_the_school_day_before_utc_catches_up(monkeypatch):
+    # 01:30 IST on the 9th is still the 8th in UTC. A teacher marking the
+    # morning's attendance must not be told the 9th is "a future date".
+    monkeypatch.setattr(
+        school_time, "_utc_now",
+        lambda: datetime(2026, 10, 8, 20, 0, tzinfo=timezone.utc),
+    )
+    assert _bulk(date(2026, 10, 9)).date == date(2026, 10, 9)
 
 
 def test_the_window_is_the_agreed_two_weeks():

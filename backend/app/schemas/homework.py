@@ -74,9 +74,13 @@ class HomeworkCompletionsResponse(BaseModel):
     """Wraps the per-student rows with metadata the teacher screen needs:
     which date attendance was checked against, and whether attendance has
     been recorded at all (to gate the Submit button).
+
+    `attendance_required` is False on a holiday or a day the grade has no
+    lessons: there is no attendance to take, so Submit must not wait for it.
     """
     attendance_date: str  # YYYY-MM-DD
     attendance_recorded: bool
+    attendance_required: bool = True
     students: List[HomeworkCompletionDetail]
 
 
