@@ -67,7 +67,11 @@ flutter test integration_test/
 
 > **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import (as of 2026-10-09 also `test_ai_fallback_chain.py`, `test_old_test_upload.py` and `test_subjects.py` — the host's `google-genai` lacks `types.GenerateContentConfig`) — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **NOT RE-RUN 2026-10-09 (last run 2026-09-13)**
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-09 after the PyJWT migration: 412 PASS**
+
+2026-10-09: every `tests/test_*.py` file in its own process, on the host in a Python 3.12 venv carrying PyJWT 2.15.1 plus `google-genai==2.2.0` and `sentry-sdk` (the host's own `python3.12` can't import 6 files — see the note above). **412 passed, 0 failed**, including the new `test_jwt_library.py` (11) and `test_owner_school_create.py` (2). Not re-run in the container this time: the running `mindforge_backend` was serving another worktree (§10 item 21).
+
+Previous run (2026-09-13):
 
 | Suite | Result |
 |---|---|
@@ -443,6 +447,12 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 
 ## 9. Past Test Sessions (History)
 
+### 2026-10-09 (python-jose → PyJWT)
+- **Trigger:** CI's pip-audit job failed on `python-jose` 3.5.0, GHSA-3qf3-8w2g-rqmx / CVE-2026-85394 (published 2026-09-03): python-jose's guard against using a public key as an HMAC secret can be bypassed with a DER-encoded key, so a holder of the public key can forge HS256 tokens when algorithms are not pinned. An incomplete fix of CVE-2024-33663; no patched release.
+- **Assessed not exploitable here:** tokens are only ever verified with the symmetric `JWT_SECRET`, no public key exists anywhere in the backend, and the one decode call pins `algorithms=[JWT_ALGORITHM]` (HS256). Migrated anyway: the second incomplete fix of the same bug, and python-jose was the only source of `ecdsa` (the one ignored advisory).
+- **Change:** `PyJWT==2.15.1` replaces `python-jose[cryptography]` (already required by `firebase-admin`, so no new dependency); `except JWTError` → `jwt.PyJWTError` in `security.py`, `routers/auth.py`, `main.py`. `python-jose`, `ecdsa` and `rsa` leave the dependency tree; the CI `--ignore-vuln PYSEC-2026-1325` is removed. New `test_jwt_library.py` (11) pins the error path (bad/expired tokens still 401 through the auth dependency and refresh), sub-second `iat` verifying immediately, algorithm pinning (`none` and HS512 refused), and that no app code imports `jose` — the type/import cases failed before the change.
+- **Verified:** backend unit 412/412; `pip-audit -r backend/requirements.txt --strict` with **no** ignores → "No known vulnerabilities found"; the image built from the branch boots with the real local config incl. `SENTRY_DSN` (§10 item 13); and, run side by side with the python-jose server, 12/12 live checks — tokens cross both ways (no forced logout on deploy, safe rollback), an old refresh token rotates, garbage tokens 401, the WebSocket accepts a PyJWT token and refuses garbage.
+
 ### 2026-10-09 (multi-tenancy & owner QA — §5.2 complete)
 - **All eight §5.2 items PASS**, no tenancy defect found. API checks drove real tokens through owner login, school + admin creation, a cross-school action (404), suspension (login 400 / refresh 401 / live access token 403 / gone from the picker / other school unaffected / owner exempt / reactivation restores login) and per-school phone uniqueness; the owner console was checked in the web build. `test_tenant_isolation.py` + `_finance.py` re-run 37/37.
 - **Fixed:** the duplicate-school error told the owner to "choose a different slug", which the console never shows. It now names the school when the slug was derived from the name; new `tests/test_owner_school_create.py` (2 tests, the name case falsified against the old text).
@@ -646,7 +656,7 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
 
    The two previously-"blocked" items both unblocked themselves upstream: python-jose 3.5.0 relaxed the pyasn1 cap, and fastapi 0.133.0 dropped the starlette cap. No migration to PyJWT was needed. `starlette` and `pyasn1` are now pinned explicitly so the audited version is the deployed one.
 
-   **One advisory is ignored, not fixed:** `ecdsa==0.19.2` / PYSEC-2026-1325 (CVE-2024-23342), the Minerva timing attack on P-256. It affects every released version and upstream considers side-channel attacks out of scope, so there is no fix version. `ecdsa` is a hard dependency of `python-jose`, not something the app imports, and the vulnerable paths are ECDSA signing/keygen/ECDH — MindForge signs JWTs with **HS256** (`JWT_ALGORITHM`, `app/core/config.py:50`), so no ECDSA private-key operation ever runs. The `--ignore-vuln` in `ci.yml` carries this rationale. **Re-evaluate if `JWT_ALGORITHM` ever becomes ES256/384/512.**
+   *(Superseded 2026-10-09: `ecdsa` left with python-jose and the ignore is gone — see §9.)* **One advisory is ignored, not fixed:** `ecdsa==0.19.2` / PYSEC-2026-1325 (CVE-2024-23342), the Minerva timing attack on P-256. It affects every released version and upstream considers side-channel attacks out of scope, so there is no fix version. `ecdsa` is a hard dependency of `python-jose`, not something the app imports, and the vulnerable paths are ECDSA signing/keygen/ECDH — MindForge signs JWTs with **HS256** (`JWT_ALGORITHM`, `app/core/config.py:50`), so no ECDSA private-key operation ever runs. The `--ignore-vuln` in `ci.yml` carries this rationale. **Re-evaluate if `JWT_ALGORITHM` ever becomes ES256/384/512.**
 
    Verified locally in a Python 3.12 venv (CI is on 3.11; the repo's default `python3` is 3.14, where `pymupdf` won't build): dependency resolution clean, `pip-audit --strict` → "No known vulnerabilities found, 1 ignored", backend suite 81/81, FastAPI resolves all 144 OpenAPI paths / 160 operations, and a TestClient smoke returns 200 + all four security headers on `/api/health`, 403 on a non-allowlisted media bucket, 422 on an empty login body.
 
