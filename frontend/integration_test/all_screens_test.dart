@@ -31,10 +31,12 @@ const _teacherUser  = String.fromEnvironment('TEACHER_USER',  defaultValue: 'met
 const _teacherMpin  = String.fromEnvironment('TEACHER_MPIN',  defaultValue: '290304');
 // ignore: do_not_use_environment
 const _teacherSchool = String.fromEnvironment('TEACHER_SCHOOL', defaultValue: 'metas');
+// `hansel_kid` used to be the default here; it is deactivated in the local DB
+// (401, then 429 once the lockout trips). `dummy8` is `dummy8_dad`'s child.
 // ignore: do_not_use_environment
-const _studentUser  = String.fromEnvironment('STUDENT_USER',  defaultValue: 'hansel_kid');
+const _studentUser  = String.fromEnvironment('STUDENT_USER',  defaultValue: 'dummy8');
 // ignore: do_not_use_environment
-const _studentMpin  = String.fromEnvironment('STUDENT_MPIN',  defaultValue: '847362');
+const _studentMpin  = String.fromEnvironment('STUDENT_MPIN',  defaultValue: '123456');
 // ignore: do_not_use_environment
 const _parentUser   = String.fromEnvironment('PARENT_USER',   defaultValue: 'dummy8_dad');
 // ignore: do_not_use_environment
