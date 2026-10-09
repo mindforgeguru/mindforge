@@ -64,6 +64,21 @@ void main() {
     expect(connect.contains('https://api.mindforge.guru'), isTrue);
   });
 
+  test('img-src allows every http(s) API origin that connect-src allows', () {
+    // Logos and avatars are served by the API's /api/media proxy, so any API
+    // origin the app talks to must also be allowed to serve images. img-src
+    // once listed only the production API, which silently blocked every school
+    // logo and avatar on a local web build (http://localhost:8000).
+    final img = directive('img-src').split(RegExp(r'\s+'));
+    final apiOrigins = directive('connect-src')
+        .split(RegExp(r'\s+'))
+        .where((s) => s.startsWith('http://') || s.startsWith('https://'))
+        .where((s) => !s.contains('gstatic.com'));
+    for (final origin in apiOrigins) {
+      expect(img, contains(origin), reason: 'img-src is missing $origin');
+    }
+  });
+
   test('script-src does not allow a remote wildcard CDN', () {
     // 'unsafe-inline'/'unsafe-eval'/blob: are required by Flutter and allowed;
     // a wildcard remote origin (https://*) would let an attacker host script.
