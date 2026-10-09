@@ -94,10 +94,14 @@ async def create_school(
     slug = payload.slug or _slugify(payload.name)
     existing = await db.execute(select(School).where(School.slug == slug))
     if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"A school with slug '{slug}' already exists. Choose a different slug.",
+        # The owner console only asks for a name and never shows the derived
+        # slug, so point at the name unless the caller chose the slug itself.
+        detail = (
+            f"A school with slug '{slug}' already exists. Choose a different slug."
+            if payload.slug
+            else f"A school named '{payload.name}' already exists. Choose a different name."
         )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
     school = School(
         name=payload.name,
