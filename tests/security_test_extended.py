@@ -170,39 +170,69 @@ async def test_idor(client, tokens):
 
 # ── 3. Mass assignment on register ─────────────────────────────────────────────
 
-async def test_mass_assignment(client):
+async def test_mass_assignment(client, tokens):
     print("\n[3] Mass-assignment on /api/auth/register")
-    payloads = [
-        {"username": "evil_admin_1", "mpin": "111111", "full_name": "Evil",
-         "role": "admin", "is_active": True, "deleted_at": None},
-        {"username": "evil_admin_2", "mpin": "222222", "full_name": "Evil2",
-         "role": "admin"},
-        {"username": "evil_teacher", "mpin": "333333", "full_name": "Evil3",
-         "role": "teacher", "is_active": True},
-    ]
-    for p in payloads:
-        r = await client.post(f"{BASE_URL}/api/auth/register",
-                              json=p, timeout=10)
-        body = r.text[:200]
-        if r.status_code in (400, 401, 403, 422):
-            record("MassAssign",
-                   f"register with role={p.get('role')!r} rejected", PASS,
-                   f"{r.status_code}")
-        elif r.status_code in (200, 201):
-            # Pull role back from /api/admin/users to confirm what got stored
-            data = r.json()
-            stored_role = data.get("role", "?")
-            if stored_role == p.get("role"):
-                record("MassAssign",
-                       f"register with role={p.get('role')!r}", FAIL,
-                       f"server STORED role={stored_role!r} — privilege escalation possible")
-            else:
-                record("MassAssign",
-                       f"register ignored injected role={p.get('role')!r}", PASS,
-                       f"stored role={stored_role!r}")
-        else:
-            record("MassAssign", f"register with role={p.get('role')!r}", WARN,
-                   f"{r.status_code} {body}")
+    import random
+
+    # Everything except the injected fields must be valid, or the request is
+    # refused for an unrelated reason and the probe proves nothing. The old
+    # payloads used MPINs like 111111, which the weak-MPIN check rejects (422)
+    # before the role or the injected flags are ever looked at.
+    def base(username):
+        body = {"username": username, "mpin": "583921",
+                "phone": f"97{random.randint(10000000, 99999999)}",
+                "teachable_subjects": ["Physics"]}
+        if SCHOOL_ID:
+            body["school_id"] = int(SCHOOL_ID)
+        return body
+
+    tag = random.randint(10000, 99999)
+    injected = {"is_active": True, "is_approved": True, "deleted_at": None}
+
+    # 3a. Self-registering as admin must be refused on the role itself.
+    r = await client.post(f"{BASE_URL}/api/auth/register", timeout=10,
+                          json={**base(f"evil_admin_{tag}"), "role": "admin", **injected})
+    fields = []
+    if r.status_code == 422:
+        try:
+            fields = [e.get("loc", [])[-1] for e in r.json().get("detail", [])]
+        except Exception:
+            pass
+    if r.status_code == 422 and "role" in fields:
+        record("MassAssign", "register as role='admin' refused on the role", PASS, "422")
+    elif r.status_code in (200, 201):
+        record("MassAssign", "register as role='admin' refused on the role", FAIL,
+               f"accepted — stored role={r.json().get('role')!r}")
+    else:
+        record("MassAssign", "register as role='admin' refused on the role", WARN,
+               f"{r.status_code} for another reason ({fields or r.text[:120]}) — probe not meaningful")
+
+    # 3b. A legitimate teacher registration with approval flags injected may
+    # succeed, but the stored account must still be pending and unable to log in.
+    username = f"evil_teacher_{tag}"
+    r = await client.post(f"{BASE_URL}/api/auth/register", timeout=10,
+                          json={**base(username), "role": "teacher", **injected})
+    if r.status_code != 201:
+        record("MassAssign", "injected is_approved ignored", WARN,
+               f"registration itself failed: {r.status_code} {r.text[:120]}")
+        return
+    stored = r.json()
+    login_body = {"username": username, "mpin": "583921"}
+    if SCHOOL_ID:
+        login_body["school_id"] = int(SCHOOL_ID)
+    lr = await client.post(f"{BASE_URL}/api/auth/login", json=login_body, timeout=15)
+    if stored.get("is_approved") is False and lr.status_code != 200:
+        record("MassAssign", "injected is_approved ignored (account still pending)", PASS,
+               f"stored is_approved=False; login {lr.status_code}")
+    else:
+        record("MassAssign", "injected is_approved ignored (account still pending)", FAIL,
+               f"stored is_approved={stored.get('is_approved')!r}; login {lr.status_code}")
+
+    # Leave nothing behind: the school's admin rejects (hard-deletes) it.
+    if tokens.get("admin") and stored.get("id"):
+        await client.delete(f"{BASE_URL}/api/admin/users/{stored['id']}/pending",
+                            headers={"Authorization": f"Bearer {tokens['admin']}"},
+                            timeout=10)
 
 
 # ── 4. Path traversal on /api/media ────────────────────────────────────────────
@@ -423,7 +453,7 @@ async def main():
 
         await test_privilege_escalation(client, tokens)
         await test_idor(client, tokens)
-        await test_mass_assignment(client)
+        await test_mass_assignment(client, tokens)
         await test_path_traversal(client)
         await test_websocket_auth(tokens)
         await test_auth_flow(client)

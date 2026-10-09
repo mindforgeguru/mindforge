@@ -200,11 +200,18 @@ async def test_sql_injection(client):
         ("Sleep injection", "'; SELECT pg_sleep(3); --"),
     ]
 
+    # Without a school_id a multi-school stack answers 400 "Please select your
+    # school." after only the owner lookup, so the per-school username query
+    # (the one every real user goes through) never sees the payload.
+    school_id = os.getenv("MF_SEC_SCHOOL_ID")
+
     for name, payload in payloads:
+        body = {"username": payload, "mpin": "123456"}
+        if school_id:
+            body["school_id"] = int(school_id)
         start = time.perf_counter()
         resp = await client.post(f"{BASE_URL}/api/auth/login",
-                                 json={"username": payload, "mpin": "123456"},
-                                 timeout=15)
+                                 json=body, timeout=15)
         elapsed = (time.perf_counter() - start) * 1000
 
         if resp.status_code == 500:
