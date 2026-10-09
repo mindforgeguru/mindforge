@@ -249,42 +249,36 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
     final phoneCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => _SubmitDialog(
         title: Text('Add School', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'School name *')),
-              const SizedBox(height: 8),
-              TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Contact email')),
-              const SizedBox(height: 8),
-              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Contact phone')),
-            ],
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'School name *')),
+            const SizedBox(height: 8),
+            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Contact email')),
+            const SizedBox(height: 8),
+            TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Contact phone')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
-        ],
+        onSubmit: () async {
+          if (nameCtrl.text.trim().isEmpty) return 'School name is required.';
+          try {
+            await ref.read(apiClientProvider).createSchool(
+                  name: nameCtrl.text.trim(),
+                  contactEmail: emailCtrl.text.trim(),
+                  contactPhone: phoneCtrl.text.trim(),
+                );
+            return null;
+          } catch (e) {
+            return _msg(e);
+          }
+        },
       ),
     );
     if (ok != true) return;
-    if (nameCtrl.text.trim().isEmpty) {
-      _snack('School name is required.', error: true);
-      return;
-    }
-    try {
-      await ref.read(apiClientProvider).createSchool(
-            name: nameCtrl.text.trim(),
-            contactEmail: emailCtrl.text.trim(),
-            contactPhone: phoneCtrl.text.trim(),
-          );
-      _snack('School created.');
-      await _load();
-    } catch (e) {
-      _snack(_msg(e), error: true);
-    }
+    _snack('School created.');
+    await _load();
   }
 
   Future<void> _showAddAdmin(Map<String, dynamic> s) async {
@@ -292,7 +286,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
     final mpinCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => _SubmitDialog(
         title: Text('Add Admin — ${s['name']}',
             style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16)),
         content: Column(
@@ -314,28 +308,100 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
-        ],
+        onSubmit: () async {
+          if (userCtrl.text.trim().length < 3 || mpinCtrl.text.length != 6) {
+            return 'Username (3+) and a 6-digit MPIN are required.';
+          }
+          try {
+            await ref.read(apiClientProvider)
+                .createSchoolAdmin(s['id'] as int, userCtrl.text.trim(), mpinCtrl.text);
+            return null;
+          } catch (e) {
+            return _msg(e);
+          }
+        },
       ),
     );
     if (ok != true) return;
-    if (userCtrl.text.trim().length < 3 || mpinCtrl.text.length != 6) {
-      _snack('Username (3+) and a 6-digit MPIN are required.', error: true);
-      return;
-    }
-    try {
-      await ref.read(apiClientProvider)
-          .createSchoolAdmin(s['id'] as int, userCtrl.text.trim(), mpinCtrl.text);
-      _snack('Admin created for ${s['name']}.');
-      await _load();
-    } catch (e) {
-      _snack(_msg(e), error: true);
-    }
+    _snack('Admin created for ${s['name']}.');
+    await _load();
   }
 
   String _msg(Object e) => ownerApiErrorMessage(e);
+}
+
+/// A form dialog that submits in place. [onSubmit] returns null on success
+/// (the dialog closes with `true`) or a message to show — and the dialog stays
+/// open, so a rejected request (a duplicate name, a taken username) doesn't
+/// throw away what the owner typed.
+class _SubmitDialog extends StatefulWidget {
+  final Widget title;
+  final Widget content;
+  final Future<String?> Function() onSubmit;
+
+  const _SubmitDialog({
+    required this.title,
+    required this.content,
+    required this.onSubmit,
+  });
+
+  @override
+  State<_SubmitDialog> createState() => _SubmitDialogState();
+}
+
+class _SubmitDialogState extends State<_SubmitDialog> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _submit() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final error = await widget.onSubmit();
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context, true);
+    } else {
+      setState(() {
+        _busy = false;
+        _error = error;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: widget.title,
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            widget.content,
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: AppColors.error)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Create'),
+        ),
+      ],
+    );
+  }
 }
 
 /// Pull a human message out of an API failure for the owner console. A
