@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
-from jose import JWTError
+from jwt import PyJWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -547,7 +547,7 @@ async def refresh_access_token(
         user_id = int(user_id_raw)
         jti = data.get("jti")
         exp = data.get("exp")
-    except (JWTError, ValueError):
+    except (PyJWTError, ValueError):
         raise credentials_exception
 
     # Reject already-used (blacklisted) tokens

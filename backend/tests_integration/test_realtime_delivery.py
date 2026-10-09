@@ -35,7 +35,7 @@ import os
 import asyncpg
 import pytest
 import websockets
-from jose import jwt
+import jwt
 
 from .conftest import BASE_URL, DB_DSN, PREFIX, auth
 

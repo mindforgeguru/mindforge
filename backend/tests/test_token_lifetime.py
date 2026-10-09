@@ -14,8 +14,8 @@ hardcoded copy of it.
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from jose import jwt
-from jose.exceptions import ExpiredSignatureError
+import jwt
+from jwt import ExpiredSignatureError
 
 from app.core.config import settings
 from app.core.security import create_access_token, create_refresh_token

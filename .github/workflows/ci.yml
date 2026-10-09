@@ -119,21 +119,13 @@ jobs:
       # `--ignore-vuln <ID>` below with a comment + tracking link.
       #
       # ── Ignored advisories ────────────────────────────────────────────────
-      # PYSEC-2026-1325 (CVE-2024-23342) — Minerva timing attack on P-256 in
-      #   `ecdsa`. Affects every released version and upstream has declared
-      #   side-channel attacks out of scope, so there is no fix version to move
-      #   to. `ecdsa` is a hard dependency of `python-jose`, not something we
-      #   import. The vulnerable paths are ECDSA signing/keygen and ECDH
-      #   (`SigningKey.sign_digest`); MindForge signs JWTs with **HS256**
-      #   (symmetric HMAC — see `JWT_ALGORITHM` in app/core/config.py), so no
-      #   ECDSA private-key operation is ever performed. Re-evaluate if the JWT
-      #   algorithm ever changes to ES256/ES384/ES512, or drop it entirely by
-      #   migrating off python-jose to PyJWT.
-      #   https://osv.dev/vulnerability/PYSEC-2026-1325
+      # None. PYSEC-2026-1325 (`ecdsa`, Minerva) was ignored until 2026-10-09;
+      # `ecdsa` arrived only through python-jose, which was replaced by PyJWT
+      # after python-jose's second incomplete algorithm-confusion fix
+      # (GHSA-3qf3-8w2g-rqmx). Both advisories left with the dependency.
       - name: Audit backend dependencies
         run: |
-          pip-audit -r backend/requirements.txt --strict \
-            --ignore-vuln PYSEC-2026-1325
+          pip-audit -r backend/requirements.txt --strict
 
   # ── Committed-secret scan ────────────────────────────────────────────────────
   secret-scan:

@@ -13,7 +13,7 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+import jwt
 import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -137,7 +137,7 @@ def token_predates_revocation(payload: dict, user) -> bool:
 
 
 def decode_access_token(token: str) -> dict:
-    """Decode and validate a JWT token. Raises JWTError on failure."""
+    """Decode and validate a JWT token. Raises jwt.PyJWTError on failure."""
     return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
 
 
@@ -178,7 +178,7 @@ async def _get_current_user(
             from app.core.redis_client import redis_manager as _redis
             if await _redis.is_access_jti_revoked(jti):
                 raise credentials_exception
-    except JWTError:
+    except jwt.PyJWTError:
         raise credentials_exception
 
     result = await db.execute(

@@ -369,14 +369,14 @@ async def websocket_endpoint(
     so query string is the standard place for the token.
     """
     from app.core.security import decode_access_token
-    from jose import JWTError
+    from jwt import PyJWTError
 
     # 1008 = Policy Violation. Closing here means handshake never completes.
     POLICY_VIOLATION = 1008
 
     try:
         payload = decode_access_token(token)
-    except JWTError:
+    except PyJWTError:
         await websocket.close(code=POLICY_VIOLATION)
         return
 
