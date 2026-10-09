@@ -117,7 +117,7 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 |---|---|
 | Backend unit suite, `tests_integration/` (except realtime delivery) | Not re-run 2026-10-09. Last: 331 PASS, 58/58 (2026-09-13) |
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
-| `tests/security_test.py`, `security_test_extended.py` | **Run 2026-10-09** against the branch's code (PyJWT) on the local stack — 21 PASS / 1 expected FAIL / 1 WARN and 48/48. See §9 |
+| `tests/security_test.py`, `security_test_extended.py` | **Run 2026-10-09** against the branch's code (PyJWT) on the local stack — 22 PASS / 1 expected FAIL / 0 WARN (after the server-header fix) and 48/48. See §9 |
 | `pip-audit` | Not run this session |
 | Manual QA (§5) | Partially run 2026-10-09 — realtime (§5.8), part of auth (§5.1) and web (§5.9); the rest unticked |
 
@@ -177,7 +177,7 @@ These were verified by source reading in May. The auth layer has changed materia
 | Sentry scrubs MPIN/password/token/cookie keys | NOT RE-VERIFIED | `backend/main.py` — `_SCRUB_KEYS`, `_scrub_event` |
 | Sentry `send_default_pii=False` | NOT RE-VERIFIED | `backend/main.py` |
 | Admin seed MPIN from `ADMIN_SEED_MPIN`, skipped + warned if missing/invalid | **PASS** (spot-checked) | `backend/main.py:134` |
-| Firebase **client** API keys are public by design; server secret is `FIREBASE_CREDENTIALS_JSON`, env-only | **PASS** (documented) | `SECURITY.md` — console-side key restriction is still an open action |
+| Firebase **client** API keys are public by design; server secret is `FIREBASE_CREDENTIALS_JSON`, env-only | **PASS** (documented) | `SECURITY.md` — console-side key restriction confirmed in place 2026-08-21 (§10 item 7) |
 
 ### 3.5 API surface — **partially re-verified 2026-07-24**
 
@@ -448,9 +448,12 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 
 ## 9. Past Test Sessions (History)
 
+### 2026-10-09 (stale known issues closed)
+- §10 items 7, 10, 11 and 12 described problems already fixed, and one had misled this session (CI was assumed not to run on `create_school`; it does). Each re-checked before striking: item 7 against the register row and the 2026-08-21 console check; item 10 in code (`publish_to_school`, `21b05bb`) plus the passing leak test; items 11 and 12 in `ci.yml` (`3bcbe81`, `0fa8a71`) and today's CI runs. Struck in place rather than moved, because later sections cite §10 items by number. Also corrected §3.4 and the register's to-do list, which still called the Firebase key restriction open.
+
 ### 2026-10-09 (security probe suites — first run on `create_school`)
 - **Target:** an image built from the branch (PyJWT, no `jose`), run as a second container on `:8001` against the shared local Postgres/Redis — the `:8000` backend was serving another worktree (§10 item 21) and was left alone. Removed afterwards. **`security_test.py` defaults to production** (`MF_SEC_BASE_URL` unset → `https://api.mindforge.guru`); always set it. Fixture: Hansel & Gretel (`MF_SEC_SCHOOL_ID=1`) — `demo_admin` 280, `chinmay_sir` 2, `dummy8_dad` 25, `dummy8` 26.
-- **`security_test.py`: 21 PASS, 1 FAIL, 1 WARN.** Headers (HSTS, nosniff, DENY, CSP), login rate limit (429), JWT tampering/missing/malformed (401), role isolation and input validation all pass. The FAIL is "HTTPS enforced", which only checks the *target URL's* scheme and so cannot pass against `http://localhost` — not an app finding. The WARN: `server: uvicorn` is sent; `backend/start.sh` runs uvicorn without `--no-server-header`, so prod likely sends it too unless Railway's edge strips it (not checked against prod). Product name only, no version.
+- **`security_test.py`: 21 PASS, 1 FAIL, 1 WARN.** Headers (HSTS, nosniff, DENY, CSP), login rate limit (429), JWT tampering/missing/malformed (401), role isolation and input validation all pass. The FAIL is "HTTPS enforced", which only checks the *target URL's* scheme and so cannot pass against `http://localhost` — not an app finding. The WARN: `server: uvicorn` was sent; `backend/start.sh` ran uvicorn without `--no-server-header`, so prod likely sent it too unless Railway's edge strips it (not checked against prod). Product name only, no version. **Fixed same day:** `--no-server-header` on `start.sh` and the `docker-compose.local.yml` command, pinned by `tests/test_server_header.py`; an image started through `start.sh` sends no `server` header and the suite re-ran at **22 PASS / 1 expected FAIL / 0 WARN**. The running local stack keeps the old command until it is restarted.
 - **Fixed a vacuous probe — SQL injection.** The five payloads were sent without `school_id`, so a multi-school stack answered 400 "Please select your school." after only the owner lookup; the per-school username query never saw them. They now send `MF_SEC_SCHOOL_ID` when set: all five → 401 in ~250 ms (the constant-time dummy-hash path), `pg_sleep(3)` causes no delay, no server errors.
 - **`security_test_extended.py`: 48/48** — the privilege-escalation matrix, IDOR, path traversal on `/api/media`, WebSocket (cross-user token refused at handshake), access token revoked after logout, old refresh token refused after rotation.
 - **Fixed a vacuous probe — mass assignment.** All three payloads used weak MPINs (`111111`/`222222`/`333333`) and were refused by the weak-MPIN check (422) before the role or injected flags were read. Rewritten as two probes with otherwise-valid bodies: `role=admin` must be refused **on the `role` field** (else WARN, "probe not meaningful"); a legitimate teacher registration with `is_active`/`is_approved` injected must be stored `is_approved=False` and refused at login (403) — then the school admin deletes it, so the run leaves no account behind. Both PASS.
@@ -678,17 +681,17 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
 
 6. **`AppConstants.privacyPolicyUrl` is still empty** (`frontend/lib/core/utils/constants.dart:30`). The in-app link auto-hides while empty, so this is not user-visible breakage, but it blocks store submission along with hosting the policy and counsel review.
 
-7. **Firebase client API keys are not yet restricted in the GCP console.** Documented in `SECURITY.md` with the exact keys and the restriction each should carry. Defense-in-depth, not a leak — the app uses only Core/FCM/Analytics/Crashlytics, so a copied key cannot read user data. Worst case is quota abuse.
+7. **~~Firebase client API keys are not yet restricted in the GCP console~~** — resolved; confirmed in the GCP console 2026-08-21 that all three keys have carried application restrictions since April 2026 (see the register's "Firebase client keys restricted" row). Stale here until 2026-10-09. Original note: Documented in `SECURITY.md` with the exact keys and the restriction each should carry. Defense-in-depth, not a leak — the app uses only Core/FCM/Analytics/Crashlytics, so a copied key cannot read user data. Worst case is quota abuse.
 
 8. **Firebase web config landed but was never functionally re-tested.** `firebase_options.dart` gained a real `web` block on 2026-06-30, which should close the old "FCM/Analytics/Crashlytics silently disabled on web" finding. Nobody has confirmed a push actually arrives in a browser. §5.9.
 
 9. **`flutter_secure_storage_web` blocks future wasm builds.** The wasm dry-run flags `dart:html` + `dart:js_util` usage. The JS build works today; revisit when Flutter's wasm target stabilises.
 
-10. **~~Realtime fan-out unverified on the client~~** — closed 2026-07-25. `tests_integration/test_realtime_delivery.py` proves the backend delivers (falsified against the old code), and `test/widget/realtime_sync_test.dart` proves the client invalidates the right cache per role (also falsified). **Still open in the same area:** `admin.py`'s `timetable_config_updated` and `new_academic_year` continue to use the unscoped `broadcast_all`, so those two events cross school boundaries.
+10. **~~Realtime fan-out unverified on the client~~** — closed 2026-07-25. `tests_integration/test_realtime_delivery.py` proves the backend delivers (falsified against the old code), and `test/widget/realtime_sync_test.dart` proves the client invalidates the right cache per role (also falsified). ~~**Still open in the same area:** `admin.py`'s `timetable_config_updated` and `new_academic_year` continue to use the unscoped `broadcast_all`, so those two events cross school boundaries.~~ Fixed 2026-07-25 (`21b05bb`): both now go through `publish_to_school`. `test_realtime_delivery.py::test_timetable_config_does_not_leak_to_another_school` pins the first (passed 2026-10-09); `new_academic_year` uses the same call but has no dedicated test. Confirmed in code 2026-10-09.
 
-11. **CI Flutter version drift.** CI pins `3.41.4`; local development is on `3.44.0`. A version-specific analyzer or test failure would not be caught symmetrically.
+11. **~~CI Flutter version drift~~** — fixed 2026-08-21 (`3bcbe81`): CI pins `3.44.0`, matching local; confirmed 2026-10-09. Original note: CI pinned `3.41.4`; local development is on `3.44.0`. A version-specific analyzer or test failure would not be caught symmetrically.
 
-12. **CI does not run on most working branches.** Triggers are `main`, `feature/**`, `fix/**`, `test/**`. Branches like `create_school` get no CI at all, so work merges to `main` having never been CI-verified.
+12. **~~CI does not run on most working branches~~** — fixed 2026-08-19 (`0fa8a71`): `push` now triggers on every branch (`branches: ["**"]`); three CI runs on `create_school` on 2026-10-09 alone. Original note: Triggers were `main`, `feature/**`, `fix/**`, `test/**`. Branches like `create_school` get no CI at all, so work merges to `main` having never been CI-verified.
 
 
 13. **A dependency bump is not verified until the app boots with a real config.** The 2026-07-24 upgrade passed imports, 81 unit tests, OpenAPI generation and a TestClient smoke in a venv — then failed to start in Docker, because Sentry only wires up its integrations when a `SENTRY_DSN` is present and the venv had none. Any future `requirements.txt` change should be validated by rebuilding the image and watching the container reach "Application startup complete", not by a venv smoke test alone.

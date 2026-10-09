@@ -104,7 +104,7 @@ goes wrong.
 | Risk | Status | Evidence / note |
 |---|---|---|
 | TLS enforcement and HSTS | VERIFIED | Live-checked: HTTP/2 only, `max-age=31536000; includeSubDomains`. |
-| Missing security headers | VERIFIED | All four present on success *and* error responses: nosniff, `X-Frame-Options: DENY`, CSP `default-src 'none'`, HSTS. |
+| Missing security headers | VERIFIED | All four present on success *and* error responses: nosniff, `X-Frame-Options: DENY`, CSP `default-src 'none'`, HSTS. 2026-10-09: the `server: uvicorn` banner is gone too — `--no-server-header` in `start.sh`, pinned by `test_server_header.py`. |
 | WebSocket authentication | VERIFIED | JWT required, `sub` matched to the path user id, revoked JTIs rejected. 5/5 in `test_websocket_auth.py`. |
 | Man-in-the-middle on mobile | STALE | CA-level pinning to Let's Encrypt is implemented and code-reviewed, but the mitmproxy test that would prove it is still an unticked release-QA item. |
 | Permissive CORS | VERIFIED | The app runs credentialed CORS (`allow_credentials=True`), where a `*` origin would reflect **any** site back with credentials allowed — so a settings validator refuses to start if the origin list contains `*`, forcing an explicit allowlist. 8 tests (`test_cors_policy.py`, real config loaded past conftest's stub) pin it: bare `*`, whitespaced ` * `, and a wildcard hidden in a comma string are all rejected; comma and JSON strings parse to a list; the shipped default is an explicit allowlist (mindforge.guru present, no wildcard). Falsified: removing the guard fails all three wildcard tests. |
@@ -733,8 +733,9 @@ outstanding.
 3. **Publish the privacy policy, and add Anthropic to it.** Host it, populate
    `privacyPolicyUrl`, disclose Claude as a recipient of uploaded documents.
    Three small tasks that together unblock store submission.
-4. **Restrict the Firebase keys in the GCP console.** `SECURITY.md` already
-   lists each key and the restriction it needs. Console clicks, no code.
+4. ~~**Restrict the Firebase keys in the GCP console.**~~ Already in place —
+   confirmed in the console 2026-08-21 (row "Firebase client keys restricted").
+   Struck 2026-10-09.
 5. **Confirm production backups actually restore.** The tooling is rehearsed
    locally; production — Railway Postgres plus the MinIO volume — is untested.
    `docs/backup-runbook.md` says what is needed.

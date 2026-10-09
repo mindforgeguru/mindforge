@@ -584,7 +584,7 @@
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">TLS enforcement and HSTS</span>
           <p class="note">Live-checked: HTTP/2 only, <code>max-age=31536000; includeSubDomains</code>.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Missing security headers</span>
-          <p class="note">All four present on success <em>and</em> error responses: nosniff, <code>X-Frame-Options: DENY</code>, CSP <code>default-src 'none'</code>, HSTS.</p></div>
+          <p class="note">All four present on success <em>and</em> error responses: nosniff, <code>X-Frame-Options: DENY</code>, CSP <code>default-src 'none'</code>, HSTS. Since 2026-10-09 no <code>server: uvicorn</code> banner either.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">WebSocket authentication</span>
           <p class="note">JWT required, <code>sub</code> matched to the path user id, revoked JTIs rejected. 5/5 in <code>test_websocket_auth.py</code>.</p></div>
         <div class="row s-warn"><span class="chip">Stale</span><span class="risk">Man-in-the-middle on mobile</span>
