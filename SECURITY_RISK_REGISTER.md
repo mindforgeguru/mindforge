@@ -68,9 +68,9 @@ goes wrong.
 |---|---|---|
 | Cross-school data access | VERIFIED | Strongest area in the codebase: 32 integration + 19 unit + 8 wiring tests. Cross-school reads return 404 rather than 403, so row existence doesn't leak. |
 | Vertical privilege escalation | VERIFIED | Student → teacher → admin paths probed in `security_test_extended.py`. |
-| Mass assignment / role injection | VERIFIED | Was **critical** — `/auth/register` accepted `role="admin"`. Fixed 2026-05-19 with a schema validator. |
+| Mass assignment / role injection | VERIFIED | Was **critical** — `/auth/register` accepted `role="admin"`. Fixed 2026-05-19 with a schema validator. 2026-10-09: the probe had stopped testing this (weak MPINs got it refused first); rewritten so `role=admin` must fail on `role` and injected `is_approved=true` must still leave the account pending — both pass. |
 | Admin escalating a user to platform owner | VERIFIED | Blocked; commit `f9e2386`. |
-| IDOR / BOLA on object ids | VERIFIED | Covered by the extended probe suite. |
+| IDOR / BOLA on object ids | VERIFIED | Covered by the extended probe suite — re-run 2026-10-09 on the branch's code, 48/48. |
 | Realtime events crossing tenants | VERIFIED | Two separate leaks found and fixed (fan-out, then `admin.py` config events). Tests falsified against the unfixed code. **Manual check 2026-10-09** (web, two schools side by side): a Hansel & Gretel grade-8 broadcast did not reach Riverdale's grade-8 student — the same-grade-number case the grade filter cannot mask. |
 | Cross-school foreign keys accepted on write | VERIFIED | Timetable `teacher_id` now validated against the caller's school; commit `25451eb`. |
 | Unauthenticated media proxy | STALE | Bucket allowlist and path traversal re-probed 2026-08-18 — 5/5 rejected, including double-encoded and null-byte keys. Still STALE because the actual risk is different: the endpoint stays open by design and leans on object keys being *unguessable*, which no probe tests. |

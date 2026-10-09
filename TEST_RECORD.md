@@ -116,7 +116,8 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 | Suite | Why / last result |
 |---|---|
 | Backend unit suite, `tests_integration/` (except realtime delivery) | Not re-run 2026-10-09. Last: 331 PASS, 58/58 (2026-09-13) |
-| `tests/security_test.py`, `security_test_extended.py`, `tests/performance_test.py` | Not run. Point at the **local** stack only; they include login rate-limit probes |
+| `tests/performance_test.py` | Not run. Point at the **local** stack only |
+| `tests/security_test.py`, `security_test_extended.py` | **Run 2026-10-09** against the branch's code (PyJWT) on the local stack — 21 PASS / 1 expected FAIL / 1 WARN and 48/48. See §9 |
 | `pip-audit` | Not run this session |
 | Manual QA (§5) | Partially run 2026-10-09 — realtime (§5.8), part of auth (§5.1) and web (§5.9); the rest unticked |
 
@@ -446,6 +447,13 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-09 (security probe suites — first run on `create_school`)
+- **Target:** an image built from the branch (PyJWT, no `jose`), run as a second container on `:8001` against the shared local Postgres/Redis — the `:8000` backend was serving another worktree (§10 item 21) and was left alone. Removed afterwards. **`security_test.py` defaults to production** (`MF_SEC_BASE_URL` unset → `https://api.mindforge.guru`); always set it. Fixture: Hansel & Gretel (`MF_SEC_SCHOOL_ID=1`) — `demo_admin` 280, `chinmay_sir` 2, `dummy8_dad` 25, `dummy8` 26.
+- **`security_test.py`: 21 PASS, 1 FAIL, 1 WARN.** Headers (HSTS, nosniff, DENY, CSP), login rate limit (429), JWT tampering/missing/malformed (401), role isolation and input validation all pass. The FAIL is "HTTPS enforced", which only checks the *target URL's* scheme and so cannot pass against `http://localhost` — not an app finding. The WARN: `server: uvicorn` is sent; `backend/start.sh` runs uvicorn without `--no-server-header`, so prod likely sends it too unless Railway's edge strips it (not checked against prod). Product name only, no version.
+- **Fixed a vacuous probe — SQL injection.** The five payloads were sent without `school_id`, so a multi-school stack answered 400 "Please select your school." after only the owner lookup; the per-school username query never saw them. They now send `MF_SEC_SCHOOL_ID` when set: all five → 401 in ~250 ms (the constant-time dummy-hash path), `pg_sleep(3)` causes no delay, no server errors.
+- **`security_test_extended.py`: 48/48** — the privilege-escalation matrix, IDOR, path traversal on `/api/media`, WebSocket (cross-user token refused at handshake), access token revoked after logout, old refresh token refused after rotation.
+- **Fixed a vacuous probe — mass assignment.** All three payloads used weak MPINs (`111111`/`222222`/`333333`) and were refused by the weak-MPIN check (422) before the role or injected flags were read. Rewritten as two probes with otherwise-valid bodies: `role=admin` must be refused **on the `role` field** (else WARN, "probe not meaningful"); a legitimate teacher registration with `is_active`/`is_approved` injected must be stored `is_approved=False` and refused at login (403) — then the school admin deletes it, so the run leaves no account behind. Both PASS.
 
 ### 2026-10-09 (python-jose → PyJWT)
 - **Trigger:** CI's pip-audit job failed on `python-jose` 3.5.0, GHSA-3qf3-8w2g-rqmx / CVE-2026-85394 (published 2026-09-03): python-jose's guard against using a public key as an HMAC secret can be bypassed with a DER-encoded key, so a holder of the public key can forge HS256 tokens when algorithms are not pinned. An incomplete fix of CVE-2024-33663; no patched release.

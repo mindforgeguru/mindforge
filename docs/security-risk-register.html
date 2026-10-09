@@ -509,11 +509,11 @@
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Vertical privilege escalation</span>
           <p class="note">Student → teacher → admin paths probed in <code>security_test_extended.py</code>.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Mass assignment / role injection</span>
-          <p class="note">Was <b>critical</b> — <code>/auth/register</code> accepted <code>role="admin"</code>. Fixed 2026-05-19 with a schema validator.</p></div>
+          <p class="note">Was <b>critical</b> — <code>/auth/register</code> accepted <code>role="admin"</code>. Fixed 2026-05-19 with a schema validator. Re-probed 2026-10-09 with a rewritten test: <code>role=admin</code> refused on the role; injected <code>is_approved=true</code> still leaves the account pending.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Admin escalating a user to platform owner</span>
           <p class="note">Blocked; commit <code>f9e2386</code>.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">IDOR / BOLA on object ids</span>
-          <p class="note">Covered by the extended probe suite.</p></div>
+          <p class="note">Covered by the extended probe suite — re-run 2026-10-09 on the branch's code, 48/48.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Realtime events crossing tenants</span>
           <p class="note">Two separate leaks found and fixed (fan-out, then <code>admin.py</code> config events). Tests falsified against the unfixed code.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Cross-school foreign keys accepted on write</span>
