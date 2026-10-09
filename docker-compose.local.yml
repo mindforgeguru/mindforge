@@ -39,7 +39,7 @@ services:
     # this so nginx is the only ingress in prod.
     ports:
       - "8000:8000"
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --no-server-header
     # Run as root for hot-reload file watching (dev only)
     user: root
 
