@@ -65,7 +65,7 @@ flutter test integration_test/
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
-> **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
+> **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import (as of 2026-10-09 also `test_ai_fallback_chain.py`, `test_old_test_upload.py` and `test_subjects.py` — the host's `google-genai` lacks `types.GenerateContentConfig`) — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
 ### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **NOT RE-RUN 2026-10-09 (last run 2026-09-13)**
 
@@ -263,16 +263,18 @@ Run end-to-end before every release build. Tick PASS/FAIL with date.
 - [ ] **Access token expiry (~60 min)** → Dio interceptor auto-refreshes
 - [ ] **Force-revoked token** → next protected call 401
 
-### 5.2 Multi-tenancy & owner *(new section — feature landed 2026-07-22)*
+### 5.2 Multi-tenancy & owner *(feature landed 2026-07-22; full pass 2026-10-09)*
 
-- [ ] Platform owner logs in and lands on the owner dashboard
-- [ ] Owner can create a school; admin for that school can log in
-- [ ] User in school A cannot read school B's rows (expect **404**, not 403)
-- [ ] Suspending a school blocks its users' login **and** token refresh
-- [ ] Owner is exempt from suspension gating
-- [ ] Phone-number uniqueness is scoped per school, not global
-- [ ] Fees and academic years are school-scoped
-- [ ] Owner error messages surface the backend detail, not a raw `DioException`
+Run 2026-10-09 against the local stack: API checks with real tokens (script in the §9 entry), the owner console in the web build, and `tests_integration/test_tenant_isolation*.py` re-run **37/37**. Two throwaway schools ("QA Tenancy A/B 42441", ids 173/174) were created for the suspension checks and left **suspended** afterwards, so they are out of the picker.
+
+- [x] Platform owner logs in and lands on the owner dashboard — PASS 2026-10-09 (login with no school → role `owner`; dashboard lists all schools with per-role counts, Add Admin / Suspend)
+- [x] Owner can create a school; admin for that school can log in — PASS 2026-10-09 (2 schools + 2 admins created; both admins log in; the same username against the other school → 401)
+- [x] User in school A cannot read school B's rows (expect **404**, not 403) — PASS 2026-10-09 (QA admin approving Hansel's `dummy8` → 404 "User not found."; `/admin/users` holds only its own school; a school admin on owner endpoints → 403; isolation suites 24/24 + 13/13)
+- [x] Suspending a school blocks its users' login **and** token refresh — PASS 2026-10-09 (login → 400 "Selected school was not found or is inactive."; refresh → 401; an already-issued access token → 403 "access has been suspended"; school leaves the public picker; the other school unaffected; reactivating restores login)
+- [x] Owner is exempt from suspension gating — PASS 2026-10-09 (owner logs in and lists schools while one is suspended)
+- [x] Phone-number uniqueness is scoped per school, not global — PASS 2026-10-09 (phone P in A → 201; P again in A → 409 with the generic, non-enumerating message; P in B → 201)
+- [x] Fees and academic years are school-scoped — PASS 2026-10-09 via `test_tenant_isolation_finance.py` 13/13 (not re-checked by hand)
+- [x] Owner error messages surface the backend detail, not a raw `DioException` — PASS 2026-10-09 (duplicate school shows the server's text). The text itself said "Choose a different slug" though the console never shows a slug — **fixed same day**: a name clash now says "A school named '…' already exists. Choose a different name."; the slug wording stays only when an API caller passed a slug (`tests/test_owner_school_create.py`). Still open: the Add School dialog closes on the error, so the typed details are lost
 
 ### 5.3 Admin school setup *(new — 2026-07-23/24)*
 
@@ -440,6 +442,13 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-09 (multi-tenancy & owner QA — §5.2 complete)
+- **All eight §5.2 items PASS**, no tenancy defect found. API checks drove real tokens through owner login, school + admin creation, a cross-school action (404), suspension (login 400 / refresh 401 / live access token 403 / gone from the picker / other school unaffected / owner exempt / reactivation restores login) and per-school phone uniqueness; the owner console was checked in the web build. `test_tenant_isolation.py` + `_finance.py` re-run 37/37.
+- **Fixed:** the duplicate-school error told the owner to "choose a different slug", which the console never shows. It now names the school when the slug was derived from the name; new `tests/test_owner_school_create.py` (2 tests, the name case falsified against the old text).
+- **Rate-limit interplay:** registration allows 5 attempts/min per IP, and the isolation suites register users from the same IP — run back to back, the next registrations 429. Expected behaviour; wait out the window.
+- **The local backend was serving another worktree.** Mid-session a parallel session restarted the Docker stack from `.claude/worktrees/youthful-elion-30dc62/backend` (its holiday fix, `35f5087`, on top of `3271d34`). The tenancy checks therefore ran against that code — same backend as the branch apart from the homework gates, so the results stand. §10 item 21.
+- **Host test environment drift:** 6 backend files now fail to import under the host `python3.12` (outdated/missing `google-genai`, missing `sentry_sdk`), up from 3. Environment only; every other file passes on the host.
 
 ### 2026-10-09 (Flutter integration back to green; first manual realtime pass; holiday homework deadlock)
 - **Flutter integration on the iOS sim: `app_test` 0/5 → 5/5, `all_screens_test` 21/29 → 29/29.** The first runs failed on the uncommitted Whiteprint login redesign, not on app behaviour: the tests found controls by visible text, and the redesign uppercases labels, draws the delete key as an icon and has no `ElevatedButton`. Fix: a public `LoginKeys` class in `login_screen.dart` (tabs, school, username, role, phone, email, submit, mode toggle, each PIN key); `app_test`, `all_screens_test` and `test/widget/login_screen_test.dart` now find controls by key. One more text assumption: after a school is picked, the header wordmark becomes the school's name, so "still on the login screen" is now asserted via `LoginKeys.submit`.
@@ -678,7 +687,12 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
 
 19. **A rebuilt web bundle is not picked up by a normal reload.** The browser kept the previous `main.dart.js` in its HTTP cache (no service worker or Cache Storage entries were involved), so a fix looked like it hadn't worked. When verifying a web change against `python -m http.server`, force-fetch the bundle (`fetch('main.dart.js', {cache: 'reload'})`) or hard-reload before judging the result. Also: `http.server` ignores `_redirects`, so a hard refresh on a deep route (`/login`) 404s there — a property of the dev server, not the app.
 
+20. **The owner's Add School dialog closes on a server error**, so the typed name, email and phone are lost and must be re-entered. Minor; noticed 2026-10-09 while checking §5.2.
+
+21. **Check which checkout the local backend is serving before trusting a result.** `docker-compose.yml` bind-mounts `./backend:/app` relative to wherever `docker compose up` ran, so a stack started from a worktree serves that worktree's code to every session. Verify with `docker inspect mindforge_backend --format '{{range .Mounts}}{{.Source}}{{end}}'`. Seen 2026-10-09 (§9).
+
 ### Resolved (kept for history)
+- ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.
 - ~~Flutter integration tests broke on the login redesign~~ — fixed 2026-10-09; tests find login controls via `LoginKeys`, not visible text.
 - ~~School logo and avatars blocked by CSP on a local web build~~ — fixed 2026-10-09; `img-src` now lists the local API origins, pinned by `web_csp_test`.
 - ~~MPIN cells overflow the login card on narrow phones; school name runs under the dashboard logout icon~~ — fixed 2026-10-09.

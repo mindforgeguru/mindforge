@@ -472,7 +472,7 @@
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">JWT forgery, tampering, alg confusion</span>
           <p class="note">HS256, no <code>none</code> acceptance. Probed by <code>test_jwt_security</code>.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Suspended tenant still authenticating</span>
-          <p class="note">Login <em>and</em> refresh both gated; owner exempt. <code>test_tenancy_wiring.py</code> 8/8.</p></div>
+          <p class="note">Login <em>and</em> refresh both gated; owner exempt. <code>test_tenancy_wiring.py</code> 8/8. Live check 2026-10-09: after suspension login 400, refresh 401, an issued access token 403, school leaves the picker, other schools unaffected, owner keeps working, reactivation restores login.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Session bleed on account switch (shared device)</span>
           <p class="note">Cache-reset race let the next sign-in read the previous user's data. Found and fixed today — commit <code>2bbb630</code>.<span class="flag new">This session</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Account lockout + lockout-DoS guard</span>
