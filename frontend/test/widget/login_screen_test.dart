@@ -32,10 +32,9 @@ Widget _buildLoginScreen() => ProviderScope(
       ),
     );
 
-/// Taps a PIN-pad digit key. Uses `.last` because the same character can
-/// appear in both the PIN dots (placeholder) and the pad key.
+/// Taps a PIN-pad digit key.
 Future<void> _tapDigit(WidgetTester tester, String digit) async {
-  await tester.tap(find.text(digit).last);
+  await tester.tap(find.byKey(LoginKeys.pinDigit(digit)));
   await tester.pump();
 }
 
@@ -60,9 +59,8 @@ void main() {
       await tester.pumpWidget(_buildLoginScreen());
       await tester.pump();
 
-      // 'Login' appears in both the tab label and the button — findsWidgets is correct.
-      expect(find.text('Login'), findsWidgets);
-      expect(find.text('Request Access'), findsOneWidget);
+      expect(find.byKey(LoginKeys.loginTab), findsOneWidget);
+      expect(find.byKey(LoginKeys.registerTab), findsOneWidget);
     });
 
     testWidgets('renders all PIN-pad digits 0–9', (tester) async {
@@ -70,7 +68,7 @@ void main() {
       await tester.pump();
 
       for (final d in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']) {
-        expect(find.text(d), findsWidgets,
+        expect(find.byKey(LoginKeys.pinDigit(d)), findsOneWidget,
             reason: 'PIN pad digit $d should be visible');
       }
     });
@@ -79,10 +77,11 @@ void main() {
       await tester.pumpWidget(_buildLoginScreen());
       await tester.pump();
 
-      final btn = tester.widget<ElevatedButton>(
-        find.byType(ElevatedButton).first,
-      );
-      expect(btn.onPressed, isNotNull,
+      final btn = tester.widget<InkWell>(find.descendant(
+        of: find.byKey(LoginKeys.submit),
+        matching: find.byType(InkWell),
+      ));
+      expect(btn.onTap, isNotNull,
           reason: 'Button should be enabled when not loading');
     });
 
@@ -119,7 +118,7 @@ void main() {
       await tester.pump();
 
       await _tapDigit(tester, '5');
-      await tester.tap(find.text('⌫'));
+      await tester.tap(find.byKey(LoginKeys.pinDelete));
       await tester.pump();
 
       expect(find.byType(LoginScreen), findsOneWidget);
@@ -135,10 +134,10 @@ void main() {
       await tester.pumpWidget(_buildLoginScreen());
       await tester.pump();
 
-      await tester.tap(find.text('Request Access'));
+      await tester.tap(find.byKey(LoginKeys.registerTab));
       await tester.pumpAndSettle();
 
-      expect(find.text('Register as'), findsOneWidget);
+      expect(find.byKey(LoginKeys.role), findsOneWidget);
     });
 
     testWidgets('switching back to Login hides register fields', (tester) async {
@@ -149,14 +148,14 @@ void main() {
       await tester.pumpWidget(_buildLoginScreen());
       await tester.pump();
 
-      await tester.tap(find.text('Request Access'));
+      await tester.tap(find.byKey(LoginKeys.registerTab));
       await tester.pumpAndSettle();
 
       // Switch back to Login tab
-      await tester.tap(find.text('Login').first);
+      await tester.tap(find.byKey(LoginKeys.loginTab));
       await tester.pumpAndSettle();
 
-      expect(find.text('Register as'), findsNothing);
+      expect(find.byKey(LoginKeys.role), findsNothing);
     });
   });
 
@@ -174,13 +173,13 @@ void main() {
       await tester.pump();
 
       // The wide/web layout toggles register mode via this link (not a tab).
-      await tester.tap(find.text("Don't have an account? Request Access"));
+      await tester.ensureVisible(find.byKey(LoginKeys.modeToggle));
+      await tester.tap(find.byKey(LoginKeys.modeToggle));
       await tester.pumpAndSettle();
 
-      // Default role is student → phone is labelled 'Phone Number' (required).
-      expect(find.text('Register as'), findsOneWidget);
-      expect(find.text('Phone Number'), findsOneWidget);
-      expect(find.text('Email (optional)'), findsOneWidget);
+      expect(find.byKey(LoginKeys.role), findsOneWidget);
+      expect(find.byKey(LoginKeys.phone), findsOneWidget);
+      expect(find.byKey(LoginKeys.email), findsOneWidget);
     });
   });
 }

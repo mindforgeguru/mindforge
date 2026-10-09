@@ -9,6 +9,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'package:mindforge/features/auth/screens/login_screen.dart';
 import 'package:mindforge/main.dart' as app;
 
 // ─── Credentials ─────────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ void main() {
   }
 
   Future<void> tapDigit(WidgetTester t, String d) async {
-    await t.tap(find.text(d).last);
+    await t.tap(find.byKey(LoginKeys.pinDigit(d)));
     await t.pump(const Duration(milliseconds: 80));
   }
 
@@ -129,7 +130,7 @@ void main() {
   /// with no picker, but fails loudly if the picker exists without the
   /// expected school — that means an unreachable or unseeded backend.
   Future<void> selectSchool(WidgetTester t, String schoolName) async {
-    final dropdown = find.byType(DropdownButtonFormField<int>);
+    final dropdown = find.byKey(LoginKeys.school);
     if (dropdown.evaluate().isEmpty) return;
 
     // getSchools() is an async network call fired from the login screen's
@@ -169,12 +170,12 @@ void main() {
   Future<void> login(WidgetTester t, (String, String, String) creds) async {
     await passSplash(t);
     await selectSchool(t, creds.$3);
-    await t.enterText(find.widgetWithText(TextField, 'Username'), creds.$1);
+    await t.enterText(find.byKey(LoginKeys.username), creds.$1);
     await t.pump();
     await enterMpin(t, creds.$2);
     // Scroll the button into view first — the school picker grew the form and
     // can push it past the bottom edge, where tap() misses instead of failing.
-    final loginButton = find.byType(ElevatedButton).first;
+    final loginButton = find.byKey(LoginKeys.submit);
     await t.ensureVisible(loginButton);
     await settle(t);
     await t.tap(loginButton);

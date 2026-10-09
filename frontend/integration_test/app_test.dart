@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'package:mindforge/features/auth/screens/login_screen.dart';
 import 'package:mindforge/main.dart' as app;
 
 // Admin credentials. Defaults are the account documented in
@@ -149,7 +150,7 @@ void main() {
   /// backend is unreachable or unseeded, which is worth distinguishing from a
   /// genuine UI failure.
   Future<void> selectSchool(WidgetTester tester) async {
-    final dropdown = find.byType(DropdownButtonFormField<int>);
+    final dropdown = find.byKey(LoginKeys.school);
     if (dropdown.evaluate().isEmpty) return;
 
     // getSchools() is an async network call from the login screen's initState;
@@ -183,9 +184,9 @@ void main() {
 
   /// Tap a single keypad digit.
   Future<void> tapDigit(WidgetTester tester, String digit) async {
-    final matches = find.text(digit);
-    expect(matches, findsWidgets, reason: 'Keypad digit "$digit" not found');
-    await tester.tap(matches.last);
+    final key = find.byKey(LoginKeys.pinDigit(digit));
+    expect(key, findsOneWidget, reason: 'Keypad digit "$digit" not found');
+    await tester.tap(key);
     await tester.pump(const Duration(milliseconds: 80));
   }
 
@@ -204,7 +205,7 @@ void main() {
   /// failing outright, so the test hangs waiting for a login that never
   /// started. Scrolling first keeps this robust against further layout growth.
   Future<void> tapLogin(WidgetTester tester) async {
-    final button = find.byType(ElevatedButton).first;
+    final button = find.byKey(LoginKeys.submit);
     await tester.ensureVisible(button);
     await settle(tester);
     await tester.tap(button);
@@ -216,7 +217,7 @@ void main() {
     await passSplash(tester);
     await selectSchool(tester);
 
-    final usernameField = find.widgetWithText(TextField, 'Username');
+    final usernameField = find.byKey(LoginKeys.username);
     expect(usernameField, findsOneWidget);
     await tester.enterText(usernameField, username);
     await tester.pump();
@@ -238,8 +239,8 @@ void main() {
     await launchApp(tester);
     expect(find.byType(MaterialApp), findsOneWidget);
     await passSplash(tester);
-    expect(find.text('MIND FORGE'), findsOneWidget);
-    expect(find.text('Login'), findsWidgets);
+    expect(find.byKey(LoginKeys.submit), findsOneWidget);
+    expect(find.byKey(LoginKeys.loginTab), findsOneWidget);
   });
 
   // ── Test 2: Request Access tab ─────────────────────────────────────────────
@@ -247,10 +248,10 @@ void main() {
     await launchApp(tester);
     await passSplash(tester);
 
-    await tester.tap(find.text('Request Access'));
+    await tester.tap(find.byKey(LoginKeys.registerTab));
     await settle(tester);
 
-    expect(find.text('Register as'), findsWidgets);
+    expect(find.byKey(LoginKeys.role), findsOneWidget);
   });
 
   // ── Test 3: MPIN delete clears last digit ─────────────────────────────────
@@ -262,11 +263,11 @@ void main() {
     await tapDigit(tester, '2');
     await tapDigit(tester, '3');
 
-    expect(find.text('⌫'), findsOneWidget);
-    await tester.tap(find.text('⌫'));
+    expect(find.byKey(LoginKeys.pinDelete), findsOneWidget);
+    await tester.tap(find.byKey(LoginKeys.pinDelete));
     await tester.pump();
 
-    expect(find.text('MIND FORGE'), findsOneWidget);
+    expect(find.byKey(LoginKeys.submit), findsOneWidget);
     // Drain any pending frames before the test exits
     await settle(tester, const Duration(seconds: 1));
   });
@@ -280,7 +281,7 @@ void main() {
     // appears and this asserts on the wrong snackbar entirely.
     await selectSchool(tester);
 
-    final usernameField = find.widgetWithText(TextField, 'Username');
+    final usernameField = find.byKey(LoginKeys.username);
     expect(usernameField, findsOneWidget);
     await tester.enterText(usernameField, 'wronguser');
     await tester.pump();
@@ -300,8 +301,9 @@ void main() {
     }
     expect(snackbarFound, isTrue,
         reason: 'Expected error snackbar to appear within 6s');
-    // Still on login screen
-    expect(find.text('MIND FORGE'), findsOneWidget);
+    // Still on login screen. Not the "MIND FORGE" wordmark: once a school is
+    // picked the header shows the school's name instead.
+    expect(find.byKey(LoginKeys.submit), findsOneWidget);
     // Let snackbar animation + any pending frames drain fully
     for (int i = 0; i < 50; i++) {
       await tester.pump(const Duration(milliseconds: 100));

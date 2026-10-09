@@ -4,12 +4,151 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/api/api_client.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
-import '../../../core/widgets/mindforge_logo.dart';
 import '../../../core/widgets/school_logo.dart';
 import '../providers/auth_provider.dart';
+
+// ─── Whiteprint tokens ─────────────────────────────────────────────────────────
+//
+// The sign-in screen is the detail sheet of the Whiteprint drawing set the
+// marketing front door opens with: a near-white drafting ground carrying a
+// construction grid, every structure drawn with a 1.5px hairline, square
+// corners, no shadow anywhere, and one warm accent that does annotation work.
+//
+// These are deliberately PRIVATE to this screen rather than added to
+// `AppColors`. Sign-in happens before authentication, so it always runs on the
+// default palette — but `AppColors` is swapped at runtime by the student XP
+// theme-unlock system, and pushing this world in there would repaint the whole
+// app. Nothing outside this file reads `_Wp`.
+class _Wp {
+  _Wp._();
+
+  // Ground and sheet
+  static const print_ = Color(0xFFE4EBF3); // drafting blue ground
+  static const printDeep = Color(0xFFD6E0EB); // recessed field
+  static const sheet = Color(0xFFF2F6FA); // the lifted drawing sheet
+  static const white = Color(0xFFFBFDFF); // innermost plate
+
+  // Line work
+  static const navy = Color(0xFF112A4A); // logo navy — display, structure
+  static const navyMid = Color(0xFF22436B);
+  static const line = Color(0x4D112A4A); // .30 — structure hairline
+  static const lineSoft = Color(0x26112A4A); // .15 — list hairline
+  static const onPlate = Color(0xFFBFD2E6); // mono label on the navy plate
+
+  // Heat — the one accent, used as annotation ink
+  static const heat = Color(0xFFF55C1E); // marks, active cell, arrows
+  static const heatRead = Color(0xFFAE3607); // the cut that reads as text
+  static const heatWash = Color(0xFFFDF3EC); // the lightest heat tint
+  static const scale = Color(0xFFF7D9A6); // heat label on the navy plate
+
+  // Text
+  static const body = Color(0xFF1B3355);
+  static const mute = Color(0xFF4A5F7E);
+  static const ok = Color(0xFF146B3F);
+  static const alarm = Color(0xFFA32014);
+
+  static const rule = 1.5; // the one hairline weight
+  static const ctrlRadius = Radius.circular(3); // the single softening
+
+  // ── Three voices: Rajdhani states, Karla explains, Spline Sans Mono labels ──
+
+  /// Display — very large condensed caps.
+  static TextStyle disp(double size,
+          {Color color = navy, FontWeight weight = FontWeight.w700}) =>
+      GoogleFonts.rajdhani(
+        fontSize: size,
+        fontWeight: weight,
+        color: color,
+        height: 0.96,
+        letterSpacing: -0.012 * size,
+      );
+
+  /// Title — Rajdhani at a readable size, still caps.
+  static TextStyle title(double size,
+          {Color color = navy, FontWeight weight = FontWeight.w600}) =>
+      GoogleFonts.rajdhani(
+        fontSize: size,
+        fontWeight: weight,
+        color: color,
+        height: 1.06,
+        letterSpacing: 0.02 * size,
+      );
+
+  /// Running copy.
+  static TextStyle text(double size, {Color color = body, FontWeight? weight}) =>
+      GoogleFonts.karla(
+        fontSize: size,
+        fontWeight: weight ?? FontWeight.w400,
+        color: color,
+        height: 1.5,
+      );
+
+  /// Mono field key / dimension label. Never sets running prose.
+  static TextStyle dim(double size,
+          {Color color = navyMid, FontWeight weight = FontWeight.w500}) =>
+      GoogleFonts.splineSansMono(
+        fontSize: size,
+        fontWeight: weight,
+        color: color,
+        letterSpacing: size * 0.075,
+        height: 1.35,
+      );
+}
+
+/// The construction grid. A committed material in its own right, not a
+/// backdrop: the form's cells are laid out on the same 16px module the fine
+/// lines draw, so the armature the ground shows is the armature in use.
+class _GridPainter extends CustomPainter {
+  const _GridPainter();
+
+  static const double fine = 16;
+  static const double coarse = 96;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final finePaint = Paint()
+      ..color = const Color(0x0E112A4A)
+      ..strokeWidth = 1;
+    final coarsePaint = Paint()
+      ..color = const Color(0x1D112A4A)
+      ..strokeWidth = 1;
+
+    for (double x = 0; x <= size.width; x += fine) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), finePaint);
+    }
+    for (double y = 0; y <= size.height; y += fine) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), finePaint);
+    }
+    for (double x = 0; x <= size.width; x += coarse) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), coarsePaint);
+    }
+    for (double y = 0; y <= size.height; y += coarse) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), coarsePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GridPainter oldDelegate) => false;
+}
+
+/// Stable handles for tests. The visible copy on this screen is restyled
+/// freely (labels are uppercased, the delete key is an icon), so tests find
+/// controls by these keys rather than by their text.
+abstract final class LoginKeys {
+  static const loginTab = ValueKey('login.tab.login');
+  static const registerTab = ValueKey('login.tab.register');
+  static const school = ValueKey('login.school');
+  static const username = ValueKey('login.username');
+  static const role = ValueKey('login.role');
+  static const phone = ValueKey('login.phone');
+  static const email = ValueKey('login.email');
+  static const modeToggle = ValueKey('login.modeToggle');
+  static const submit = ValueKey('login.submit');
+  static const pinDelete = ValueKey('login.pin.delete');
+  static ValueKey<String> pinDigit(String d) => ValueKey('login.pin.$d');
+}
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -129,28 +268,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   String get _enteredPin => _pin.join();
 
-  // Shared field styling for the wide/web register form (filled white, rounded,
-  // primary focus border) — matches the Username/Register-as fields above.
-  InputDecoration _webRegisterDecoration(String label, IconData icon,
-      {String? helper}) {
-    return InputDecoration(
-      labelText: label,
-      helperText: helper,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.divider)),
-      enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.divider)),
-      focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.primary, width: 2)),
-    );
-  }
-
   void _tapDigit(String d) {
     if (_pinIndex >= 6) return;
     setState(() {
@@ -246,7 +363,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       if (ok && mounted) {
         _showSnack('Registration submitted! Await admin approval.',
-            color: AppColors.success);
+            color: _Wp.ok);
         setState(() {
           _isRegister = false;
           _clearPin();
@@ -281,9 +398,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final submitted = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
+      barrierColor: _Wp.navy.withValues(alpha: 0.42),
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('Two-factor authentication'),
+          backgroundColor: _Wp.sheet,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.zero,
+            side: BorderSide(color: _Wp.navy, width: _Wp.rule),
+          ),
+          titlePadding: EdgeInsets.zero,
+          title: _plateHeader('Two-factor authentication', 'Step 2 of 2'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,43 +419,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ? 'Enter one of the recovery codes you saved when you set '
                         'this up. Each code works once.'
                     : 'Enter the 6-digit code from your authenticator app.',
-                style: const TextStyle(fontSize: 13),
+                style: _Wp.text(14.5),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: codeController,
                 autofocus: true,
+                style: _Wp.text(16, color: _Wp.navy),
                 keyboardType:
                     useRecovery ? TextInputType.text : TextInputType.number,
                 textCapitalization: useRecovery
                     ? TextCapitalization.characters
                     : TextCapitalization.none,
-                decoration: InputDecoration(
-                  labelText: useRecovery ? 'Recovery code' : '6-digit code',
-                  hintText: useRecovery ? 'ABCD-EFGH-JKMN' : '123456',
-                  border: const OutlineInputBorder(),
+                decoration: _dec(
+                  useRecovery ? 'Recovery code' : '6-digit code',
+                  hint: useRecovery ? 'ABCD-EFGH-JKMN' : '123456',
                 ),
                 onSubmitted: (_) => Navigator.of(dialogContext).pop(true),
               ),
+              const SizedBox(height: 4),
               TextButton(
+                style: _linkStyle,
                 onPressed: () => setDialogState(() {
                   useRecovery = !useRecovery;
                   codeController.clear();
                 }),
-                child: Text(useRecovery
-                    ? 'Use my authenticator app instead'
-                    : "I don't have my phone"),
+                child: Text(
+                  useRecovery
+                      ? 'Use my authenticator app instead'
+                      : "I don't have my phone",
+                  style: _Wp.text(14, color: _Wp.heatRead,
+                      weight: FontWeight.w700),
+                ),
               ),
             ],
           ),
+          actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+            _OutlineKey(
+              label: 'Cancel',
+              onTap: () => Navigator.of(dialogContext).pop(false),
             ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Verify'),
+            const SizedBox(width: 10),
+            _FilledKey(
+              label: 'Verify',
+              onTap: () => Navigator.of(dialogContext).pop(true),
             ),
           ],
         ),
@@ -350,11 +484,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _showSnack(String msg, {Color? color}) {
+    final ground = color ?? _Wp.alarm;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
-        backgroundColor: color ?? AppColors.error,
+        content: Text(msg, style: _Wp.text(14.5, color: Colors.white)),
+        backgroundColor: ground,
         behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+          side: BorderSide(color: ground, width: _Wp.rule),
+        ),
       ),
     );
   }
@@ -365,22 +505,154 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _showForgotMpinHelp() {
     showDialog<void>(
       context: context,
+      barrierColor: _Wp.navy.withValues(alpha: 0.42),
       builder: (_) => AlertDialog(
-        title: const Text('Forgot your MPIN?'),
-        content: const Text(
+        backgroundColor: _Wp.sheet,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+          side: BorderSide(color: _Wp.navy, width: _Wp.rule),
+        ),
+        titlePadding: EdgeInsets.zero,
+        title: _plateHeader('Forgot your MPIN?', 'Recovery'),
+        content: Text(
           "For your security, your MPIN can't be recovered on your own.\n\n"
           "Ask your school's admin to reset it — they can set a new MPIN for "
           "you from their dashboard. A student can also ask their parent.",
+          style: _Wp.text(14.5),
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
         actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it'),
+          _FilledKey(
+            label: 'Got it',
+            onTap: () => Navigator.of(context).pop(),
           ),
         ],
       ),
     );
   }
+
+  // ─── Shared Whiteprint parts ────────────────────────────────────────────────
+
+  /// The navy plate header that caps a sheet or a dialog. The one place
+  /// Plate Navy carries a filled area.
+  static Widget _plateHeader(String label, String right) {
+    return Container(
+      width: double.infinity,
+      color: _Wp.navy,
+      padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label.toUpperCase(),
+              style: _Wp.dim(12.5, color: _Wp.onPlate, weight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(right.toUpperCase(),
+              style: _Wp.dim(12.5, color: _Wp.scale, weight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  static final ButtonStyle _linkStyle = TextButton.styleFrom(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    minimumSize: const Size(0, 48),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
+
+  /// One field decoration for every input on the screen: square, hairline,
+  /// white plate, heat focus. Mono label so the field reads as a title-block
+  /// cell key rather than a floating placeholder.
+  static InputDecoration _dec(
+    String label, {
+    IconData? icon,
+    String? helper,
+    String? hint,
+    Widget? suffix,
+  }) {
+    OutlineInputBorder b(Color c, double w) => OutlineInputBorder(
+          borderRadius: BorderRadius.zero,
+          borderSide: BorderSide(color: c, width: w),
+        );
+    return InputDecoration(
+      labelText: label.toUpperCase(),
+      hintText: hint,
+      helperText: helper,
+      helperMaxLines: 3,
+      helperStyle: _Wp.text(12.5, color: _Wp.mute),
+      hintStyle: _Wp.text(15, color: _Wp.mute),
+      labelStyle: _Wp.dim(12.5, color: _Wp.navyMid, weight: FontWeight.w600),
+      floatingLabelStyle:
+          _Wp.dim(12.5, color: _Wp.heatRead, weight: FontWeight.w600),
+      prefixIcon: icon == null
+          ? null
+          : Icon(icon, size: 19, color: _Wp.navyMid),
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: _Wp.white,
+      isDense: true,
+      contentPadding: const EdgeInsets.fromLTRB(14, 15, 14, 15),
+      border: b(_Wp.line, _Wp.rule),
+      enabledBorder: b(_Wp.line, _Wp.rule),
+      focusedBorder: b(_Wp.heat, 2),
+      counterText: '',
+    );
+  }
+
+  /// A selectable chip — square, hairline, filled navy when on. Used for
+  /// teachable subjects and a student's additional subjects.
+  Widget _chip({
+    required String label,
+    IconData? icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        constraints: const BoxConstraints(minHeight: 40),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? _Wp.navy : _Wp.white,
+          border: Border.all(
+              color: selected ? _Wp.navy : _Wp.line, width: _Wp.rule),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon,
+                  size: 15, color: selected ? _Wp.scale : _Wp.navyMid),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: _Wp.text(13.5,
+                  color: selected ? Colors.white : _Wp.body,
+                  weight: selected ? FontWeight.w700 : FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// A mono caption naming the group of controls beneath it. This is a field
+  /// label over a value, not a kicker over a heading.
+  Widget _groupLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(text.toUpperCase(),
+            style: _Wp.dim(12.5, weight: FontWeight.w600)),
+      );
+
+  // ─── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -393,527 +665,135 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     });
 
+    // Caret, selection and scrollbars ship with framework defaults that belong
+    // to no design system; theme them from the palette like everything else.
+    final themed = Theme.of(context).copyWith(
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: _Wp.heat,
+        selectionColor: Color(0x33F55C1E),
+        selectionHandleColor: _Wp.heat,
+      ),
+      scrollbarTheme: ScrollbarThemeData(
+        thumbColor: WidgetStateProperty.all(_Wp.line),
+        trackColor: WidgetStateProperty.all(_Wp.printDeep),
+        radius: Radius.zero,
+        thickness: WidgetStateProperty.all(9),
+      ),
+      iconTheme: const IconThemeData(color: _Wp.navyMid),
+      splashColor: const Color(0x14F55C1E),
+      highlightColor: const Color(0x0DF55C1E),
+    );
+
     // Use wide web layout on screens >= 900px
     if (MediaQuery.of(context).size.width >= 900) {
-      return _buildWebScaffold(context, auth);
+      return Theme(data: themed, child: _buildWebScaffold(context, auth));
     }
+    return Theme(data: themed, child: _buildMobileScaffold(context, auth));
+  }
 
+  // ─── Mobile layout — Sheet 2 alone ──────────────────────────────────────────
+
+  Widget _buildMobileScaffold(BuildContext context, AuthState auth) {
     final sh = MediaQuery.of(context).size.height;
     final compact = sh < 700;
     // viewPadding.bottom covers BOTH 3-button nav (48dp) and gesture nav (30dp).
     // Clamp to a minimum of 32 so the Login button always clears the nav bar.
     final safeBottom =
         MediaQuery.of(context).viewPadding.bottom.clamp(32.0, 80.0);
-
-    // Fluid header height — scales with viewport height (CSS vh equivalent)
-    // 19 vh ≈ 148px on 780px screen; 27 vh ≈ 224px on 830px screen
-    final hPad =
-        R.vh(context, compact ? 2.8 : 4.5); // vertical padding inside header
-    final logoScale =
-        R.fluid(context, compact ? 1.05 : 1.25, min: 0.9, max: 1.4);
+    final hzPad = R.sp(context, 16);
 
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: _Wp.print_,
       resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        bottom: false, // card extends beneath home indicator
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // Header height is driven by content + fluid padding — no hardcoded px
-            final headerH = R.vh(context, compact ? 19.0 : 27.0);
-            // Card fills at minimum the rest of the screen.
-            // When register fields push it taller, SingleChildScrollView kicks in.
-            final cardMinH = constraints.maxHeight - headerH;
-            // Fluid horizontal padding — scales with screen width
-            final hzPad = R.sp(context, 24);
-
-            return SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // ── Logo header ──────────────────────────────────────
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(hzPad, hPad, hzPad, hPad),
-                    child: MindForgeLogo(
-                      size: logoScale,
-                      dark: true,
-                      showTagline: true,
-                      logoUrl: _pickedSchoolLogoUrl,
-                      schoolName: _pickedSchoolName,
-                    ),
-                  ),
-
-                  // ── Form card ────────────────────────────────────────
-                  Container(
-                    width: double.infinity,
-                    constraints: BoxConstraints(minHeight: cardMinH),
-                    decoration: const BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius:
-                          BorderRadius.vertical(top: Radius.circular(32)),
-                    ),
+      body: Stack(
+        children: [
+          // The construction ground, behind everything.
+          const Positioned.fill(
+            child: CustomPaint(painter: _GridPainter()),
+          ),
+          SafeArea(
+            bottom: false, // sheet extends beneath the home indicator
+            child: Column(
+              children: [
+                _mobileRail(context),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: EdgeInsets.fromLTRB(
-                        hzPad, compact ? 16 : 20, hzPad, safeBottom),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // ── Tabs — Expanded fills available width (Flexbox) ──
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.divider.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.all(4),
-                          child: Row(
-                            children: [
-                              _Tab(
-                                label: 'Login',
-                                active: !_isRegister,
-                                onTap: () => setState(() {
-                                  _isRegister = false;
-                                  _clearPin();
-                                  _parentUsernameController.clear();
-                                  _parentMpinController.clear();
-                                }),
-                              ),
-                              _Tab(
-                                label: 'Request Access',
-                                active: _isRegister,
-                                onTap: () => setState(() {
-                                  _isRegister = true;
-                                  _clearPin();
-                                  _clearOwnerSelection();
-                                }),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        SizedBox(height: R.sp(context, compact ? 12 : 16)),
-
-                        // ── School ──────────────────────────────────────
-                        _schoolField(web: false),
-                        if (!_schoolsLoading && _schools.isNotEmpty)
-                          const SizedBox(height: 10),
-
-                        // ── Username ────────────────────────────────────
-                        TextField(
-                          controller: _usernameController,
-                          decoration: const InputDecoration(
-                            labelText: 'Username',
-                            prefixIcon: Icon(Icons.person_outline),
-                            isDense: true,
-                          ),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                          ],
-                          textInputAction: TextInputAction.done,
-                        ),
-
-                        // ── Register-only fields ────────────────────────
-                        if (_isRegister) ...[
-                          const SizedBox(height: 10),
-                          DropdownButtonFormField<String>(
-                            initialValue: _selectedRole,
-                            decoration: const InputDecoration(
-                              labelText: 'Register as',
-                              prefixIcon: Icon(Icons.badge_outlined),
-                              isDense: true,
-                            ),
-                            items: ['student', 'teacher', 'parent']
-                                .map((r) => DropdownMenuItem(
-                                      value: r,
-                                      child: Text(
-                                          r[0].toUpperCase() + r.substring(1)),
-                                    ))
-                                .toList(),
-                            onChanged: (v) => setState(() {
-                              _selectedRole = v ?? 'student';
-                              _parentUsernameController.clear();
-                              _parentMpinController.clear();
-                              _selectedSubjects.clear();
-                              _selectedTeacherSubjects.clear();
-                              _selectedGrade = 8;
-                            }),
-                          ),
-
-                          // ── Phone & Email ─────────────────────────────
-                          const SizedBox(height: 10),
-                          TextField(
-                            controller: _phoneController,
-                            decoration: InputDecoration(
-                              labelText: _selectedRole == 'parent'
-                                  ? 'Phone Number (optional)'
-                                  : 'Phone Number',
-                              prefixIcon: const Icon(Icons.phone_outlined),
-                              isDense: true,
-                              helperText: _selectedRole == 'student'
-                                  ? "You can use your parent's number."
-                                  : null,
-                            ),
-                            keyboardType: TextInputType.phone,
-                            textInputAction: TextInputAction.next,
-                          ),
-                          const SizedBox(height: 10),
-                          TextField(
-                            controller: _emailController,
-                            decoration: InputDecoration(
-                              labelText: 'Email (optional)',
-                              prefixIcon: const Icon(Icons.email_outlined),
-                              isDense: true,
-                              helperText: _selectedRole == 'student'
-                                  ? "You can use your parent's email."
-                                  : null,
-                            ),
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                          ),
-
-                          // ── Teacher-only fields ───────────────────────
-                          if (_selectedRole == 'teacher') ...[
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Text(
-                                  'Subjects you can teach',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              children: AppConstants.subjects.map((s) {
-                                final sel =
-                                    _selectedTeacherSubjects.contains(s);
-                                return GestureDetector(
-                                  onTap: () => setState(() => sel
-                                      ? _selectedTeacherSubjects.remove(s)
-                                      : _selectedTeacherSubjects.add(s)),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 150),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 7),
-                                    decoration: BoxDecoration(
-                                      color: sel
-                                          ? AppColors.primary
-                                          : AppColors.surface,
-                                      border: Border.all(
-                                        color: sel
-                                            ? AppColors.primary
-                                            : AppColors.divider,
-                                        width: sel ? 2 : 1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      s,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 11,
-                                        fontWeight: sel
-                                            ? FontWeight.w700
-                                            : FontWeight.normal,
-                                        color: sel
-                                            ? Colors.white
-                                            : AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ],
-
-                          // ── Student-only fields ───────────────────────
-                          if (_selectedRole == 'student') ...[
-                            const SizedBox(height: 10),
-                            DropdownButtonFormField<int>(
-                              initialValue: _selectedGrade,
-                              decoration: const InputDecoration(
-                                labelText: 'Grade',
-                                prefixIcon: Icon(Icons.school_outlined),
-                                isDense: true,
-                              ),
-                              items: [8, 9, 10]
-                                  .map((g) => DropdownMenuItem(
-                                        value: g,
-                                        child: Text('Grade $g'),
-                                      ))
-                                  .toList(),
-                              onChanged: (v) =>
-                                  setState(() => _selectedGrade = v ?? 8),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'Additional Subjects',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              children: _subjectOptions.map((s) {
-                                final sel = _selectedSubjects.contains(s.key);
-                                return GestureDetector(
-                                  onTap: () => setState(() => sel
-                                      ? _selectedSubjects.remove(s.key)
-                                      : _selectedSubjects.add(s.key)),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 150),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: sel
-                                          ? AppColors.primary
-                                          : AppColors.surface,
-                                      border: Border.all(
-                                        color: sel
-                                            ? AppColors.primary
-                                            : AppColors.divider,
-                                        width: sel ? 2 : 1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(s.icon,
-                                            size: 15,
-                                            color: sel
-                                                ? Colors.white
-                                                : AppColors.textSecondary),
-                                        const SizedBox(width: 5),
-                                        Text(
-                                          s.label,
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 12,
-                                            fontWeight: sel
-                                                ? FontWeight.w700
-                                                : FontWeight.normal,
-                                            color: sel
-                                                ? Colors.white
-                                                : AppColors.textSecondary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 10),
-                            TextField(
-                              controller: _parentUsernameController,
-                              decoration: const InputDecoration(
-                                labelText: "Parent's Username *",
-                                prefixIcon: Icon(Icons.family_restroom),
-                                isDense: true,
-                                helperText:
-                                    'Required. If the parent does not have an '
-                                    'account yet, one will be created with the '
-                                    "Parent's MPIN you enter below.",
-                                helperMaxLines: 3,
-                              ),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                              ],
-                              textInputAction: TextInputAction.next,
-                            ),
-                            const SizedBox(height: 10),
-                            TextField(
-                              controller: _parentMpinController,
-                              obscureText: _obscureParentMpin,
-                              keyboardType: TextInputType.number,
-                              maxLength: 6,
-                              decoration: InputDecoration(
-                                labelText: "Parent's 6-digit MPIN *",
-                                prefixIcon: const Icon(Icons.lock_outline),
-                                isDense: true,
-                                counterText: '',
-                                helperText:
-                                    "If the parent already has an account this "
-                                    "must match their MPIN. Don't reuse the "
-                                    "student's MPIN.",
-                                helperMaxLines: 3,
-                                suffixIcon: IconButton(
-                                  icon: Icon(_obscureParentMpin
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined),
-                                  onPressed: () => setState(() =>
-                                      _obscureParentMpin = !_obscureParentMpin),
-                                ),
-                              ),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              textInputAction: TextInputAction.done,
-                            ),
-                          ],
-                        ],
-
-                        SizedBox(height: R.sp(context, compact ? 14 : 18)),
-
-                        // ── MPIN label ──────────────────────────────────
-                        Text(
-                          _isRegister
-                              ? 'Set a 6-digit MPIN'
-                              : 'Enter your 6-digit MPIN',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            fontSize: R.fs(context, 13, min: 11, max: 15),
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-
-                        SizedBox(height: R.sp(context, 10)),
-
-                        // ── PIN dots — FractionallySizedBox keeps them
-                        //   proportional; height ≥ 48 for accessibility ──
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(6, (i) {
-                            final filled = _pin[i].isNotEmpty;
-                            final active = i == _pinIndex;
-                            final dotW = R.fluid(context, 38, min: 32, max: 46);
-                            final dotH = R.fluid(context, 50, min: 48, max: 58);
-                            return Container(
-                              margin: EdgeInsets.symmetric(
-                                  horizontal: R.sp(context, 4)),
-                              width: dotW,
-                              height: dotH,
-                              decoration: BoxDecoration(
-                                color: filled
-                                    ? AppColors.primary.withValues(alpha: 0.12)
-                                    : AppColors.surface,
-                                border: Border.all(
-                                  color: active
-                                      ? AppColors.primary
-                                      : AppColors.divider,
-                                  width: active ? 2 : 1,
-                                ),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: filled
-                                    ? Container(
-                                        width: R.fluid(context, 10,
-                                            min: 8, max: 12),
-                                        height: R.fluid(context, 10,
-                                            min: 8, max: 12),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                            );
-                          }),
-                        ),
-
-                        SizedBox(height: R.sp(context, 14)),
-
-                        // ── Number pad ──────────────────────────────────
-                        _buildPad(context),
-
-                        SizedBox(height: R.sp(context, 12)),
-
-                        // ── Submit — FractionallySizedBox (100% width),
-                        //   height ≥ 48 logical px for accessibility ─────
-                        SizedBox(
-                          width: double.infinity,
-                          height: R.fluid(context, 52, min: 48, max: 60),
-                          child: ElevatedButton(
-                            onPressed: auth.isLoading ? null : _submit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            child: auth.isLoading
-                                ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        color: AppColors.textOnDark),
-                                  )
-                                : FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      _isRegister
-                                          ? 'Submit Registration'
-                                          : 'Login',
-                                      style: GoogleFonts.poppins(
-                                        fontSize:
-                                            R.fs(context, 15, min: 13, max: 17),
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.textOnDark,
-                                        letterSpacing: 1.2,
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                        ),
-
-                        // No self-service MPIN reset — point users to their
-                        // admin rather than leave them stuck at login.
-                        if (!_isRegister)
-                          TextButton(
-                            onPressed: _showForgotMpinHelp,
-                            child: Text(
-                              'Forgot your MPIN?',
-                              style: GoogleFonts.poppins(
-                                fontSize: R.fs(context, 13, min: 12, max: 15),
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                        hzPad, compact ? 12 : 16, hzPad, safeBottom),
+                    child: _formSheet(context, auth, compact: compact),
                   ),
-                ],
-              ),
-            );
-          },
-        ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  // ─── Web layout ───────────────────────────────────────────────────────────
+  /// The hairline rail: school (or MindForge) mark, wordmark, tagline.
+  Widget _mobileRail(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: _Wp.navy, width: _Wp.rule)),
+      ),
+      padding: EdgeInsets.fromLTRB(R.sp(context, 16), 10, R.sp(context, 16), 10),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: _Wp.white,
+              border: Border.all(color: _Wp.line, width: _Wp.rule),
+            ),
+            padding: const EdgeInsets.all(3),
+            child: SchoolLogo(
+                fit: BoxFit.contain, logoUrl: _pickedSchoolLogoUrl),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _pickedSchoolName ?? 'MIND FORGE',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: _Wp.navy,
+                    letterSpacing: 2.6,
+                    height: 1.1,
+                  ),
+                ),
+                Text('AI assisted learning',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _Wp.text(12.5, color: _Wp.mute)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Web layout — a two-sheet drawing set ───────────────────────────────────
 
   Widget _buildWebScaffold(BuildContext context, AuthState auth) {
     return Scaffold(
-      backgroundColor: const Color(0xFF060F1E),
+      backgroundColor: _Wp.print_,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Left: branding panel ─────────────────────────────────────
-          Expanded(
-            flex: 48,
-            child: _buildWebLeftPanel(context),
-          ),
-          // ── Right: clean white form ──────────────────────────────────
-          Expanded(
-            flex: 52,
-            child: _buildWebRightPanel(context, auth),
-          ),
+          // ── Sheet 1: the general arrangement ──────────────────────────
+          Expanded(flex: 48, child: _buildWebLeftPanel(context)),
+          // ── Sheet 2: the detail — the form ────────────────────────────
+          Expanded(flex: 52, child: _buildWebRightPanel(context, auth)),
         ],
       ),
     );
@@ -922,225 +802,181 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget _buildWebLeftPanel(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF060F1E), Color(0xFF1D3557), Color(0xFF153A5E)],
-          stops: [0.0, 0.6, 1.0],
-        ),
+        color: _Wp.print_,
+        border: Border(right: BorderSide(color: _Wp.navy, width: _Wp.rule)),
       ),
       child: Stack(
         children: [
-          // Large soft glow circles
-          Positioned(
-              top: -100,
-              left: -100,
-              child: Container(
-                  width: 360,
-                  height: 360,
-                  decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.025)))),
-          Positioned(
-              bottom: -90,
-              right: -70,
-              child: Container(
-                  width: 400,
-                  height: 400,
-                  decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.accent.withValues(alpha: 0.08)))),
-          // Accent vertical edge glow
-          Positioned(
-            left: 0,
-            top: 100,
-            bottom: 100,
-            child: Container(
-              width: 3,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    AppColors.accent.withValues(alpha: 0.6),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Content
-          SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(52, 48, 52, 48),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Logo block — Hansal logo + MindForge logo side by side
-                  Row(
-                    children: [
-                      // Hansal Sir logo
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: [
-                            BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 6))
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: Image.asset('assets/images/hansal_logo.png',
-                            fit: BoxFit.contain),
-                      ),
-                      // Vertical divider
-                      Container(
-                        width: 1,
-                        height: 52,
-                        margin: const EdgeInsets.symmetric(horizontal: 18),
-                        color: Colors.white.withValues(alpha: 0.2),
-                      ),
-                      // MindForge logo + name
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: [
-                            BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 6))
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(10),
-                        child: SchoolLogo(
-                            fit: BoxFit.contain, logoUrl: _pickedSchoolLogoUrl),
-                      ),
-                      const SizedBox(width: 16),
-                      Flexible(
-                        child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(_pickedSchoolName ?? 'MIND FORGE',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.poppins(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  letterSpacing: 1.5)),
-                          Text('AI Assisted Learning',
-                              style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: Colors.white.withValues(alpha: 0.5))),
-                        ],
-                      ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 56),
-
-                  // Hero text
-                  Text('Smart Learning\nStarts Here.',
-                      style: GoogleFonts.poppins(
-                          fontSize: 44,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.1,
-                          letterSpacing: -0.5)),
-                  const SizedBox(height: 14),
-                  Text(
-                      'A complete platform for teachers,\nstudents, and parents.',
-                      style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: Colors.white.withValues(alpha: 0.55),
-                          height: 1.65)),
-
-                  const SizedBox(height: 40),
-
-                  // Feature list
-                  ...[
-                    (
-                      Icons.auto_awesome_rounded,
-                      'AI-Generated Tests & Answer Keys'
-                    ),
-                    (Icons.how_to_reg_rounded, 'Real-Time Attendance Tracking'),
-                    (Icons.bar_chart_rounded, 'Smart Grade Analytics'),
-                    (
-                      Icons.account_balance_wallet_rounded,
-                      'Fee Management & Receipts'
-                    ),
-                  ].map((f) => Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: AppColors.accent.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Icon(f.$1,
-                                  size: 16, color: AppColors.accentLight),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(f.$2,
-                                style: GoogleFonts.poppins(
-                                    fontSize: 13,
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                    fontWeight: FontWeight.w500)),
-                          ],
-                        ),
-                      )),
-
-                  const SizedBox(height: 48),
-
-                  // Capsule — adapted from splash screen for dark background
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.22), width: 1),
-                      color: Colors.white.withValues(alpha: 0.07),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+          const Positioned.fill(child: CustomPaint(painter: _GridPainter())),
+          // The sheet's drawn matter sits at the head; the approval stamp is
+          // anchored at the foot the way a drawing's title block is, rather
+          // than floating wherever the content happens to end.
+          LayoutBuilder(
+            builder: (context, viewport) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: viewport.maxHeight),
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(48, 40, 44, 36),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Icon(Icons.workspace_premium_rounded,
-                            size: 18, color: Colors.white.withValues(alpha: 0.85)),
-                        const SizedBox(width: 10),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('25+ YEARS OF EXCELLENCE',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                    letterSpacing: 1.4)),
-                            Text('Trusted education since 1997',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 10,
-                                    color: Colors.white.withValues(alpha: 0.55),
-                                    letterSpacing: 0.2)),
+                  // ── Brand plates ────────────────────────────────────
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _plate(
+                        // 3.6MB source decoded down to the box it is drawn in.
+                        child: Image.asset(
+                          'assets/images/hansal_logo.png',
+                          fit: BoxFit.contain,
+                          cacheWidth: 160,
+                          filterQuality: FilterQuality.medium,
+                        ),
+                      ),
+                      Container(
+                          width: _Wp.rule,
+                          height: 54,
+                          margin: const EdgeInsets.symmetric(horizontal: 16),
+                          color: _Wp.line),
+                      _plate(
+                        child: SchoolLogo(
+                            fit: BoxFit.contain,
+                            logoUrl: _pickedSchoolLogoUrl),
+                      ),
+                      const SizedBox(width: 14),
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _pickedSchoolName ?? 'MIND FORGE',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.rajdhani(
+                                fontSize: 21,
+                                fontWeight: FontWeight.w700,
+                                color: _Wp.navy,
+                                letterSpacing: 2.8,
+                                height: 1.15,
+                              ),
+                            ),
+                            Text('AI assisted learning',
+                                style: _Wp.text(13, color: _Wp.mute)),
                           ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 44),
+
+                  // ── Headline ────────────────────────────────────────
+                  Text('Smart Learning\nStarts Here.'.toUpperCase(),
+                      style: _Wp.disp(58)),
+                  const SizedBox(height: 14),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 380),
+                    child: Text(
+                        'A complete platform for teachers, students, and '
+                        'parents.',
+                        style: _Wp.text(16)),
+                  ),
+
+                  const SizedBox(height: 34),
+
+                  // ── Capability schedule ─────────────────────────────
+                  Container(
+                    decoration: const BoxDecoration(
+                      border:
+                          Border(top: BorderSide(color: _Wp.navy, width: _Wp.rule)),
+                    ),
+                    child: Column(
+                      children: [
+                        for (final f in const [
+                          ('01', 'AI-Generated Tests & Answer Keys'),
+                          ('02', 'Real-Time Attendance Tracking'),
+                          ('03', 'Smart Grade Analytics'),
+                          ('04', 'Fee Management & Receipts'),
+                        ])
+                          Container(
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                  bottom: BorderSide(
+                                      color: _Wp.lineSoft, width: 1)),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 42,
+                                  child: Text(f.$1,
+                                      style: _Wp.dim(12.5,
+                                          color: _Wp.heatRead,
+                                          weight: FontWeight.w600)),
+                                ),
+                                Expanded(
+                                  child: Text(f.$2,
+                                      style: _Wp.title(21)),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                          ],
+                        ),
+
+                        // ── Approval stamp. Pre-existing owner claim,
+                        //    restyled, not re-authored. See the surface
+                        //    brief. ─────────────────────────────────────
+                        Padding(
+                          padding: const EdgeInsets.only(top: 40),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: _Wp.white,
+                              border:
+                                  Border.all(color: _Wp.line, width: _Wp.rule),
+                            ),
+                            padding: const EdgeInsets.fromLTRB(16, 12, 18, 13),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 3,
+                                  height: 38,
+                                  color: _Wp.heat,
+                                  margin: const EdgeInsets.only(right: 14),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('25+ YEARS OF EXCELLENCE',
+                                        style: _Wp.dim(12.5,
+                                            color: _Wp.heatRead,
+                                            weight: FontWeight.w600)),
+                                    const SizedBox(height: 3),
+                                    Text('Trusted education since 1997',
+                                        style: _Wp.text(14)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1149,99 +985,133 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  /// A square white plate holding a logo. Depth is plate overlap, never shadow.
+  Widget _plate({required Widget child}) => Container(
+        width: 74,
+        height: 74,
+        decoration: BoxDecoration(
+          color: _Wp.white,
+          border: Border.all(color: _Wp.line, width: _Wp.rule),
+        ),
+        padding: const EdgeInsets.all(8),
+        child: child,
+      );
+
   Widget _buildWebRightPanel(BuildContext context, AuthState auth) {
     return Container(
-      color: const Color(0xFFF4F6FA),
-      child: Center(
-        child: SingleChildScrollView(
-          child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 48),
+      color: _Wp.print_,
+      child: Stack(
+        children: [
+          const Positioned.fill(child: CustomPaint(painter: _GridPainter())),
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 40),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 452),
+                child: _formSheet(context, auth, compact: false),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Sheet 2: the form, built as a title block ──────────────────────────────
+
+  Widget _formSheet(BuildContext context, AuthState auth,
+      {required bool compact}) {
+    final gap = compact ? 12.0 : 14.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _Wp.sheet,
+        border: Border.all(color: _Wp.navy, width: _Wp.rule),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _plateHeader(
+            _isRegister ? 'Request access' : 'Sign in',
+            _isRegister ? 'Await approval' : 'Your school',
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(16, compact ? 14 : 18, 16, compact ? 16 : 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Heading
-                Text(_isRegister ? 'Request Access' : 'Welcome back',
-                    style: GoogleFonts.poppins(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0D1B2A),
-                        letterSpacing: -0.5)),
-                const SizedBox(height: 4),
-                Text(
-                    _isRegister
-                        ? 'Fill in your details and await admin approval.'
-                        : 'Sign in to your MIND FORGE account.',
-                    style: GoogleFonts.poppins(
-                        fontSize: 12, color: AppColors.textMuted)),
-                const SizedBox(height: 4),
+                // ── Tabs ────────────────────────────────────────────
                 Container(
-                  width: 40,
-                  height: 3,
                   decoration: BoxDecoration(
-                    color: AppColors.accent,
-                    borderRadius: BorderRadius.circular(2),
+                    border: Border.all(color: _Wp.line, width: _Wp.rule),
+                  ),
+                  child: Row(
+                    children: [
+                      _Tab(
+                        key: LoginKeys.loginTab,
+                        label: 'Login',
+                        active: !_isRegister,
+                        onTap: () => setState(() {
+                          _isRegister = false;
+                          _clearPin();
+                          _parentUsernameController.clear();
+                          _parentMpinController.clear();
+                        }),
+                      ),
+                      Container(width: _Wp.rule, height: 46, color: _Wp.line),
+                      _Tab(
+                        key: LoginKeys.registerTab,
+                        label: 'Request Access',
+                        active: _isRegister,
+                        onTap: () => setState(() {
+                          _isRegister = true;
+                          _clearPin();
+                          _clearOwnerSelection();
+                        }),
+                      ),
+                    ],
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                SizedBox(height: gap + 4),
 
-                // School
-                _schoolField(web: true),
+                // ── School ──────────────────────────────────────────
+                _schoolField(),
                 if (!_schoolsLoading && _schools.isNotEmpty)
-                  const SizedBox(height: 14),
+                  SizedBox(height: gap),
 
-                // Username
+                // ── Username ────────────────────────────────────────
                 TextField(
+                  key: LoginKeys.username,
                   controller: _usernameController,
-                  decoration: InputDecoration(
-                    labelText: 'Username',
-                    prefixIcon: const Icon(Icons.person_outline),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.divider)),
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.divider)),
-                    focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: AppColors.primary, width: 2)),
-                  ),
+                  style: _Wp.text(16, color: _Wp.navy),
+                  decoration: _dec('Username', icon: Icons.person_outline),
                   inputFormatters: [
-                    FilteringTextInputFormatter.deny(RegExp(r'\s'))
+                    FilteringTextInputFormatter.deny(RegExp(r'\s')),
                   ],
+                  textInputAction: TextInputAction.done,
                 ),
 
-                // Register fields
+                // ── Register-only fields ────────────────────────────
                 if (_isRegister) ...[
-                  const SizedBox(height: 14),
+                  SizedBox(height: gap),
                   DropdownButtonFormField<String>(
+                    key: LoginKeys.role,
                     initialValue: _selectedRole,
-                    decoration: InputDecoration(
-                      labelText: 'Register as',
-                      prefixIcon: const Icon(Icons.badge_outlined),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: AppColors.divider)),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              BorderSide(color: AppColors.primary, width: 2)),
-                    ),
+                    isExpanded: true,
+                    style: _Wp.text(16, color: _Wp.navy),
+                    decoration:
+                        _dec('Register as', icon: Icons.badge_outlined),
+                    dropdownColor: _Wp.white,
+                    borderRadius: BorderRadius.zero,
                     items: ['student', 'teacher', 'parent']
                         .map((r) => DropdownMenuItem(
-                            value: r,
-                            child: Text(r[0].toUpperCase() + r.substring(1))))
+                              value: r,
+                              child: Text(r[0].toUpperCase() + r.substring(1),
+                                  style: _Wp.text(15.5, color: _Wp.navy)),
+                            ))
                         .toList(),
                     onChanged: (v) => setState(() {
                       _selectedRole = v ?? 'student';
@@ -1253,345 +1123,306 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     }),
                   ),
 
-                  // Phone & Email — required for teacher/student (validated on
-                  // submit), optional for parent. The mobile layout has these
-                  // too; omitting them here made desktop teacher/student
-                  // sign-up impossible (submit demands a phone with no field).
-                  const SizedBox(height: 14),
+                  // ── Phone & Email ─────────────────────────────────
+                  // Required for teacher/student (validated on submit),
+                  // optional for parent.
+                  SizedBox(height: gap),
                   TextField(
+                    key: LoginKeys.phone,
                     controller: _phoneController,
+                    style: _Wp.text(16, color: _Wp.navy),
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.next,
-                    decoration: _webRegisterDecoration(
+                    decoration: _dec(
                       _selectedRole == 'parent'
-                          ? 'Phone Number (optional)'
-                          : 'Phone Number',
-                      Icons.phone_outlined,
+                          ? 'Phone number (optional)'
+                          : 'Phone number',
+                      icon: Icons.phone_outlined,
                       helper: _selectedRole == 'student'
                           ? "You can use your parent's number."
                           : null,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  SizedBox(height: gap),
                   TextField(
+                    key: LoginKeys.email,
                     controller: _emailController,
+                    style: _Wp.text(16, color: _Wp.navy),
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
-                    decoration: _webRegisterDecoration(
+                    decoration: _dec(
                       'Email (optional)',
-                      Icons.email_outlined,
+                      icon: Icons.email_outlined,
                       helper: _selectedRole == 'student'
                           ? "You can use your parent's email."
                           : null,
                     ),
                   ),
-                  if (_selectedRole == 'student') ...[
-                    const SizedBox(height: 14),
-                    DropdownButtonFormField<int>(
-                      initialValue: _selectedGrade,
-                      decoration: InputDecoration(
-                        labelText: 'Grade',
-                        prefixIcon: const Icon(Icons.school_outlined),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppColors.divider)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide(color: AppColors.primary, width: 2)),
-                      ),
-                      items: [8, 9, 10]
-                          .map((g) => DropdownMenuItem(
-                              value: g, child: Text('Grade $g')))
-                          .toList(),
-                      onChanged: (v) => setState(() => _selectedGrade = v ?? 8),
-                    ),
-                    const SizedBox(height: 14),
-                    Text('Additional Subjects',
-                        style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
+
+                  // ── Teacher-only ──────────────────────────────────
+                  if (_selectedRole == 'teacher') ...[
+                    SizedBox(height: gap + 2),
+                    _groupLabel('Subjects you can teach'),
                     Wrap(
                       spacing: 8,
-                      runSpacing: 6,
-                      children: _subjectOptions.map((s) {
-                        final sel = _selectedSubjects.contains(s.key);
-                        return GestureDetector(
-                          onTap: () => setState(() => sel
-                              ? _selectedSubjects.remove(s.key)
-                              : _selectedSubjects.add(s.key)),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: sel ? AppColors.primary : Colors.white,
-                              border: Border.all(
-                                  color: sel
-                                      ? AppColors.primary
-                                      : AppColors.divider),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(s.label,
-                                style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    color: sel
-                                        ? Colors.white
-                                        : AppColors.textSecondary,
-                                    fontWeight: sel
-                                        ? FontWeight.w700
-                                        : FontWeight.normal)),
-                          ),
-                        );
-                      }).toList(),
+                      runSpacing: 8,
+                      children: AppConstants.subjects
+                          .map((s) => _chip(
+                                label: s,
+                                selected: _selectedTeacherSubjects.contains(s),
+                                onTap: () => setState(() =>
+                                    _selectedTeacherSubjects.contains(s)
+                                        ? _selectedTeacherSubjects.remove(s)
+                                        : _selectedTeacherSubjects.add(s)),
+                              ))
+                          .toList(),
                     ),
-                    const SizedBox(height: 14),
+                  ],
+
+                  // ── Student-only ──────────────────────────────────
+                  if (_selectedRole == 'student') ...[
+                    SizedBox(height: gap),
+                    DropdownButtonFormField<int>(
+                      initialValue: _selectedGrade,
+                      isExpanded: true,
+                      style: _Wp.text(16, color: _Wp.navy),
+                      decoration: _dec('Grade', icon: Icons.school_outlined),
+                      dropdownColor: _Wp.white,
+                      borderRadius: BorderRadius.zero,
+                      items: [8, 9, 10]
+                          .map((g) => DropdownMenuItem(
+                                value: g,
+                                child: Text('Grade $g',
+                                    style: _Wp.text(15.5, color: _Wp.navy)),
+                              ))
+                          .toList(),
+                      onChanged: (v) =>
+                          setState(() => _selectedGrade = v ?? 8),
+                    ),
+                    SizedBox(height: gap + 2),
+                    _groupLabel('Additional subjects'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _subjectOptions
+                          .map((s) => _chip(
+                                label: s.label,
+                                icon: s.icon,
+                                selected: _selectedSubjects.contains(s.key),
+                                onTap: () => setState(() =>
+                                    _selectedSubjects.contains(s.key)
+                                        ? _selectedSubjects.remove(s.key)
+                                        : _selectedSubjects.add(s.key)),
+                              ))
+                          .toList(),
+                    ),
+                    SizedBox(height: gap + 2),
                     TextField(
                       controller: _parentUsernameController,
-                      decoration: InputDecoration(
-                        labelText: "Parent's Username *",
-                        helperText:
-                            'Required. If the parent does not have an account yet, '
-                            "one will be created with the Parent's MPIN you enter below.",
-                        helperMaxLines: 3,
-                        prefixIcon: const Icon(Icons.family_restroom),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppColors.divider)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide(color: AppColors.primary, width: 2)),
+                      style: _Wp.text(16, color: _Wp.navy),
+                      decoration: _dec(
+                        "Parent's username *",
+                        icon: Icons.family_restroom,
+                        helper: 'Required. If the parent does not have an '
+                            'account yet, one will be created with the '
+                            "Parent's MPIN you enter below.",
                       ),
                       inputFormatters: [
-                        FilteringTextInputFormatter.deny(RegExp(r'\s'))
+                        FilteringTextInputFormatter.deny(RegExp(r'\s')),
                       ],
+                      textInputAction: TextInputAction.next,
                     ),
-                    const SizedBox(height: 14),
+                    SizedBox(height: gap),
                     TextField(
                       controller: _parentMpinController,
                       obscureText: _obscureParentMpin,
                       keyboardType: TextInputType.number,
                       maxLength: 6,
-                      decoration: InputDecoration(
-                        labelText: "Parent's 6-digit MPIN *",
-                        helperText:
-                            "If the parent already has an account this must "
-                            "match their MPIN. Don't reuse the student's MPIN.",
-                        helperMaxLines: 3,
-                        counterText: '',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(_obscureParentMpin
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined),
+                      style: _Wp.text(16, color: _Wp.navy),
+                      decoration: _dec(
+                        "Parent's 6-digit MPIN *",
+                        icon: Icons.lock_outline,
+                        helper: 'If the parent already has an account this '
+                            "must match their MPIN. Don't reuse the "
+                            "student's MPIN.",
+                        suffix: IconButton(
+                          tooltip: _obscureParentMpin ? 'Show' : 'Hide',
+                          icon: Icon(
+                              _obscureParentMpin
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              size: 19,
+                              color: _Wp.navyMid),
                           onPressed: () => setState(
                               () => _obscureParentMpin = !_obscureParentMpin),
                         ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppColors.divider)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide(color: AppColors.primary, width: 2)),
                       ),
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    ),
-                  ],
-                  if (_selectedRole == 'teacher') ...[
-                    const SizedBox(height: 14),
-                    Text('Subjects you can teach',
-                        style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: AppConstants.subjects.map((s) {
-                        final sel = _selectedTeacherSubjects.contains(s);
-                        return GestureDetector(
-                          onTap: () => setState(() => sel
-                              ? _selectedTeacherSubjects.remove(s)
-                              : _selectedTeacherSubjects.add(s)),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: sel ? AppColors.primary : Colors.white,
-                              border: Border.all(
-                                  color: sel
-                                      ? AppColors.primary
-                                      : AppColors.divider),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(s,
-                                style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    color: sel
-                                        ? Colors.white
-                                        : AppColors.textSecondary,
-                                    fontWeight: sel
-                                        ? FontWeight.w700
-                                        : FontWeight.normal)),
-                          ),
-                        );
-                      }).toList(),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      textInputAction: TextInputAction.done,
                     ),
                   ],
                 ],
 
-                const SizedBox(height: 16),
+                SizedBox(height: compact ? 16 : 20),
 
-                // MPIN label
-                Text(
-                    _isRegister
-                        ? 'Set a 6-digit MPIN'
-                        : 'Enter your 6-digit MPIN',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary)),
-                const SizedBox(height: 10),
-
-                // PIN dots
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(6, (i) {
-                    final filled = _pin[i].isNotEmpty;
-                    final active = i == _pinIndex;
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      width: 40,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: filled
-                            ? AppColors.primary.withValues(alpha: 0.1)
-                            : Colors.white,
-                        border: Border.all(
-                            color: active
-                                ? AppColors.primary
-                                : filled
-                                    ? AppColors.primary.withValues(alpha: 0.5)
-                                    : AppColors.divider,
-                            width: active ? 2 : 1),
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.04),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2))
+                // ── MPIN cells ──────────────────────────────────────
+                Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                        top: BorderSide(color: _Wp.navy, width: _Wp.rule)),
+                  ),
+                  padding: EdgeInsets.only(top: compact ? 12 : 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              (_isRegister
+                                      ? 'Set a 6-digit MPIN'
+                                      : 'Enter your 6-digit MPIN')
+                                  .toUpperCase(),
+                              style: _Wp.dim(12.5, weight: FontWeight.w600),
+                            ),
+                          ),
+                          Text('$_pinIndex / 6',
+                              style: _Wp.dim(12.5,
+                                  color: _pinIndex == 6
+                                      ? _Wp.ok
+                                      : _Wp.heatRead,
+                                  weight: FontWeight.w600)),
                         ],
                       ),
-                      child: Center(
-                          child: filled
-                              ? Container(
-                                  width: 9,
-                                  height: 9,
-                                  decoration: BoxDecoration(
-                                      color: AppColors.primary,
-                                      shape: BoxShape.circle))
-                              : null),
-                    );
-                  }),
+                      SizedBox(height: compact ? 9 : 11),
+                      _pinCells(context, compact: compact),
+                      SizedBox(height: compact ? 12 : 14),
+                      _buildPad(context),
+                    ],
+                  ),
                 ),
 
-                const SizedBox(height: 12),
-                _buildPad(context),
-                const SizedBox(height: 14),
+                SizedBox(height: compact ? 14 : 16),
 
-                // Sign In button
+                // ── Submit ──────────────────────────────────────────
                 SizedBox(
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: auth.isLoading ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                      elevation: 3,
-                    ),
-                    child: auth.isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2.5, color: Colors.white))
-                        : Text(_isRegister ? 'Submit Registration' : 'Sign In',
-                            style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                letterSpacing: 0.5)),
+                  width: double.infinity,
+                  height: R.fluid(context, 52, min: 50, max: 58),
+                  child: _FilledKey(
+                    key: LoginKeys.submit,
+                    label: _isRegister ? 'Submit registration' : 'Sign in',
+                    loading: auth.isLoading,
+                    expand: true,
+                    onTap: auth.isLoading ? null : _submit,
                   ),
                 ),
 
-                // No self-service MPIN reset — direct users to their admin.
+                // No self-service MPIN reset — point users to their admin
+                // rather than leave them stuck at login.
                 if (!_isRegister)
-                  TextButton(
-                    onPressed: _showForgotMpinHelp,
-                    child: Text(
-                      'Forgot your MPIN?',
-                      style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: TextButton(
+                      style: _linkStyle,
+                      onPressed: _showForgotMpinHelp,
+                      child: Text('Forgot your MPIN?',
+                          style: _Wp.text(14.5,
+                              color: _Wp.heatRead, weight: FontWeight.w700)),
                     ),
                   ),
 
-                const SizedBox(height: 10),
-
-                // Toggle link
-                GestureDetector(
-                  onTap: () => setState(() {
-                    _isRegister = !_isRegister;
-                    _clearPin();
-                    _clearOwnerSelection();
-                    _usernameController.clear();
-                    _parentUsernameController.clear();
-                    _parentMpinController.clear();
-                    _selectedGrade = 8;
-                    _selectedSubjects.clear();
-                    _selectedTeacherSubjects.clear();
-                  }),
-                  child: Text(
-                    _isRegister
-                        ? 'Already have an account? Sign In'
-                        : "Don't have an account? Request Access",
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: AppColors.secondary,
-                        fontWeight: FontWeight.w600),
+                // ── Mode toggle ─────────────────────────────────────
+                Padding(
+                  padding: EdgeInsets.only(top: _isRegister ? 8 : 0),
+                  child: TextButton(
+                    key: LoginKeys.modeToggle,
+                    style: _linkStyle,
+                    onPressed: () => setState(() {
+                      _isRegister = !_isRegister;
+                      _clearPin();
+                      _clearOwnerSelection();
+                      _usernameController.clear();
+                      _parentUsernameController.clear();
+                      _parentMpinController.clear();
+                      _selectedGrade = 8;
+                      _selectedSubjects.clear();
+                      _selectedTeacherSubjects.clear();
+                    }),
+                    child: Text(
+                      _isRegister
+                          ? 'Already have an account? Sign in'
+                          : "Don't have an account? Request access",
+                      textAlign: TextAlign.center,
+                      style: _Wp.text(14, color: _Wp.navyMid,
+                          weight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        ),
+        ],
       ),
+    );
+  }
+
+  /// Six square cells with their position number set in mono beneath — a
+  /// dimensioned row rather than a string of dots. The cell being filled
+  /// carries the heat border; filled cells carry a solid navy mark.
+  Widget _pinCells(BuildContext context, {required bool compact}) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        const gap = 7.0;
+        final cellW = ((c.maxWidth - gap * 5) / 6).clamp(34.0, 60.0);
+        final cellH = compact ? 50.0 : 54.0;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(6, (i) {
+            final filled = _pin[i].isNotEmpty;
+            final active = i == _pinIndex;
+            return Padding(
+              padding: EdgeInsets.only(right: i == 5 ? 0 : gap),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    width: cellW,
+                    height: cellH,
+                    decoration: BoxDecoration(
+                      color: filled ? _Wp.heatWash : _Wp.white,
+                      border: Border.all(
+                        color: active
+                            ? _Wp.heat
+                            : filled
+                                ? _Wp.navy
+                                : _Wp.line,
+                        width: active ? 2 : _Wp.rule,
+                      ),
+                    ),
+                    child: Center(
+                      child: filled
+                          ? Container(
+                              width: 11,
+                              height: 11,
+                              color: _Wp.navy,
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text('${i + 1}',
+                      style: _Wp.dim(11.5,
+                          color: active ? _Wp.heatRead : _Wp.mute,
+                          weight: FontWeight.w600)),
+                ],
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 
@@ -1600,58 +1431,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   // Renders a spinner while loading and nothing at all if the list is empty or
   // failed to load — in which case the backend resolves a single-school
   // deployment on its own.
-  Widget _schoolField({required bool web}) {
+  Widget _schoolField() {
     if (_schoolsLoading) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
           children: [
             const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: _Wp.heat),
             ),
             const SizedBox(width: 10),
-            Text('Loading schools…',
-                style: GoogleFonts.poppins(
-                    fontSize: 12, color: AppColors.textSecondary)),
+            Text('LOADING SCHOOLS…', style: _Wp.dim(12.5)),
           ],
         ),
       );
     }
     if (_schools.isEmpty) return const SizedBox.shrink();
 
-    final decoration = web
-        ? InputDecoration(
-            labelText: 'School',
-            prefixIcon: const Icon(Icons.account_balance_outlined),
-            filled: true,
-            fillColor: Colors.white,
-            border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.divider)),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppColors.primary, width: 2)),
-          )
-        : const InputDecoration(
-            labelText: 'School',
-            prefixIcon: Icon(Icons.account_balance_outlined),
-            isDense: true,
-          );
-
     return DropdownButtonFormField<int>(
+      key: LoginKeys.school,
       initialValue: _selectedSchoolId,
       isExpanded: true,
-      decoration: decoration,
-      hint: const Text('Select your school'),
+      style: _Wp.text(16, color: _Wp.navy),
+      dropdownColor: _Wp.white,
+      borderRadius: BorderRadius.zero,
+      decoration: _dec('School', icon: Icons.account_balance_outlined),
+      hint: Text('Select your school', style: _Wp.text(15.5, color: _Wp.mute)),
       items: [
         ..._schools.map((s) => DropdownMenuItem<int>(
               value: s['id'] as int,
-              child:
-                  Text(s['name'] as String, overflow: TextOverflow.ellipsis),
+              child: Text(s['name'] as String,
+                  overflow: TextOverflow.ellipsis,
+                  style: _Wp.text(15.5, color: _Wp.navy)),
             )),
         // Platform owner belongs to no school; sending a school_id would make
         // the backend miss the account entirely (401). Sign-in only.
@@ -1660,18 +1474,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             value: _ownerSchoolSentinel,
             child: Text('Platform owner (no school)',
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.textSecondary)),
+                style: _Wp.text(15.5,
+                    color: _Wp.mute)
+                    .copyWith(fontStyle: FontStyle.italic)),
           ),
       ],
       onChanged: (v) => setState(() => _selectedSchoolId = v),
     );
   }
 
-  // ── Old brand panel (kept for reference — replaced above) ──────────────────
-  // PIN pad — keys use Expanded (like CSS flex: 1) so they fill available
-  // width on any screen size. Height ≥ 48 logical px for accessibility.
+  /// The keypad — a square hairline key grid. Keys fill the available width
+  /// (flex: 1) and never fall below a 48 logical-px tap target.
   Widget _buildPad(BuildContext context) {
     const rows = [
       ['1', '2', '3'],
@@ -1679,60 +1492,236 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ['7', '8', '9'],
       ['', '0', '⌫'],
     ];
-    final keyH = R.fluid(context, 44, min: 40, max: 54);
-    final numFs = R.fs(context, 17, min: 14, max: 21);
-    final delFs = R.fs(context, 14, min: 11, max: 17);
-    final rowGap = R.sp(context, 5);
-    final keyGap = R.sp(context, 4);
+    final keyH = R.fluid(context, 50, min: 48, max: 58);
+    const gap = 7.0;
 
     return Column(
       children: rows.map((row) {
         return Padding(
-          padding: EdgeInsets.only(bottom: rowGap),
+          padding: const EdgeInsets.only(bottom: gap),
           child: Row(
-            children: row.map((key) {
-              if (key.isEmpty) {
-                // Invisible spacer — same flex weight as a real key
-                return Expanded(child: SizedBox(height: keyH));
-              }
-              final isDel = key == '⌫';
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    isDel ? _tapDelete() : _tapDigit(key);
-                  },
-                  child: Container(
-                    height: keyH,
-                    margin: EdgeInsets.symmetric(horizontal: keyGap),
-                    decoration: BoxDecoration(
-                      color: isDel
-                          ? AppColors.error.withValues(alpha: 0.08)
-                          : AppColors.surface,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.divider),
-                    ),
-                    child: Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          key,
-                          style: GoogleFonts.poppins(
-                            fontSize: isDel ? delFs : numFs,
-                            fontWeight: FontWeight.w700,
-                            color:
-                                isDel ? AppColors.error : AppColors.textPrimary,
-                          ),
+            children: [
+              for (int i = 0; i < row.length; i++) ...[
+                if (i > 0) const SizedBox(width: gap),
+                Expanded(
+                  child: row[i].isEmpty
+                      // Invisible spacer — same flex weight as a real key.
+                      ? SizedBox(height: keyH)
+                      : _PadKey(
+                          key: row[i] == '⌫'
+                              ? LoginKeys.pinDelete
+                              : LoginKeys.pinDigit(row[i]),
+                          label: row[i],
+                          height: keyH,
+                          isDelete: row[i] == '⌫',
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            row[i] == '⌫' ? _tapDelete() : _tapDigit(row[i]);
+                          },
                         ),
-                      ),
-                    ),
-                  ),
                 ),
-              );
-            }).toList(),
+              ],
+            ],
           ),
         );
       }).toList(),
+    );
+  }
+}
+
+// ─── Controls ──────────────────────────────────────────────────────────────────
+
+/// A single keypad key. Square, hairline, Rajdhani numeral; the ground inverts
+/// to navy while pressed rather than glowing.
+class _PadKey extends StatefulWidget {
+  final String label;
+  final double height;
+  final bool isDelete;
+  final VoidCallback onTap;
+  const _PadKey({
+    super.key,
+    required this.label,
+    required this.height,
+    required this.isDelete,
+    required this.onTap,
+  });
+
+  @override
+  State<_PadKey> createState() => _PadKeyState();
+}
+
+class _PadKeyState extends State<_PadKey> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = _down
+        ? Colors.white
+        : widget.isDelete
+            ? _Wp.heatRead
+            : _Wp.navy;
+    return Semantics(
+      button: true,
+      label: widget.isDelete ? 'Delete last digit' : widget.label,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _down = true),
+        onTapCancel: () => setState(() => _down = false),
+        onTapUp: (_) => setState(() => _down = false),
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 90),
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: _down
+                ? (widget.isDelete ? _Wp.heatRead : _Wp.navy)
+                : _Wp.white,
+            border: Border.all(
+                color: _down
+                    ? (widget.isDelete ? _Wp.heatRead : _Wp.navy)
+                    : _Wp.line,
+                width: _Wp.rule),
+          ),
+          child: Center(
+            child: widget.isDelete
+                ? Icon(Icons.backspace_outlined, size: 19, color: fg)
+                : Text(widget.label,
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 25,
+                      fontWeight: FontWeight.w600,
+                      color: fg,
+                      height: 1,
+                    )),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The page's one filled control: ink ground, paper text, heat on hover.
+class _FilledKey extends StatefulWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final bool loading;
+  final bool expand;
+  const _FilledKey({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.loading = false,
+    this.expand = false,
+  });
+
+  @override
+  State<_FilledKey> createState() => _FilledKeyState();
+}
+
+class _FilledKeyState extends State<_FilledKey> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = widget.onTap == null;
+    final ground = disabled
+        ? _Wp.navy.withValues(alpha: 0.45)
+        : _hover
+            ? _Wp.heatRead
+            : _Wp.navy;
+    return Semantics(
+      button: true,
+      enabled: !disabled,
+      label: widget.label,
+      child: InkWell(
+        onTap: widget.onTap,
+        onHover: (h) => setState(() => _hover = h),
+        focusColor: const Color(0x33F55C1E),
+        borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
+        mouseCursor:
+            disabled ? SystemMouseCursors.basic : SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          constraints: const BoxConstraints(minHeight: 48),
+          width: widget.expand ? double.infinity : null,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+          decoration: BoxDecoration(
+            color: ground,
+            border: Border.all(color: ground, width: _Wp.rule),
+            borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
+          ),
+          child: Center(
+            child: widget.loading
+                ? const SizedBox(
+                    width: 21,
+                    height: 21,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.4, color: Colors.white),
+                  )
+                : Text(
+                    widget.label.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 1.6,
+                      height: 1.1,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The outlined secondary control. Hover inverts ground and text.
+class _OutlineKey extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _OutlineKey({required this.label, required this.onTap});
+
+  @override
+  State<_OutlineKey> createState() => _OutlineKeyState();
+}
+
+class _OutlineKeyState extends State<_OutlineKey> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: InkWell(
+        onTap: widget.onTap,
+        onHover: (h) => setState(() => _hover = h),
+        focusColor: const Color(0x33F55C1E),
+        borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
+        mouseCursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+          decoration: BoxDecoration(
+            color: _hover ? _Wp.navy : Colors.transparent,
+            border: Border.all(color: _Wp.navy, width: _Wp.rule),
+            borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
+          ),
+          child: Center(
+            child: Text(
+              widget.label.toUpperCase(),
+              style: GoogleFonts.rajdhani(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: _hover ? Colors.white : _Wp.navy,
+                letterSpacing: 1.6,
+                height: 1.1,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1746,36 +1735,47 @@ class _Subject {
   const _Subject(this.key, this.label, this.icon);
 }
 
-// ─── Tab widget ────────────────────────────────────────────────────────────────
+// ─── Tab ───────────────────────────────────────────────────────────────────────
 
 class _Tab extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
-  const _Tab({required this.label, required this.active, required this.onTap});
+  const _Tab(
+      {super.key,
+      required this.label,
+      required this.active,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          // Vertical padding ensures tap target ≥ 48 logical px (accessibility)
-          padding: const EdgeInsets.symmetric(vertical: 13),
-          decoration: BoxDecoration(
-            color: active ? AppColors.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: active ? FontWeight.w700 : FontWeight.normal,
-                color: active ? AppColors.textOnDark : AppColors.textSecondary,
+      child: Semantics(
+        button: true,
+        selected: active,
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            // Vertical padding keeps the tap target >= 48 logical px.
+            constraints: const BoxConstraints(minHeight: 46),
+            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+            color: active ? _Wp.navy : Colors.transparent,
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: active ? Colors.white : _Wp.navyMid,
+                    letterSpacing: 1.3,
+                    height: 1.1,
+                  ),
+                ),
               ),
             ),
           ),
