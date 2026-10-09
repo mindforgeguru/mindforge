@@ -186,7 +186,8 @@ class _TeacherHomeworkCompletionScreenState
           final incompleteCount = records.length - completeCount;
           final alreadySubmitted =
               records.any((r) => r.markedAt != null);
-          final attendanceMissing = !response.attendanceRecorded;
+          final attendanceMissing =
+              response.attendanceRequired && !response.attendanceRecorded;
 
           return Column(
             children: [

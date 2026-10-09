@@ -8,6 +8,7 @@ from typing import List, Optional
 from pydantic import BaseModel, field_validator
 
 from app.core.attendance_window import attendance_date_reason
+from app.core.school_time import school_today
 from app.models.attendance import AttendanceStatus
 
 
@@ -32,7 +33,8 @@ class AttendanceBulkCreate(BaseModel):
         # Reject future dates and anything older than the backdate window, so a
         # teacher cannot mark attendance for a day that hasn't happened or
         # silently rewrite an old record. See core/attendance_window.py.
-        reason = attendance_date_reason(v, date.today())
+        # "Today" is the school's date, not the UTC server's.
+        reason = attendance_date_reason(v, school_today())
         if reason:
             raise ValueError(reason)
         return v

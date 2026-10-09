@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mindforge/core/models/test.dart';
 import 'package:mindforge/core/models/timetable.dart';
 import 'package:mindforge/core/models/grade.dart';
+import 'package:mindforge/core/models/homework.dart';
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
 
@@ -238,6 +239,25 @@ void main() {
       json['percentage'] = 76; // int
       final m = GradeModel.fromJson(json);
       expect(m.percentage, 76.0);
+    });
+  });
+
+  group('HomeworkCompletionsResponse.fromJson', () {
+    Map<String, dynamic> json({bool? required}) => {
+          'attendance_date': '2026-10-09',
+          'attendance_recorded': false,
+          if (required != null) 'attendance_required': required,
+          'students': <dynamic>[],
+        };
+
+    test('reads attendance_required (false on a holiday)', () {
+      final r = HomeworkCompletionsResponse.fromJson(json(required: false));
+      expect(r.attendanceRequired, isFalse);
+    });
+
+    test('defaults attendance_required to true for older servers', () {
+      final r = HomeworkCompletionsResponse.fromJson(json());
+      expect(r.attendanceRequired, isTrue);
     });
   });
 }

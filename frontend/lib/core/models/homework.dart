@@ -83,11 +83,15 @@ class HomeworkCompletionDetail {
 class HomeworkCompletionsResponse {
   final String attendanceDate; // YYYY-MM-DD
   final bool attendanceRecorded;
+  // False on a holiday / no-class day: there is no attendance to take, so
+  // review must not wait for it.
+  final bool attendanceRequired;
   final List<HomeworkCompletionDetail> students;
 
   const HomeworkCompletionsResponse({
     required this.attendanceDate,
     required this.attendanceRecorded,
+    this.attendanceRequired = true,
     required this.students,
   });
 
@@ -95,6 +99,7 @@ class HomeworkCompletionsResponse {
       HomeworkCompletionsResponse(
         attendanceDate: json['attendance_date'] as String,
         attendanceRecorded: json['attendance_recorded'] as bool,
+        attendanceRequired: json['attendance_required'] as bool? ?? true,
         students: (json['students'] as List<dynamic>)
             .map((e) =>
                 HomeworkCompletionDetail.fromJson(e as Map<String, dynamic>))
