@@ -11,6 +11,9 @@ fresh. Never use these credentials anywhere but a local machine.
 
 All MPINs are entered on the 6-digit PIN pad on the login screen.
 
+> Every credential below was verified against `POST /api/auth/login` on
+> 2026-08-18 and returned 200 unless the row says otherwise.
+
 ## Platform owner
 
 | Field | Value |
@@ -30,14 +33,47 @@ Select the school in the login picker, then sign in:
 - Greenwood Academy
 - Greenwood Academy 5762
 
-## Student logins (grade 8)
+All five were login-verified.
 
-Pre-existing students whose MPIN was reset to a known value for testing:
+Additional school-specific admins:
 
 | School | Username | MPIN |
 |--------|----------|------|
-| Hansel & Gretel | `hansel_kid` | `847362` |
-| Riverdale High | `river_kid` | `847362` |
+| Riverdale High | `river_admin` | `123456` |
+| St. Xavier High | `xavier_admin` | unknown — `847362` and `123456` both 401 |
+| Greenwood Academy 5762 | `gw_admin_5762` | unknown — `847362` and `123456` both 401 |
 
-> Teachers and parents: no shared known credentials. Provision an admin with
-> the owner console, then create teachers/students from the admin dashboard.
+## Teachers
+
+| School | Username | MPIN |
+|--------|----------|------|
+| Hansel & Gretel | `chinmay_sir` | `847362` |
+| Riverdale High | `river_teach` | `123456` |
+
+## Students
+
+| School | Username | Grade | MPIN |
+|--------|----------|-------|------|
+| Hansel & Gretel | `nitin` | 10 | `123456` |
+| Hansel & Gretel | `manam` | 10 | `123456` |
+| Hansel & Gretel | `dummy8` | 8 | `123456` |
+| Riverdale High | `river_kid` | 8 | `847362` |
+
+> `hansel_kid` is listed in older notes but is **deactivated**
+> (`users.is_active = false`) and now returns 401. Use `dummy8` for a
+> Hansel & Gretel grade-8 student instead.
+
+## Parents
+
+| School | Username | Child | MPIN |
+|--------|----------|-------|------|
+| Hansel & Gretel | `nitin_dad` | `nitin` (grade 10) | `123456` |
+| Riverdale High | `river_par` | `river_kid` (grade 8) | `123456` |
+
+## Notes for cross-school testing
+
+Grade 8 exists in **both** Hansel & Gretel and Riverdale High, which makes this
+pair useful for tenant-isolation checks: a leak across schools is visible as
+data for the *same grade number* showing up in the wrong account, rather than
+being masked by the grade filter. `river_kid` (Riverdale, grade 8) and `dummy8`
+(Hansel, grade 8) are the two ends of that test.
