@@ -389,11 +389,14 @@ class _BalanceSummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Title flexes, chip keeps its width — same reason as _FeeRow.
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Fee Summary',
-                  style: Theme.of(context).textTheme.titleMedium),
+              Expanded(
+                child: Text('Fee Summary',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -472,14 +475,20 @@ class _FeeRow extends StatelessWidget {
     final formatter = NumberFormat.currency(symbol: '₹', decimalDigits: 0);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
+      // The label takes the remaining width and wraps; the amount keeps its
+      // natural width. With neither flexible, a long label ("Artificial
+      // Intelligence"), a narrow phone or a large accessibility text size
+      // pushed the amount off the right edge.
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: isSmall ? 13 : null,
-                  fontWeight: isBold ? FontWeight.bold : null)),
+          Expanded(
+            child: Text(label,
+                style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: isSmall ? 13 : null,
+                    fontWeight: isBold ? FontWeight.bold : null)),
+          ),
+          const SizedBox(width: 12),
           Text(formatter.format(amount),
               style: TextStyle(
                   color: color,
