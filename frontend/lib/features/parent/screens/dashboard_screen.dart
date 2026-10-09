@@ -285,8 +285,11 @@ class _ParentDashboardScreenState
                   // Logo + wordmark + tagline
                   Positioned(
                     top: topPadding + _s(context, 16, min: 10, max: 22),
-                    left: 0,
-                    right: 0,
+                    // Inset by the logout button's footprint (48 + up to 8)
+                    // on both sides so a long school name stays centred and
+                    // wraps before it reaches the icon instead of under it.
+                    left: 56,
+                    right: 56,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -326,6 +329,8 @@ class _ParentDashboardScreenState
                                 SizedBox(height: _s(context, 3, min: 2, max: 5)),
                                 Text(
                                   'AI Assisted Learning',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.poppins(
                                     fontSize: _fs(context, 14, min: 13, max: 16),
                                     fontWeight: FontWeight.w400,

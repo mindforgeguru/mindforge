@@ -1374,8 +1374,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget _pinCells(BuildContext context, {required bool compact}) {
     return LayoutBuilder(
       builder: (context, c) {
-        const gap = 7.0;
-        final cellW = ((c.maxWidth - gap * 5) / 6).clamp(34.0, 60.0);
+        // No minimum width: a floor (it was 34) forced the row wider than the
+        // card on narrow phones and pushed the sixth cell past the edge. The
+        // gap tightens instead so the cells keep as much width as possible.
+        final gap = c.maxWidth < 260 ? 4.0 : 7.0;
+        final cellW = ((c.maxWidth - gap * 5) / 6).clamp(0.0, 60.0);
         final cellH = compact ? 50.0 : 54.0;
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
