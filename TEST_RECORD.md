@@ -1,6 +1,6 @@
 # Mindforge — Testing Record
 
-**Last updated:** 2026-09-13
+**Last updated:** 2026-10-09
 **Maintainer:** chinmay1975@gmail.com
 **Scope:** Reference document for every kind of testing performed on the Mindforge app — automated tests, security/privacy verification, and manual QA. Update this file every time a significant test session is run.
 
@@ -61,13 +61,13 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-09-13
-**Branch:** `create_school`, **with uncommitted work in the tree** (attendance date window, homework review gate, 31 screen files)
-**Environment:** macOS (darwin 25.6.0), local Docker stack up (`/api/health` 200); backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
+**Date:** 2026-10-09 (frontend, Flutter integration, realtime) — backend unit/integration last full run **2026-09-13**, not re-run this session
+**Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
+**Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
 > **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-### 2.1 Backend unit — each file in its own pytest process (mirrors CI)
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **NOT RE-RUN 2026-10-09 (last run 2026-09-13)**
 
 | Suite | Result |
 |---|---|
@@ -79,7 +79,9 @@ flutter test integration_test/
 
 Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-### 2.2 Backend integration (live local stack)
+### 2.2 Backend integration (live local stack) — **only `test_realtime_delivery.py` re-run 2026-10-09 (6/6 PASS); the rest last run 2026-09-13**
+
+> `tests_integration/` reads `../../.env.local`, so it must run **from the host** (`cd backend && python3 -m pytest tests_integration/...`). Inside the container it fails at collection with `FileNotFoundError: /app/tests_integration/../../.env.local`.
 
 | Suite | Result |
 |---|---|
@@ -94,21 +96,25 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test test/unit/` | **PASS — 103/103** |
-| `flutter test test/widget/` | **PASS — 40/40** |
-| `flutter test` (everything) | **PASS — 143/143** |
-| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (was 6) |
+| `flutter test test/unit/` | **PASS — 108/108** (2026-10-09; +1 `web_csp_test` img-src case) |
+| `flutter test test/widget/` | **PASS — 46/46** (2026-10-09; was 40/46 against the redesigned login screen until the tests moved to `LoginKeys`) |
+| `flutter test` (everything) | **PASS — 154/154** (2026-10-09) |
+| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-09, unchanged) |
+| `integration_test/app_test.dart` (iPhone 17 Pro sim, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-09; was 0/5 on the first run — see §9) |
+| `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-09; first run 21/29, all 8 failures the deactivated `hansel_kid` default) |
 
-The infos: 33 `prefer_const_constructors` across the role screens (the uncommitted screen edits), 4 `no_leading_underscores_for_local_identifiers`, 1 `prefer_const_declarations`, 1 `dangling_library_doc_comments`. CI runs `--no-fatal-infos`, so none break the build.
+The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading_underscores_for_local_identifiers`, 1 `prefer_const_declarations`, 1 `dangling_library_doc_comments`. CI runs `--no-fatal-infos`, so none break the build.
+
+> **The header fix landed after the simulator run started.** The MPIN-cell and dashboard-header layout changes are covered by `flutter test` and a browser check at 280/300/375 px, not by the 29/29 run.
 
 ### 2.4 Not run this session
 
 | Suite | Why / last result |
 |---|---|
-| Flutter integration — `app_test.dart`, `all_screens_test.dart` | Needs a simulator. Last: 5/5 and 26 pass / 3 fail (2026-07-24/25, see §9) — the 31 changed screens are **unverified on-device** |
+| Backend unit suite, `tests_integration/` (except realtime delivery) | Not re-run 2026-10-09. Last: 331 PASS, 58/58 (2026-09-13) |
 | `tests/security_test.py`, `security_test_extended.py`, `tests/performance_test.py` | Not run. Point at the **local** stack only; they include login rate-limit probes |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | 92 items unticked |
+| Manual QA (§5) | Partially run 2026-10-09 — realtime (§5.8), part of auth (§5.1) and web (§5.9); the rest unticked |
 
 ---
 
@@ -248,12 +254,12 @@ Run end-to-end before every release build. Tick PASS/FAIL with date.
 - [ ] **Register with Phone + Email on the wide/web form** → both persist (fixed 2026-07-22)
 - [ ] **Login while pending** → "pending approval" message
 - [ ] **Admin approves user** → user can now log in
-- [ ] **Login with correct MPIN** → correct dashboard for role
+- [x] **Login with correct MPIN** → correct dashboard for role — PASS 2026-10-09 (web: teacher `chinmay_sir`, students `dummy8` + `river_kid`; sim: admin, teacher, student, parent via `all_screens_test`)
 - [ ] **Login with wrong MPIN** → 401 "Invalid username or MPIN"
 - [ ] **Login 11 times wrong** → 429 rate limit
 - [ ] **Login 5 wrong, then correct** → lockout counter clears
 - [ ] **Weak/blocklisted MPIN rejected at set/change time** (added 2026-07-07)
-- [ ] **Logout** → access + refresh JTIs blacklisted, FCM cleared, secure storage cleared
+- [ ] **Logout** → access + refresh JTIs blacklisted, FCM cleared, secure storage cleared — *partial 2026-10-09: web logout returns to login and leaves no `mindforge*` localStorage keys; JTI blacklist and FCM clear not checked*
 - [ ] **Access token expiry (~60 min)** → Dio interceptor auto-refreshes
 - [ ] **Force-revoked token** → next protected call 401
 
@@ -276,7 +282,7 @@ Run end-to-end before every release build. Tick PASS/FAIL with date.
 
 ### 5.4 Student
 
-- [ ] Dashboard summary loads (single `/student/dashboard-summary` call)
+- [x] Dashboard summary loads (single `/student/dashboard-summary` call) — PASS 2026-10-09 (web, `dummy8`; one call in the network log)
 - [ ] Attendance history paginated
 - [ ] Test list; take a test (single-attempt: back / app-kill forfeits with 0)
 - [ ] Test review matches the per-student option shuffle
@@ -293,7 +299,7 @@ Run end-to-end before every release build. Tick PASS/FAIL with date.
 - [ ] Daily Workflow road shows current grade's color; car advances per milestone
 - [ ] Every milestone tappable; car replaces current pending milestone (no duplicates)
 - [ ] Pre-fill attendance from previous period
-- [ ] Holiday / no-class day → car advances correctly; whole-school holiday banner shows
+- [ ] Holiday / no-class day → car advances correctly; whole-school holiday banner shows — *partial 2026-10-09: "Holiday! No classes today" banner shows on the teacher dashboard; car not checked. On the same holiday the teacher **cannot assign homework** — §10 item 18*
 - [ ] HW review uses most-recent-HW model; tiles color-coded by review status
 - [ ] Presentations: upload PDF and `.pptx`, adopt, log a period
 - [ ] Auto-quiz appears in the Online Tests tab as "Generating", then flips to ready/failed
@@ -318,17 +324,17 @@ Run end-to-end before every release build. Tick PASS/FAIL with date.
 - [ ] Profile **does NOT** show "Delete my account"
 - [ ] `DELETE /api/auth/account` as admin → 403
 
-### 5.8 Realtime *(new section — reworked 2026-07-24, unverified on-device)*
+### 5.8 Realtime *(reworked 2026-07-24; first manual pass 2026-10-09, web only)*
 
-The WebSocket fan-out was rewritten this session. **None of this is manually verified yet** — it is the highest-priority manual QA item.
+The WebSocket fan-out was rewritten on 2026-07-24. **First manual pass 2026-10-09**, in the web build against the local stack: two users side by side, one per origin (`http://localhost:8080` and `http://localhost:5001`, the two CORS-allowed dev ports, so each keeps its own login). Not yet repeated on a device. The homework items are blocked by the holiday deadlock in §10 item 18 — re-run them on a school day.
 
 - [ ] Teacher sends a school-wide broadcast → appears live on student / parent / other-teacher **Broadcasts screen** without navigating or refreshing
-- [ ] Teacher sends a **grade-targeted** broadcast → reaches that grade's students + parents, and all teachers
-- [ ] Teacher assigns homework → appears live on the student/parent homework screen **and** on other teachers' dashboards
+- [x] Teacher sends a **grade-targeted** broadcast → reaches that grade's students + parents, and all teachers — PASS 2026-10-09 for the student leg: grade-8 broadcast from `chinmay_sir` appeared on `dummy8`'s open Broadcasts screen in ~2 s, no refresh (web, two origins). Parent and other-teacher legs not checked
+- [ ] Teacher assigns homework → appears live on the student/parent homework screen **and** on other teachers' dashboards — *BLOCKED 2026-10-09: holiday, assignment refused by the review gate (§10 item 18). Backend leg covered by `test_realtime_delivery.py` 6/6*
 - [ ] Auto-quiz from a presentation period log → appears in the teacher Online Tests list immediately, without pull-to-refresh
-- [ ] Marking homework completion updates the student's Pending/Complete pill live
+- [ ] Marking homework completion updates the student's Pending/Complete pill live — *BLOCKED 2026-10-09: completion needs today's attendance, none on a holiday (§10 item 18)*
 - [ ] Attendance / timetable / grade events refresh the relevant screen live
-- [ ] Events do **not** leak across schools (two schools, two browsers)
+- [x] Events do **not** leak across schools (two schools, two browsers) — PASS 2026-10-09: a Hansel & Gretel grade-8 broadcast did not reach Riverdale's grade-8 `river_kid` (screen unchanged; backend log shows no refetch by user 42 after the `POST … 201`). Riverdale's list also never showed the Hansel broadcast at rest
 - [ ] Backgrounding the app for >30 s then resuming reconnects once (no double-reconnect, no infinite loop)
 
 ### 5.9 Web build QA
@@ -346,8 +352,9 @@ Last executed **2026-05-19** on Flutter 3.41.7 / Chrome against the local stack.
 - [x] Release bundle sanity check via static server — PASS (2026-05-19)
 - [x] Deep-route fallback to `index.html` — PASS (2026-05-19)
 - [ ] **Firebase on web (FCM/Analytics/Crashlytics)** — was FAIL; **config added 2026-06-30**, re-test needed
-- [ ] Left sidebar nav renders and navigates on desktop widths (new)
+- [x] Left sidebar nav renders and navigates on desktop widths (new) — PASS 2026-10-09 (student + teacher, 800 px)
 - [ ] Avatar upload works through the CSP (`blob:` in `connect-src`, added 2026-07-03)
+- [x] School logo + avatars **display** on a local web build — PASS 2026-10-09 after adding the local API origins to `img-src` (was FAIL: blocked by CSP, header fell back to the MindForge mark)
 - [ ] MindForge favicon + PWA icons show (new)
 
 ### 5.10 Cross-cutting
@@ -433,6 +440,15 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-09 (Flutter integration back to green; first manual realtime pass; holiday homework deadlock)
+- **Flutter integration on the iOS sim: `app_test` 0/5 → 5/5, `all_screens_test` 21/29 → 29/29.** The first runs failed on the uncommitted Whiteprint login redesign, not on app behaviour: the tests found controls by visible text, and the redesign uppercases labels, draws the delete key as an icon and has no `ElevatedButton`. Fix: a public `LoginKeys` class in `login_screen.dart` (tabs, school, username, role, phone, email, submit, mode toggle, each PIN key); `app_test`, `all_screens_test` and `test/widget/login_screen_test.dart` now find controls by key. One more text assumption: after a school is picked, the header wordmark becomes the school's name, so "still on the login screen" is now asserted via `LoginKeys.submit`.
+- **`all_screens_test` defaulted to a deactivated student.** `hansel_kid` is `is_active = false` locally (401, then 429 once the lockout tripped), which failed all 8 student screens. Default is now `dummy8` / `123456` (child of `dummy8_dad`). Admin, teacher and parent screens passed on the first run.
+- **Realtime, first manual pass (web, two origins):** grade-8 broadcast live to a grade-8 student — PASS; same-grade-number cross-school leak (Hansel → Riverdale) — PASS, none. Homework legs blocked by the holiday deadlock below. Backend `test_realtime_delivery.py` re-run 6/6.
+- **Found: on a holiday a teacher cannot assign homework** — §10 item 18.
+- **Fixed: school logo and avatars never displayed on a local web build.** The CSP `img-src` allowed only `https://api.mindforge.guru`; locally media comes from `http://localhost:8000`, so the browser blocked it (console: `violates … img-src`) and the header fell back to the MindForge mark. `img-src` now carries the same API origins as `connect-src`; a new `web_csp_test` case fails if they drift apart. Production was not affected (media is served from `api.mindforge.guru`, assuming `BACKEND_PUBLIC_URL` is set to it — not checked) and native apps don't apply the CSP.
+- **Fixed two narrow-width layout defects:** the six MPIN cells overflowed the login card below ~240 px of card width (a 34 px minimum cell width; now no floor and a tighter gap), and a long school name ran under the logout icon on the student/teacher/parent dashboards (wordmark now inset by the button's footprint; tagline held to one line). Checked in the browser at 280, 300 and 375 px.
+- **Testing caveat:** after `flutter build web`, the browser kept serving the previous `main.dart.js` from its HTTP cache through normal reloads — §10 item 19.
 
 ### 2026-09-13 (full automated re-run)
 - Backend unit **331 PASS**, integration **58/58 PASS**, Flutter **143/143 PASS**, analyze 0 errors / 0 warnings. Full detail in §2.
@@ -650,7 +666,7 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
 
 13. **A dependency bump is not verified until the app boots with a real config.** The 2026-07-24 upgrade passed imports, 81 unit tests, OpenAPI generation and a TestClient smoke in a venv — then failed to start in Docker, because Sentry only wires up its integrations when a `SENTRY_DSN` is present and the venv had none. Any future `requirements.txt` change should be validated by rebuilding the image and watching the container reach "Application startup complete", not by a venv smoke test alone.
 
-14. **An app that installs its own error handlers blinds the integration tests.** `main()` sets Crashlytics as both `FlutterError.onError` and `PlatformDispatcher.onError` (`main.dart:63-64`) before `runApp`. Every integration test calls `app.main()`, so the app displaces the test binding's reporter: framework errors are shipped to Crashlytics instead of failing the test, and the binding surfaces only `_pendingExceptionDetails != null` — an assertion that replaces the real cause with a message about error handling. This silently masked every framework error in the suite from the day it was written until 2026-07-24. `app_test.dart` now reclaims both handlers in `launchApp()`; **`all_screens_test.dart` does not yet** and should get the same treatment.
+14. **An app that installs its own error handlers blinds the integration tests.** `main()` sets Crashlytics as both `FlutterError.onError` and `PlatformDispatcher.onError` (`main.dart:63-64`) before `runApp`. Every integration test calls `app.main()`, so the app displaces the test binding's reporter: framework errors are shipped to Crashlytics instead of failing the test, and the binding surfaces only `_pendingExceptionDetails != null` — an assertion that replaces the real cause with a message about error handling. This silently masked every framework error in the suite from the day it was written until 2026-07-24. `app_test.dart` now reclaims both handlers in `launchApp()`; `all_screens_test.dart` does the same since `078f4e3` (2026-07-24) — confirmed 2026-10-09; kept here as a caveat for any new integration file.
 
 15. **~~`seed_integration_test_users.py` is stale and misleading~~** — retired 2026-07-25. Orphaned (docs-only references), broke on missing `school_id`, and unfixable in place: its four accounts now live in different schools, and re-running it would reset the MPINs of the accounts the tests rely on. `docs/local-test-accounts.md` is the source of truth for local test credentials.
 
@@ -658,7 +674,14 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
 
 17. **`tests/test_api.py` points at production and is stale.** Its `BASE_URL` is `https://api.mindforge.guru` and it registers, approves and revokes users against the live database. It is also broken: it predates multi-tenancy and omits `school_id`, so every write returns 422. This was discovered the hard way on run `30118897312` — adding `workflow_dispatch` to make the previously-unreachable `api-integration` job runnable also meant a plain `gh workflow run ci.yml` fired it at production. No data was created, only because the 422s rejected every write, and the run was cancelled once the target was noticed. The job now requires an explicit `run_api_integration` input defaulting to false. A file-level production guard was added 2026-07-25: it now refuses a production host unless `MF_API_ALLOW_PROD=1` and is env-targetable via `MF_API_BASE_URL`. **The suite itself still needs multi-tenancy modernization** — `school_id` threaded through register/login, and a reworked parent path (self-register-as-parent is no longer allowed) — before it passes. That was left documented rather than blind-edited, since verifying it properly wants a staging server.
 
+18. **On a school holiday a teacher cannot assign homework (OPEN — fix in progress in a separate session, 2026-10-09).** Two gates in `backend/app/routers/teacher.py` combine into a dead end: `create_homework` returns 409 `homework_review_pending` while a past homework's completion review is unfinished, and recording completion returns 400 "Mark attendance for {date} first" unless today's attendance exists for the grade. A holiday has no attendance, so the review can never be closed and no new homework can be assigned for that grade all day. Seen on 2026-10-09 (Hansel & Gretel, grade 8, homework 75) with the "Holiday! No classes today" banner showing at the same time. Both gates also take "today" from UTC, so between 00:00 and 05:30 IST it is still yesterday. This also blocks two §5.8 realtime checks.
+
+19. **A rebuilt web bundle is not picked up by a normal reload.** The browser kept the previous `main.dart.js` in its HTTP cache (no service worker or Cache Storage entries were involved), so a fix looked like it hadn't worked. When verifying a web change against `python -m http.server`, force-fetch the bundle (`fetch('main.dart.js', {cache: 'reload'})`) or hard-reload before judging the result. Also: `http.server` ignores `_redirects`, so a hard refresh on a deep route (`/login`) 404s there — a property of the dev server, not the app.
+
 ### Resolved (kept for history)
+- ~~Flutter integration tests broke on the login redesign~~ — fixed 2026-10-09; tests find login controls via `LoginKeys`, not visible text.
+- ~~School logo and avatars blocked by CSP on a local web build~~ — fixed 2026-10-09; `img-src` now lists the local API origins, pinned by `web_csp_test`.
+- ~~MPIN cells overflow the login card on narrow phones; school name runs under the dashboard logout icon~~ — fixed 2026-10-09.
 - ~~SSL pin leaf cert expires 2026-06-28~~ — superseded 2026-06-01 by CA-level pinning (`ssl_pinning.dart`). Leaf rotation no longer breaks the app; current leaf expires 2026-08-27.
 - ~~Firebase not configured for the Flutter web build~~ — `web` block added 2026-06-30. Functional re-test still open (item 8).
 - ~~`test_logout_handler.py` fails on Python ≥3.12 locally~~ — fixed 2026-05-14 via real `type()` classes in `conftest.py`.
