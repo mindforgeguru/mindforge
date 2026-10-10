@@ -82,4 +82,44 @@ void main() {
       expect(find.byIcon(Icons.event_busy_rounded), findsNothing);
     });
   });
+
+  // Seen on the iPhone 17 Pro simulator, 2026-10-10: "Academic Year" wraps to
+  // two lines in its 78 px slot, and because labels above the road were
+  // positioned from their top edge the second line landed on the step's
+  // circle. A label above the road must end above its node however many lines
+  // it takes. (The test font is narrower-lined than Poppins, so the 1.5x case
+  // is the one that reproduces the phone.)
+  group('SetupRoadCard labels', () {
+    for (final scale in [1.0, 1.5]) {
+      testWidgets('labels above the road clear their nodes at ${scale}x text',
+          (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.physicalSize = const Size(402, 874);
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(MediaQuery(
+          data: MediaQueryData(
+            size: const Size(402, 874),
+            textScaler: TextScaler.linear(scale),
+          ),
+          child: _wrap(
+              _status(ay: true, tt: true, fees: true, pay: true, logo: true)),
+        ));
+        await tester.pump();
+
+        // Steps 1, 3 and 5 carry their label above the road.
+        final nodes = find.byIcon(Icons.check_rounded);
+        for (final (label, node) in [
+          ('Academic Year', 0),
+          ('Fee Details', 2),
+          ('School Logo', 4),
+        ]) {
+          final labelBottom = tester.getRect(find.text(label)).bottom;
+          final nodeTop = tester.getRect(nodes.at(node)).top;
+          expect(labelBottom, lessThanOrEqualTo(nodeTop),
+              reason: '"$label" runs into its node');
+        }
+      });
+    }
+  });
 }

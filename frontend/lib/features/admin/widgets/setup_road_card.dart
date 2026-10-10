@@ -230,7 +230,6 @@ class _SetupRoad extends StatelessWidget {
     return LayoutBuilder(builder: (context, constraints) {
       const radius = 12.0;
       const carRadius = 16.0;
-      const labelHeight = 20.0;
       const labelWidth = 78.0;
       const leftPad = 38.0;
       const rightPad = 38.0;
@@ -309,13 +308,16 @@ class _SetupRoad extends StatelessWidget {
                         ),
                 ),
               ),
-            // Label alternates above/below to avoid crowding.
+            // Label alternates above/below to avoid crowding. One above the
+            // road is anchored by its bottom edge, so a label that wraps
+            // ("Academic Year") grows upward instead of down onto its node.
             Positioned(
               left: xAt(i) - labelWidth / 2,
               width: labelWidth,
-              top: i.isEven
-                  ? centerY - radius - labelHeight - 2
-                  : centerY + radius + 4,
+              top: i.isEven ? null : centerY + radius + 4,
+              bottom: i.isEven
+                  ? constraints.maxHeight - (centerY - radius - 2)
+                  : null,
               child: GestureDetector(
                 onTap: i < setupCount ? steps[i].onTap : closeStep.onTap,
                 child: Text(
