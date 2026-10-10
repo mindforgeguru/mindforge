@@ -7,14 +7,28 @@ import '../api/api_client.dart';
 /// Show a "Report a problem" modal. Submits the message + the user's current
 /// route to /api/feedback so the admin can see where the user was.
 Future<void> showReportProblemDialog(BuildContext context, WidgetRef ref) async {
+  // Read the route here, from the screen's context. The dialog itself is
+  // pushed on the root navigator, above every GoRoute, so the same lookup
+  // from inside it throws — which used to surface as "Could not send" on
+  // every report. The route is context for the admin, never a reason to
+  // refuse a report, so a failed lookup just sends without it.
+  String? route;
+  try {
+    route = GoRouterState.of(context).uri.path;
+  } catch (_) {
+    route = null;
+  }
+  final messenger = ScaffoldMessenger.maybeOf(context);
   await showDialog<void>(
     context: context,
-    builder: (ctx) => const _ReportProblemDialog(),
+    builder: (ctx) => _ReportProblemDialog(route: route, messenger: messenger),
   );
 }
 
 class _ReportProblemDialog extends ConsumerStatefulWidget {
-  const _ReportProblemDialog();
+  final String? route;
+  final ScaffoldMessengerState? messenger;
+  const _ReportProblemDialog({this.route, this.messenger});
 
   @override
   ConsumerState<_ReportProblemDialog> createState() => _ReportProblemDialogState();
@@ -43,14 +57,14 @@ class _ReportProblemDialogState extends ConsumerState<_ReportProblemDialog> {
     });
     try {
       final api = ref.read(apiClientProvider);
-      final route = GoRouterState.of(context).uri.path;
-      await api.submitFeedback(message: msg, route: route);
+      await api.submitFeedback(message: msg, route: widget.route);
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
+      widget.messenger?.showSnackBar(
         const SnackBar(content: Text('Thanks — your report was sent.')),
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _submitting = false;
         _error = 'Could not send. Please try again.';
