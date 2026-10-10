@@ -28,6 +28,12 @@ import app.models  # noqa: F401 — registers all models with Base
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# uvicorn logs every WebSocket handshake with its full path, and the path
+# carries the access token. Redact before the first connection can arrive.
+from app.core.log_redaction import install_token_redaction  # noqa: E402
+
+install_token_redaction()
+
 
 # ─── Sentry init ──────────────────────────────────────────────────────────────
 # Must run before FastAPI() is created so the FastAPI integration can attach.
