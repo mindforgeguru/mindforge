@@ -1088,13 +1088,25 @@ class _TestTileState extends ConsumerState<_TestTile> {
   bool _deleting = false;
   bool _retrying = false;
 
+  @override
+  void didUpdateWidget(covariant _TestTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The tile is keyed by test id, so this State outlives a retry. Once the
+    // refetched row arrives the spinner has done its job — without this, a
+    // retry that fails again leaves the spinner where Retry should be.
+    if (_retrying && !identical(oldWidget.test, widget.test)) {
+      _retrying = false;
+    }
+  }
+
   Future<void> _retryGeneration() async {
     setState(() => _retrying = true);
     try {
       final api = ref.read(apiClientProvider);
       await api.retryAutoQuiz(widget.test.id);
-      // The row flips back to "generating"; invalidating swaps this tile out
-      // and the tab's poll resumes — so don't setState after this point.
+      // The row flips back to "generating"; invalidating refetches the list
+      // and the tab's poll resumes. didUpdateWidget clears _retrying when the
+      // new row lands.
       if (mounted) ref.invalidate(teacherTestsProvider);
     } catch (e) {
       if (mounted) {
