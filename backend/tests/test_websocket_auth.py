@@ -178,3 +178,51 @@ def test_account_that_fails_db_checks_is_rejected_with_1008():
     token = create_access_token(data={"sub": "42", "role": "student"})
     ws = asyncio.run(_call_endpoint(token=token, user_id=42, account_ok=False))
     ws.close.assert_awaited_once_with(code=POLICY_VIOLATION)
+
+
+# ── The account check itself (the tests above replace it with a mock) ─────────
+
+def _account_allows(user) -> bool:
+    """Run the real _ws_account_allows against a session that yields `user`."""
+    import main
+    import sqlalchemy
+
+    result = MagicMock()
+    result.scalar_one_or_none = MagicMock(return_value=user)
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=result)
+
+    class _Session:
+        async def __aenter__(self):
+            return db
+
+        async def __aexit__(self, *exc):
+            return False
+
+    with patch.object(sys.modules["app.core.database"], "AsyncSessionLocal", _Session), \
+         patch.object(sqlalchemy, "select", lambda *a, **k: MagicMock()):
+        return asyncio.run(main._ws_account_allows(42, {"iat": 0}))
+
+
+def _account(**overrides):
+    user = MagicMock()
+    user.is_approved = True
+    user.is_active = True
+    user.deleted_at = None
+    user.tokens_valid_after = None
+    for k, v in overrides.items():
+        setattr(user, k, v)
+    return user
+
+
+def test_account_check_allows_a_live_account():
+    assert _account_allows(_account()) is True
+
+
+def test_account_check_refuses_a_deactivated_account():
+    # Found 2026-10-10: a deactivated user kept receiving live events.
+    assert _account_allows(_account(is_active=False)) is False
+
+
+def test_account_check_refuses_an_unapproved_account():
+    assert _account_allows(_account(is_approved=False)) is False

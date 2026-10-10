@@ -163,6 +163,12 @@ async def _get_current_user(
 
     try:
         payload = decode_access_token(credentials.credentials)
+        # A refresh token is signed with the same key and carries the same
+        # claims, so without this it works as a 30-day access token — and one
+        # that logout cannot kill, since refresh JTIs are revoked in a different
+        # Redis namespace from the one checked below.
+        if payload.get("type") == "refresh":
+            raise credentials_exception
         user_id_raw = payload.get("sub")
         if user_id_raw is None:
             raise credentials_exception
@@ -186,6 +192,12 @@ async def _get_current_user(
     )
     user = result.scalar_one_or_none()
     if user is None or token_predates_revocation(payload, user):
+        raise credentials_exception
+    # Login and /auth/refresh both refuse a deactivated account; without the
+    # same check here it keeps working on whatever token it already holds.
+    # 401 rather than 403 so the client tries a refresh, is refused, and signs
+    # out — instead of sitting in a session where every call fails.
+    if not user.is_active:
         raise credentials_exception
     if not user.is_approved:
         raise HTTPException(

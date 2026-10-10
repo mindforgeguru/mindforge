@@ -332,9 +332,9 @@ app.include_router(presentations.router, prefix="/api/presentations", tags=["Aut
 async def _ws_account_allows(user_id: int, payload: dict) -> bool:
     """The account checks the HTTP dependency makes on every request.
 
-    The socket authenticates on its own, so without these a deleted user, or a
-    session ended by an MPIN reset, keeps receiving live events for the rest of
-    the token's lifetime.
+    The socket authenticates on its own, so without these a deleted or
+    deactivated user, or a session ended by an MPIN reset, keeps receiving live
+    events for the rest of the token's lifetime.
     """
     from sqlalchemy import select
     from app.core.database import AsyncSessionLocal
@@ -348,6 +348,7 @@ async def _ws_account_allows(user_id: int, payload: dict) -> bool:
     return (
         user is not None
         and user.is_approved
+        and user.is_active
         and not token_predates_revocation(payload, user)
     )
 
