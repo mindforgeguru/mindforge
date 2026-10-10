@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,10 +22,39 @@ class _FakeApiClient extends Fake implements ApiClient {
   Future<List<Map<String, dynamic>>> getSchools() async => const [];
 }
 
+/// Answers every sign-in the way the backend does for an MFA-enrolled account
+/// that sent no code: 401 with `mfa_required`. The real AuthNotifier turns that
+/// into MfaRequiredException, which is what makes the screen show the prompt.
+class _MfaRequiredApiClient extends _FakeApiClient {
+  /// The (mfaCode, recoveryCode) pair of every sign-in attempt, in order.
+  final attempts = <(String?, String?)>[];
+
+  @override
+  Future<Map<String, dynamic>> login(String username, String mpin,
+      {int? schoolId, String? mfaCode, String? recoveryCode}) async {
+    attempts.add((mfaCode, recoveryCode));
+    final request = RequestOptions(path: '/auth/login');
+    throw DioException(
+      requestOptions: request,
+      type: DioExceptionType.badResponse,
+      response: Response(
+        requestOptions: request,
+        statusCode: 401,
+        // With a code the fake rejects it, so the screen stays put.
+        data: {
+          'detail': mfaCode == null && recoveryCode == null
+              ? 'mfa_required'
+              : 'Invalid code'
+        },
+      ),
+    );
+  }
+}
+
 /// Pump the login screen inside a ProviderScope with the network stubbed out.
-Widget _buildLoginScreen() => ProviderScope(
+Widget _buildLoginScreen({ApiClient? api}) => ProviderScope(
       overrides: [
-        apiClientProvider.overrideWithValue(_FakeApiClient()),
+        apiClientProvider.overrideWithValue(api ?? _FakeApiClient()),
       ],
       child: MaterialApp(
         theme: AppTheme.lightTheme,
@@ -180,6 +210,73 @@ void main() {
       expect(find.byKey(LoginKeys.role), findsOneWidget);
       expect(find.byKey(LoginKeys.phone), findsOneWidget);
       expect(find.byKey(LoginKeys.email), findsOneWidget);
+    });
+  });
+
+  group('LoginScreen — two-factor prompt', () {
+    // Same defect as the delete-account dialog (2026-10-10): the caller
+    // disposed the prompt's TextEditingController as soon as showDialog
+    // returned, while the dialog was still animating out with a TextField
+    // attached to it — a red error screen in debug builds.
+    Future<_MfaRequiredApiClient> openPrompt(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final api = _MfaRequiredApiClient();
+      await tester.pumpWidget(_buildLoginScreen(api: api));
+      await tester.pump();
+
+      await tester.enterText(find.byKey(LoginKeys.username), 'mfa_teacher');
+      for (final d in ['1', '2', '3', '4', '5', '6']) {
+        await _tapDigit(tester, d);
+      }
+      await tester.tap(find.byKey(LoginKeys.submit));
+      await tester.pumpAndSettle();
+
+      expect(find.text('TWO-FACTOR AUTHENTICATION'), findsOneWidget);
+      return api;
+    }
+
+    testWidgets('Cancel closes the prompt without a framework error',
+        (tester) async {
+      final api = await openPrompt(tester);
+
+      await tester.tap(find.text('CANCEL'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('TWO-FACTOR AUTHENTICATION'), findsNothing);
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(api.attempts, [(null, null)], reason: 'Cancel must not retry');
+    });
+
+    testWidgets('Verify retries the sign-in with the authenticator code',
+        (tester) async {
+      final api = await openPrompt(tester);
+
+      await tester.enterText(find.byType(TextField).last, ' 654321 ');
+      await tester.tap(find.text('VERIFY'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(api.attempts, [(null, null), ('654321', null)]);
+    });
+
+    testWidgets('the recovery toggle sends the entry as a recovery code',
+        (tester) async {
+      final api = await openPrompt(tester);
+
+      await tester.tap(find.text("I don't have my phone"));
+      await tester.pump();
+      expect(find.text('Use my authenticator app instead'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField).last, 'ABCD-EFGH-JKMN');
+      await tester.tap(find.text('VERIFY'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(api.attempts, [(null, null), (null, 'ABCD-EFGH-JKMN')]);
     });
   });
 }

@@ -106,14 +106,14 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test` (unit + widget, everything) | **PASS — 187/187** (2026-10-10 evening; 173 at the start of the day, +14 from the five frontend fixes in §9) |
+| `flutter test` (unit + widget, everything) | **PASS — 190/190** (2026-10-10 late; 173 at the start of the day, +17 from the six frontend fixes in §9) |
 | `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-10, unchanged) |
 | `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-10) |
 | `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-10, 10 m 47 s; no overflow or framework exception in the log) |
 
 The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading_underscores_for_local_identifiers`, 1 `prefer_const_declarations`, 1 `dangling_library_doc_comments`. CI runs `--no-fatal-infos`, so none break the build.
 
-> The integration run predates the frontend fixes made later the same day (§9). Those are covered by `flutter test` 187/187 and by hand on the simulator, not by the 29/29 run — **re-run the integration suites before relying on them for this code.**
+> The integration run predates the frontend fixes made later the same day (§9). Those are covered by `flutter test` 190/190 and by hand on the simulator, not by the 29/29 run — **re-run the integration suites before relying on them for this code.**
 
 ### 2.4 Not run this session
 
@@ -456,6 +456,12 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 
 ## 9. Past Test Sessions (History)
 
+### 2026-10-10 (late — the two-factor prompt's disposed controller, §10 item 22)
+- **Fixed — Cancel on the two-factor prompt raised a framework error.** The same defect as the delete-account dialog this afternoon: `_promptForSecondFactor` in `login_screen.dart` created the code controller, awaited `showDialog`, and disposed it on the next line, while the dialog was still animating out with its TextField attached. The prompt is now its own widget whose State owns and disposes the controller; it pops the trimmed entry and the recovery flag, and the caller no longer reads the controller. Look, copy and the recovery-code toggle are unchanged.
+- **Test first.** Three cases added to `test/widget/login_screen_test.dart`, reaching the prompt the way the app does: a fake `ApiClient` answers the sign-in with 401 `mfa_required`, and the real `AuthNotifier` turns that into `MfaRequiredException`. Before the fix the Cancel case failed with "A TextEditingController was used after being disposed" at the prompt's TextField. The other two pin what the rewrite could have broken: Verify retries with the trimmed entry as `mfaCode`, and after "I don't have my phone" as `recoveryCode`; Cancel makes no second attempt.
+- **Suites after it:** Flutter **190/190** (was 187); analyzer unchanged at 0 errors, 0 warnings, 39 style infos.
+- **Not done:** not driven by hand — there is still no MFA-enrolled account on the local stack, so the prompt has only been seen in the widget test. Integration suites not re-run.
+
 ### 2026-10-10 (evening — realtime on a device, the admin screens, and four more defects)
 - **Realtime on the simulator (§5.8):** homework assignment and completion both reached an open student screen live, on a no-class day; background-and-resume reconnected once. Three more rows ticked.
 - **Found and fixed — reconnect storm after an outage.** Reading the backend log for the resume check showed one idle web client opening about 60 sockets a second, each closed 2 ms later, 105 in 15 minutes. `WebSocketClient` scheduled a retry from each of the ways a failed socket reports itself (`ready` failing, the stream erroring, the stream closing), all in the same generation; each retry then closed whatever socket was current, and that close scheduled another. So retries multiplied while the server was unreachable — the backend had auto-reloaded several times today — and kept each other alive once it was back. Now at most one reconnect is pending, and a socket's callbacks act only while it is still the current one. `test/unit/websocket_reconnect_test.dart` (4) drives the real client against scripted sockets under fake time: before the fix, a 60-second outage produced 400+ attempts (the test's safety cap; uncapped it never finished) and no stable socket afterwards. **Live after the fix:** backend restarted under the running app → one reconnect, then quiet.
@@ -766,7 +772,7 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
 
 21. **Check which checkout the local backend is serving before trusting a result.** `docker-compose.yml` bind-mounts `./backend:/app` relative to wherever `docker compose up` ran, so a stack started from a worktree serves that worktree's code to every session. Verify with `docker inspect mindforge_backend --format '{{range .Mounts}}{{.Source}}{{end}}'`. Seen 2026-10-09 (§9).
 
-22. **The two-factor prompt disposes its text controller too early.** `login_screen.dart` creates the MFA code controller, awaits `showDialog`, and disposes it on the next line — the pattern that put a red error screen up when the delete-account dialog was cancelled (§9, 2026-10-10). Debug-only as far as is known (release builds skip the assertions). Untested and unfixed; it needs a widget test that reaches the prompt, or an MFA-enrolled account.
+22. **~~The two-factor prompt disposes its text controller too early~~** — fixed 2026-10-10 (late): the prompt's State owns the controller; `test/widget/login_screen_test.dart`, "two-factor prompt" group. Not yet driven by hand with an MFA-enrolled account. Original note: `login_screen.dart` creates the MFA code controller, awaits `showDialog`, and disposes it on the next line — the pattern that put a red error screen up when the delete-account dialog was cancelled (§9, 2026-10-10). Debug-only as far as is known (release builds skip the assertions). Untested and unfixed; it needs a widget test that reaches the prompt, or an MFA-enrolled account.
 
 23. **A hidden browser pane cannot drive the Flutter web build.** With the pane not displayed the page stops getting animation frames, the splash's animation controllers never complete, and the app sits on the splash with an empty accessibility tree. It looks like an app hang and is not one. When the pane is visible, Flutter's accessibility tree (click the `flt-semantics-placeholder` once) reads every screen as text. Seen 2026-10-10.
 

@@ -392,94 +392,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// Collects a 6-digit authenticator code, or a recovery code if the phone is
   /// gone, and retries the sign-in with it.
   Future<void> _promptForSecondFactor(String username) async {
-    final codeController = TextEditingController();
-    var useRecovery = false;
-
-    final submitted = await showDialog<bool>(
+    final result = await showDialog<_SecondFactorEntry>(
       context: context,
       barrierDismissible: false,
       barrierColor: _Wp.navy.withValues(alpha: 0.42),
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          backgroundColor: _Wp.sheet,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
-            side: BorderSide(color: _Wp.navy, width: _Wp.rule),
-          ),
-          titlePadding: EdgeInsets.zero,
-          title: _plateHeader('Two-factor authentication', 'Step 2 of 2'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                useRecovery
-                    ? 'Enter one of the recovery codes you saved when you set '
-                        'this up. Each code works once.'
-                    : 'Enter the 6-digit code from your authenticator app.',
-                style: _Wp.text(14.5),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: codeController,
-                autofocus: true,
-                style: _Wp.text(16, color: _Wp.navy),
-                keyboardType:
-                    useRecovery ? TextInputType.text : TextInputType.number,
-                textCapitalization: useRecovery
-                    ? TextCapitalization.characters
-                    : TextCapitalization.none,
-                decoration: _dec(
-                  useRecovery ? 'Recovery code' : '6-digit code',
-                  hint: useRecovery ? 'ABCD-EFGH-JKMN' : '123456',
-                ),
-                onSubmitted: (_) => Navigator.of(dialogContext).pop(true),
-              ),
-              const SizedBox(height: 4),
-              TextButton(
-                style: _linkStyle,
-                onPressed: () => setDialogState(() {
-                  useRecovery = !useRecovery;
-                  codeController.clear();
-                }),
-                child: Text(
-                  useRecovery
-                      ? 'Use my authenticator app instead'
-                      : "I don't have my phone",
-                  style: _Wp.text(14, color: _Wp.heatRead,
-                      weight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
-          actions: [
-            _OutlineKey(
-              label: 'Cancel',
-              onTap: () => Navigator.of(dialogContext).pop(false),
-            ),
-            const SizedBox(width: 10),
-            _FilledKey(
-              label: 'Verify',
-              onTap: () => Navigator.of(dialogContext).pop(true),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => const _SecondFactorDialog(),
     );
 
-    final entered = codeController.text.trim();
-    codeController.dispose();
-    if (submitted != true || entered.isEmpty || !mounted) return;
+    if (result == null || result.code.isEmpty || !mounted) return;
 
     await ref.read(authProvider.notifier).login(
           username,
           _enteredPin,
           schoolId: _schoolIdForRequest,
-          mfaCode: useRecovery ? null : entered,
-          recoveryCode: useRecovery ? entered : null,
+          mfaCode: result.recovery ? null : result.code,
+          recoveryCode: result.recovery ? result.code : null,
         );
   }
 
@@ -1725,6 +1652,108 @@ class _OutlineKeyState extends State<_OutlineKey> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── Two-factor prompt ─────────────────────────────────────────────────────────
+
+/// What the two-factor prompt hands back: the trimmed code, and whether it is a
+/// recovery code rather than an authenticator code. Cancel pops null.
+typedef _SecondFactorEntry = ({String code, bool recovery});
+
+class _SecondFactorDialog extends StatefulWidget {
+  const _SecondFactorDialog();
+
+  @override
+  State<_SecondFactorDialog> createState() => _SecondFactorDialogState();
+}
+
+class _SecondFactorDialogState extends State<_SecondFactorDialog> {
+  // Owned here, not by the caller: showDialog's future completes while the
+  // dialog is still animating out, so a controller disposed at that point is
+  // still attached to a live TextField.
+  final _codeController = TextEditingController();
+  bool _useRecovery = false;
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.of(context).pop<_SecondFactorEntry>(
+      (code: _codeController.text.trim(), recovery: _useRecovery));
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: _Wp.sheet,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: BorderSide(color: _Wp.navy, width: _Wp.rule),
+      ),
+      titlePadding: EdgeInsets.zero,
+      title: _LoginScreenState._plateHeader(
+          'Two-factor authentication', 'Step 2 of 2'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _useRecovery
+                ? 'Enter one of the recovery codes you saved when you set '
+                    'this up. Each code works once.'
+                : 'Enter the 6-digit code from your authenticator app.',
+            style: _Wp.text(14.5),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _codeController,
+            autofocus: true,
+            style: _Wp.text(16, color: _Wp.navy),
+            keyboardType:
+                _useRecovery ? TextInputType.text : TextInputType.number,
+            textCapitalization: _useRecovery
+                ? TextCapitalization.characters
+                : TextCapitalization.none,
+            decoration: _LoginScreenState._dec(
+              _useRecovery ? 'Recovery code' : '6-digit code',
+              hint: _useRecovery ? 'ABCD-EFGH-JKMN' : '123456',
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            style: _LoginScreenState._linkStyle,
+            onPressed: () => setState(() {
+              _useRecovery = !_useRecovery;
+              _codeController.clear();
+            }),
+            child: Text(
+              _useRecovery
+                  ? 'Use my authenticator app instead'
+                  : "I don't have my phone",
+              style: _Wp.text(14, color: _Wp.heatRead,
+                  weight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+      actions: [
+        _OutlineKey(
+          label: 'Cancel',
+          onTap: () => Navigator.of(context).pop(),
+        ),
+        const SizedBox(width: 10),
+        _FilledKey(
+          label: 'Verify',
+          onTap: _submit,
+        ),
+      ],
     );
   }
 }
