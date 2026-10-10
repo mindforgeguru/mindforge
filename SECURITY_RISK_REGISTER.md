@@ -32,7 +32,7 @@ There is also a rendered, filterable version of this register:
 | Open | **22** |
 | **Total tracked** | **90** across 13 domains |
 
-*Last verification sweep: 2026-09-17 (see [Verification log](#verification-log)).*
+*Last verification sweep: 2026-10-10 (see [Verification log](#verification-log)).*
 
 **The shape of it.** Multi-tenancy and authentication are genuinely strong — that is
 where the tests are, and it shows. The open items cluster in three places instead:
@@ -53,9 +53,9 @@ goes wrong.
 | Suspended tenant still authenticating | VERIFIED | Login *and* refresh both gated; owner exempt. `test_tenancy_wiring.py` 8/8. **Live check 2026-10-09** on the local stack: after suspension, login 400, refresh 401, an already-issued access token 403, the school leaves the public picker, a second school is unaffected, the owner keeps working, and reactivation restores login. |
 | Session bleed on account switch (shared device) | VERIFIED | Cache-reset race let the next sign-in read the previous user's data. Found and fixed 2026-08-18 — commit `2bbb630`. |
 | Account lockout + lockout-DoS guard | VERIFIED | Two layers, now pinned by 10 tests (`test_account_lockout.py`): per-(user, IP) lock after 5 fails, plus a per-user global backstop at 50 for distributed attacks. The **anti-DoS** property is tested directly — an attacker locking themselves out from one IP leaves the real user, on another IP, able to log in — and each guard was falsified: breaking the IP scope, removing the backstop, or forgetting the global keys on success each fails the matching test. Fails open with no Redis. Known limit: attacker + victim behind one NAT share an IP, so the per-IP lock can catch both — inherent to any IP-based guard. |
-| Refresh-token rotation and JTI revocation | VERIFIED | Rotate-on-use with old JTI blacklisted in Redis. Re-confirmed 2026-08-18: `security_test_extended.py` §6 — access token 401s after logout, and a rotated refresh token 401s on reuse. |
+| Refresh-token rotation and JTI revocation | VERIFIED | Rotate-on-use with old JTI blacklisted in Redis. Re-confirmed 2026-08-18: `security_test_extended.py` §6 — access token 401s after logout, and a rotated refresh token 401s on reuse. **Was exploitable until 2026-10-10:** all of that held at `/auth/refresh` only. The per-request dependency never checked `type`, so a refresh token worked as a 30-day *access* token — and kept working after rotation and after logout, since refresh JTIs are revoked in a namespace the dependency does not read. Fixed: `_get_current_user` refuses `type=refresh` (401). `test_bearer_token_gate.py`; live on the local stack, `/auth/me` with a fresh, a rotated-out and a logged-out refresh token went 200 → 401. |
 | Token lifetime and expiry handling | VERIFIED | 8 tests (`test_token_lifetime.py`): access token carries `exp` at the configured lifetime, a unique `jti` and `type=access`; refresh is long-lived, typed, and outlives access; an expired token is **rejected on decode** (minted with a past expiry, `ExpiredSignatureError`), proving expiry is enforced not merely present. Assertions read the lifetimes from settings, so they track config. Falsified: dropping `exp` fails the expiry tests. |
-| Deactivated, pending or deleted users signing in | VERIFIED | The login state-gate is now a pure `login_block_reason` in `app.core.account_state` (the router calls it, keeping its logging + IP), pinned by 8 tests: unapproved → 403 pending, deactivated → 403 deactivated, and a soft-deleted account → an opaque 401 *identical* to a wrong-username reply (no enumeration tell). Deleted is checked first, so a deactivated-then-deleted account can't leak via a stale flag. Deleted rows are also excluded by the login query itself; the function re-asserts it as a single choke-point for reuse. Falsified: skipping the active check or losing deleted-precedence each fails the matching test. |
+| Deactivated, pending or deleted users signing in | VERIFIED | The login state-gate is now a pure `login_block_reason` in `app.core.account_state` (the router calls it, keeping its logging + IP), pinned by 8 tests: unapproved → 403 pending, deactivated → 403 deactivated, and a soft-deleted account → an opaque 401 *identical* to a wrong-username reply (no enumeration tell). Deleted is checked first, so a deactivated-then-deleted account can't leak via a stale flag. Deleted rows are also excluded by the login query itself; the function re-asserts it as a single choke-point for reuse. Falsified: skipping the active check or losing deleted-precedence each fails the matching test. **Gap closed 2026-10-10:** the gate covered *signing in*, not a session already open — a deactivated user's access token kept working, and their socket kept receiving events, because neither `_get_current_user` nor `_ws_account_allows` checked `is_active`. Both do now (401 / handshake refused); `test_bearer_token_gate.py` and `test_websocket_auth.py`, and a live check with a real token and socket. |
 | Weak / guessable MPIN | VERIFIED | 32 tests (`test_weak_mpin.py`) pin the guessability rule (all-same, runs, half-repeats, keypad shapes) and — the part that matters — the **wiring**: weak PINs are rejected at every set site (register, change `new_mpin`, admin reset) and accepted at login and `current_mpin`, so a legacy weak-PIN user can still sign in and fix it. Falsified: making login strict or register lenient each fails the matching wiring test. |
 | Multi-factor authentication | VERIFIED | TOTP (RFC 6238, stdlib) for **admin and owner**, opt-in: enrolment screen (admin profile + owner console) with QR plus typed key, single-use recovery codes, screen-capture blocked while the secret shows; two-step enrolment so an abandoned setup can't lock the account; disable needs MPIN *and* a factor. **The 'marking your own homework' gap is now closed:** beyond the six official RFC vectors, `test_totp_interop.py` carries a from-scratch second implementation (anchored to the RFC vector) that agrees with the app both ways *and* on the secret parsed out of the actual `otpauth://` QR — which is spec-compliant SHA1/6-digit/30s. A real authenticator app is one more RFC-6238 implementation of that same URI, so a physical phone scan (checklist 06) is now a formality, not an open correctness risk. Falsified: a 60s step or a mangled QR secret breaks the interop tests. Other roles keep a single factor by design. |
 | Account enumeration | VERIFIED | **Was exploitable.** Bodies always matched, but `login()` short-circuited past bcrypt for an unknown username: 238.7 ms vs 3.9 ms, a 61x tell. Closed with `verify_mpin_constant_time`, which always hashes; re-measured at 240.6 vs 239.7 ms (1.00x). 5 tests. |
@@ -165,7 +165,7 @@ goes wrong.
 | PII leaking into AI prompts | OPEN | The prompt sweep that found this clean predates the entire Claude pipeline. |
 | Policy not published | OPEN | Not hosted at a public URL, not reviewed by counsel, and `AppConstants.privacyPolicyUrl` is still empty. Blocks store submission. |
 | Data retention | OPEN | No defined retention or purge policy. Soft-deleted rows persist indefinitely. |
-| Account deletion completeness | VERIFIED | The open question — *is owner self-delete blocked?* — was a real gap: `delete_my_account` blocked admin and student but let **owner fall through and soft-delete itself**, orphaning the platform. Fixed: the role policy is now `self_delete_block_reason` in `app.core.account_state` (admin/student/owner blocked; parent/teacher allowed, parent cascades to its one child), pinned by 14 tests and falsified — reverting the owner block fails the owner test. Deletion side-effects (soft-delete flags, access+refresh JTI revocation, FCM clear, audit row, parent→child cascade) remain verified by reading; an end-to-end deletion test is the remaining depth. |
+| Account deletion completeness | VERIFIED | The open question — *is owner self-delete blocked?* — was a real gap: `delete_my_account` blocked admin and student but let **owner fall through and soft-delete itself**, orphaning the platform. Fixed: the role policy is now `self_delete_block_reason` in `app.core.account_state` (admin/student/owner blocked; parent/teacher allowed, parent cascades to its one child), pinned by 14 tests and falsified — reverting the owner block fails the owner test. Deletion side-effects (soft-delete flags, access+refresh JTI revocation, FCM clear, audit row, parent→child cascade) were verified by reading until **2026-10-10**, when `tests/auth_session_qa.py` drove them live on the local stack: teacher self-delete, and a parent self-delete cascading to its student — rows soft-deleted, access + refresh tokens and the child's live token all 401, FCM NULL on both, `self_delete` + `self_delete_cascade_child` audit rows, login answered like an unknown user; student, admin and owner each refused with 403. A script, not a CI test. |
 | PII reaching error-reporting vendors | VERIFIED | Sentry runs `send_default_pii=False` and a `before_send` scrubber, now extracted to `app.core.sentry_scrub` and pinned by **8 tests**. It redacts credentials (mpin, tokens, authorization, cookie) **and** a minor's direct identifiers (phone, parent_phone, email) from request data/headers/cookies — hardened here, since the app holds children's records and those fields could ride a request body into a 500. Case-insensitive, recurses nested bodies and lists, and never raises (a throwing before_send would drop the event). Falsified: dropping the PII keys fails 4, removing recursion fails 2. |
 ## 11. AI pipeline
 
@@ -710,6 +710,36 @@ school's). Manual check with a real PDF and real Gemini: upload answered in
 
 **Also noted, not changed:** when both deck providers fail, the teacher sees
 Gemini's error, while Claude's reason goes only to the logs.
+
+### 2026-10-10 — A refresh token was a 30-day access token; deactivation ended nothing
+
+A live pass over the auth block (`tests/auth_session_qa.py`, 63 checks against
+the local stack — detail in `TEST_RECORD.md` §9) found two holes in
+`_get_current_user`, the one dependency every authenticated request passes.
+Three rows above were marked VERIFIED while both existed, because each row's
+tests stopped at the endpoint that issues a session (`/auth/login`,
+`/auth/refresh`) and none presented a token to an ordinary endpoint.
+
+- **Token type was never checked.** A refresh token returned 200 on
+  `/api/auth/me` — fresh, after being rotated out, and after logout. Logout and
+  rotation write `revoked_jti:<jti>`; the dependency reads only the access-token
+  namespace. So a stolen refresh token was a 30-day bearer that the user could
+  not end by logging out, only by an MPIN reset or account deletion.
+- **`is_active` was never checked.** A deactivated account could not log in or
+  refresh, but any access token it already held kept working, and its socket
+  stayed subscribed.
+
+Fix: the dependency refuses `type == "refresh"` and an inactive account, both
+401; the socket's account check requires `is_active`. Six unit tests, written
+first and seen to fail (3 in `test_bearer_token_gate.py`, 3 in
+`test_websocket_auth.py` — the socket's account check had only ever been mocked).
+Live: all four failing cases now 401, a deactivated user's socket handshake is
+refused; backend unit 424, integration 77/77.
+
+**No row changed status, and the counts above are unchanged** — but two
+VERIFIED rows now say what was missing. **Production:** `main` has neither
+check (read from git, not probed), so both gaps are very likely live there
+until `create_school` ships.
 
 ---
 

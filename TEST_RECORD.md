@@ -1,6 +1,6 @@
 # Mindforge — Testing Record
 
-**Last updated:** 2026-10-09
+**Last updated:** 2026-10-10
 **Maintainer:** chinmay1975@gmail.com
 **Scope:** Reference document for every kind of testing performed on the Mindforge app — automated tests, security/privacy verification, and manual QA. Update this file every time a significant test session is run.
 
@@ -23,12 +23,14 @@
 | Backend logout-handler tests | `backend/tests/test_logout_handler.py` (3) | FCM token clearing on logout, JWT revocation failure path | **Yes** |
 | Backend WebSocket auth tests | `backend/tests/test_websocket_auth.py` (5) | `/ws/{user_id}` rejects malformed / refresh-type / mismatched-sub / revoked-JTI tokens; accepts valid matching token | **Yes** |
 | Backend schema invariants | `backend/tests/test_schema_invariants.py` (4) | Models discoverable; `SET NULL` FKs are nullable; audit actor survives its author | **No — gap, see §10 item 2** |
+| Backend bearer-gate tests | `backend/tests/test_bearer_token_gate.py` (3), plus 3 account-check cases in `test_websocket_auth.py` | The per-request dependency refuses a refresh token and a deactivated account; the socket's own account check refuses deactivated and unapproved accounts | **Yes** (glob) |
 | Backend tenancy unit tests | `backend/tests/test_tenancy.py` (19) | `require_school_id`, `same_school_or_404` (404 not 403), `assert_school_active` (suspension, owner exemption), cached student profile carries `school_id`, every tenant model has a `school_id` column | **No — gap, see §10 item 2** |
 | Backend tenancy wiring tests | `backend/tests/test_tenancy_wiring.py` (8) | `get_current_user` and `/auth/refresh` both enforce school suspension; owner is not gated | **No — gap, see §10 item 2** |
 | Backend realtime fan-out tests | `backend/tests/test_realtime_fanout.py` (8) | Grade audience resolution (students + parents, dedup), explicit user-ID addressing, empty audience publishes nothing, `broadcast_to_users` delivery | **No — gap, see §10 item 2** |
 | Backend tenant-isolation integration | `backend/tests_integration/test_tenant_isolation.py` + `…_finance.py` (32) | Router-level cross-school scoping against a live stack | No — skips cleanly when the stack is down |
 | Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (6) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools | No — same skip |
 | API integration / probes | `tests/test_api.py`, `tests/security_test.py`, `tests/security_test_extended.py`, `tests/performance_test.py` | Live endpoint smoke, security probe matrix, latency | **No — the CI job is unreachable, see §10 item 3** |
+| Auth / session live QA | `tests/auth_session_qa.py` (63 checks) | Registration → approval → login, lockout and rate limit, refresh rotation, logout, deactivation, MPIN-reset revocation, self-delete and its cascade — over HTTP against the local stack, reading Postgres and Redis for what the API cannot show | No — a script, not pytest; local stack only |
 | Flutter unit tests | `frontend/test/unit/` (78, 6 files) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, models, admin setup status, owner API error messages | **Yes** |
 | Flutter widget tests | `frontend/test/widget/` (26, 5 files) | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
 | Flutter integration tests | `frontend/integration_test/` — `app_test.dart` (5), `all_screens_test.dart` (29) | Auth flows; every screen for every role | No — needs a simulator **and** `--dart-define=LOCAL_DEV=true`, or it hits production |
@@ -61,13 +63,16 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-10-09 (frontend, Flutter integration, realtime) — backend unit/integration last full run **2026-09-13**, not re-run this session
+**Date:** 2026-10-10 (backend unit + integration, auth/session live QA) — frontend and Flutter integration last run **2026-10-09**, not re-run
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
 > **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import (as of 2026-10-09 also `test_ai_fallback_chain.py`, `test_old_test_upload.py` and `test_subjects.py` — the host's `google-genai` lacks `types.GenerateContentConfig`) — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-09 after the PyJWT migration: 412 PASS**
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-10 after the bearer-gate fix: 424 PASS**
+
+2026-10-10: every `tests/test_*.py` file in its own process inside `mindforge_backend` (Python 3.11, `pytest pytest-asyncio` installed for the run) — **385 passed**, with the three known container gaps run on the host instead: `test_prod_guard.py` 24, `test_secrets_gitignore.py` 12, and the 3 host-only cases in `test_subjects.py` / `test_server_header.py`. **424 passed, 0 failed** across 38 files (was 418; +3 `test_bearer_token_gate.py`, +3 in `test_websocket_auth.py`).
+
 
 2026-10-09: every `tests/test_*.py` file in its own process, on the host in a Python 3.12 venv carrying PyJWT 2.15.1 plus `google-genai==2.2.0` and `sentry-sdk` (the host's own `python3.12` can't import 6 files — see the note above). **412 passed, 0 failed**, including the new `test_jwt_library.py` (11) and `test_owner_school_create.py` (2). Not re-run in the container this time: the running `mindforge_backend` was serving another worktree (§10 item 21).
 
@@ -83,7 +88,7 @@ Previous run (2026-09-13):
 
 Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-### 2.2 Backend integration (live local stack) — **only `test_realtime_delivery.py` re-run 2026-10-09 (6/6 PASS); the rest last run 2026-09-13**
+### 2.2 Backend integration (live local stack) — **re-run 2026-10-10 on the fixed code: 77/77 PASS in 170 s** (the table below is the 2026-09-13 breakdown)
 
 > `tests_integration/` reads `../../.env.local`, so it must run **from the host** (`cd backend && python3 -m pytest tests_integration/...`). Inside the container it fails at collection with `FileNotFoundError: /app/tests_integration/../../.env.local`.
 
@@ -115,11 +120,11 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 
 | Suite | Why / last result |
 |---|---|
-| Backend unit suite, `tests_integration/` (except realtime delivery) | Not re-run 2026-10-09. Last: 331 PASS, 58/58 (2026-09-13) |
+| Flutter unit / widget / integration | Not re-run 2026-10-10 (no frontend change). Last: 173/173, `app_test` 5/5, `all_screens_test` 29/29 (2026-10-09) |
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
-| `tests/security_test.py`, `security_test_extended.py` | **Run 2026-10-09** against the branch's code (PyJWT) on the local stack — 22 PASS / 1 expected FAIL / 0 WARN (after the server-header fix) and 48/48. See §9 |
+| `tests/security_test.py`, `security_test_extended.py` | Not re-run 2026-10-10. **Run 2026-10-09** against the branch's code (PyJWT) on the local stack — 22 PASS / 1 expected FAIL / 0 WARN (after the server-header fix) and 48/48. See §9 |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | Partially run 2026-10-09 — realtime (§5.8), part of auth (§5.1) and web (§5.9); the rest unticked |
+| Manual QA (§5) | 2026-10-10: §5.1 auth and the API rows of §5.7, over the API. 2026-10-09: §5.2, realtime (§5.8), part of web (§5.9). §5.3–§5.6, §5.10 still unticked |
 
 ---
 
@@ -141,25 +146,29 @@ Source: `backend/main.py` — `SecurityHeadersMiddleware` (~line 220). Headers a
 
 > Note: the edge `server` header is now `railway-hikari` (was `railway-edge` in the 2026-05-19 record). Cosmetic; it still overrides uvicorn's banner.
 
-### 3.2 Authentication & sessions — **NOT RE-VERIFIED (last checked 2026-05-19)**
+### 3.2 Authentication & sessions — **re-verified live 2026-10-10**
 
-These were verified by source reading in May. The auth layer has changed materially since (multi-tenancy, school suspension gating, MPIN blocklist, lockout-DoS guard, audit logging), so the line numbers in the previous record are stale and the table below is **carried forward, not re-confirmed**. Spot-checked as still present on 2026-07-24: bcrypt MPIN hashing, JTI revocation on logout, `ADMIN_SEED_MPIN` env gate (`backend/main.py:134`).
+Every row below was driven over HTTP against the local stack by `tests/auth_session_qa.py` (63/63 after the fix), with Postgres and Redis read directly where the API cannot show the result. **Two rows failed on the first run and were fixed the same day** — see §9.
 
-| Check | Status | Source |
+| Check | Status | Evidence (2026-10-10) |
 |---|---|---|
-| MPINs stored as bcrypt hash (work factor 12) | NOT RE-VERIFIED | `app/core/security.py` |
-| Access tokens are short-lived JWTs (60 min) | NOT RE-VERIFIED | `JWT_EXPIRE_MINUTES=60` |
-| Refresh tokens are separate JWTs (30 days) with `type=refresh` | NOT RE-VERIFIED | `app/routers/auth.py` |
-| Refresh tokens rotate on use; old JTI blacklisted | NOT RE-VERIFIED | `app/routers/auth.py` |
-| Logout revokes access-token JTI in Redis | NOT RE-VERIFIED | `app/routers/auth.py` |
-| Logout revokes refresh-token JTI when client sends it | NOT RE-VERIFIED | `app/routers/auth.py` |
-| Logout clears the user's FCM token | **PASS** | covered by `test_logout_handler.py`, re-run today |
-| Web session cookie `Secure; HttpOnly; SameSite=Strict; Path=/api` | NOT RE-VERIFIED | `app/routers/auth.py` |
-| Login rate-limited per (IP, username) | NOT RE-VERIFIED | `app/routers/auth.py` |
-| Account lockout after repeated failed logins (15 min) | NOT RE-VERIFIED | plus lockout-DoS guard added 2026-07-07 |
-| Deactivated / soft-deleted users cannot log in | NOT RE-VERIFIED | `app/routers/auth.py` |
-| Pending accounts cannot log in | NOT RE-VERIFIED | `app/routers/auth.py` |
-| **Suspended school blocks login and refresh; owner exempt** | **PASS** | `test_tenancy_wiring.py`, re-run today (8/8) |
+| MPINs stored as bcrypt hash (work factor 12) | **PASS** | a freshly registered row's `mpin_hash` starts `$2b$12$` |
+| Access tokens are short-lived JWTs (60 min) | **PASS** | `exp − iat` = 3600 s, `type=access` |
+| Refresh tokens are separate JWTs (30 days) with `type=refresh` | **PASS** | 30 d, own `jti`; an access token is refused at `/auth/refresh` (401) |
+| **A refresh token is not accepted as a bearer** | **PASS — was FAIL** | was 200 on `/auth/me`, including after logout and after rotation; now 401 in all three cases. `test_bearer_token_gate.py` |
+| Refresh tokens rotate on use; old JTI blacklisted | **PASS** | new pair returned; the old token → 401; `revoked_jti:<jti>` present in Redis |
+| Logout revokes access-token JTI in Redis | **PASS** | same bearer → 401 afterwards; a second session's token keeps working |
+| Logout revokes refresh-token JTI when client sends it | **PASS** | `/auth/refresh` → 401 |
+| Logout clears the user's FCM token | **PASS** | `users.fcm_token` set, then NULL after logout; also `test_logout_handler.py` |
+| Web session cookie `Secure; HttpOnly; SameSite=Strict; Path=/api` | **PASS** | `Set-Cookie: session=…; HttpOnly; Max-Age=3600; Path=/api; SameSite=strict; Secure` |
+| Login rate-limited per (IP, username) | **PASS** | unknown username: 10 × 401, then 429 with `Retry-After: 60` |
+| Account lockout after repeated failed logins (15 min) | **PASS** | 5 × 401, then 429 "temporarily locked", `Retry-After: 900`, lock key TTL 900 s. 4 wrong then the right MPIN → 200 and the counters are gone |
+| Deactivated / soft-deleted users cannot log in | **PASS** | deactivated → 403 "deactivated"; soft-deleted → 401, same text as an unknown user |
+| **A deactivated user's live session ends** | **PASS — was FAIL** | an access token issued before deactivation was 200; now 401, and the WebSocket handshake is refused. Re-activation restores both |
+| Pending accounts cannot log in | **PASS** | 403 "pending admin approval"; 200 once approved |
+| MPIN reset ends existing sessions | **PASS** | access and refresh tokens issued before an admin reset → 401; old MPIN 401, new MPIN 200 |
+| Wrong MPIN and unknown username answer identically | **PASS** | same status and body |
+| **Suspended school blocks login and refresh; owner exempt** | **PASS** | `test_tenancy_wiring.py` 8/8, re-run today |
 
 ### 3.3 Transport security — **partially re-verified 2026-07-24**
 
@@ -184,7 +193,7 @@ These were verified by source reading in May. The auth layer has changed materia
 | Check | Status | Source |
 |---|---|---|
 | `/api/media/{bucket}/{key}` allowlists buckets (profiles only) | **PASS** (spot-checked) | `backend/main.py:362` — `ALLOWED_BUCKETS` |
-| CORS forbids wildcard origin | NOT RE-VERIFIED | hardened 2026-06-23; `settings.BACKEND_CORS_ORIGINS` |
+| CORS forbids wildcard origin | **PASS** (2026-10-10, local) | preflight from `https://evil.example` gets no `Access-Control-Allow-Origin` (400); `http://localhost:5001` is echoed exactly, never `*` |
 | WebSocket requires JWT, validates `sub == user_id`, rejects revoked JTIs | **PASS** | `test_websocket_auth.py`, re-run today (5/5) |
 | Cross-school row access returns 404, not 403 | **PASS** | `test_tenancy.py::TestSameSchoolOr404`, re-run today |
 | Every tenant-scoped model carries `school_id`, and the migration list matches the models | **PASS** | `test_tenancy.py::TestTenantModelContract`, re-run today |
@@ -193,21 +202,22 @@ These were verified by source reading in May. The auth layer has changed materia
 
 ## 4. Privacy Audit
 
-### 4.1 Account deletion — **NOT RE-VERIFIED (last checked 2026-05-14)**
+### 4.1 Account deletion — **backend re-verified live 2026-10-10; the in-app screens not re-checked**
 
-All items below passed on 2026-05-14 by source reading. The auth router has changed since; re-verify before store submission.
+Driven end to end by `tests/auth_session_qa.py` on the local stack: a teacher self-deletes, and a parent self-deletes with one linked student.
 
 | Check | Status |
 |---|---|
-| In-app "Delete my account" in student/teacher/parent profile | NOT RE-VERIFIED |
-| Admin profile does **not** offer self-delete | NOT RE-VERIFIED |
-| Deletion is soft (`deleted_at` + `is_active=False`) | NOT RE-VERIFIED |
-| Deletion revokes access + refresh token JTIs | NOT RE-VERIFIED |
-| Deletion clears FCM push token | NOT RE-VERIFIED |
-| Deletion writes an `AuditLog` row (`action="self_delete"`) | NOT RE-VERIFIED |
-| Deleted user cannot log in | NOT RE-VERIFIED |
-
-**New since May:** the platform **owner** role exists and is school-less. Confirm whether owner self-delete is permitted or blocked, and add a row here.
+| In-app "Delete my account" in teacher/parent profile | NOT RE-VERIFIED (UI; last checked 2026-05-14) |
+| Student profile offers no self-delete, and the API refuses it | **PASS** (API, 2026-10-10) — `DELETE /api/auth/account` as a student → 403, account intact. *This row used to list students as able to self-delete; the policy changed 2026-05-14 — a parent or admin removes a student.* UI not re-checked |
+| Admin cannot self-delete | **PASS** (API, 2026-10-10) — 403, account intact. UI not re-checked |
+| **Owner cannot self-delete** | **PASS** (2026-10-10) — 403, account intact |
+| Deletion is soft (`deleted_at` + `is_active=False`) | **PASS** (2026-10-10) — read from Postgres |
+| A parent's deletion cascades to the one linked student | **PASS** (2026-10-10) — both rows soft-deleted |
+| Deletion revokes access + refresh token JTIs | **PASS** (2026-10-10) — both → 401; the cascaded child's live token → 401 too |
+| Deletion clears FCM push token | **PASS** (2026-10-10) — NULL on parent and child |
+| Deletion writes an `AuditLog` row (`action="self_delete"`) | **PASS** (2026-10-10) — plus `self_delete_cascade_child` for the student, both school-scoped |
+| Deleted user cannot log in | **PASS** (2026-10-10) — 401, same text as an unknown username |
 
 ### 4.2 Privacy policy
 
@@ -253,20 +263,20 @@ Run end-to-end before every release build. Tick PASS/FAIL with date.
 
 ### 5.1 Auth flows
 
-- [ ] **Register student** → pending screen
-- [ ] **Register teacher** → pending screen
-- [ ] **Register parent (auto-created from student registration)** → exists in DB
-- [ ] **Register with Phone + Email on the wide/web form** → both persist (fixed 2026-07-22)
-- [ ] **Login while pending** → "pending approval" message
-- [ ] **Admin approves user** → user can now log in
+- [x] **Register student** → pending screen — PASS 2026-10-10 (API: 201, `is_approved=false`; screen not viewed)
+- [x] **Register teacher** → pending screen — PASS 2026-10-10 (API: 201, `is_approved=false`; screen not viewed)
+- [x] **Register parent (auto-created from student registration)** → exists in DB — PASS 2026-10-10 (pending parent row in the same school, linked from the student profile; logs in with its own MPIN once approved)
+- [ ] **Register with Phone + Email on the wide/web form** → both persist (fixed 2026-07-22) — *partial 2026-10-10: both persist through the API; the web form itself not driven*
+- [x] **Login while pending** → "pending approval" message — PASS 2026-10-10 (403 "Your account is pending admin approval. Please wait.")
+- [x] **Admin approves user** → user can now log in — PASS 2026-10-10
 - [x] **Login with correct MPIN** → correct dashboard for role — PASS 2026-10-09 (web: teacher `chinmay_sir`, students `dummy8` + `river_kid`; sim: admin, teacher, student, parent via `all_screens_test`)
-- [ ] **Login with wrong MPIN** → 401 "Invalid username or MPIN"
-- [ ] **Login 11 times wrong** → 429 rate limit
-- [ ] **Login 5 wrong, then correct** → lockout counter clears
-- [ ] **Weak/blocklisted MPIN rejected at set/change time** (added 2026-07-07)
-- [ ] **Logout** → access + refresh JTIs blacklisted, FCM cleared, secure storage cleared — *partial 2026-10-09: web logout returns to login and leaves no `mindforge*` localStorage keys; JTI blacklist and FCM clear not checked*
+- [x] **Login with wrong MPIN** → 401 "Invalid username or MPIN" — PASS 2026-10-10 (an unknown username gets the identical reply)
+- [x] **Login 11 times wrong** → 429 rate limit — PASS 2026-10-10. For a real account the lockout arrives first: 5 × 401, then 429 "temporarily locked" (`Retry-After: 900`); the 11th in a minute is the rate limit (`Retry-After: 60`). For an unknown username: 10 × 401, then 429
+- [x] **Login 4 wrong, then correct** → lockout counter clears — PASS 2026-10-10 (counter read 4 in Redis, then gone). *Was "5 wrong": the fifth failure is the one that locks, so a correct MPIN after it is refused for 15 minutes*
+- [x] **Weak/blocklisted MPIN rejected at set/change time** (added 2026-07-07) — PASS 2026-10-10 at register and at admin reset (422); self-service change not driven (covered by unit tests)
+- [ ] **Logout** → access + refresh JTIs blacklisted, FCM cleared, secure storage cleared — *server side PASS 2026-10-10 (access 401, refresh 401, `fcm_token` NULL); web storage cleared 2026-10-09; secure storage on a device not checked*
 - [ ] **Access token expiry (~60 min)** → Dio interceptor auto-refreshes
-- [ ] **Force-revoked token** → next protected call 401
+- [x] **Force-revoked token** → next protected call 401 — PASS 2026-10-10 (admin MPIN reset; deactivation, **after the fix in §9**; account deletion)
 
 ### 5.2 Multi-tenancy & owner *(feature landed 2026-07-22; full pass 2026-10-09)*
 
@@ -323,13 +333,13 @@ Run 2026-10-09 against the local stack: API checks with real tokens (script in t
 ### 5.7 Admin
 
 - [ ] Dashboard loads, no overflow on small screens
-- [ ] Pending users — approve flow
-- [ ] Pending users — reject (hard-delete) flow, no 500
+- [x] Pending users — approve flow — PASS 2026-10-10 (API; screen not driven)
+- [x] Pending users — reject (hard-delete) flow, no 500 — PASS 2026-10-10 (API: 204, row gone — including a pending student with its parent; an approved user → 400)
 - [ ] Faculty approval filter
-- [ ] User management (deactivate / re-activate)
+- [x] User management (deactivate / re-activate) — PASS 2026-10-10 (API). Deactivation now also ends the live session — §9
 - [ ] Feedback viewer shows in-app problem reports
 - [ ] Profile **does NOT** show "Delete my account"
-- [ ] `DELETE /api/auth/account` as admin → 403
+- [x] `DELETE /api/auth/account` as admin → 403 — PASS 2026-10-10 (owner → 403 too)
 
 ### 5.8 Realtime *(reworked 2026-07-24; first manual pass 2026-10-09, web only)*
 
@@ -447,6 +457,17 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-10 (auth, sessions and account deletion — two bearer-token defects found and fixed)
+- **What ran:** `tests/auth_session_qa.py`, new this session — 63 checks over HTTP against the local stack (the main checkout, confirmed per §10 item 21), covering §3.2, §4.1, §5.1 and the API rows of §5.7 with four throwaway accounts in Hansel & Gretel. First run **57 PASS / 4 FAIL**; the four failures were two defects in `_get_current_user` (`backend/app/core/security.py`), the dependency every authenticated request passes.
+- **Found: a refresh token worked as an access token.** It is signed with the same key and carries the same `sub`, and the dependency never looked at `type`. So the 60-minute access lifetime was really 30 days for anyone holding a refresh token — and logout did not help, because a refresh JTI is revoked under `revoked_jti:` while the dependency checks only the access-token namespace. Measured: `GET /api/auth/me` with a refresh token → **200**; with a refresh token already rotated out → **200**; with one revoked by logout → **200**. Only an MPIN reset or deleting the account ended it. The WebSocket already refused refresh tokens; HTTP did not.
+- **Found: deactivating a user did not end their session.** Login and `/auth/refresh` both check `is_active`; the per-request dependency and the socket's `_ws_account_allows` did not. A deactivated user's access token kept returning 200 (up to its hour — or, through the first defect, the refresh token's 30 days) and the socket kept delivering events.
+- **Fixed:** the dependency refuses `type == "refresh"` and an inactive account, both with 401 (so the client tries a refresh, is refused, and signs out); `_ws_account_allows` requires `is_active`. Tests written first and seen to fail: `tests/test_bearer_token_gate.py` (3) and three account-check cases in `test_websocket_auth.py`, which until now replaced that function with a mock.
+- **Verified on the fixed code:** the live script **63/63** (the four cases now 401, plus a real socket refused for a deactivated user and reopened after re-activation); backend unit **424**, 0 failing; `tests_integration/` **77/77**.
+- **Everything else in the block passed first time** — bcrypt cost 12, cookie flags, lockout (5 fails, 15 min) and rate limit (10/min), rotation, logout, pending/approve, MPIN-reset revocation, CORS, and the whole deletion path including the parent → child cascade and its audit rows.
+- **Production very likely has both gaps.** `main` — what production runs — has neither check in `_get_current_user` (read from `git show main:`; production itself was not probed). They close when `create_school` ships.
+- **Two checklist rows were wrong, corrected in place:** §5.1 said "5 wrong, then correct → counter clears" (the fifth failure locks; four is the testable case), and §4.1 listed students as able to self-delete (policy since 2026-05-14: they cannot).
+- **Housekeeping:** registration allows 5 a minute per IP, and two back-to-back runs tripped it mid-script; the six accounts those aborted runs left were rejected or revoked through the admin API. `pytest` and `pytest-asyncio` were pip-installed into the running `mindforge_backend` container for the unit run; they vanish on the next rebuild. Not re-run today: Flutter suites (no frontend change), the two security probe suites.
 
 ### 2026-10-09 (holiday homework fix merged; local stack back on the branch)
 - Merged `claude/holiday-hw-gate` (`35f5087`, from a separate session) as `edb6d4f`, clean. The fix makes homework-completion review require attendance only when the grade has a non-holiday period today (the same rule as `attendance_applicable` in today-workflow), returns `attendance_required` so the teacher screen stops disabling Submit, and moves every daily gate to the school-local date via `core/school_time.py` — UTC was a day behind between 00:00 and 05:30 IST.
