@@ -631,6 +631,8 @@
         <span class="sec-tally"></span>
       </div>
       <div class="rows">
+        <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Credentials written to server logs</span>
+          <p class="note">Was happening until 10 Oct 2026: the WebSocket handshake carries the access token as <code>?token=</code> and uvicorn logged the full path of every handshake. A logging filter now writes <code>token=[redacted]</code>; 6 tests, and confirmed on the live local stack. Production still runs the unfixed code.<span class="flag new">Fixed 10 Oct</span></p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Weak or defaulted signing key</span>
           <p class="note"><code>JWT_SECRET</code> has no default — the app refuses to start without it.</p></div>
         <div class="row s-ok"><span class="chip">Verified</span><span class="risk">Shipping default infrastructure credentials</span>

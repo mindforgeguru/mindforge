@@ -27,10 +27,10 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **60** |
+| Verified | **61** |
 | Stale | **8** |
 | Open | **22** |
-| **Total tracked** | **90** across 13 domains |
+| **Total tracked** | **91** across 13 domains |
 
 *Last verification sweep: 2026-10-10 (see [Verification log](#verification-log)).*
 
@@ -127,6 +127,7 @@ goes wrong.
 
 | Risk | Status | Evidence / note |
 |---|---|---|
+| Credentials written to server logs | VERIFIED | **Was happening until 2026-10-10:** the WebSocket handshake carries the access token as `?token=` and uvicorn logs the full path of every handshake — 110 usable JWTs in 15 minutes of local log. Fixed with a logging filter on uvicorn's loggers (`app/core/log_redaction.py`) that writes `token=[redacted]`; 6 tests (`test_log_redaction.py`), and on the live local stack a real handshake logs the redacted form with no `token=eyJ` anywhere. Covers `token=` and `refresh_token=` in uvicorn's lines only — application code that logged a token itself would not be caught. Production still runs the unfixed code. |
 | Weak or defaulted signing key | VERIFIED | `JWT_SECRET` has no default — the app refuses to start without it. |
 | Shipping default infrastructure credentials | VERIFIED | Backend refuses to boot under `APP_ENV=production` if Postgres, Redis or MinIO are on built-in defaults. |
 | Seeded default admin account | VERIFIED | Removed from `init_db.sql` 2026-08-19 (commit `7e5de32`) — provisioning is now only via the env-gated seed in `main.py` or Owner Console. **Production checked and closed 2026-08-21:** the leftover `admin` row *had* run there and was neutralised (`is_active=false`, `deleted_at` set) via the Railway console — `admin`/`123456` can no longer log in. Not hard-deleted (FK safety); reversible. |
@@ -740,6 +741,27 @@ refused; backend unit 424, integration 77/77.
 VERIFIED rows now say what was missing. **Production:** `main` has neither
 check (read from git, not probed), so both gaps are very likely live there
 until `create_school` ships.
+
+### 2026-10-10 — Access tokens in the server log; a reconnect storm
+
+Found while reading the backend log for an unrelated check.
+
+**Tokens in logs.** Every WebSocket handshake was logged by uvicorn with its
+full path, `?token=<access JWT>` included. Anyone with read access to the logs
+— or to wherever they are shipped and retained — held a working credential for
+up to an hour per line. This was not on the register at all; it is now, as a
+new row under Secrets & configuration (61 verified, 91 tracked). The fix is a
+redacting filter on uvicorn's loggers, tested and confirmed live.
+
+**Reconnect storm.** Not a confidentiality issue but an availability one: after
+any outage the app's WebSocket client multiplied its retries without bound and
+then kept reconnecting forever — about 60 handshakes a second from a single
+client. Many clients doing that against a server that has just come back is a
+self-inflicted denial of service. Fixed in the client (one pending reconnect,
+per-socket callbacks), with a unit test that fails on the old logic; detail in
+`TEST_RECORD.md` §9.
+
+**Production** has both (same code on `main`, read from git, not probed).
 
 ---
 

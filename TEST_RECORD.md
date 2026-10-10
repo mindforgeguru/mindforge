@@ -31,8 +31,9 @@
 | Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (6) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools | No — same skip |
 | API integration / probes | `tests/test_api.py`, `tests/security_test.py`, `tests/security_test_extended.py`, `tests/performance_test.py` | Live endpoint smoke, security probe matrix, latency | **No — the CI job is unreachable, see §10 item 3** |
 | Auth / session live QA | `tests/auth_session_qa.py` (63 checks) | Registration → approval → login, lockout and rate limit, refresh rotation, logout, deactivation, MPIN-reset revocation, self-delete and its cascade — over HTTP against the local stack, reading Postgres and Redis for what the API cannot show | No — a script, not pytest; local stack only |
+| Backend log-redaction tests | `backend/tests/test_log_redaction.py` (6) | The token in a WebSocket handshake path never reaches uvicorn's log; lines without one are untouched | **Yes** (glob) |
 | Flutter unit tests | `frontend/test/unit/` (78, 6 files) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, models, admin setup status, owner API error messages | **Yes** |
-| Flutter widget tests | `frontend/test/widget/` (10 files; +`delete_account_dialog_test.dart`, 5 cases, 2026-10-10) | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
+| Flutter widget tests | `frontend/test/widget/` (11 files; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
 | Flutter integration tests | `frontend/integration_test/` — `app_test.dart` (5), `all_screens_test.dart` (29) | Auth flows; every screen for every role | No — needs a simulator **and** `--dart-define=LOCAL_DEV=true`, or it hits production |
 | Local stack bootstrap | `docker-compose.yml` + `docker-compose.local.yml`; test accounts documented in `docs/local-test-accounts.md` | Spin up postgres/redis/minio/backend for integration testing | Manual |
 
@@ -69,9 +70,9 @@ flutter test integration_test/
 
 > **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import (as of 2026-10-09 also `test_ai_fallback_chain.py`, `test_old_test_upload.py` and `test_subjects.py` — the host's `google-genai` lacks `types.GenerateContentConfig`) — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-10 after the bearer-gate fix: 424 PASS**
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-10: 430 PASS**
 
-2026-10-10: every `tests/test_*.py` file in its own process inside `mindforge_backend` (Python 3.11, `pytest pytest-asyncio` installed for the run) — **385 passed**, with the three known container gaps run on the host instead: `test_prod_guard.py` 24, `test_secrets_gitignore.py` 12, and the 3 host-only cases in `test_subjects.py` / `test_server_header.py`. **424 passed, 0 failed** across 38 files (was 418; +3 `test_bearer_token_gate.py`, +3 in `test_websocket_auth.py`).
+2026-10-10: every `tests/test_*.py` file in its own process inside `mindforge_backend` (Python 3.11, `pytest pytest-asyncio` installed for the run) — **385 passed**, with the three known container gaps run on the host instead: `test_prod_guard.py` 24, `test_secrets_gitignore.py` 12, and the 3 host-only cases in `test_subjects.py` / `test_server_header.py`. **424 passed, 0 failed** across 38 files (was 418; +3 `test_bearer_token_gate.py`, +3 in `test_websocket_auth.py`). Re-run the same way in the evening after the log-redaction fix: **430 passed** across 39 files (+6 `test_log_redaction.py`).
 
 
 2026-10-09: every `tests/test_*.py` file in its own process, on the host in a Python 3.12 venv carrying PyJWT 2.15.1 plus `google-genai==2.2.0` and `sentry-sdk` (the host's own `python3.12` can't import 6 files — see the note above). **412 passed, 0 failed**, including the new `test_jwt_library.py` (11) and `test_owner_school_create.py` (2). Not re-run in the container this time: the running `mindforge_backend` was serving another worktree (§10 item 21).
@@ -105,14 +106,14 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test` (unit + widget, everything) | **PASS — 178/178** (2026-10-10; was 173 — +5 `delete_account_dialog_test`) |
+| `flutter test` (unit + widget, everything) | **PASS — 187/187** (2026-10-10 evening; 173 at the start of the day, +14 from the five frontend fixes in §9) |
 | `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-10, unchanged) |
 | `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-10) |
 | `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-10, 10 m 47 s; no overflow or framework exception in the log) |
 
 The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading_underscores_for_local_identifiers`, 1 `prefer_const_declarations`, 1 `dangling_library_doc_comments`. CI runs `--no-fatal-infos`, so none break the build.
 
-> The integration run predates the three small frontend fixes made later the same day (auto-quiz Retry, the delete-account dialog, the empty Privacy & Data heading). Those are covered by `flutter test` 178/178 and by hand on the simulator (§9), not by the 29/29 run.
+> The integration run predates the frontend fixes made later the same day (§9). Those are covered by `flutter test` 187/187 and by hand on the simulator, not by the 29/29 run — **re-run the integration suites before relying on them for this code.**
 
 ### 2.4 Not run this session
 
@@ -121,7 +122,7 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
 | `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | 2026-10-10: §5.1 auth and the API rows of §5.7 over the API; parts of §5.4–§5.6 by hand on the simulator. Still unticked: §5.3, most of §5.4/§5.5 beyond what is marked, the screen side of §5.7, the rest of §5.8, §5.10 |
+| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. Still unticked: taking a test, homework submission from the student side, presentations, push notifications, the web-only rows, most of §5.10 |
 
 ---
 
@@ -290,7 +291,7 @@ Run 2026-10-09 against the local stack: API checks with real tokens (script in t
 
 ### 5.3 Admin school setup *(new — 2026-07-23/24)*
 
-- [ ] Graphical school-setup workflow gates steps in the right order
+- [ ] Graphical school-setup workflow gates steps in the right order — *partial 2026-10-10 (simulator): the completed state renders — five done steps, Close Year unlocked, "Setup complete — tap any step to edit." The "Academic Year" label sat on top of its step; fixed, §9. Gating on a fresh school only via `setup_road_card_test`*
 - [ ] School Logo setup task uploads and displays
 - [ ] Close-Year workflow step completes
 
@@ -329,13 +330,13 @@ Run 2026-10-09 against the local stack: API checks with real tokens (script in t
 
 ### 5.7 Admin
 
-- [ ] Dashboard loads, no overflow on small screens
-- [x] Pending users — approve flow — PASS 2026-10-10 (API; screen not driven)
-- [x] Pending users — reject (hard-delete) flow, no 500 — PASS 2026-10-10 (API: 204, row gone — including a pending student with its parent; an approved user → 400)
-- [ ] Faculty approval filter
+- [x] Dashboard loads, no overflow on small screens — PASS 2026-10-10 on the simulator (402 pt wide; the school name truncates to "Hansel & Gret…" beside the three header icons). Narrower widths not checked by hand
+- [x] Pending users — approve flow — PASS 2026-10-10 (API). On the simulator the pending list showed a new registration after Refresh — it does not appear live, which nothing requires — with Approve and delete on the row
+- [x] Pending users — reject (hard-delete) flow, no 500 — PASS 2026-10-10 (API: 204, row gone — including a pending student with its parent; an approved user → 400. Repeated on the simulator: trash icon → confirm → 204, row gone)
+- [ ] Faculty approval filter — *not checked; the Active Users tab's User Type and Grade filters render (simulator, 2026-10-10)*
 - [x] User management (deactivate / re-activate) — PASS 2026-10-10 (API). Deactivation now also ends the live session — §9
-- [ ] Feedback viewer shows in-app problem reports
-- [ ] Profile **does NOT** show "Delete my account"
+- [x] Feedback viewer shows in-app problem reports — **was FAIL, fixed 2026-10-10**: no report could be sent at all — Send always answered "Could not send", for every role. After the fix a report sent from the admin dashboard on the simulator returned 204 and appears in `GET /admin/feedback` with its user, role and route. The viewer screen itself was not opened. §9
+- [x] Profile **does NOT** show "Delete my account" — PASS 2026-10-10 (simulator)
 - [x] `DELETE /api/auth/account` as admin → 403 — PASS 2026-10-10 (owner → 403 too)
 
 ### 5.8 Realtime *(reworked 2026-07-24; first manual pass 2026-10-09, web only)*
@@ -344,12 +345,12 @@ The WebSocket fan-out was rewritten on 2026-07-24. **First manual pass 2026-10-0
 
 - [ ] Teacher sends a school-wide broadcast → appears live on student / parent / other-teacher **Broadcasts screen** without navigating or refreshing
 - [x] Teacher sends a **grade-targeted** broadcast → reaches that grade's students + parents, and all teachers — PASS 2026-10-09 for the student leg: grade-8 broadcast from `chinmay_sir` appeared on `dummy8`'s open Broadcasts screen in ~2 s, no refresh (web, two origins). Parent and other-teacher legs not checked
-- [ ] Teacher assigns homework → appears live on the student/parent homework screen **and** on other teachers' dashboards — *BLOCKED 2026-10-09: holiday, assignment refused by the review gate (§10 item 18). Backend leg covered by `test_realtime_delivery.py` 6/6*
+- [x] Teacher assigns homework → appears live on the student/parent homework screen **and** on other teachers' dashboards — PASS 2026-10-10 for the student leg, on a device: with `dummy8`'s Homework screen open on the simulator, a grade-8 homework assigned through the API appeared at the top within 3 s, no refresh. Done on a no-class Saturday, so it also confirms the §10 item 18 fix. Parent and other-teacher legs not checked
 - [ ] Auto-quiz from a presentation period log → appears in the teacher Online Tests list immediately, without pull-to-refresh
-- [ ] Marking homework completion updates the student's Pending/Complete pill live — *BLOCKED 2026-10-09: completion needs today's attendance, none on a holiday (§10 item 18)*
+- [x] Marking homework completion updates the student's Pending/Complete pill live — PASS 2026-10-10 on the simulator: homework 75 flipped Pending → Complete within 3 s of the teacher's `PUT …/completions` (which returned 200 with `attendance_required: false` on a no-class day)
 - [ ] Attendance / timetable / grade events refresh the relevant screen live
 - [x] Events do **not** leak across schools (two schools, two browsers) — PASS 2026-10-09: a Hansel & Gretel grade-8 broadcast did not reach Riverdale's grade-8 `river_kid` (screen unchanged; backend log shows no refetch by user 42 after the `POST … 201`). Riverdale's list also never showed the Hansel broadcast at rest
-- [ ] Backgrounding the app for >30 s then resuming reconnects once (no double-reconnect, no infinite loop)
+- [x] Backgrounding the app for >30 s then resuming reconnects once (no double-reconnect, no infinite loop) — PASS 2026-10-10 on the simulator: 40 s in the background, then exactly one new socket in the backend log. **The infinite loop did exist, on a different trigger — a server outage — and is fixed, §9.** After the fix, restarting the backend under the running app produced exactly one reconnect and nothing further for 75 s
 
 ### 5.9 Web build QA
 
@@ -454,6 +455,18 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-10 (evening — realtime on a device, the admin screens, and four more defects)
+- **Realtime on the simulator (§5.8):** homework assignment and completion both reached an open student screen live, on a no-class day; background-and-resume reconnected once. Three more rows ticked.
+- **Found and fixed — reconnect storm after an outage.** Reading the backend log for the resume check showed one idle web client opening about 60 sockets a second, each closed 2 ms later, 105 in 15 minutes. `WebSocketClient` scheduled a retry from each of the ways a failed socket reports itself (`ready` failing, the stream erroring, the stream closing), all in the same generation; each retry then closed whatever socket was current, and that close scheduled another. So retries multiplied while the server was unreachable — the backend had auto-reloaded several times today — and kept each other alive once it was back. Now at most one reconnect is pending, and a socket's callbacks act only while it is still the current one. `test/unit/websocket_reconnect_test.dart` (4) drives the real client against scripted sockets under fake time: before the fix, a 60-second outage produced 400+ attempts (the test's safety cap; uncapped it never finished) and no stable socket afterwards. **Live after the fix:** backend restarted under the running app → one reconnect, then quiet.
+- **Found and fixed — access tokens in the server log.** The WebSocket handshake carries the JWT as `?token=`, and uvicorn logs the full path of every handshake: 110 usable access tokens in 15 minutes of local log. A logging filter on uvicorn's loggers (`app/core/log_redaction.py`) now writes `token=[redacted]`. `tests/test_log_redaction.py` (6); live, a real handshake logs `"WebSocket /ws/3?token=[redacted]" [accepted]` and a grep for `token=eyJ` finds nothing. Register updated.
+- **Found and fixed — "Report a problem" never sent (§5.7).** Send answered "Could not send. Please try again." every time and no request left the app. The dialog looked up the current route from its own context, which sits above every route, so the lookup threw and the catch-all reported a send failure. Every role's report button shares the dialog. The route is now read where the dialog is opened. `test/widget/report_problem_dialog_test.dart` (3) mounts it inside a real router. On the simulator afterwards: 204, "Thanks — your report was sent.", and the row in the admin feedback list.
+- **Found and fixed — the "Academic Year" label on the admin setup road** wrapped to two lines and ran over its step's circle. Labels above the road are anchored by their bottom edge now. Two cases added to `setup_road_card_test.dart`; confirmed on the simulator.
+- **Admin by hand (§5.3, §5.7):** dashboard, the setup road in its completed state, pending list and on-screen reject (204, row gone), Active Users with its filters, profile without a delete option.
+- **Suites after all of it:** backend unit **430**, Flutter **187/187**, analyzer unchanged. The Flutter integration suites and `tests_integration/` were **not** re-run after these fixes.
+- **Production:** `main` has the same reconnect code, the same report dialog, and uvicorn's default logging (read from git, not checked against production). So production logs very likely hold access tokens, each valid for up to an hour from issue; the shipped app's problem-report button very likely fails; and a production outage would likely start the same storm from every open client.
+- **Seen, not changed:** on the admin profile's MPIN pad the "0" key sits about 4 pt left of the column above it. A new registration does not appear on an open pending list until Refresh.
+- **Housekeeping:** homework 75's completion was recorded for grade 8 and stays; the QA homework (167) was deleted and the QA problem report resolved. One throwaway account was registered and rejected on screen.
 
 ### 2026-10-10 (afternoon — remaining suites, and student / teacher / parent by hand on the simulator)
 - **Automated, all on today's code:** Flutter **173/173** before the fixes below and **178/178** after; analyzer unchanged; integration on the iPhone 17 Pro simulator **`app_test` 5/5, `all_screens_test` 29/29**; `security_test_extended.py` **48/48**; `security_test.py` **22 PASS / 1 expected FAIL / 0 WARN**. A read-only API sweep of 26 student and parent endpoints returned 200 throughout (two 422s were a required query parameter).
@@ -756,6 +769,8 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
 22. **The two-factor prompt disposes its text controller too early.** `login_screen.dart` creates the MFA code controller, awaits `showDialog`, and disposes it on the next line — the pattern that put a red error screen up when the delete-account dialog was cancelled (§9, 2026-10-10). Debug-only as far as is known (release builds skip the assertions). Untested and unfixed; it needs a widget test that reaches the prompt, or an MFA-enrolled account.
 
 23. **A hidden browser pane cannot drive the Flutter web build.** With the pane not displayed the page stops getting animation frames, the splash's animation controllers never complete, and the app sits on the splash with an empty accessibility tree. It looks like an app hang and is not one. When the pane is visible, Flutter's accessibility tree (click the `flt-semantics-placeholder` once) reads every screen as text. Seen 2026-10-10.
+
+24. **Production logs probably contain access tokens.** Until the 2026-10-10 fix ships, every WebSocket handshake logs its `?token=`. Once it has shipped, consider how long the existing logs are retained and who can read them. A token is good for an hour from issue, so old log lines are not a live credential — but the log is still not where they belong.
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.
