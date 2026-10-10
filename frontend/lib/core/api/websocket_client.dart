@@ -21,8 +21,14 @@ final webSocketClientProvider = Provider<WebSocketClient>((ref) {
 class WebSocketClient {
   final String? Function()? _getCurrentToken;
 
-  WebSocketClient({String? Function()? getCurrentToken})
-      : _getCurrentToken = getCurrentToken;
+  /// Opens the socket. Injectable so tests can script connection failures.
+  final WebSocketChannel Function(Uri uri) _connectChannel;
+
+  WebSocketClient({
+    String? Function()? getCurrentToken,
+    WebSocketChannel Function(Uri uri)? connectChannel,
+  })  : _getCurrentToken = getCurrentToken,
+        _connectChannel = connectChannel ?? WebSocketChannel.connect;
 
   WebSocketChannel? _channel;
   StreamController<Map<String, dynamic>>? _controller;
@@ -32,6 +38,15 @@ class WebSocketClient {
   // Incremented on every disconnect/reconnect cycle so stale delayed callbacks
   // can detect they belong to an old generation and skip firing.
   int _generation = 0;
+  // One per socket opened. A socket's callbacks act only while it is still the
+  // current one, so a socket this client replaced (or one whose failure was
+  // already reported by another callback) cannot schedule a reconnect.
+  int _attempt = 0;
+  // At most one reconnect is ever pending. A failed attempt reports itself up
+  // to three times (`ready` fails, the stream errors, the stream closes); when
+  // each of those scheduled its own retry, retries multiplied through an
+  // outage and then kept closing each other's sockets after it.
+  Timer? _reconnectTimer;
 
   /// Returns a stream of WebSocket events for the given user.
   ///
@@ -117,7 +132,8 @@ class WebSocketClient {
   /// to bail out.
   void _scheduleReconnect(
       int userId, String capturedToken, int generation, Duration delay) {
-    Future.delayed(delay, () {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(delay, () {
       if (generation != _generation) return;
       _connect(userId, _resolveReconnectToken(capturedToken), generation);
     });
@@ -131,6 +147,12 @@ class WebSocketClient {
     // connect() call short-circuits correctly.
     _connectedToken = token;
 
+    // From here this is the current socket; anything still pending for an
+    // earlier one is void.
+    final attempt = ++_attempt;
+    _reconnectTimer?.cancel();
+    bool isCurrent() => generation == _generation && attempt == _attempt;
+
     try {
       // Close any existing channel before opening a new one.
       _channel?.sink.close();
@@ -139,12 +161,12 @@ class WebSocketClient {
       final uri = Uri.parse(
         '${AppConstants.wsBaseUrl}/$userId?token=${Uri.encodeQueryComponent(token)}',
       );
-      _channel = WebSocketChannel.connect(uri);
+      _channel = _connectChannel(uri);
 
       // Catch connection-level errors (e.g. DNS failure, TLS rejection,
       // auth failure — the backend closes with 1008 on bad/expired token).
       _channel!.ready.catchError((_) {
-        if (generation != _generation) return;
+        if (!isCurrent()) return;
         _channel = null;
         _scheduleReconnect(userId, token, generation,
             const Duration(seconds: 5));
@@ -164,6 +186,7 @@ class WebSocketClient {
           }
         },
         onDone: () {
+          if (!isCurrent()) return;
           _channel = null; // mark as dead so connect() can detect it on resume
           // Auto-reconnect after 3 seconds on disconnect.
           // Pass the current generation so stale timers self-cancel.
@@ -171,6 +194,7 @@ class WebSocketClient {
               const Duration(seconds: 3));
         },
         onError: (error) {
+          if (!isCurrent()) return;
           _channel = null; // mark as dead
           _scheduleReconnect(userId, token, generation,
               const Duration(seconds: 5));
@@ -193,6 +217,7 @@ class WebSocketClient {
         }
       });
     } catch (e) {
+      if (!isCurrent()) return;
       // Retry connection after delay
       _scheduleReconnect(userId, token, generation,
           const Duration(seconds: 5));
@@ -201,6 +226,7 @@ class WebSocketClient {
 
   void disconnect() {
     _generation++; // Invalidate all pending reconnect callbacks
+    _reconnectTimer?.cancel();
     _pingTimer?.cancel();
     _channel?.sink.close();
     _controller?.close();
