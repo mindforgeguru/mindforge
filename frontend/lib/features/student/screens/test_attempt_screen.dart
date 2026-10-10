@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +11,14 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/leave_guard.dart' as leave_guard;
 import '../../../core/utils/responsive.dart';
 import '../providers/student_provider.dart';
+
+/// True when the server ended this attempt because the student left the test
+/// (closed the app, went back, opened it again) rather than because time ran
+/// out: it was submitted automatically while the clock still had time on it.
+@visibleForTesting
+bool attemptEndedByLeaving(Map<String, dynamic> data) =>
+    data['auto_submitted'] == true &&
+    ((data['remaining_seconds'] as num?)?.toInt() ?? 0) > 0;
 
 class TestAttemptScreen extends ConsumerStatefulWidget {
   final int testId;
@@ -183,7 +191,8 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
       // Network hiccup on resume — fall back to 0 in the dialog; the grade
       // list will still reflect the real server-side score.
     }
-    await _showResultDialog(score: score, autoSubmitted: true);
+    await _showResultDialog(
+        score: score, autoSubmitted: true, leftTest: true);
     _leaveTest();
   }
 
@@ -199,6 +208,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
         await _showResultDialog(
           score: (data['score'] as num?)?.toDouble() ?? 0,
           autoSubmitted: data['auto_submitted'] == true,
+          leftTest: attemptEndedByLeaving(data),
         );
         _leaveTest();
         return;
@@ -313,6 +323,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
         await _showResultDialog(
           score: (data['score'] as num?)?.toDouble() ?? 0,
           autoSubmitted: data['auto_submitted'] == true,
+          leftTest: attemptEndedByLeaving(data),
         );
         _leaveTest();
         return;
@@ -356,6 +367,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     required double score,
     required bool autoSubmitted,
     bool fromTimeout = false,
+    bool leftTest = false,
   }) async {
     // The attempt is over — stop warning about leaving the page.
     leave_guard.disableLeaveConfirmation();
@@ -364,11 +376,12 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
       context: context,
       useRootNavigator: false,
       barrierDismissible: false,
-      builder: (_) => _ResultDialog(
+      builder: (_) => TestResultDialog(
         score: score,
         total: _totalMarks,
         autoSubmitted: autoSubmitted,
         fromTimeout: fromTimeout,
+        leftTest: leftTest,
         totalQuestions: _questions.length,
         answered: _answeredCount,
       ),
@@ -387,7 +400,10 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     }
   }
 
-  Future<void> _submitTest({bool autoSubmitted = false}) async {
+  Future<void> _submitTest({
+    bool autoSubmitted = false,
+    bool leftTest = false,
+  }) async {
     if (_submitted) return;
     _flushAnswers();
     setState(() => _submitted = true);
@@ -406,7 +422,8 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
 
       final score = (result['score'] as num?)?.toDouble() ?? 0;
       final wasAuto = (result['auto_submitted'] as bool?) ?? autoSubmitted;
-      await _showResultDialog(score: score, autoSubmitted: wasAuto);
+      await _showResultDialog(
+          score: score, autoSubmitted: wasAuto, leftTest: wasAuto && leftTest);
       _leaveTest();
     } on DioException catch (e) {
       // 409 = already submitted (server finalized while we were away).
@@ -494,7 +511,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
         if (didPop || _submitted) return;
         final confirmed = await _confirmExitSubmit();
         if (confirmed) {
-          await _submitTest(autoSubmitted: true);
+          await _submitTest(autoSubmitted: true, leftTest: true);
         }
       },
       child: Scaffold(
@@ -1019,21 +1036,29 @@ class _TrueFalseSelector extends StatelessWidget {
 
 // ─── Result dialog ────────────────────────────────────────────────────────────
 
-class _ResultDialog extends StatelessWidget {
+@visibleForTesting
+class TestResultDialog extends StatelessWidget {
   final double score;
   final double total;
   final bool autoSubmitted;
   // True when finalization happened because the deadline passed while the
   // student was away from the screen (vs. timer running out in-app).
   final bool fromTimeout;
+  // True when the attempt ended because the student left the test — back,
+  // app closed, or opened again — with time still on the clock. Takes
+  // precedence over the timer wording: telling a student the timer ran out
+  // when it had not hides the rule they just ran into.
+  final bool leftTest;
   final int totalQuestions;
   final int answered;
 
-  const _ResultDialog({
+  const TestResultDialog({
+    super.key,
     required this.score,
     required this.total,
     required this.autoSubmitted,
     this.fromTimeout = false,
+    this.leftTest = false,
     required this.totalQuestions,
     required this.answered,
   });
@@ -1051,11 +1076,19 @@ class _ResultDialog extends StatelessWidget {
       title: Row(
         children: [
           Icon(
-            autoSubmitted ? Icons.timer_off : Icons.check_circle,
+            !autoSubmitted
+                ? Icons.check_circle
+                : leftTest
+                    ? Icons.exit_to_app
+                    : Icons.timer_off,
             color: autoSubmitted ? AppColors.warning : AppColors.success,
           ),
           const SizedBox(width: 8),
-          Text(autoSubmitted ? 'Time Up!' : 'Test Submitted!'),
+          Text(!autoSubmitted
+              ? 'Test Submitted!'
+              : leftTest
+                  ? 'Test Ended'
+                  : 'Time Up!'),
         ],
       ),
       content: Column(
@@ -1069,9 +1102,11 @@ class _ResultDialog extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                fromTimeout
-                    ? 'The test was auto-submitted because the timer expired while the app was closed.'
-                    : 'Your test was auto-submitted when the timer ran out.',
+                leftTest
+                    ? 'You left the test, so it was submitted with the answers you had saved. A test can only be taken once.'
+                    : fromTimeout
+                        ? 'The test was auto-submitted because the timer expired while the app was closed.'
+                        : 'Your test was auto-submitted when the timer ran out.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AppColors.warning, fontSize: 13),
               ),
