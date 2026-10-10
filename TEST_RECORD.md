@@ -113,7 +113,7 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading_underscores_for_local_identifiers`, 1 `prefer_const_declarations`, 1 `dangling_library_doc_comments`. CI runs `--no-fatal-infos`, so none break the build.
 
-> The integration run predates the frontend fixes made later the same day (§9). Those are covered by `flutter test` 190/190 and by hand on the simulator, not by the 29/29 run — **re-run the integration suites before relying on them for this code.**
+> Both integration suites were run twice on 2026-10-10: in the afternoon, and again in the evening at `f4b0234` — every fix in §9 except the two-factor prompt (`573ba63`), which landed from a separate session while the second run was in progress. 5/5 and 29/29 both times, no overflow or framework exception in the log. The two-factor fix is covered by `flutter test` 190/190.
 
 ### 2.4 Not run this session
 
@@ -469,7 +469,7 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 - **Found and fixed — "Report a problem" never sent (§5.7).** Send answered "Could not send. Please try again." every time and no request left the app. The dialog looked up the current route from its own context, which sits above every route, so the lookup threw and the catch-all reported a send failure. Every role's report button shares the dialog. The route is now read where the dialog is opened. `test/widget/report_problem_dialog_test.dart` (3) mounts it inside a real router. On the simulator afterwards: 204, "Thanks — your report was sent.", and the row in the admin feedback list.
 - **Found and fixed — the "Academic Year" label on the admin setup road** wrapped to two lines and ran over its step's circle. Labels above the road are anchored by their bottom edge now. Two cases added to `setup_road_card_test.dart`; confirmed on the simulator.
 - **Admin by hand (§5.3, §5.7):** dashboard, the setup road in its completed state, pending list and on-screen reject (204, row gone), Active Users with its filters, profile without a delete option.
-- **Suites after all of it:** backend unit **430**, Flutter **187/187**, analyzer unchanged. The Flutter integration suites and `tests_integration/` were **not** re-run after these fixes.
+- **Suites after all of it, at `f4b0234`:** backend unit **430**; `tests_integration/` **77/77**; Flutter **187/187**, analyzer unchanged; Flutter integration on the simulator **5/5 and 29/29**. The two security probe suites were last run in the afternoon, before the log-redaction and client fixes.
 - **Production:** `main` has the same reconnect code, the same report dialog, and uvicorn's default logging (read from git, not checked against production). So production logs very likely hold access tokens, each valid for up to an hour from issue; the shipped app's problem-report button very likely fails; and a production outage would likely start the same storm from every open client.
 - **Seen, not changed:** on the admin profile's MPIN pad the "0" key sits about 4 pt left of the column above it. A new registration does not appear on an open pending list until Refresh.
 - **Housekeeping:** homework 75's completion was recorded for grade 8 and stays; the QA homework (167) was deleted and the QA problem report resolved. One throwaway account was registered and rejected on screen.
