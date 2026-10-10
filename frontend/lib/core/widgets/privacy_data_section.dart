@@ -81,16 +81,13 @@ class PrivacyDataSection extends ConsumerWidget {
     if (username.isEmpty) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    final controller = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => _DeleteConfirmDialog(
         username: username,
-        controller: controller,
         warning: deleteWarning,
       ),
     );
-    controller.dispose();
 
     if (confirmed != true) return;
 
@@ -115,11 +112,9 @@ class PrivacyDataSection extends ConsumerWidget {
 
 class _DeleteConfirmDialog extends StatefulWidget {
   final String username;
-  final TextEditingController controller;
   final String? warning;
   const _DeleteConfirmDialog({
     required this.username,
-    required this.controller,
     this.warning,
   });
 
@@ -128,12 +123,26 @@ class _DeleteConfirmDialog extends StatefulWidget {
 }
 
 class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
+  // Owned here, not by the caller: showDialog's future completes while the
+  // dialog is still animating out, so a controller disposed at that point is
+  // still attached to a live TextField.
+  final _controller = TextEditingController();
   bool _matches = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Delete account?'),
+      // The field autofocuses, so the keyboard is up as soon as the dialog
+      // opens; with the parent's cascade warning the content is then taller
+      // than the space left above it. Scroll instead of overflowing.
+      scrollable: true,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,7 +179,7 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
           ),
           const SizedBox(height: 12),
           TextField(
-            controller: widget.controller,
+            controller: _controller,
             autofocus: true,
             decoration: InputDecoration(
               hintText: widget.username,
