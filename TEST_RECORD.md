@@ -32,7 +32,7 @@
 | API integration / probes | `tests/test_api.py`, `tests/security_test.py`, `tests/security_test_extended.py`, `tests/performance_test.py` | Live endpoint smoke, security probe matrix, latency | **No — the CI job is unreachable, see §10 item 3** |
 | Auth / session live QA | `tests/auth_session_qa.py` (63 checks) | Registration → approval → login, lockout and rate limit, refresh rotation, logout, deactivation, MPIN-reset revocation, self-delete and its cascade — over HTTP against the local stack, reading Postgres and Redis for what the API cannot show | No — a script, not pytest; local stack only |
 | Flutter unit tests | `frontend/test/unit/` (78, 6 files) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, models, admin setup status, owner API error messages | **Yes** |
-| Flutter widget tests | `frontend/test/widget/` (26, 5 files) | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
+| Flutter widget tests | `frontend/test/widget/` (10 files; +`delete_account_dialog_test.dart`, 5 cases, 2026-10-10) | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
 | Flutter integration tests | `frontend/integration_test/` — `app_test.dart` (5), `all_screens_test.dart` (29) | Auth flows; every screen for every role | No — needs a simulator **and** `--dart-define=LOCAL_DEV=true`, or it hits production |
 | Local stack bootstrap | `docker-compose.yml` + `docker-compose.local.yml`; test accounts documented in `docs/local-test-accounts.md` | Spin up postgres/redis/minio/backend for integration testing | Manual |
 
@@ -63,7 +63,7 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-10-10 (backend unit + integration, auth/session live QA) — frontend and Flutter integration last run **2026-10-09**, not re-run
+**Date:** 2026-10-10 — every automated suite re-run today (backend unit + integration, Flutter unit/widget/integration, both security probe suites, auth/session live QA)
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
@@ -105,26 +105,23 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test test/unit/` | **PASS — 108/108** (2026-10-09; +1 `web_csp_test` img-src case) |
-| `flutter test test/widget/` | **PASS — 46/46** (2026-10-09; was 40/46 against the redesigned login screen until the tests moved to `LoginKeys`) |
-| `flutter test` (everything) | **PASS — 154/154** (2026-10-09) |
-| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-09, unchanged) |
-| `integration_test/app_test.dart` (iPhone 17 Pro sim, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-09; was 0/5 on the first run — see §9) |
-| `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-09; first run 21/29, all 8 failures the deactivated `hansel_kid` default) |
+| `flutter test` (unit + widget, everything) | **PASS — 178/178** (2026-10-10; was 173 — +5 `delete_account_dialog_test`) |
+| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-10, unchanged) |
+| `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-10) |
+| `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-10, 10 m 47 s; no overflow or framework exception in the log) |
 
 The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading_underscores_for_local_identifiers`, 1 `prefer_const_declarations`, 1 `dangling_library_doc_comments`. CI runs `--no-fatal-infos`, so none break the build.
 
-> **The header fix landed after the simulator run started.** The MPIN-cell and dashboard-header layout changes are covered by `flutter test` and a browser check at 280/300/375 px, not by the 29/29 run.
+> The integration run predates the three small frontend fixes made later the same day (auto-quiz Retry, the delete-account dialog, the empty Privacy & Data heading). Those are covered by `flutter test` 178/178 and by hand on the simulator (§9), not by the 29/29 run.
 
 ### 2.4 Not run this session
 
 | Suite | Why / last result |
 |---|---|
-| Flutter unit / widget / integration | Not re-run 2026-10-10 (no frontend change). Last: 173/173, `app_test` 5/5, `all_screens_test` 29/29 (2026-10-09) |
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
-| `tests/security_test.py`, `security_test_extended.py` | Not re-run 2026-10-10. **Run 2026-10-09** against the branch's code (PyJWT) on the local stack — 22 PASS / 1 expected FAIL / 0 WARN (after the server-header fix) and 48/48. See §9 |
+| `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | 2026-10-10: §5.1 auth and the API rows of §5.7, over the API. 2026-10-09: §5.2, realtime (§5.8), part of web (§5.9). §5.3–§5.6, §5.10 still unticked |
+| Manual QA (§5) | 2026-10-10: §5.1 auth and the API rows of §5.7 over the API; parts of §5.4–§5.6 by hand on the simulator. Still unticked: §5.3, most of §5.4/§5.5 beyond what is marked, the screen side of §5.7, the rest of §5.8, §5.10 |
 
 ---
 
@@ -274,7 +271,7 @@ Run end-to-end before every release build. Tick PASS/FAIL with date.
 - [x] **Login 11 times wrong** → 429 rate limit — PASS 2026-10-10. For a real account the lockout arrives first: 5 × 401, then 429 "temporarily locked" (`Retry-After: 900`); the 11th in a minute is the rate limit (`Retry-After: 60`). For an unknown username: 10 × 401, then 429
 - [x] **Login 4 wrong, then correct** → lockout counter clears — PASS 2026-10-10 (counter read 4 in Redis, then gone). *Was "5 wrong": the fifth failure is the one that locks, so a correct MPIN after it is refused for 15 minutes*
 - [x] **Weak/blocklisted MPIN rejected at set/change time** (added 2026-07-07) — PASS 2026-10-10 at register and at admin reset (422); self-service change not driven (covered by unit tests)
-- [ ] **Logout** → access + refresh JTIs blacklisted, FCM cleared, secure storage cleared — *server side PASS 2026-10-10 (access 401, refresh 401, `fcm_token` NULL); web storage cleared 2026-10-09; secure storage on a device not checked*
+- [x] **Logout** → access + refresh JTIs blacklisted, FCM cleared, secure storage cleared — PASS 2026-10-10: server side over the API (access 401, refresh 401, `fcm_token` NULL); on the simulator, Log Out (with its confirm prompt) returns to the login screen for parent and teacher, and relaunching the app stays logged out. Secure storage not inspected directly
 - [ ] **Access token expiry (~60 min)** → Dio interceptor auto-refreshes
 - [x] **Force-revoked token** → next protected call 401 — PASS 2026-10-10 (admin MPIN reset; deactivation, **after the fix in §9**; account deletion)
 
@@ -300,19 +297,19 @@ Run 2026-10-09 against the local stack: API checks with real tokens (script in t
 ### 5.4 Student
 
 - [x] Dashboard summary loads (single `/student/dashboard-summary` call) — PASS 2026-10-09 (web, `dummy8`; one call in the network log)
-- [ ] Attendance history paginated
+- [x] Attendance history paginated — PASS 2026-10-10 (API: `skip`/`limit` pages of 5, no overlap; the screen itself only via `all_screens_test`)
 - [ ] Test list; take a test (single-attempt: back / app-kill forfeits with 0)
 - [ ] Test review matches the per-student option shuffle
 - [ ] Homework list + submission; completion status auto-refreshes
 - [ ] Fees screen
-- [ ] XP card visible (mobile **and** desktop web)
+- [ ] XP card visible (mobile **and** desktop web) — *partial 2026-10-10: visible on the simulator dashboard ("Novice I — 85 / 283 XP"); desktop web not checked*
 - [ ] Leaderboard; theme unlock at level threshold
-- [ ] Holiday banner shows on a holiday
-- [ ] Profile → Privacy & Data; delete-my-account dialog
+- [ ] Holiday banner shows on a holiday — *not testable 2026-10-10: a Saturday with no timetable slots shows "No classes today"; the student banner needs a declared holiday on a school day (slots flagged holiday)*
+- [x] Profile → Privacy & Data — PASS 2026-10-10 (simulator): the student profile offers **no** delete, matching the policy (a parent or admin removes a student). The "Privacy & Data" heading stood over an empty section — fixed same day, §9
 
 ### 5.5 Teacher
 
-- [ ] Dashboard summary loads
+- [x] Dashboard summary loads — PASS 2026-10-10 (web and simulator, `chinmay_sir`)
 - [ ] Daily Workflow road shows current grade's color; car advances per milestone
 - [ ] Every milestone tappable; car replaces current pending milestone (no duplicates)
 - [ ] Pre-fill attendance from previous period
@@ -320,15 +317,15 @@ Run 2026-10-09 against the local stack: API checks with real tokens (script in t
 - [ ] HW review uses most-recent-HW model; tiles color-coded by review status
 - [ ] Presentations: upload PDF and `.pptx`, adopt, log a period
 - [ ] Auto-quiz appears in the Online Tests tab as "Generating", then flips to ready/failed
-- [ ] Retry on a failed auto-quiz card works
+- [x] Retry on a failed auto-quiz card works — **was FAIL, fixed 2026-10-10**: the retry was sent (202) but when it failed again the Retry button never came back. Now PASS on the simulator. §9
 - [ ] Broadcasts are shared school-wide across teachers
-- [ ] Profile → Privacy & Data visible
+- [x] Profile → Privacy & Data visible — PASS 2026-10-10 (simulator; "Delete my account" present)
 
 ### 5.6 Parent
 
-- [ ] Dashboard shows linked child's data
-- [ ] Attendance / tests / homework / fees visible read-only
-- [ ] Profile → Privacy & Data visible
+- [x] Dashboard shows linked child's data — PASS 2026-10-10 (simulator, `dummy8_dad`: the child's test marks and timetable)
+- [x] Attendance / tests / homework / fees visible read-only — PASS 2026-10-10 (API, `nitin_dad`: all four return the child's data; the same token on student, teacher and admin endpoints → 403. Screens via `all_screens_test`)
+- [x] Profile → Privacy & Data visible — PASS 2026-10-10 (simulator). The delete dialog shows the cascade warning and keeps Delete disabled until the username is typed; it **overflowed and errored on Cancel — both fixed same day**, §9
 
 ### 5.7 Admin
 
@@ -457,6 +454,19 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-10 (afternoon — remaining suites, and student / teacher / parent by hand on the simulator)
+- **Automated, all on today's code:** Flutter **173/173** before the fixes below and **178/178** after; analyzer unchanged; integration on the iPhone 17 Pro simulator **`app_test` 5/5, `all_screens_test` 29/29**; `security_test_extended.py` **48/48**; `security_test.py` **22 PASS / 1 expected FAIL / 0 WARN**. A read-only API sweep of 26 student and parent endpoints returned 200 throughout (two 422s were a required query parameter).
+- **Found and fixed — auto-quiz Retry (§5.5).** After Retry, a quiz that failed again showed no Retry button until the teacher left the screen: the tile is keyed by test id, so its State survives the refetch, and `_retrying` was never cleared. `didUpdateWidget` now clears it when the refetched row arrives. Seen in the web build, confirmed fixed on the simulator (POST 202, "thin source" failure, Retry back). **No widget test** — the tile is private to a screen that needs most of the app's providers to mount.
+- **Found and fixed — the delete-account dialog (§5.6), two defects**, both pinned by the new `test/widget/delete_account_dialog_test.dart`:
+  - With the keyboard up (the field autofocuses) the parent's dialog, which carries the cascade warning, **overflowed by 41 px** and pushed "Type your username below to confirm" under the field. The dialog now scrolls.
+  - **Cancel raised a framework error** — a red screen in this debug build ("`_dependents.isEmpty`", and in the test "A TextEditingController was used after being disposed"). The caller disposed the controller as soon as `showDialog` returned, while the dialog was still animating out. The dialog's State owns the controller now. Release builds skip these assertions, so users most likely saw nothing; it had also been invisible to the integration tests, which never open the dialog.
+  - Both re-checked on the simulator after a rebuild.
+- **Found and fixed — an empty "Privacy & Data" heading on the student profile.** No delete tile (by policy) and no policy link (URL unset, §10 item 6) left the heading over nothing. It is now hidden when the section has no rows.
+- **Open — the same disposed-controller pattern in the two-factor prompt** (`login_screen.dart`, the MFA code dialog). Not fixed here: it has no test and needs an MFA-enrolled account to drive. §10 item 22.
+- **Checked by hand on the simulator, no defect:** parent dashboard shows the child's marks; parent, teacher and student profiles (delete offered to parent and teacher, not to the student); logout with its confirm prompt, for two roles; the school picker omits the two suspended QA schools; school logo and avatar display; teacher "Holiday!" banner; student XP card.
+- **Not done:** §5.3 (school setup), the admin screens by hand, taking a test, homework submission, presentations, the realtime homework legs (a no-class Saturday again — the gate fix allows assignment, but this pass did not get to it), push notifications, backgrounding/reconnect. `all_screens_test` opens every one of those screens without error, which is not the same as exercising them.
+- **Tooling:** the built-in browser pane was hidden for this session, and a hidden pane stops producing animation frames — the Flutter web build then never leaves its animated splash. §10 item 23. The afternoon's hand checks therefore ran on the simulator.
 
 ### 2026-10-10 (auth, sessions and account deletion — two bearer-token defects found and fixed)
 - **What ran:** `tests/auth_session_qa.py`, new this session — 63 checks over HTTP against the local stack (the main checkout, confirmed per §10 item 21), covering §3.2, §4.1, §5.1 and the API rows of §5.7 with four throwaway accounts in Hansel & Gretel. First run **57 PASS / 4 FAIL**; the four failures were two defects in `_get_current_user` (`backend/app/core/security.py`), the dependency every authenticated request passes.
@@ -742,6 +752,10 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
 20. **~~The owner's Add School dialog closes on a server error~~** — fixed 2026-10-09: it (and Add Admin, which had the same flaw) now submits in place and stays open with the server's message; `test/widget/owner_dialogs_test.dart`. Original note: the typed name, email and phone were lost and had to be re-entered. Minor; noticed 2026-10-09 while checking §5.2.
 
 21. **Check which checkout the local backend is serving before trusting a result.** `docker-compose.yml` bind-mounts `./backend:/app` relative to wherever `docker compose up` ran, so a stack started from a worktree serves that worktree's code to every session. Verify with `docker inspect mindforge_backend --format '{{range .Mounts}}{{.Source}}{{end}}'`. Seen 2026-10-09 (§9).
+
+22. **The two-factor prompt disposes its text controller too early.** `login_screen.dart` creates the MFA code controller, awaits `showDialog`, and disposes it on the next line — the pattern that put a red error screen up when the delete-account dialog was cancelled (§9, 2026-10-10). Debug-only as far as is known (release builds skip the assertions). Untested and unfixed; it needs a widget test that reaches the prompt, or an MFA-enrolled account.
+
+23. **A hidden browser pane cannot drive the Flutter web build.** With the pane not displayed the page stops getting animation frames, the splash's animation controllers never complete, and the app sits on the splash with an empty accessibility tree. It looks like an app hang and is not one. When the pane is visible, Flutter's accessibility tree (click the `flt-semantics-placeholder` once) reads every screen as text. Seen 2026-10-10.
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.

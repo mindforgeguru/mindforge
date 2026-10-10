@@ -46,13 +46,16 @@ class PrivacyDataSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-          child: Text(
-            'Privacy & Data',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        // No heading over an empty section — the student profile has no delete
+        // tile, and the policy link hides while its URL is unset.
+        if (hasUrl || showDeleteButton)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text(
+              'Privacy & Data',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
           ),
-        ),
         if (hasUrl)
           ListTile(
             leading: const Icon(Icons.privacy_tip_outlined),

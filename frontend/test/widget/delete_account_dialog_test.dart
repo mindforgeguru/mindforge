@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mindforge/core/api/api_client.dart';
 import 'package:mindforge/core/api/websocket_client.dart';
+import 'package:mindforge/core/utils/constants.dart';
 import 'package:mindforge/core/widgets/privacy_data_section.dart';
 import 'package:mindforge/features/auth/providers/auth_provider.dart';
 
@@ -132,5 +133,28 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Delete account?'), findsNothing);
     expect(find.text('Delete my account'), findsOneWidget);
+  });
+
+  // The student profile hides the delete tile, and until a privacy-policy URL
+  // is configured there is no policy link either — which left a "Privacy &
+  // Data" heading with nothing under it.
+  testWidgets('no heading when the section has nothing to show',
+      (tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PrivacyDataSection(showDeleteButton: false),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Privacy & Data'),
+        AppConstants.privacyPolicyUrl.isEmpty ? findsNothing : findsOneWidget);
+    expect(find.text('Delete my account'), findsNothing);
+    expect(find.text('About'), findsOneWidget);
   });
 }
