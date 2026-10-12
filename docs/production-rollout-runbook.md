@@ -9,8 +9,8 @@ Production (`api.mindforge.guru`) runs `main`, which stopped at `5cff40d`
 (2026-07-18) and is still the single-school app. `create_school` is **127
 commits ahead and 0 behind**, so the merge is a fast-forward. It brings
 multi-tenancy, the owner console, the realtime rewrite, PyJWT, MFA for
-admins/owner, session revocation and the redesigned login, plus **8 database
-migrations (030–037)**.
+admins/owner, session revocation and the redesigned login, plus **9 database
+migrations (030–038)**.
 
 ---
 
@@ -19,7 +19,7 @@ migrations (030–037)**.
 **1. Deploying is migrating.** There is no separate migration step to pause at.
 `backend/start.sh` runs `alembic upgrade head` and the app's own startup in
 `backend/main.py` runs it again. The moment the new backend boots against the
-production database, 030–037 apply.
+production database, 030–038 apply.
 
 **2. The migration cannot be undone by a downgrade.** 030 adds `owner` to the
 `user_role` Postgres enum, and Postgres cannot remove an enum value. A rollback
@@ -95,16 +95,18 @@ Do these in order. Stop if any fails.
    2. `psql "$COPY_DSN" -f backend/scripts/verify_migration_1_before.sql`
       (snapshots row counts into `_mt_baseline`).
    3. Run the branch's backend image against that copy so its startup applies
-      030–037. Watch for `Alembic migrations applied.` and
+      030–038. Watch for `Alembic migrations applied.` and
       `Application startup complete.`
    4. `psql "$COPY_DSN" -f backend/scripts/verify_migration_2_after.sql` and
       check its pass criteria: every row-count delta 0; no tenant rows left
       without a school; exactly one school, slug `hansel-gretel`; every
       non-owner user in that school.
-   5. The verify scripts were written for 030–035. Also check that 036/037
+   5. The verify scripts were written for 030–035. Also check that 036–038
       landed: `users` has `mfa_enabled`, `mfa_secret`, `mfa_recovery_codes`,
-      `tokens_valid_after`, and `SELECT version_num FROM alembic_version`
-      returns `037`.
+      `tokens_valid_after`; `\d users` lists `ix_users_school_username_live`
+      and `ix_users_school_phone_live` and no longer lists
+      `uq_users_school_username`; and `SELECT version_num FROM alembic_version`
+      returns `038`.
 
 4. **Smoke-test against the migrated copy**, with the backend from step 3 still
    pointed at it:
@@ -156,7 +158,7 @@ marking attendance. Have the Railway dashboard and logs open.
 4. **Deploy the web app** if it doesn't deploy automatically.
 5. **Post-deploy checks (15 minutes):**
    - `GET https://api.mindforge.guru/api/health` → 200.
-   - `alembic_version` = `037`; `SELECT COUNT(*) FROM schools` = 1;
+   - `alembic_version` = `038`; `SELECT COUNT(*) FROM schools` = 1;
      `SELECT COUNT(*) FROM users WHERE school_id IS NULL AND role <> 'owner'` = 0.
    - Row counts for `users`, `attendance`, `grades`, `fee_payments` match the
      pre-deploy dump's manifest.

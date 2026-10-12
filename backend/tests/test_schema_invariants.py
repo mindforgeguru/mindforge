@@ -92,3 +92,36 @@ def test_audit_actor_survives_its_author():
     assert ondelete == {"SET NULL"}, (
         f"audit_logs.admin_id should be ON DELETE SET NULL, got {ondelete}"
     )
+
+
+def test_user_uniqueness_covers_live_accounts_only():
+    """A removed account must not reserve its username or phone number.
+
+    Removal is a soft delete, and every conflict check in the application
+    filters on `deleted_at IS NULL`. While the unique indexes covered removed
+    rows too, the two disagreed: after a year close the application let a
+    returning user through and the database turned them away with a 500.
+    Pinned here so a plain `unique=True` or UniqueConstraint cannot come back.
+    """
+    from sqlalchemy import Index, UniqueConstraint
+
+    from app.models.user import User
+
+    args = User.__table_args__
+    assert not [a for a in args if isinstance(a, UniqueConstraint)], (
+        "users must not carry a table-wide UniqueConstraint — it would count "
+        "removed accounts"
+    )
+
+    unique = [a for a in args if isinstance(a, Index) and a.unique]
+    assert len(unique) == 2, f"expected the username and phone indexes, got {unique}"
+    for idx in unique:
+        where = str(idx.dialect_options["postgresql"]["where"])
+        assert "deleted_at IS NULL" in where, (
+            f"{idx.name} counts removed accounts: WHERE {where}"
+        )
+
+    for column in ("username", "phone"):
+        assert not getattr(User, column).column.unique, (
+            f"users.{column} is unique on its own, across removed accounts too"
+        )

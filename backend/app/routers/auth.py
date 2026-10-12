@@ -134,6 +134,22 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _registration_conflict() -> HTTPException:
+    """The reply when the database refuses a registration the checks let through.
+
+    Deliberately vague: phone numbers are PII and a precise error would let
+    someone probe which numbers are registered.
+    """
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Registration could not be completed with the details "
+            "provided. Please contact the school admin if this is "
+            "unexpected."
+        ),
+    )
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
     request: Request,
@@ -245,7 +261,11 @@ async def register_user(
         email=payload.email or None,
     )
     db.add(user)
-    await db.flush()  # Get the generated user.id
+    try:
+        await db.flush()  # Get the generated user.id
+    except IntegrityError:
+        await db.rollback()
+        raise _registration_conflict()
 
     # If registering as teacher, create a TeacherProfile with teachable subjects
     if payload.role == "teacher":
@@ -322,7 +342,11 @@ async def register_user(
                     academic_year_id=current_year.id if current_year else None,
                 )
                 db.add(new_parent)
-                await db.flush()
+                try:
+                    await db.flush()
+                except IntegrityError:
+                    await db.rollback()
+                    raise _registration_conflict()
                 parent_user_id = new_parent.id
 
         grade = payload.grade if payload.grade in (8, 9, 10) else 8
@@ -338,23 +362,14 @@ async def register_user(
         db.add(profile)
 
     # The username/phone checks above are read-then-write, so two concurrent
-    # registrations can both pass them and collide at the index. Translate that
-    # into the same conflict the checks would have raised rather than letting a
-    # raw IntegrityError surface as a 500. The message stays deliberately vague:
-    # phone numbers are PII and a precise error would let someone probe which
-    # numbers are registered.
+    # registrations can both pass them and collide at the index — here or at
+    # either flush above. Translate that into a conflict rather than letting a
+    # raw IntegrityError surface as a 500.
     try:
         await db.commit()
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Registration could not be completed with the details "
-                "provided. Please contact the school admin if this is "
-                "unexpected."
-            ),
-        )
+        raise _registration_conflict()
     await db.refresh(user)
     return user
 

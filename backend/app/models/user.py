@@ -9,7 +9,7 @@ from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean, DateTime, Enum, ForeignKey, Index, Integer, JSON, String,
-    UniqueConstraint, func, text
+    func, text
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,19 +33,28 @@ class User(Base):
     __tablename__ = "users"
     # Usernames are unique *per school*, not globally — two schools can each
     # have an "admin". The platform owner has school_id NULL; Postgres treats
-    # NULLs as distinct, so this constraint doesn't box the owner in.
+    # NULLs as distinct, so this index doesn't box the owner in.
     # Phone is likewise unique per school, not globally (migration 033) — the
     # registration and admin-edit conflict checks both filter by school_id, and
-    # a global index made them disagree with the database. Declared as a partial
-    # Index rather than a UniqueConstraint because it must exclude NULLs.
+    # a global index made them disagree with the database.
+    # Both cover live accounts only (migration 038). A removed account keeps
+    # its row, and every conflict check already ignores it; while the indexes
+    # did not, nobody removed by a year close could register again under their
+    # own username or phone.
     __table_args__ = (
-        UniqueConstraint("school_id", "username", name="uq_users_school_username"),
         Index(
-            "ix_users_school_phone_unique",
+            "ix_users_school_username_live",
+            "school_id",
+            "username",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_users_school_phone_live",
             "school_id",
             "phone",
             unique=True,
-            postgresql_where=text("phone IS NOT NULL"),
+            postgresql_where=text("phone IS NOT NULL AND deleted_at IS NULL"),
         ),
     )
 
