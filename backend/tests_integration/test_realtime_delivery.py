@@ -310,3 +310,139 @@ def test_timetable_config_does_not_leak_to_another_school(
     assert not leaked, (
         f"school B user received school A's timetable_config_updated: {leaked}"
     )
+
+
+# ── Fee payments ─────────────────────────────────────────────────────────────
+#
+# A recorded payment was pushed to the student's parent and nobody else. The
+# student app has always listened for `fee_payment_recorded` and refreshes its
+# fee summary on it, but the event never came, so a student with the Fees
+# screen open kept the old balance until they refreshed by hand. A payment
+# that was corrected or deleted told nobody at all — parent included.
+
+
+def _fee_events(api, admin_token, listener_id, act):
+    """Run `act()` (an admin call) while `listener_id` is connected; return
+    the fee events that socket received."""
+
+    async def scenario():
+        async with _connect(listener_id, _mint_access_token(listener_id)) as ws:
+            await asyncio.sleep(0.5)
+            act()
+            return await _collect(ws, RECV_TIMEOUT)
+
+    return _events_of(asyncio.run(scenario()), "fee_payment_recorded")
+
+
+@pytest.fixture(scope="module")
+def parent_of_student_a(api, two_schools, students):
+    """user_id of a parent linked to school A's student, creating one if the
+    parent-linking tests have not already."""
+
+    async def _parent_id():
+        conn = await asyncpg.connect(DB_DSN)
+        try:
+            return await conn.fetchval(
+                "SELECT parent_user_id FROM student_profiles WHERE user_id = $1",
+                students["a"],
+            )
+        finally:
+            await conn.close()
+
+    parent_id = asyncio.run(_parent_id())
+    if parent_id is None:
+        r = api.put(
+            f"/api/admin/users/{students['a']}",
+            headers=auth(two_schools["a"]["admin_token"]),
+            json={"parent_username": f"{PREFIX}_fee_parent", "parent_mpin": "847362"},
+        )
+        assert r.status_code in (200, 201), r.text
+        parent_id = asyncio.run(_parent_id())
+    assert parent_id is not None, "could not link a parent to student A"
+    return parent_id
+
+
+def _record_payment(api, admin_token, student_id, amount=100):
+    r = api.post(
+        "/api/admin/fees/payments",
+        headers=auth(admin_token),
+        json={"student_id": student_id, "amount": amount},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_recorded_fee_payment_reaches_the_student(api, two_schools, students):
+    admin_token = two_schools["a"]["admin_token"]
+    got = _fee_events(
+        api, admin_token, students["a"],
+        lambda: _record_payment(api, admin_token, students["a"]),
+    )
+    assert got, "student received no fee_payment_recorded for their own payment"
+
+
+def test_recorded_fee_payment_still_reaches_the_parent(
+    api, two_schools, students, parent_of_student_a
+):
+    admin_token = two_schools["a"]["admin_token"]
+    got = _fee_events(
+        api, admin_token, parent_of_student_a,
+        lambda: _record_payment(api, admin_token, students["a"]),
+    )
+    assert got, "parent received no fee_payment_recorded for their child's payment"
+
+
+@pytest.mark.parametrize("who", ["student", "parent"])
+def test_corrected_fee_payment_reaches_student_and_parent(
+    api, two_schools, students, parent_of_student_a, who
+):
+    admin_token = two_schools["a"]["admin_token"]
+    payment_id = _record_payment(api, admin_token, students["a"])
+    listener = students["a"] if who == "student" else parent_of_student_a
+
+    def correct():
+        r = api.put(
+            f"/api/admin/fees/payments/{payment_id}",
+            headers=auth(admin_token),
+            json={"amount": 250, "notes": "corrected"},
+        )
+        assert r.status_code == 200, r.text
+
+    assert _fee_events(api, admin_token, listener, correct), (
+        f"{who} was not told a payment was corrected"
+    )
+
+
+@pytest.mark.parametrize("who", ["student", "parent"])
+def test_deleted_fee_payment_reaches_student_and_parent(
+    api, two_schools, students, parent_of_student_a, who
+):
+    admin_token = two_schools["a"]["admin_token"]
+    payment_id = _record_payment(api, admin_token, students["a"])
+    listener = students["a"] if who == "student" else parent_of_student_a
+
+    def delete():
+        r = api.delete(
+            f"/api/admin/fees/payments/{payment_id}", headers=auth(admin_token)
+        )
+        assert r.status_code == 204, r.text
+
+    assert _fee_events(api, admin_token, listener, delete), (
+        f"{who} was not told a payment was deleted"
+    )
+
+
+def test_fee_payment_does_not_reach_another_student(api, two_schools, students):
+    """Fees are private to the family. Another school's student is the
+    outsider to hand; the event is addressed by user id, so the same check
+    covers a classmate."""
+    admin_token = two_schools["a"]["admin_token"]
+
+    async def scenario():
+        async with _connect(students["b"], _mint_access_token(students["b"])) as ws:
+            await asyncio.sleep(0.5)
+            _record_payment(api, admin_token, students["a"])
+            return await _collect(ws, SILENCE_TIMEOUT)
+
+    leaked = _events_of(asyncio.run(scenario()), "fee_payment_recorded")
+    assert not leaked, f"an unrelated student received a fee event: {leaked}"

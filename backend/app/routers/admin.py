@@ -13,7 +13,7 @@ from sqlalchemy import func as sqlfunc
 
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
-from app.services.realtime_service import publish_to_school
+from app.services.realtime_service import publish_to_school, publish_to_users
 from app.core.security import get_current_admin
 from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.models.academic_year import AcademicYear
@@ -1079,6 +1079,36 @@ async def delete_fee_structure(
     await db.commit()
 
 
+async def _announce_fee_change(
+    db: AsyncSession,
+    student_id: int,
+    *,
+    action: str,
+    amount: float,
+    notes: Optional[str] = None,
+) -> None:
+    """Tell the student and their parent that the fee ledger changed.
+
+    One event name for a payment recorded, corrected or deleted: both apps
+    refetch the fee summary on `fee_payment_recorded`, and `action` says which
+    it was. Addressed to the family only — fees are nobody else's business.
+    """
+    parent_id = (await db.execute(
+        select(StudentProfile.parent_user_id).where(
+            StudentProfile.user_id == student_id
+        )
+    )).scalar_one_or_none()
+    await publish_to_users(
+        [student_id, parent_id],
+        {
+            "event": "fee_payment_recorded",
+            "action": action,
+            "amount": float(amount),
+            "notes": notes,
+        },
+    )
+
+
 @router.put("/fees/payments/{payment_id}", response_model=FeePaymentResponse)
 async def update_fee_payment(
     payment_id: int,
@@ -1099,6 +1129,10 @@ async def update_fee_payment(
                   "notes": payload.notes})
     await db.commit()
     await db.refresh(payment)
+    await _announce_fee_change(
+        db, payment.student_id, action="updated",
+        amount=payment.amount, notes=payment.notes,
+    )
     return payment
 
 
@@ -1115,8 +1149,10 @@ async def delete_fee_payment(
         raise HTTPException(status_code=404, detail="Payment not found.")
     await _audit(db, current_admin.id, "delete_fee_payment", "fee_payment", payment_id,
                  {"student_id": payment.student_id, "amount": float(payment.amount)})
+    student_id, amount = payment.student_id, payment.amount
     await db.delete(payment)
     await db.commit()
+    await _announce_fee_change(db, student_id, action="deleted", amount=amount)
 
 
 @router.post("/fees/payments", response_model=FeePaymentResponse, status_code=status.HTTP_201_CREATED)
@@ -1162,24 +1198,10 @@ async def record_fee_payment(
     await db.commit()
     await db.refresh(payment)
 
-    # Notify parent if linked. StudentProfile comes from the module-level
-    # import; re-importing it here made the name function-local, so the
-    # cross-school guard above referenced it before assignment and every call
-    # raised UnboundLocalError.
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == payload.student_id)
+    await _announce_fee_change(
+        db, payload.student_id, action="recorded",
+        amount=payload.amount, notes=payload.notes,
     )
-    profile = profile_result.scalar_one_or_none()
-    if profile and profile.parent_user_id:
-        await redis_manager.publish({
-            "target_type": "user",
-            "user_id": profile.parent_user_id,
-            "payload": {
-                "event": "fee_payment_recorded",
-                "amount": payload.amount,
-                "notes": payload.notes,
-            },
-        })
 
     return payment
 
