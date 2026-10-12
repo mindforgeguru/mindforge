@@ -1,6 +1,6 @@
 # Mindforge — Testing Record
 
-**Last updated:** 2026-10-11
+**Last updated:** 2026-10-12
 **Maintainer:** chinmay1975@gmail.com
 **Scope:** Reference document for every kind of testing performed on the Mindforge app — automated tests, security/privacy verification, and manual QA. Update this file every time a significant test session is run.
 
@@ -28,13 +28,14 @@
 | Backend tenancy wiring tests | `backend/tests/test_tenancy_wiring.py` (8) | `get_current_user` and `/auth/refresh` both enforce school suspension; owner is not gated | **No — gap, see §10 item 2** |
 | Backend realtime fan-out tests | `backend/tests/test_realtime_fanout.py` (8) | Grade audience resolution (students + parents, dedup), explicit user-ID addressing, empty audience publishes nothing, `broadcast_to_users` delivery | **No — gap, see §10 item 2** |
 | Backend tenant-isolation integration | `backend/tests_integration/test_tenant_isolation.py` + `…_finance.py` (32) | Router-level cross-school scoping against a live stack | No — skips cleanly when the stack is down |
-| Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (6) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools | No — same skip |
+| Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (13) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools; a fee payment recorded, corrected or deleted reaches the student and the parent and nobody else | No — same skip |
 | Backend re-registration integration | `backend/tests_integration/test_reregister_after_removal.py` (7) | After a year close, and after an admin revoke, the removed account's username, phone and parent username can be registered again and log in; a live username or phone is still refused | No — same skip |
+| Backend theme-lock integration | `backend/tests_integration/test_xp_theme_lock.py` (2) | A theme is dropped when a deduction takes the student below the level that unlocks it, and kept while the level still does | No — same skip |
 | API integration / probes | `tests/test_api.py`, `tests/security_test.py`, `tests/security_test_extended.py`, `tests/performance_test.py` | Live endpoint smoke, security probe matrix, latency | **No — the CI job is unreachable, see §10 item 3** |
 | Auth / session live QA | `tests/auth_session_qa.py` (63 checks) | Registration → approval → login, lockout and rate limit, refresh rotation, logout, deactivation, MPIN-reset revocation, self-delete and its cascade — over HTTP against the local stack, reading Postgres and Redis for what the API cannot show | No — a script, not pytest; local stack only |
 | Backend log-redaction tests | `backend/tests/test_log_redaction.py` (6) | The token in a WebSocket handshake path never reaches uvicorn's log; lines without one are untouched | **Yes** (glob) |
 | Flutter unit tests | `frontend/test/unit/` (78, 6 files) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, models, admin setup status, owner API error messages | **Yes** |
-| Flutter widget tests | `frontend/test/widget/` (11 files; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day, and `timetable_default_periods_test.dart` on 2026-10-11 | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
+| Flutter widget tests | `frontend/test/widget/` (11 files; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day, and `timetable_default_periods_test.dart` on 2026-10-11, and `student_grade_provider_test.dart` on 2026-10-12 | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
 | Flutter integration tests | `frontend/integration_test/` — `app_test.dart` (5), `all_screens_test.dart` (29) | Auth flows; every screen for every role | No — needs a simulator **and** `--dart-define=LOCAL_DEV=true`, or it hits production |
 | Local stack bootstrap | `docker-compose.yml` + `docker-compose.local.yml`; test accounts documented in `docs/local-test-accounts.md` | Spin up postgres/redis/minio/backend for integration testing | Manual |
 
@@ -65,13 +66,15 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-10-11 — backend unit, backend integration and Flutter unit/widget re-run after today's two fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
+**Date:** 2026-10-12 — backend unit, backend integration and Flutter unit/widget re-run after today's four fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
 > **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import (as of 2026-10-09 also `test_ai_fallback_chain.py`, `test_old_test_upload.py` and `test_subjects.py` — the host's `google-genai` lacks `types.GenerateContentConfig`) — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-11: 431 PASS**
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-12: 431 PASS**
+
+2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests.
 
 2026-10-11: the same way as yesterday — every file in its own process inside `mindforge_backend`, **392 passed**, plus the container's known gaps on the host: `test_prod_guard.py` 24, `test_secrets_gitignore.py` 12, and the 3 host-only cases in `test_subjects.py` / `test_server_header.py`. **431 passed, 0 failed** across 39 files (+1 in `test_schema_invariants.py`).
 
@@ -92,7 +95,7 @@ Previous run (2026-09-13):
 
 Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-### 2.2 Backend integration (live local stack) — **re-run 2026-10-11 on the fixed code: 84/84 PASS in 235 s** (77 on 2026-10-10; +7 `test_reregister_after_removal.py`. The table below is the 2026-09-13 breakdown)
+### 2.2 Backend integration (live local stack) — **re-run 2026-10-12 on the fixed code: 93/93 PASS in 292 s** (84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`. The table below is the 2026-09-13 breakdown)
 
 > `tests_integration/` reads `../../.env.local`, so it must run **from the host** (`cd backend && python3 -m pytest tests_integration/...`). Inside the container it fails at collection with `FileNotFoundError: /app/tests_integration/../../.env.local`.
 
@@ -109,8 +112,8 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test` (unit + widget, everything) | **PASS — 201/201** (2026-10-11; 197 the night before, +4 `timetable_default_periods_test.dart`) |
-| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-11, unchanged) |
+| `flutter test` (unit + widget, everything) | **PASS — 204/204** (2026-10-12; 201 the day before, +3 `student_grade_provider_test.dart`; `realtime_sync_test.dart` extended in place) |
+| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-12, unchanged) |
 | `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-10) |
 | `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-10, 10 m 47 s; no overflow or framework exception in the log) |
 
@@ -125,7 +128,7 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
 | `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. Still unticked: the rest of §5.4 (fees, leaderboard and theme unlock), most of §5.5 (the daily workflow road, attendance pre-fill, homework review, broadcasts), the parent and other-teacher legs of §5.8, push notifications, the web-only rows, most of §5.10 |
+| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4. Still unticked: the XP card on desktop web, most of §5.5 (the daily workflow road, attendance pre-fill, homework review, broadcasts), the parent and other-teacher legs of §5.8, push notifications, the web-only rows, most of §5.10 |
 
 ---
 
@@ -307,10 +310,10 @@ Run 2026-10-11 on the simulator against a school created for it ("QA Setup 97622
 - [x] Test list; take a test (single-attempt: back / app-kill forfeits with 0) — PASS 2026-10-10. API, three throwaway grade-8 students: pending list and attempt payload carry no answers; autosave; submit → score; second submit 409; re-entering an in-progress attempt finalizes it (`auto_submitted`, credit for saved answers only); the test moves to Completed; a grade-10 student gets 404. Simulator, `dummy8`: Start Test → the "single attempt" warning → answer → app killed → reopening ended the attempt. **The result dialog blamed the timer with six minutes left — fixed, §9.** The in-app back path (confirm, then submit) not driven
 - [x] Test review matches the per-student option shuffle — PASS 2026-10-10 (API): two students got different question and option orders; answering by the labels as shown scored 6/6; the review returns the same option mapping the student saw, with the correct-answer label remapped to it. The review lists questions in the original order, not the shuffled one
 - [x] Homework list + submission; completion status auto-refreshes — PASS 2026-10-10 (simulator, §5.8: list shown, pill flipped live). There is no student-side "submission": completion is recorded by the teacher
-- [ ] Fees screen
-- [ ] XP card visible (mobile **and** desktop web) — *partial 2026-10-10: visible on the simulator dashboard ("Novice I — 85 / 283 XP"); desktop web not checked*
-- [ ] Leaderboard; theme unlock at level threshold
-- [ ] Holiday banner shows on a holiday — *not testable 2026-10-10: a Saturday with no timetable slots shows "No classes today"; the student banner needs a declared holiday on a school day (slots flagged holiday)*
+- [x] Fees screen — PASS 2026-10-12 (simulator and API, a throwaway grade-8 student). Summary: grade, year, fee breakdown, paid and balance, all matching the admin's structure; Pay: the balance and the school's three payment options. A payment recorded by the admin showed after pull-to-refresh with the right totals. **It did not show on the open screen until refreshed — fixed, §9**; after the fix a second payment appeared within 4 s, untouched
+- [ ] XP card visible (mobile **and** desktop web) — *partial 2026-10-10: visible on the simulator dashboard ("Novice I — 85 / 283 XP"), and on 2026-10-12 followed live through a level-up; desktop web not checked*
+- [x] Leaderboard; theme unlock at level threshold — PASS 2026-10-12. API, 28 checks: 1117 XP is level 4 with Tide Breeze locked and refused (400), 1118 is level 5 and it can be selected; only an admin of the same school can adjust XP; the grade board holds the student's own grade only, ranked by XP, without deactivated or removed students; the school board spans grades; another school's board shares no names. Simulator: the level-up dialog arrived live, the selected theme recoloured the app at once, and Class / Points Table / All match the API (the points table matches what the server awards). **Two defects, both fixed, §9:** the picker kept showing the theme locked after the level-up, and a student taken back below level 5 kept wearing it
+- [x] Holiday banner shows on a holiday — PASS 2026-10-12 (simulator): with grade 8's slots for the day all flagged holiday, the dashboard shows "Holiday!" with the reason given ("QA Founders Day") in place of the timetable. With no slots at all it says "No classes today"
 - [x] Profile → Privacy & Data — PASS 2026-10-10 (simulator): the student profile offers **no** delete, matching the policy (a parent or admin removes a student). The "Privacy & Data" heading stood over an empty section — fixed same day, §9
 
 ### 5.5 Teacher
@@ -460,6 +463,17 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-12 (student fees, XP, themes, leaderboard, holiday banner — four fixes)
+- **The rest of §5.4:** a throwaway grade-8 student in Hansel & Gretel, driven over the API (28 checks, all as designed) and then by hand on the simulator. Fees, the leaderboard's three tabs, theme unlock and the holiday banner all work.
+- **Found and fixed — a new student had no grade on screen.** The "Grade 8" chip on the student dashboard and profile was read off the student's most recent attendance record, so a student nobody had marked yet — every new student, and everyone at the start of a year — showed "STUDENT" and nothing else. It comes from the student's profile now. `test/unit/student_grade_provider_test.dart` (3), red first; confirmed on the simulator.
+- **Found and fixed — a fee payment did not reach the student's screen.** The server pushed a recorded payment to the parent only. The student app has always listened for the event and refreshes its fee summary on it, so with Fees open the old balance stayed until a manual refresh. A payment that was corrected or deleted told nobody, parent included. All three now go to the student and the parent, and to no one else. Seven cases added to `tests_integration/test_realtime_delivery.py`; five failed before the fix (the parent on a new payment, and the no-leak check, already passed). Live after it: a second payment appeared on the open screen.
+- **Found and fixed — a new level did not unlock its theme on screen.** On a level-up the app refetched the XP figures and not the theme list, so the picker went on saying "Reach Level 5 to unlock" beside a level-5 student. `realtime_sync_test.dart` now expects the theme list to refresh on `level_up`; red first. On the simulator the theme unlocked as the dialog was dismissed.
+- **Found and fixed — a student kept a theme their level no longer unlocks.** XP only goes down through an admin's manual deduction, and that path left the selected theme alone: a student taken from level 5 to level 1 stayed in Tide Breeze, and the picker showed it "ACTIVE" with a lock on it. The selection now falls back to the default when the level drops below the theme's. `tests_integration/test_xp_theme_lock.py` (2), one red first; the other pins that a deduction which keeps the level keeps the theme.
+- **Suites after all four:** backend unit **431**; `tests_integration/` **93/93**; Flutter **204/204**, analyzer unchanged. The Flutter integration suites on the simulator and the two security probe suites were not re-run.
+- **Production:** `main` has the attendance-derived grade and the parent-only fee event (read from git, not checked against production).
+- **Seen, not changed** — §10 item 26.
+- **Housekeeping:** the throwaway student and its parent were revoked, both QA payments deleted, and the three holiday slots for grade 8 on 2026-10-12 removed (the date had none before). The simulator is logged out.
 
 ### 2026-10-11 (school setup from an empty school, Close Year, and two fixes)
 - **School setup (§5.3), all three rows:** walked on the simulator from a school with nothing in it to the unlocked dashboard, then Close Year. The road, the gating and the logo upload work as designed.
@@ -809,6 +823,13 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
     - *"Users cannot register until a year is started" is not what the server does.* Registration goes through without a current year (read from `auth.py`, not tried).
     - *A payment option with only a bank name completes the Bank / Payment step* — nothing a parent could pay into.
     - *The amount fields keep their leading 0* ("045000" while typing; saved as 45,000). *The logo confirmation asks "Is this the image you want to use?" without showing it.*
+
+26. **XP and fees — seen 2026-10-12, not changed.**
+    - *A deduction larger than the balance is recorded in full.* Taking 5000 from a student with 1118 leaves 0, and the student's activity list shows −5000, so the entries no longer add up to the total.
+    - *Ties are ranked by account age.* Four students on 105 XP are shown as #2 to #5, oldest account first, not as a shared place.
+    - *A parent cannot read their own child's XP by id* (403), though they can open the school leaderboard, which lists every student's name and XP.
+    - *The fee summary's "paid" is every payment the student has ever made,* set against the current year's fee. Harmless while a year close removes the accounts; worth a look if accounts ever carry over.
+    - *Deleting a day's timetable sends no realtime event* (read from `teacher.py`, not tried on a screen).
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.
