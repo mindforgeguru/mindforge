@@ -54,11 +54,11 @@ final studentProfileProvider =
   return api.getStudentProfile();
 });
 
-/// Derives the student's grade number from attendance records.
+/// The student's grade, from their profile. Not from attendance: a student
+/// nobody has marked yet has no attendance to read it from.
 final studentGradeProvider = FutureProvider<int?>((ref) async {
-  final attendance = await ref.watch(studentAttendanceProvider.future);
-  if (attendance.isNotEmpty) return attendance.first.grade;
-  return null;
+  final profile = await ref.watch(studentProfileProvider.future);
+  return profile['grade'] as int?;
 });
 
 final studentGradesProvider =
