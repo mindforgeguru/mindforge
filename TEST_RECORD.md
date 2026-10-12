@@ -28,8 +28,9 @@
 | Backend tenancy wiring tests | `backend/tests/test_tenancy_wiring.py` (8) | `get_current_user` and `/auth/refresh` both enforce school suspension; owner is not gated | **No — gap, see §10 item 2** |
 | Backend realtime fan-out tests | `backend/tests/test_realtime_fanout.py` (8) | Grade audience resolution (students + parents, dedup), explicit user-ID addressing, empty audience publishes nothing, `broadcast_to_users` delivery | **No — gap, see §10 item 2** |
 | Backend tenant-isolation integration | `backend/tests_integration/test_tenant_isolation.py` + `…_finance.py` (32) | Router-level cross-school scoping against a live stack | No — skips cleanly when the stack is down |
-| Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (13) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools; a fee payment recorded, corrected or deleted reaches the student and the parent and nobody else | No — same skip |
+| Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (19) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools; a fee payment recorded, corrected or deleted reaches the student and the parent and nobody else; a deleted homework, a "no homework" marker and a deleted timetable day are announced like the additions are | No — same skip |
 | Backend re-registration integration | `backend/tests_integration/test_reregister_after_removal.py` (7) | After a year close, and after an admin revoke, the removed account's username, phone and parent username can be registered again and log in; a live username or phone is still refused | No — same skip |
+| Backend admin user-filter integration | `backend/tests_integration/test_admin_user_filters.py` (5) | The admin's role and grade filters, that no filter reaches another school, and that an unknown role is a 422 | No — same skip |
 | Backend presentation realtime integration | `backend/tests_integration/test_presentation_realtime.py` (6) | A colleague's socket hears when a deck is uploaded, adopted, edited, taken off a dashboard or deleted; another school hears none of it. Decks are `.pptx`, so no AI call | No — same skip |
 | Backend daily-workflow integration | `backend/tests_integration/test_today_workflow.py` (7) | A school with no timetable is offered the timetable step for each grade that has students, and is not called a holiday; the road from timetable to homework on a working day; one grade on holiday against every grade on holiday | No — same skip |
 | Backend theme-lock integration | `backend/tests_integration/test_xp_theme_lock.py` (2) | A theme is dropped when a deduction takes the student below the level that unlocks it, and kept while the level still does | No — same skip |
@@ -68,7 +69,7 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-10-12 — backend unit, backend integration and Flutter unit/widget re-run after today's seven fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
+**Date:** 2026-10-12 — backend unit, backend integration and Flutter unit/widget re-run after today's nine fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
@@ -76,7 +77,7 @@ flutter test integration_test/
 
 ### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-12: 431 PASS**
 
-2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests. Re-run the same way after the afternoon's workflow fix, and again after the presentation fixes: 431 each time.
+2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests. Re-run the same way after the afternoon's workflow fix, again after the presentation fixes, and again after the realtime and filter fixes: 431 each time.
 
 2026-10-11: the same way as yesterday — every file in its own process inside `mindforge_backend`, **392 passed**, plus the container's known gaps on the host: `test_prod_guard.py` 24, `test_secrets_gitignore.py` 12, and the 3 host-only cases in `test_subjects.py` / `test_server_header.py`. **431 passed, 0 failed** across 39 files (+1 in `test_schema_invariants.py`).
 
@@ -97,7 +98,7 @@ Previous run (2026-09-13):
 
 Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-### 2.2 Backend integration (live local stack) — **re-run 2026-10-12 on the fixed code: 106/106 PASS in 406 s** (84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`, +7 `test_today_workflow.py`, +6 `test_presentation_realtime.py`. The table below is the 2026-09-13 breakdown)
+### 2.2 Backend integration (live local stack) — **re-run 2026-10-12 on the fixed code: 117/117 PASS in 452 s** (84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`, +7 `test_today_workflow.py`, +6 `test_presentation_realtime.py`, +6 deletion cases in `test_realtime_delivery.py`, +5 `test_admin_user_filters.py`. The table below is the 2026-09-13 breakdown)
 
 > `tests_integration/` reads `../../.env.local`, so it must run **from the host** (`cd backend && python3 -m pytest tests_integration/...`). Inside the container it fails at collection with `FileNotFoundError: /app/tests_integration/../../.env.local`.
 
@@ -130,7 +131,7 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
 | `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, and all of §5.5. Still unticked: the XP card on desktop web, the parent and other-teacher legs of §5.8, push notifications, the web-only rows, most of §5.10 |
+| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, all of §5.5, the last row of §5.7 and the rest of §5.8. Still unticked: the XP card on desktop web, push notifications, the web-only rows, most of §5.10 |
 
 ---
 
@@ -345,7 +346,7 @@ Run 2026-10-12 on the simulator and over the API in a school made for it ("QA Wo
 - [x] Dashboard loads, no overflow on small screens — PASS 2026-10-10 on the simulator (402 pt wide; the school name truncates to "Hansel & Gret…" beside the three header icons). Narrower widths not checked by hand
 - [x] Pending users — approve flow — PASS 2026-10-10 (API). On the simulator the pending list showed a new registration after Refresh — it does not appear live, which nothing requires — with Approve and delete on the row
 - [x] Pending users — reject (hard-delete) flow, no 500 — PASS 2026-10-10 (API: 204, row gone — including a pending student with its parent; an approved user → 400. Repeated on the simulator: trash icon → confirm → 204, row gone)
-- [ ] Faculty approval filter — *not checked; the Active Users tab's User Type and Grade filters render (simulator, 2026-10-10)*
+- [x] Faculty approval filter — PASS 2026-10-12, read as the Active Users filters: on the simulator Student lists the school's four students with their grade and parent, and Teacher its two teachers, the grade filter hiding itself; over the API role and grade narrow correctly (parents by their child's grade), nothing from another school appears, and a teacher cannot list users. **An unknown role value was a 500 — fixed, §9.** The Pending tab has no filter; approving was covered on 2026-10-10
 - [x] User management (deactivate / re-activate) — PASS 2026-10-10 (API). Deactivation now also ends the live session — §9
 - [x] Feedback viewer shows in-app problem reports — **was FAIL, fixed 2026-10-10**: no report could be sent at all — Send always answered "Could not send", for every role. After the fix a report sent from the admin dashboard on the simulator returned 204 and appears in `GET /admin/feedback` with its user, role and route. The viewer screen itself was not opened. §9
 - [x] Profile **does NOT** show "Delete my account" — PASS 2026-10-10 (simulator)
@@ -355,12 +356,12 @@ Run 2026-10-12 on the simulator and over the API in a school made for it ("QA Wo
 
 The WebSocket fan-out was rewritten on 2026-07-24. **First manual pass 2026-10-09**, in the web build against the local stack: two users side by side, one per origin (`http://localhost:8080` and `http://localhost:5001`, the two CORS-allowed dev ports, so each keeps its own login). Not yet repeated on a device. The homework items are blocked by the holiday deadlock in §10 item 18 — re-run them on a school day.
 
-- [ ] Teacher sends a school-wide broadcast → appears live on student / parent / other-teacher **Broadcasts screen** without navigating or refreshing — *partial 2026-10-12: the other-teacher leg, on the dashboard's Announcements card (simulator); student and parent legs not watched live*
+- [x] Teacher sends a school-wide broadcast → appears live on student / parent / other-teacher **Broadcasts screen** without navigating or refreshing — PASS 2026-10-12: with nine sockets open (two teachers, the admin, students and parents of two grades, and a teacher in another school) a school-wide broadcast reached all eight in the school and not the outsider; a grade-8 one reached staff and grade 8's students and parents only. Seen arriving on the other teacher's dashboard and on a parent's dashboard (simulator). On the dashboards' Announcements card, not the Broadcasts screen itself
 - [x] Teacher sends a **grade-targeted** broadcast → reaches that grade's students + parents, and all teachers — PASS 2026-10-09 for the student leg: grade-8 broadcast from `chinmay_sir` appeared on `dummy8`'s open Broadcasts screen in ~2 s, no refresh (web, two origins). Parent and other-teacher legs not checked
 - [x] Teacher assigns homework → appears live on the student/parent homework screen **and** on other teachers' dashboards — PASS 2026-10-10 for the student leg, on a device: with `dummy8`'s Homework screen open on the simulator, a grade-8 homework assigned through the API appeared at the top within 3 s, no refresh. Done on a no-class Saturday, so it also confirms the §10 item 18 fix. Parent and other-teacher legs not checked
 - [x] Auto-quiz from a presentation period log → appears in the teacher Online Tests list immediately, without pull-to-refresh — PASS 2026-10-12 (simulator): the card was there as "Generating quiz…" on opening Online Tests straight after the log, and turned into a ready quiz with a Publish button about ten seconds later, untouched
 - [x] Marking homework completion updates the student's Pending/Complete pill live — PASS 2026-10-10 on the simulator: homework 75 flipped Pending → Complete within 3 s of the teacher's `PUT …/completions` (which returned 200 with `attendance_required: false` on a no-class day)
-- [ ] Attendance / timetable / grade events refresh the relevant screen live
+- [x] Attendance / timetable / grade events refresh the relevant screen live — PASS 2026-10-12 (simulator, as a parent, nothing touched): the child's attendance day turned from present to absent on the open Attendance screen; a new class appeared on Today's Timetable; a new mark added a bar to Recent Test Marks; a homework appeared and the status chart recounted. The same thirteen actions were checked socket by socket for all roles. **Deleting a homework or a day's timetable told nobody — fixed, §9**; afterwards both cleared from the parent's dashboard live
 - [x] Events do **not** leak across schools (two schools, two browsers) — PASS 2026-10-09: a Hansel & Gretel grade-8 broadcast did not reach Riverdale's grade-8 `river_kid` (screen unchanged; backend log shows no refetch by user 42 after the `POST … 201`). Riverdale's list also never showed the Hansel broadcast at rest
 - [x] Backgrounding the app for >30 s then resuming reconnects once (no double-reconnect, no infinite loop) — PASS 2026-10-10 on the simulator: 40 s in the background, then exactly one new socket in the backend log. **The infinite loop did exist, on a different trigger — a server outage — and is fixed, §9.** After the fix, restarting the backend under the running app produced exactly one reconnect and nothing further for 75 s
 
@@ -467,6 +468,15 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-12 (evening — realtime for every role, the admin's user filters, two fixes)
+- **The rest of §5.8 and the last row of §5.7.** Thirteen actions (broadcasts, attendance, timetable, grades, homework, fees, profile edit, XP) were run in the throwaway school with nine sockets listening — every role, two grades, and an outsider — to see who is told what; then the parent's side was watched on the simulator. Every addition reached the right people and nobody in another school.
+- **Found and fixed — deletions were silent.** Assigning a homework or saving a timetable slot was announced; deleting the homework, or deleting the day's timetable, was not. A student or parent went on seeing homework that no longer existed and a class that had been cancelled, and other teachers' roads did not move. Both are announced now, to the same people as the additions, and so is the "no homework today" marker, which finishes the last step of every teacher's road and told no one. The apps act on the new `homework_deleted` event. Six cases added to `test_realtime_delivery.py` (four red first; the no-leak check and the marker's test were written with the fix) and three lines in `realtime_sync_test.dart`, red first. On the simulator a deleted homework left the parent's dashboard and a deleted day cleared its holiday banner.
+- **Found and fixed — an unknown role in the admin's user list was a 500.** The filter went to the database as free text, which rejects anything that is not a role. It is validated now (422), on the per-year list too. The app only ever sends real roles, so no admin would meet this on a screen. `tests_integration/test_admin_user_filters.py` (5; 2 red first), which also pins the filters themselves.
+- **Suites after both:** backend unit **431**; `tests_integration/` **117/117**; Flutter **212/212**, analyzer unchanged. Flutter integration on the simulator and the security probe suites not re-run.
+- **Production:** `main` deletes homework without an event and takes the role as free text (read from git, not checked against production).
+- **Seen, not changed** — §10 item 29.
+- **Housekeeping:** the school is suspended again with what the day put in it; the QA payment and XP award made by the socket run were reversed; the simulator is logged out.
 
 ### 2026-10-12 (later — presentations: the chapter-PDF path, on a screen, and two fixes)
 - **The last row of §5.5:** a chapter PDF turned into a deck by the AI, then adopted, taught and logged on the simulator, and the rules around it over the API (39 checks in all). In the same throwaway school as the workflow pass.
@@ -869,6 +879,12 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
     - *A refused upload still counts against the hourly generation limit* (20): the limit is checked before the file is.
     - *The "Presentations" tab label is cut off* on the phone ("Presentatio").
     - *The existing integration suite reaches Gemini on every run:* during a run the backend sent eight 45-byte old-test uploads to Gemini, each rejected (400, "no pages") — from the old-test upload suites, by the storage paths in the log; the test files were not read.
+
+29. **Realtime and the admin screens — seen 2026-10-12, not changed.**
+    - *The server sends three account events no app listens for:* approved, revoked, and new academic year (read from the code, both sides). A user whose account is approved while they wait sees nothing change.
+    - *A profile edit by the admin reaches the student but not the parent.*
+    - *The admin dashboard breaks the school name mid-word* ("QA Wor / kflow …").
+    - *The admin's Users screen has no bottom bar,* unlike the screens around it.
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.
