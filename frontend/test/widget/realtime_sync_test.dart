@@ -176,7 +176,7 @@ void main() {
       (tester) async {
     final c = _Counters();
     const tracked = {
-      'broadcasts', 'tests', 'xp', 'homework',
+      'broadcasts', 'tests', 'xp', 'themes', 'homework',
       'attendance', 'grades', 'fees', 'timetable',
     };
 
@@ -199,6 +199,10 @@ void main() {
         }),
         studentXpProvider.overrideWith((ref) async {
           c.bump('xp');
+          _stub();
+        }),
+        themesProvider.overrideWith((ref) async {
+          c.bump('themes');
           _stub();
         }),
         studentHomeworkProvider.overrideWith((ref) async {
@@ -227,6 +231,7 @@ void main() {
         container.listen(studentBroadcastsProvider, (_, __) {}),
         container.listen(pendingTestsProvider, (_, __) {}),
         container.listen(studentXpProvider, (_, __) {}),
+        container.listen(themesProvider, (_, __) {}),
         container.listen(studentHomeworkProvider, (_, __) {}),
         container.listen(studentAttendanceProvider, (_, __) {}),
         container.listen(studentGradesProvider(null), (_, __) {}),
@@ -240,7 +245,9 @@ void main() {
       'new_test_available': {'tests'},
       'test_status_changed': {'tests'},
       'test_completed': {'tests'},
-      'level_up': {'xp'},
+      // A new level can unlock a theme, so the picker's lock states go stale
+      // along with the XP figures.
+      'level_up': {'xp', 'themes'},
       'test_submitted': {'xp'},
       'homework_added': {'homework', 'xp'},
       'homework_completion_updated': {'homework', 'xp'},

@@ -193,6 +193,11 @@ class _RealtimeSyncState extends ConsumerState<RealtimeSync>
         ref.invalidate(completedTestsProvider);
         break;
       case 'level_up':
+        ref.invalidate(studentXpProvider);
+        // A new level can unlock a theme; the picker's lock states are
+        // fetched separately and would stay as they were.
+        ref.invalidate(themesProvider);
+        break;
       case 'test_submitted':
         ref.invalidate(studentXpProvider);
         break;
