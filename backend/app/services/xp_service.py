@@ -104,6 +104,18 @@ async def _next_level(db: AsyncSession, current_level: int) -> Optional[LevelCon
     )).scalar_one_or_none()
 
 
+async def _theme_unlock_level(db: AsyncSession, theme_id: str) -> Optional[int]:
+    """The level at which `theme_id` unlocks, or None if no level offers it."""
+    rows = (await db.execute(
+        select(LevelConfig).order_by(LevelConfig.level)
+    )).scalars().all()
+    for row in rows:
+        unlocks = row.unlocks or {}
+        if isinstance(unlocks, dict) and unlocks.get("theme") == theme_id:
+            return row.level
+    return None
+
+
 async def _publish_level_up(
     student_id: int,
     new_level: int,
@@ -188,6 +200,13 @@ async def award_xp(
 
     new_level_cfg = await _level_for_xp(db, xp_row.total_xp)
     xp_row.current_level = new_level_cfg.level
+
+    # A deduction can take a student below the level that unlocked the theme
+    # they are wearing. select_theme would refuse it now, so it cannot stay.
+    if new_level_cfg.level < old_level and xp_row.selected_theme:
+        unlock_level = await _theme_unlock_level(db, xp_row.selected_theme)
+        if unlock_level is None or unlock_level > new_level_cfg.level:
+            xp_row.selected_theme = None
 
     try:
         await db.commit()
