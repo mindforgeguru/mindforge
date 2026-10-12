@@ -60,7 +60,14 @@ class AutoPresentationListScreen extends ConsumerWidget {
                 ),
                 data: (rows) {
                   if (rows.isEmpty) {
-                    return _EmptyState();
+                    final library =
+                        ref.watch(presentationLibraryProvider).valueOrNull;
+                    return PresentationsEmptyState(
+                      libraryCount: library?.length ?? 0,
+                      onBrowseLibrary: () => context.go(
+                        '${RouteNames.teacherDashboard}/database?tab=3',
+                      ),
+                    );
                   }
                   return ListView.separated(
                     padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
@@ -78,9 +85,24 @@ class AutoPresentationListScreen extends ConsumerWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
+/// What the list shows when the teacher has no deck in progress.
+///
+/// This screen lists adopted decks only; a freshly generated one waits in the
+/// school library. With [libraryCount] above zero the message says so and
+/// offers the way there, so an upload never looks lost.
+class PresentationsEmptyState extends StatelessWidget {
+  final int libraryCount;
+  final VoidCallback onBrowseLibrary;
+  const PresentationsEmptyState({
+    super.key,
+    required this.libraryCount,
+    required this.onBrowseLibrary,
+  });
+
   @override
   Widget build(BuildContext context) {
+    final hasLibrary = libraryCount > 0;
+    final noun = libraryCount == 1 ? 'presentation' : 'presentations';
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
@@ -91,7 +113,7 @@ class _EmptyState extends StatelessWidget {
                 size: 48, color: AppColors.textMuted),
             const SizedBox(height: 12),
             Text(
-              'No presentations yet.',
+              hasLibrary ? 'Nothing in progress.' : 'No presentations yet.',
               style: GoogleFonts.poppins(
                 fontSize: 14, fontWeight: FontWeight.w600,
                 color: AppColors.textSecondary,
@@ -99,12 +121,27 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Upload a chapter PDF to generate a slide-by-slide lesson plan.',
+              hasLibrary
+                  ? '$libraryCount $noun in the school library. Open one and '
+                      'adopt it for your class to see it here.'
+                  : 'Upload a chapter PDF to generate a slide-by-slide lesson plan.',
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 12, color: AppColors.textMuted,
               ),
             ),
+            if (hasLibrary) ...[
+              const SizedBox(height: 14),
+              OutlinedButton(
+                onPressed: onBrowseLibrary,
+                child: Text(
+                  'Browse library',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

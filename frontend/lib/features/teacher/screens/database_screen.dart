@@ -15,7 +15,9 @@ import '../widgets/teacher_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
 
 class TeacherDatabaseScreen extends ConsumerStatefulWidget {
-  const TeacherDatabaseScreen({super.key});
+  /// Tab to open on: 0 Old Tests, 1 Chapters, 2 Syllabus, 3 Presentations.
+  final int initialTab;
+  const TeacherDatabaseScreen({super.key, this.initialTab = 0});
 
   @override
   ConsumerState<TeacherDatabaseScreen> createState() =>
@@ -29,7 +31,8 @@ class _TeacherDatabaseScreenState extends ConsumerState<TeacherDatabaseScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 4, vsync: this);
+    _tab = TabController(
+        length: 4, vsync: this, initialIndex: widget.initialTab.clamp(0, 3));
   }
 
   @override

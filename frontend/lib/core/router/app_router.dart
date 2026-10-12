@@ -260,7 +260,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: 'database',
-            pageBuilder: (_, __) => _slidePage(const teacher.TeacherDatabaseScreen()),
+            pageBuilder: (_, state) => _slidePage(teacher.TeacherDatabaseScreen(
+              initialTab:
+                  int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0,
+            )),
           ),
           GoRoute(
             path: 'presentations',
