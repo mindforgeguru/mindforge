@@ -1,6 +1,6 @@
 # Mindforge — Testing Record
 
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-11
 **Maintainer:** chinmay1975@gmail.com
 **Scope:** Reference document for every kind of testing performed on the Mindforge app — automated tests, security/privacy verification, and manual QA. Update this file every time a significant test session is run.
 
@@ -22,18 +22,19 @@
 | Backend unit tests | `backend/tests/test_unit.py` (34) | JWT round-trip, refresh-token type, expiry, password hashing, login/register schema validation | **Yes** |
 | Backend logout-handler tests | `backend/tests/test_logout_handler.py` (3) | FCM token clearing on logout, JWT revocation failure path | **Yes** |
 | Backend WebSocket auth tests | `backend/tests/test_websocket_auth.py` (5) | `/ws/{user_id}` rejects malformed / refresh-type / mismatched-sub / revoked-JTI tokens; accepts valid matching token | **Yes** |
-| Backend schema invariants | `backend/tests/test_schema_invariants.py` (4) | Models discoverable; `SET NULL` FKs are nullable; audit actor survives its author | **No — gap, see §10 item 2** |
+| Backend schema invariants | `backend/tests/test_schema_invariants.py` (5) | Models discoverable; `SET NULL` FKs are nullable; audit actor survives its author; the unique indexes on `users` cover live accounts only | **No — gap, see §10 item 2** |
 | Backend bearer-gate tests | `backend/tests/test_bearer_token_gate.py` (3), plus 3 account-check cases in `test_websocket_auth.py` | The per-request dependency refuses a refresh token and a deactivated account; the socket's own account check refuses deactivated and unapproved accounts | **Yes** (glob) |
 | Backend tenancy unit tests | `backend/tests/test_tenancy.py` (19) | `require_school_id`, `same_school_or_404` (404 not 403), `assert_school_active` (suspension, owner exemption), cached student profile carries `school_id`, every tenant model has a `school_id` column | **No — gap, see §10 item 2** |
 | Backend tenancy wiring tests | `backend/tests/test_tenancy_wiring.py` (8) | `get_current_user` and `/auth/refresh` both enforce school suspension; owner is not gated | **No — gap, see §10 item 2** |
 | Backend realtime fan-out tests | `backend/tests/test_realtime_fanout.py` (8) | Grade audience resolution (students + parents, dedup), explicit user-ID addressing, empty audience publishes nothing, `broadcast_to_users` delivery | **No — gap, see §10 item 2** |
 | Backend tenant-isolation integration | `backend/tests_integration/test_tenant_isolation.py` + `…_finance.py` (32) | Router-level cross-school scoping against a live stack | No — skips cleanly when the stack is down |
 | Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (6) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools | No — same skip |
+| Backend re-registration integration | `backend/tests_integration/test_reregister_after_removal.py` (7) | After a year close, and after an admin revoke, the removed account's username, phone and parent username can be registered again and log in; a live username or phone is still refused | No — same skip |
 | API integration / probes | `tests/test_api.py`, `tests/security_test.py`, `tests/security_test_extended.py`, `tests/performance_test.py` | Live endpoint smoke, security probe matrix, latency | **No — the CI job is unreachable, see §10 item 3** |
 | Auth / session live QA | `tests/auth_session_qa.py` (63 checks) | Registration → approval → login, lockout and rate limit, refresh rotation, logout, deactivation, MPIN-reset revocation, self-delete and its cascade — over HTTP against the local stack, reading Postgres and Redis for what the API cannot show | No — a script, not pytest; local stack only |
 | Backend log-redaction tests | `backend/tests/test_log_redaction.py` (6) | The token in a WebSocket handshake path never reaches uvicorn's log; lines without one are untouched | **Yes** (glob) |
 | Flutter unit tests | `frontend/test/unit/` (78, 6 files) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, models, admin setup status, owner API error messages | **Yes** |
-| Flutter widget tests | `frontend/test/widget/` (11 files; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
+| Flutter widget tests | `frontend/test/widget/` (11 files; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day, and `timetable_default_periods_test.dart` on 2026-10-11 | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
 | Flutter integration tests | `frontend/integration_test/` — `app_test.dart` (5), `all_screens_test.dart` (29) | Auth flows; every screen for every role | No — needs a simulator **and** `--dart-define=LOCAL_DEV=true`, or it hits production |
 | Local stack bootstrap | `docker-compose.yml` + `docker-compose.local.yml`; test accounts documented in `docs/local-test-accounts.md` | Spin up postgres/redis/minio/backend for integration testing | Manual |
 
@@ -64,13 +65,15 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-10-10 — every automated suite re-run today (backend unit + integration, Flutter unit/widget/integration, both security probe suites, auth/session live QA)
+**Date:** 2026-10-11 — backend unit, backend integration and Flutter unit/widget re-run after today's two fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
 > **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import (as of 2026-10-09 also `test_ai_fallback_chain.py`, `test_old_test_upload.py` and `test_subjects.py` — the host's `google-genai` lacks `types.GenerateContentConfig`) — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-10: 430 PASS**
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-11: 431 PASS**
+
+2026-10-11: the same way as yesterday — every file in its own process inside `mindforge_backend`, **392 passed**, plus the container's known gaps on the host: `test_prod_guard.py` 24, `test_secrets_gitignore.py` 12, and the 3 host-only cases in `test_subjects.py` / `test_server_header.py`. **431 passed, 0 failed** across 39 files (+1 in `test_schema_invariants.py`).
 
 2026-10-10: every `tests/test_*.py` file in its own process inside `mindforge_backend` (Python 3.11, `pytest pytest-asyncio` installed for the run) — **385 passed**, with the three known container gaps run on the host instead: `test_prod_guard.py` 24, `test_secrets_gitignore.py` 12, and the 3 host-only cases in `test_subjects.py` / `test_server_header.py`. **424 passed, 0 failed** across 38 files (was 418; +3 `test_bearer_token_gate.py`, +3 in `test_websocket_auth.py`). Re-run the same way in the evening after the log-redaction fix: **430 passed** across 39 files (+6 `test_log_redaction.py`).
 
@@ -89,7 +92,7 @@ Previous run (2026-09-13):
 
 Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-### 2.2 Backend integration (live local stack) — **re-run 2026-10-10 on the fixed code: 77/77 PASS in 170 s** (the table below is the 2026-09-13 breakdown)
+### 2.2 Backend integration (live local stack) — **re-run 2026-10-11 on the fixed code: 84/84 PASS in 235 s** (77 on 2026-10-10; +7 `test_reregister_after_removal.py`. The table below is the 2026-09-13 breakdown)
 
 > `tests_integration/` reads `../../.env.local`, so it must run **from the host** (`cd backend && python3 -m pytest tests_integration/...`). Inside the container it fails at collection with `FileNotFoundError: /app/tests_integration/../../.env.local`.
 
@@ -106,8 +109,8 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test` (unit + widget, everything) | **PASS — 197/197** (2026-10-10 night; 173 at the start of the day, +24 from the seven frontend fixes in §9) |
-| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-10, unchanged) |
+| `flutter test` (unit + widget, everything) | **PASS — 201/201** (2026-10-11; 197 the night before, +4 `timetable_default_periods_test.dart`) |
+| `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-11, unchanged) |
 | `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-10) |
 | `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-10, 10 m 47 s; no overflow or framework exception in the log) |
 
@@ -122,7 +125,7 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
 | `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. Still unticked: taking a test, homework submission from the student side, presentations, push notifications, the web-only rows, most of §5.10 |
+| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. Still unticked: the rest of §5.4 (fees, leaderboard and theme unlock), most of §5.5 (the daily workflow road, attendance pre-fill, homework review, broadcasts), the parent and other-teacher legs of §5.8, push notifications, the web-only rows, most of §5.10 |
 
 ---
 
@@ -291,9 +294,11 @@ Run 2026-10-09 against the local stack: API checks with real tokens (script in t
 
 ### 5.3 Admin school setup *(new — 2026-07-23/24)*
 
-- [ ] Graphical school-setup workflow gates steps in the right order — *partial 2026-10-10 (simulator): the completed state renders — five done steps, Close Year unlocked, "Setup complete — tap any step to edit." The "Academic Year" label sat on top of its step; fixed, §9. Gating on a fresh school only via `setup_road_card_test`*
-- [ ] School Logo setup task uploads and displays
-- [ ] Close-Year workflow step completes
+Run 2026-10-11 on the simulator against a school created for it ("QA Setup 97622"), starting from nothing: no year, no timetable, no fees, no payment details, no logo. Close Year was also run over the API on a second throwaway school with a teacher, a student and a parent in it.
+
+- [x] Graphical school-setup workflow gates steps in the right order — PASS 2026-10-11 (simulator). Fresh school: the car sits on Academic Year, the other four steps and Close Year are locked and do nothing when tapped, and the dashboard shows the road and nothing else. Each step, once saved, turns green and moves the car one along — year, timetable, fees, bank/payment (the step opens Fee Management on its Payment Info tab), logo. After the fifth the tiles appear and Close Year unlocks. **The order is enforced on the road only** — see §10 item 25
+- [x] School Logo setup task uploads and displays — PASS 2026-10-11 (simulator): picked from the photo library, confirmed, `POST /admin/school/logo` 200; shown on the logo screen and in the dashboard header straight away
+- [x] Close-Year workflow step completes — PASS 2026-10-11 (simulator and API). Cancel on the confirmation changes nothing. Confirming: 201, "Academic year closed — a new year has started."; the old year is closed with its user count kept, every teacher, student and parent is removed, their access and refresh tokens are refused, and the timetable setup, fee structure, payment details and logo stay, so the road remains complete. **Nobody removed could register again under their old username or phone — fixed same day, §9**
 
 ### 5.4 Student
 
@@ -455,6 +460,15 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-11 (school setup from an empty school, Close Year, and two fixes)
+- **School setup (§5.3), all three rows:** walked on the simulator from a school with nothing in it to the unlocked dashboard, then Close Year. The road, the gating and the logo upload work as designed.
+- **Found and fixed — nobody could come back after a year close.** Closing the year removes every student, teacher and parent and tells them to register again. Anyone who then registered under their old username, their old phone number, or — for a student — their old parent's username got "Internal server error". Only a registration with every detail new went through. Removal is a soft delete, so the old rows stay, and the two unique indexes on `users` still counted them; every conflict check in the application looks at live accounts only, so it let the registration through and the database refused it. The same happened after an admin revoked an account or a teacher or parent deleted their own. Migration 038 makes both indexes cover live accounts only, which is the rule the application already applied everywhere (all thirteen username and phone lookups were read — eleven by username, two by phone; each filters on `deleted_at`). Registration also turns a collision at the index into a 409 at every write point now — it only did at the final commit, and the collision arrives earlier. `tests_integration/test_reregister_after_removal.py` (7): 6 failed before the fix, on the 500; it covers the year close, an admin revoke, login picking the live account of two that share a name, and that a live username or phone is still refused. `test_schema_invariants.py` gained a case, checked to fail against the old model. Live afterwards, on the school whose year had been closed before the fix: the teacher and the student each registered again under the same username, phone and parent username (201), and a second registration of the now-live username was refused (409).
+- **Found and fixed — the pre-filled timetable had two one-hour holes.** A new school's timetable screen proposed 09:00–09:45, then 10:45–11:30, … 13:00–13:45, then 14:45–15:30: any period ending at :45 pushed the next one a whole hour on, and the same happened to periods added with the slider. A period now starts when the one before it ends. `test/unit/timetable_default_periods_test.dart` (4), run red against the old arithmetic first. On the simulator afterwards: two periods added with the slider after one ending 15:30 came out 15:30–16:15 and 16:15–17:00 (the second would have been 17:15).
+- **Suites after both:** backend unit **431**; `tests_integration/` **84/84**; Flutter **201/201**, analyzer unchanged. The Flutter integration suites on the simulator and the two security probe suites were not re-run.
+- **Production:** `main` has the same shape — a unique username, a unique phone index from migration 014, and conflict checks that skip removed accounts (read from git, not tried against production). So a year close on production would very likely lock out every returning user who keeps their username or phone, until this ships. The rollout runbook now lists nine migrations, 030–038.
+- **Seen, not changed** — §10 item 25.
+- **Housekeeping:** three throwaway schools were created ("QA Setup 97622", "QA CloseYear 97669", and the integration run's own, which it deletes). The first two are left **suspended**, out of the picker. One test image was added to the simulator's photo library.
 
 ### 2026-10-10 (night — taking a test, presentations, and one more fix)
 - **Taking a test (§5.4):** 16 API checks with throwaway students against a grade-8 test whose expiry was moved forward for the run and restored afterwards, then the same flow by hand on the simulator. Single attempt, forfeit on re-entry, no answer leakage, per-student shuffle with correct scoring and review — all as designed.
@@ -786,6 +800,15 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
 23. **A hidden browser pane cannot drive the Flutter web build.** With the pane not displayed the page stops getting animation frames, the splash's animation controllers never complete, and the app sits on the splash with an empty accessibility tree. It looks like an app hang and is not one. When the pane is visible, Flutter's accessibility tree (click the `flt-semantics-placeholder` once) reads every screen as text. Seen 2026-10-10.
 
 24. **Production logs probably contain access tokens.** Until the 2026-10-10 fix ships, every WebSocket handshake logs its `?token=`. Once it has shipped, consider how long the existing logs are retained and who can read them. A token is good for an hour from issue, so old log lines are not a live credential — but the log is still not where they belong.
+
+25. **School setup — seen 2026-10-11, not changed.** None of these stops setup; each is a decision rather than a repair.
+    - *The step order is enforced on the road only.* While the road shows a step locked, the bottom bar still opens Fees, Timetable and Users, so a fee structure can be saved before the academic year exists.
+    - *Close Year is reachable while its step is locked.* The Academic Year screen — the first step — carries "Start New Academic Year", which is the same action.
+    - *Close Year's confirmation is one tap on an ordinary button.* Deleting one's own account asks for the username to be typed; removing every user in the school does not, and the button is not styled as destructive.
+    - *A year closed in the same calendar year gets the same label.* The label comes from the calendar year alone ("2026-27"), so two years in the list can carry one name, and on the dashboard nothing visibly changes after a close. Fee structures are stored against the label, so the "kept" fee structure belongs to whichever years share it. By the same rule a year started in January–March is labelled a year ahead of the session it belongs to.
+    - *"Users cannot register until a year is started" is not what the server does.* Registration goes through without a current year (read from `auth.py`, not tried).
+    - *A payment option with only a bank name completes the Bank / Payment step* — nothing a parent could pay into.
+    - *The amount fields keep their leading 0* ("045000" while typing; saved as 45,000). *The logo confirmation asks "Is this the image you want to use?" without showing it.*
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.
