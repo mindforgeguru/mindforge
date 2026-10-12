@@ -202,6 +202,7 @@ class _RealtimeSyncState extends ConsumerState<RealtimeSync>
         ref.invalidate(studentXpProvider);
         break;
       case 'homework_added':
+      case 'homework_deleted':
       case 'homework_completion_updated':
         ref.invalidate(studentHomeworkProvider);
         ref.invalidate(studentHomeworkCompletionsProvider);
@@ -247,6 +248,7 @@ class _RealtimeSyncState extends ConsumerState<RealtimeSync>
         ref.invalidate(teacherTestsProvider);
         break;
       case 'homework_added':
+      case 'homework_deleted':
       case 'homework_completion_updated':
         ref.invalidate(teacherHomeworkProvider);
         ref.invalidate(teacherHomeworkCompletionsProvider);
@@ -297,6 +299,7 @@ class _RealtimeSyncState extends ConsumerState<RealtimeSync>
         ref.invalidate(parentChildTestsProvider);
         break;
       case 'homework_added':
+      case 'homework_deleted':
       case 'homework_completion_updated':
         ref.invalidate(parentHomeworkProvider);
         ref.invalidate(parentChildHomeworkCompletionsProvider);

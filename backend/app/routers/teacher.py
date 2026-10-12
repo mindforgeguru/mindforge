@@ -521,6 +521,20 @@ async def delete_timetable_for_grade_date(
     )
     await db.commit()
     deleted = result.rowcount
+    if deleted:
+        # Saving a slot is announced; so is taking the day away.
+        await publish_to_grade(
+            db,
+            school_id=current_teacher.school_id,
+            grade=grade,
+            include_staff=True,
+            payload={
+                "event": "timetable_updated",
+                "grade": grade,
+                "slot_date": date,
+                "deleted": True,
+            },
+        )
     return {"deleted": deleted, "message": f"Deleted {deleted} slot(s) for Grade {grade} on {date}."}
 
 
@@ -1691,6 +1705,19 @@ async def mark_no_homework(
     db.add(hw)
     await db.commit()
     await db.refresh(hw)
+    # The marker completes the grade's homework step on every teacher's road.
+    await publish_to_grade(
+        db,
+        school_id=current_teacher.school_id,
+        grade=payload.grade,
+        include_staff=True,
+        payload={
+            "event": "homework_added",
+            "homework_id": hw.id,
+            "grade": hw.grade,
+            "is_no_homework": True,
+        },
+    )
     return hw
 
 
@@ -1776,8 +1803,22 @@ async def delete_homework(
     hw = result.scalar_one_or_none()
     if not hw:
         raise HTTPException(status_code=404, detail="Homework not found")
+    grade = hw.grade
     await db.delete(hw)
     await db.commit()
+    # The same audience that was told it was assigned: without this the
+    # deleted homework stays on their screens until they refresh.
+    await publish_to_grade(
+        db,
+        school_id=current_teacher.school_id,
+        grade=grade,
+        include_staff=True,
+        payload={
+            "event": "homework_deleted",
+            "homework_id": homework_id,
+            "grade": grade,
+        },
+    )
 
 
 # ─── Homework completion tracking ─────────────────────────────────────────────

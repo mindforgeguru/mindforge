@@ -446,3 +446,108 @@ def test_fee_payment_does_not_reach_another_student(api, two_schools, students):
 
     leaked = _events_of(asyncio.run(scenario()), "fee_payment_recorded")
     assert not leaked, f"an unrelated student received a fee event: {leaked}"
+
+
+# ── Deletions ────────────────────────────────────────────────────────────────
+#
+# Adding a homework or a timetable slot was announced; taking one away was not.
+# A student went on seeing homework that no longer existed, and a class that
+# had been cancelled, until they refreshed.
+
+
+def _events_while(listener_id, act, name, timeout=RECV_TIMEOUT):
+    async def scenario():
+        async with _connect(listener_id, _mint_access_token(listener_id)) as ws:
+            await asyncio.sleep(0.5)
+            act()
+            return await _collect(ws, timeout)
+
+    return _events_of(asyncio.run(scenario()), name)
+
+
+def _new_homework(api, token, title):
+    r = api.post(
+        "/api/teacher/homework",
+        headers=auth(token),
+        json={"grade": 8, "subject": "Physics", "title": title},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+@pytest.mark.parametrize("who", ["student", "teacher"])
+def test_deleted_homework_reaches_students_and_staff(
+    api, two_schools, students, teacher_user_ids, who
+):
+    token = two_schools["a"]["teacher_token"]
+    hw_id = _new_homework(api, token, f"{PREFIX} doomed hw {who}")
+    listener = students["a"] if who == "student" else teacher_user_ids["a"]
+
+    def delete():
+        r = api.delete(f"/api/teacher/homework/{hw_id}", headers=auth(token))
+        assert r.status_code == 204, r.text
+
+    got = _events_while(listener, delete, "homework_deleted")
+    assert got, f"{who} was not told a homework was deleted"
+    assert got[0]["homework_id"] == hw_id
+
+
+def test_deleted_homework_does_not_reach_another_school(
+    api, two_schools, teacher_user_ids
+):
+    token = two_schools["a"]["teacher_token"]
+    hw_id = _new_homework(api, token, f"{PREFIX} doomed hw quiet")
+
+    def delete():
+        r = api.delete(f"/api/teacher/homework/{hw_id}", headers=auth(token))
+        assert r.status_code == 204, r.text
+
+    leaked = _events_while(
+        teacher_user_ids["b"], delete, "homework_deleted", SILENCE_TIMEOUT
+    )
+    assert not leaked, f"school B heard about school A's deleted homework: {leaked}"
+
+
+@pytest.mark.parametrize("who", ["student", "teacher"])
+def test_deleted_timetable_day_reaches_students_and_staff(
+    api, two_schools, students, teacher_user_ids, who
+):
+    token = two_schools["a"]["teacher_token"]
+    day = "2027-01-15"  # far from "today", so no daily-workflow test sees it
+    r = api.post(
+        "/api/teacher/timetable",
+        headers=auth(token),
+        json={"grade": 8, "slot_date": day, "period_number": 1, "subject": "Physics"},
+    )
+    assert r.status_code == 200, r.text
+    listener = students["a"] if who == "student" else teacher_user_ids["a"]
+
+    def delete():
+        r = api.post(
+            "/api/teacher/timetable/delete",
+            headers=auth(token), params={"grade": 8, "date": day},
+        )
+        assert r.status_code == 200 and r.json()["deleted"] == 1, r.text
+
+    got = _events_while(listener, delete, "timetable_updated")
+    assert got, f"{who} was not told a day's timetable was deleted"
+    assert got[0]["slot_date"] == day
+
+
+def test_a_no_homework_marker_reaches_the_staff(api, two_schools, teacher_user_ids):
+    """Marking "no homework today" completes the last step of every teacher's
+    daily road for that grade, so the other teachers' roads have to hear it."""
+    token = two_schools["a"]["teacher_token"]
+
+    def mark():
+        r = api.post(
+            "/api/teacher/homework/none", headers=auth(token), json={"grade": 9}
+        )
+        # 409 = an earlier homework for the grade still awaits review; nothing
+        # was created, so there is nothing to announce.
+        assert r.status_code in (201, 409), r.text
+        if r.status_code == 409:
+            pytest.skip("grade 9 has a pending review in this run")
+
+    got = _events_while(teacher_user_ids["a"], mark, "homework_added")
+    assert got, "staff were not told a no-homework marker was recorded"
