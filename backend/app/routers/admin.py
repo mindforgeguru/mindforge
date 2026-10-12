@@ -199,7 +199,9 @@ async def get_pending_users(
 
 @router.get("/users", response_model=List[UserWithProfileResponse])
 async def get_all_users(
-    role: Optional[str] = Query(None),
+    # Typed, so a value that is not a role is refused here (422) and never
+    # reaches the database, which rejects it as an invalid enum (a 500).
+    role: Optional[UserRole] = Query(None),
     grade: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
@@ -1446,7 +1448,7 @@ async def get_current_academic_year(
 @router.get("/academic-years/{year_id}/users", response_model=List[UserWithProfileResponse])
 async def get_users_by_year(
     year_id: int,
-    role: Optional[str] = Query(None),
+    role: Optional[UserRole] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
