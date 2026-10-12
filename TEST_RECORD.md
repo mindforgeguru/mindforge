@@ -30,12 +30,13 @@
 | Backend tenant-isolation integration | `backend/tests_integration/test_tenant_isolation.py` + `…_finance.py` (32) | Router-level cross-school scoping against a live stack | No — skips cleanly when the stack is down |
 | Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (13) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools; a fee payment recorded, corrected or deleted reaches the student and the parent and nobody else | No — same skip |
 | Backend re-registration integration | `backend/tests_integration/test_reregister_after_removal.py` (7) | After a year close, and after an admin revoke, the removed account's username, phone and parent username can be registered again and log in; a live username or phone is still refused | No — same skip |
+| Backend daily-workflow integration | `backend/tests_integration/test_today_workflow.py` (7) | A school with no timetable is offered the timetable step for each grade that has students, and is not called a holiday; the road from timetable to homework on a working day; one grade on holiday against every grade on holiday | No — same skip |
 | Backend theme-lock integration | `backend/tests_integration/test_xp_theme_lock.py` (2) | A theme is dropped when a deduction takes the student below the level that unlocks it, and kept while the level still does | No — same skip |
 | API integration / probes | `tests/test_api.py`, `tests/security_test.py`, `tests/security_test_extended.py`, `tests/performance_test.py` | Live endpoint smoke, security probe matrix, latency | **No — the CI job is unreachable, see §10 item 3** |
 | Auth / session live QA | `tests/auth_session_qa.py` (63 checks) | Registration → approval → login, lockout and rate limit, refresh rotation, logout, deactivation, MPIN-reset revocation, self-delete and its cascade — over HTTP against the local stack, reading Postgres and Redis for what the API cannot show | No — a script, not pytest; local stack only |
 | Backend log-redaction tests | `backend/tests/test_log_redaction.py` (6) | The token in a WebSocket handshake path never reaches uvicorn's log; lines without one are untouched | **Yes** (glob) |
 | Flutter unit tests | `frontend/test/unit/` (78, 6 files) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, models, admin setup status, owner API error messages | **Yes** |
-| Flutter widget tests | `frontend/test/widget/` (11 files; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day, and `timetable_default_periods_test.dart` on 2026-10-11, and `student_grade_provider_test.dart` on 2026-10-12 | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
+| Flutter widget tests | `frontend/test/widget/` (11 files; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day, and `timetable_default_periods_test.dart` on 2026-10-11, and `student_grade_provider_test.dart` and `teacher_workflow_holiday_test.dart` on 2026-10-12 | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
 | Flutter integration tests | `frontend/integration_test/` — `app_test.dart` (5), `all_screens_test.dart` (29) | Auth flows; every screen for every role | No — needs a simulator **and** `--dart-define=LOCAL_DEV=true`, or it hits production |
 | Local stack bootstrap | `docker-compose.yml` + `docker-compose.local.yml`; test accounts documented in `docs/local-test-accounts.md` | Spin up postgres/redis/minio/backend for integration testing | Manual |
 
@@ -66,7 +67,7 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-10-12 — backend unit, backend integration and Flutter unit/widget re-run after today's four fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
+**Date:** 2026-10-12 — backend unit, backend integration and Flutter unit/widget re-run after today's five fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
@@ -74,7 +75,7 @@ flutter test integration_test/
 
 ### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-12: 431 PASS**
 
-2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests.
+2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests. Re-run the same way after the afternoon's workflow fix: 431.
 
 2026-10-11: the same way as yesterday — every file in its own process inside `mindforge_backend`, **392 passed**, plus the container's known gaps on the host: `test_prod_guard.py` 24, `test_secrets_gitignore.py` 12, and the 3 host-only cases in `test_subjects.py` / `test_server_header.py`. **431 passed, 0 failed** across 39 files (+1 in `test_schema_invariants.py`).
 
@@ -95,7 +96,7 @@ Previous run (2026-09-13):
 
 Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-### 2.2 Backend integration (live local stack) — **re-run 2026-10-12 on the fixed code: 93/93 PASS in 292 s** (84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`. The table below is the 2026-09-13 breakdown)
+### 2.2 Backend integration (live local stack) — **re-run 2026-10-12 on the fixed code: 100/100 PASS in 356 s** (84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`, +7 `test_today_workflow.py`. The table below is the 2026-09-13 breakdown)
 
 > `tests_integration/` reads `../../.env.local`, so it must run **from the host** (`cd backend && python3 -m pytest tests_integration/...`). Inside the container it fails at collection with `FileNotFoundError: /app/tests_integration/../../.env.local`.
 
@@ -112,7 +113,7 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test` (unit + widget, everything) | **PASS — 204/204** (2026-10-12; 201 the day before, +3 `student_grade_provider_test.dart`; `realtime_sync_test.dart` extended in place) |
+| `flutter test` (unit + widget, everything) | **PASS — 209/209** (2026-10-12; 201 the day before, +3 `student_grade_provider_test.dart`, +5 `teacher_workflow_holiday_test.dart`; `realtime_sync_test.dart` extended in place) |
 | `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-12, unchanged) |
 | `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-10) |
 | `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-10, 10 m 47 s; no overflow or framework exception in the log) |
@@ -128,7 +129,7 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
 | `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4. Still unticked: the XP card on desktop web, most of §5.5 (the daily workflow road, attendance pre-fill, homework review, broadcasts), the parent and other-teacher legs of §5.8, push notifications, the web-only rows, most of §5.10 |
+| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, and §5.5 apart from presentations. Still unticked: the XP card on desktop web, presentations on a screen and the chapter-PDF path, the parent and other-teacher legs of §5.8, push notifications, the web-only rows, most of §5.10 |
 
 ---
 
@@ -319,15 +320,17 @@ Run 2026-10-11 on the simulator against a school created for it ("QA Setup 97622
 ### 5.5 Teacher
 
 - [x] Dashboard summary loads — PASS 2026-10-10 (web and simulator, `chinmay_sir`)
-- [ ] Daily Workflow road shows current grade's color; car advances per milestone
-- [ ] Every milestone tappable; car replaces current pending milestone (no duplicates)
-- [ ] Pre-fill attendance from previous period
-- [ ] Holiday / no-class day → car advances correctly; whole-school holiday banner shows — *partial 2026-10-09: "Holiday! No classes today" banner shows on the teacher dashboard; car not checked. On the same holiday the teacher **cannot assign homework** — §10 item 18*
-- [ ] HW review uses most-recent-HW model; tiles color-coded by review status
+Run 2026-10-12 on the simulator and over the API in a school made for it ("QA Workflow 87235": two teachers, three grade-8 students, one grade-9), taken through a whole day: no timetable → timetable → attendance over three periods → yesterday's homework reviewed → new homework assigned, with grade 9 declared a holiday alongside.
+
+- [x] Daily Workflow road shows current grade's color; car advances per milestone — PASS 2026-10-12 (simulator): grade 8's road is blue and grade 9's purple; the car sat at Timetable, then Attendance (through 1/3 and 2/3), then HW Review, and left the road when Homework turned green. Both teachers get the same workflow. **A school with no timetable was shown "Holiday!" and no road at all — fixed, §9**
+- [x] Every milestone tappable; car replaces current pending milestone (no duplicates) — PASS 2026-10-12 (simulator): Timetable, Attendance and HW Review each opened their screen from the road; the car stands in place of the pending milestone's dot, one per road, and a finished road has four ticks and no car. The Homework milestone was not tapped (it opens the same screen as HW Review)
+- [x] Pre-fill attendance from previous period — PASS 2026-10-12 (simulator): with period 1 saved with one student absent, period 2 opened unsaved with the same student already absent, and was saved that way. A period that already has its own record shows that record
+- [x] Holiday / no-class day → car advances correctly; whole-school holiday banner shows — PASS 2026-10-12 (simulator): with grade 9 alone on holiday its car skipped Attendance and HW Review to Homework while grade 8 carried on; with every timetabled grade on holiday the roads give way to the "Holiday!" banner. The teacher's banner does not carry the reason the student's does. Homework on a holiday: fixed 2026-10-09, §10 item 18
+- [x] HW review uses most-recent-HW model; tiles color-coded by review status — PASS 2026-10-12 (simulator and API): of two earlier homeworks only the more recent blocked new homework (409; on the phone "Mark yesterday's homework completion before assigning new homework."); another grade was not blocked. The review screen locks a student who was absent today. Once submitted the tile turned from an orange "Pending" to a green "Done", the older one stayed Pending without blocking, and new homework went through
 - [ ] Presentations: upload PDF and `.pptx`, adopt, log a period — *partial 2026-10-10 (API): a ten-slide `.pptx` uploaded READY with 10 slides and 2 recommended periods; a legacy `.ppt` and a non-deck file → 415 with a usable message; period log before adopt → 409; adopt → 201; period log → 201. **The chapter-PDF path (AI writes the deck) was not run**, and none of it on a screen*
 - [x] Auto-quiz appears in the Online Tests tab as "Generating", then flips to ready/failed — PASS 2026-10-10 (API): `generating` in the teacher's test list immediately after the period log, `ready` 9 s later with 5 questions, unpublished until the teacher publishes; once published it showed on the student's Tests tab on the simulator with a 48-hour window. Generated by Gemini — the local stack has no Anthropic key, so the Claude leg cannot be exercised here
 - [x] Retry on a failed auto-quiz card works — **was FAIL, fixed 2026-10-10**: the retry was sent (202) but when it failed again the Retry button never came back. Now PASS on the simulator. §9
-- [ ] Broadcasts are shared school-wide across teachers
+- [x] Broadcasts are shared school-wide across teachers — PASS 2026-10-12: a school-wide and a grade-9 broadcast sent by one teacher both appeared, live and marked unread, on the other teacher's open dashboard, and the two teachers' lists are identical. The grade-9 one reached the grade-9 student and not the grade-8 one; a teacher in another school saw neither
 - [x] Profile → Privacy & Data visible — PASS 2026-10-10 (simulator; "Delete my account" present)
 
 ### 5.6 Parent
@@ -351,7 +354,7 @@ Run 2026-10-11 on the simulator against a school created for it ("QA Setup 97622
 
 The WebSocket fan-out was rewritten on 2026-07-24. **First manual pass 2026-10-09**, in the web build against the local stack: two users side by side, one per origin (`http://localhost:8080` and `http://localhost:5001`, the two CORS-allowed dev ports, so each keeps its own login). Not yet repeated on a device. The homework items are blocked by the holiday deadlock in §10 item 18 — re-run them on a school day.
 
-- [ ] Teacher sends a school-wide broadcast → appears live on student / parent / other-teacher **Broadcasts screen** without navigating or refreshing
+- [ ] Teacher sends a school-wide broadcast → appears live on student / parent / other-teacher **Broadcasts screen** without navigating or refreshing — *partial 2026-10-12: the other-teacher leg, on the dashboard's Announcements card (simulator); student and parent legs not watched live*
 - [x] Teacher sends a **grade-targeted** broadcast → reaches that grade's students + parents, and all teachers — PASS 2026-10-09 for the student leg: grade-8 broadcast from `chinmay_sir` appeared on `dummy8`'s open Broadcasts screen in ~2 s, no refresh (web, two origins). Parent and other-teacher legs not checked
 - [x] Teacher assigns homework → appears live on the student/parent homework screen **and** on other teachers' dashboards — PASS 2026-10-10 for the student leg, on a device: with `dummy8`'s Homework screen open on the simulator, a grade-8 homework assigned through the API appeared at the top within 3 s, no refresh. Done on a no-class Saturday, so it also confirms the §10 item 18 fix. Parent and other-teacher legs not checked
 - [ ] Auto-quiz from a presentation period log → appears in the teacher Online Tests list immediately, without pull-to-refresh
@@ -463,6 +466,14 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-12 (afternoon — the teacher's day: workflow road, attendance, homework review, broadcasts — one fix)
+- **§5.5 apart from presentations:** a school made for it, taken through a whole day on the simulator and over the API. Attendance pre-fill, the homework review gate, the colour-coded tiles and shared broadcasts all work as designed; 21 API checks beside the screens.
+- **Found and fixed — a school with no timetable was told it was a holiday.** The road only drew grades that had a timetable today or in the last fourteen days. A school with none — a new school on its first day, or any school back from a break longer than two weeks — got no grades back, flagged as a holiday, and the teacher's dashboard showed "Holiday! No classes today — enjoy the day off!" on a working day, with nothing offering the step that ends that state. Now such a school gets a road for each grade that has students, the car waiting at Timetable; "holiday" means every timetabled grade is flagged as one; and a school with no students either says "No classes set up yet" with a way into the timetable. `tests_integration/test_today_workflow.py` (7; 5 red first) and `test/unit/teacher_workflow_holiday_test.dart` (5; 2 red first). The integration file also pins the working-day road and the two holiday cases, which nothing covered before. On the simulator the same teacher went from the holiday banner to two roads. The "No classes set up yet" line for a school with no students was not seen on a screen; only its rule is tested.
+- **Suites after it:** backend unit **431**; `tests_integration/` **100/100**; Flutter **209/209**, analyzer unchanged. Flutter integration on the simulator and the security probe suites not re-run.
+- **Production:** `main` computes the holiday flag the same way (read from git, not checked against production), so a school's first day on the app — and the first day after any long break — very likely opens on the holiday banner for every teacher.
+- **Seen, not changed** — §10 item 27.
+- **Housekeeping:** "QA Workflow 87235" is left **suspended**, out of the picker, with its accounts, timetable, attendance and homework inside it. The simulator is logged out.
 
 ### 2026-10-12 (student fees, XP, themes, leaderboard, holiday banner — four fixes)
 - **The rest of §5.4:** a throwaway grade-8 student in Hansel & Gretel, driven over the API (28 checks, all as designed) and then by hand on the simulator. Fees, the leaderboard's three tabs, theme unlock and the holiday banner all work.
@@ -830,6 +841,14 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
     - *A parent cannot read their own child's XP by id* (403), though they can open the school leaderboard, which lists every student's name and XP.
     - *The fee summary's "paid" is every payment the student has ever made,* set against the current year's fee. Harmless while a year close removes the accounts; worth a look if accounts ever carry over.
     - *Deleting a day's timetable sends no realtime event* (read from `teacher.py`, not tried on a screen).
+
+27. **The teacher's day — seen 2026-10-12, not changed.**
+    - *The road's order is advice on the server, apart from one rule.* Homework for a grade was accepted (201) before any attendance was taken; only an open review of yesterday's homework is refused. The road dims the Homework step until attendance is done, and nothing else enforces it.
+    - *Attendance is accepted for a period the grade has no class in* (period 5 of a three-period day, 201), and the student earns XP for it.
+    - *A grade that has never had a timetable is still missing from the road when another grade has one.* The fallback to grades with students only applies when the school has no timetable at all.
+    - *The "must review first" message appears behind the Assign dialog,* dimmed, while the dialog stays open.
+    - *On a holiday the teacher's subject chips disappear from the welcome card,* and the teacher's banner shows no reason.
+    - *The Homework Review screen offers Grade 10 in a school with nobody in it.*
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.
