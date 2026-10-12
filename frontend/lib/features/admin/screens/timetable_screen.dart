@@ -8,6 +8,19 @@ import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
 
+/// The timing pre-filled for a period that follows one ending at
+/// [previousEnd], or for the first period of the day when there is none.
+/// A period starts when the one before it ends; the admin adds any breaks.
+({TimeOfDay start, TimeOfDay end}) defaultPeriodAfter(TimeOfDay? previousEnd) {
+  const periodMinutes = 45;
+  final start = previousEnd ?? const TimeOfDay(hour: 9, minute: 0);
+  final endMinutes = start.hour * 60 + start.minute + periodMinutes;
+  return (
+    start: start,
+    end: TimeOfDay(hour: (endMinutes ~/ 60) % 24, minute: endMinutes % 60),
+  );
+}
+
 class AdminTimetableScreen extends ConsumerStatefulWidget {
   const AdminTimetableScreen({super.key});
 
@@ -44,17 +57,9 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
 
   void _syncPeriodTimes() {
     while (_periodTimes.length < _periodsPerDay) {
-      final prev = _periodTimes.isNotEmpty ? _periodTimes.last : null;
-      final startHour = prev != null
-          ? (prev.end.hour + (prev.end.minute >= 45 ? 1 : 0))
-          : 9;
-      final startMin = prev != null ? ((prev.end.minute + 0) % 60) : 0;
-      _periodTimes.add(_PeriodTime(
-        start: TimeOfDay(hour: startHour % 24, minute: startMin),
-        end: TimeOfDay(
-            hour: (startHour + (startMin + 45 >= 60 ? 1 : 0)) % 24,
-            minute: (startMin + 45) % 60),
-      ));
+      final next = defaultPeriodAfter(
+          _periodTimes.isNotEmpty ? _periodTimes.last.end : null);
+      _periodTimes.add(_PeriodTime(start: next.start, end: next.end));
     }
     while (_periodTimes.length > _periodsPerDay) {
       _periodTimes.removeLast();
