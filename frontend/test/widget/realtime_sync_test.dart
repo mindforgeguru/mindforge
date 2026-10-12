@@ -343,6 +343,8 @@ void main() {
       'grade_added': {'grades'},
       'grade_deleted': {'grades'},
       'presentation_ready': {'presentation'},
+      // A colleague adopted, edited, logged against or deleted a deck.
+      'presentation_updated': {'presentation'},
       'timetable_updated': {'timetable'},
       'timetable_config_updated': {'timetable'},
       // Background AI classification of an uploaded old test paper finished.

@@ -178,6 +178,26 @@ async def _broadcast_auto_quiz_status(db: AsyncSession, test: Test) -> None:
     )
 
 
+async def _announce_presentation_change(
+    db: AsyncSession, school_id: int, presentation_id: int, change: str,
+) -> None:
+    """Tell the school's staff that a deck, or somebody's progress through it,
+    changed.
+
+    The library and the dashboard's progress cards are school-wide, so every
+    teacher's screen is showing this deck. Without the event they keep the old
+    picture until someone pulls to refresh.
+    """
+    await publish_to_users(
+        await school_staff_ids(db, school_id=school_id),
+        {
+            "event": "presentation_updated",
+            "presentation_id": presentation_id,
+            "change": change,
+        },
+    )
+
+
 async def _run_auto_test_job(
     test_id: int, presentation_id: int, teacher_id: int,
     slides_from: int, slides_to: int,
@@ -585,6 +605,9 @@ async def upload_deck(
     await db.commit()
     # Like /upload, no auto-adoption — the teacher hits "Adopt for my class"
     # to put it on their dashboard.
+
+    await _announce_presentation_change(
+        db, current_user.school_id, row.id, "added")
 
     return PresentationCreateResponse(
         presentation_id=row.id, status=row.status.value
@@ -1109,6 +1132,8 @@ async def adopt_presentation(
         db, presentation_id, current_user.id
     )
     await db.commit()
+    await _announce_presentation_change(
+        db, current_user.school_id, presentation_id, "adopted")
     return {
         "progress_id": progress.id,
         "presentation_id": presentation_id,
@@ -1158,6 +1183,8 @@ async def unadopt_presentation(
     )
     await db.delete(progress)
     await db.commit()
+    await _announce_presentation_change(
+        db, current_user.school_id, presentation_id, "unadopted")
 
 
 # ── PATCH /{id}/slides/{slide_id} ────────────────────────────────────────────
@@ -1213,6 +1240,8 @@ async def patch_slide(
 
     await db.commit()
     await db.refresh(slide)
+    await _announce_presentation_change(
+        db, current_user.school_id, presentation_id, "slide_edited")
 
     return PresentationSlideOut(
         id=slide.id, slide_index=slide.slide_index, title=slide.title,
@@ -1350,6 +1379,9 @@ async def create_period_log(
                 slides_from, to_idx,
             )
 
+    await _announce_presentation_change(
+        db, current_user.school_id, presentation_id, "period_logged")
+
     return PresentationPeriodLogOut(
         id=log.id,
         teacher_id=log.teacher_id,
@@ -1451,6 +1483,9 @@ async def update_period_log(
         select(User.username).where(User.id == log.teacher_id)
     )).scalar_one_or_none() or "?"
 
+    await _announce_presentation_change(
+        db, current_user.school_id, presentation_id, "period_log_edited")
+
     return PresentationPeriodLogOut(
         id=log.id,
         teacher_id=log.teacher_id,
@@ -1547,3 +1582,5 @@ async def delete_presentation(
 
     await db.delete(pres)
     await db.commit()
+    await _announce_presentation_change(
+        db, current_user.school_id, presentation_id, "deleted")

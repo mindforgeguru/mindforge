@@ -21,7 +21,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.redis_client import redis_manager
 from app.models.presentation import (
     ChapterPresentation,
     PresentationSlide,
@@ -29,6 +28,7 @@ from app.models.presentation import (
     PresentationTeacherProgress,
 )
 from app.services import ai_service
+from app.services.realtime_service import publish_to_users, school_staff_ids
 
 
 # Outline + slide-fill responses can be huge (80+ slides × multi-line text)
@@ -418,16 +418,17 @@ async def run_generation(db: AsyncSession, presentation_id: int) -> None:
         await db.commit()
 
         try:
-            await redis_manager.publish({
-                "target_type": "user",
-                "user_id": row.created_by_teacher_id,
-                "payload": {
+            # To the whole staff, not only the uploader: the deck has just
+            # appeared in the school library that every teacher browses.
+            await publish_to_users(
+                await school_staff_ids(db, school_id=row.school_id),
+                {
                     "event": "presentation_ready",
                     "presentation_id": row.id,
                     "total_slides": row.total_slides,
                     "recommended_periods": row.recommended_periods,
                 },
-            })
+            )
         except Exception as exc:
             logger.warning("presentation_ready publish failed: %s", exc)
 

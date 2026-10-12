@@ -261,7 +261,11 @@ class _RealtimeSyncState extends ConsumerState<RealtimeSync>
       case 'grade_deleted':
         ref.invalidate(teacherGradesProvider);
         break;
+      // `presentation_updated`: a colleague adopted, edited, logged a period
+      // against, took off their dashboard or deleted a deck. The library and
+      // the progress cards are school-wide, so this screen is showing it too.
       case 'presentation_ready':
+      case 'presentation_updated':
         ref.invalidate(presentationListProvider);
         ref.invalidate(presentationDetailProvider);
         ref.invalidate(presentationLibraryProvider);
