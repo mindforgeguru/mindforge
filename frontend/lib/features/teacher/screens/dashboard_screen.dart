@@ -1505,6 +1505,22 @@ class _GradeAnalysisChartState extends State<_GradeAnalysisChart> {
 // (dashed grey line) sections. Each milestone is tappable and navigates
 // to the relevant screen. Backed by GET /teacher/today-workflow.
 
+/// Whether today's workflow is a whole-school holiday: among the grades that
+/// have today's timetable filled in, every one is flagged as a holiday.
+///
+/// Read off the grade rows, not the dashboard summary — marking a holiday
+/// strips the teacher_id off slots, so `my_timetable` cannot see it. A
+/// workflow with no grades, or none with a timetable yet, is a day nobody has
+/// set up, which is not a holiday.
+bool workflowShowsHoliday(Map<String, dynamic> data) {
+  final grades =
+      (data['grades'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+  final gradesWithTimetable =
+      grades.where((g) => g['timetable_created'] == true).toList();
+  return gradesWithTimetable.isNotEmpty &&
+      gradesWithTimetable.every((g) => g['is_holiday'] == true);
+}
+
 class _TodayWorkflowCard extends StatelessWidget {
   final Map<String, dynamic> data;
   const _TodayWorkflowCard({required this.data});
@@ -1528,16 +1544,7 @@ class _TodayWorkflowCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final grades = (data['grades'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-    // Whole-school holiday: among the grades that have today's timetable
-    // filled in, every one is a holiday. (Grades with no timetable yet are
-    // "not created", not a contradiction.) Marking a holiday strips the
-    // teacher_id off slots, so the dashboard summary's my_timetable can't see
-    // it — this grade-wide workflow data is the reliable holiday signal.
-    final gradesWithTimetable =
-        grades.where((g) => g['timetable_created'] == true).toList();
-    final isHoliday = data['is_holiday_for_teacher'] == true ||
-        (gradesWithTimetable.isNotEmpty &&
-            gradesWithTimetable.every((g) => g['is_holiday'] == true));
+    final isHoliday = workflowShowsHoliday(data);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
@@ -1570,8 +1577,10 @@ class _TodayWorkflowCard extends StatelessWidget {
                 ],
               ),
             const SizedBox(height: 4),
-            if (isHoliday || grades.isEmpty)
+            if (isHoliday)
               const HolidayBanner(margin: EdgeInsets.only(top: 4))
+            else if (grades.isEmpty)
+              const _NoClassesYet()
             else
               ...grades.map((g) => _GradeRoadRow(
                     grade: g,
@@ -1597,6 +1606,38 @@ class _TodayWorkflowCard extends StatelessWidget {
     );
   }
 
+}
+
+/// Shown in place of the roads when the school has no grade to draw one for:
+/// no timetable and no students yet.
+class _NoClassesYet extends StatelessWidget {
+  const _NoClassesYet();
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => context.go('${RouteNames.teacherDashboard}/timetable'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Row(
+          children: [
+            const Icon(Icons.event_note_outlined,
+                size: 22, color: AppColors.textMuted),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "No classes set up yet. Add today's timetable to get started.",
+                style: GoogleFonts.poppins(
+                    fontSize: 12.5, color: AppColors.textSecondary),
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _GradePill extends StatelessWidget {

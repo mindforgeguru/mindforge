@@ -2068,7 +2068,8 @@ async def get_today_workflow(
 
     Grades shown = grades that have any TimetableSlot in the past 14
     days (any teacher). This way every teacher sees the same set of
-    grades and can act on each step.
+    grades and can act on each step. When that is nobody, the grades
+    that have students are shown instead, each waiting on its timetable.
 
     `is_holiday`: only True when today's timetable for the grade has
     been created and every slot is flagged as a holiday — a grade with
@@ -2105,6 +2106,25 @@ async def get_today_workflow(
     recent_grades = {row[0] for row in recent_grade_rows}
 
     grades_to_show = sorted(set(today_by_grade.keys()) | recent_grades)
+
+    # A school with no timetable today or recently — a new school, or one
+    # back from a long break — would otherwise have no road at all, and so
+    # nothing offering the step that ends that state. Fall back to the
+    # grades that have students in them.
+    if not grades_to_show:
+        enrolled_rows = (await db.execute(
+            select(StudentProfile.grade)
+            .join(User, User.id == StudentProfile.user_id)
+            .where(
+                User.school_id == current_teacher.school_id,
+                User.role == UserRole.student,
+                User.is_active == True,  # noqa: E712
+                User.is_approved == True,  # noqa: E712
+                User.deleted_at.is_(None),
+            )
+            .distinct()
+        )).all()
+        grades_to_show = sorted({row[0] for row in enrolled_rows})
 
     grade_results = []
     for grade in grades_to_show:
@@ -2215,9 +2235,13 @@ async def get_today_workflow(
             "next_step": next_step,
         })
 
+    # A holiday is something declared: every grade whose timetable exists
+    # today is flagged as one. No timetable at all is not a holiday.
+    timetabled = [g for g in grade_results if g["timetable_created"]]
     return {
         "date": today.isoformat(),
-        "is_holiday_for_teacher": len(grade_results) == 0,
+        "is_holiday_for_teacher": bool(timetabled)
+        and all(g["is_holiday"] for g in timetabled),
         "grades": grade_results,
     }
 
