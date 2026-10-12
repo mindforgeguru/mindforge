@@ -30,13 +30,14 @@
 | Backend tenant-isolation integration | `backend/tests_integration/test_tenant_isolation.py` + `…_finance.py` (32) | Router-level cross-school scoping against a live stack | No — skips cleanly when the stack is down |
 | Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (13) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools; a fee payment recorded, corrected or deleted reaches the student and the parent and nobody else | No — same skip |
 | Backend re-registration integration | `backend/tests_integration/test_reregister_after_removal.py` (7) | After a year close, and after an admin revoke, the removed account's username, phone and parent username can be registered again and log in; a live username or phone is still refused | No — same skip |
+| Backend presentation realtime integration | `backend/tests_integration/test_presentation_realtime.py` (6) | A colleague's socket hears when a deck is uploaded, adopted, edited, taken off a dashboard or deleted; another school hears none of it. Decks are `.pptx`, so no AI call | No — same skip |
 | Backend daily-workflow integration | `backend/tests_integration/test_today_workflow.py` (7) | A school with no timetable is offered the timetable step for each grade that has students, and is not called a holiday; the road from timetable to homework on a working day; one grade on holiday against every grade on holiday | No — same skip |
 | Backend theme-lock integration | `backend/tests_integration/test_xp_theme_lock.py` (2) | A theme is dropped when a deduction takes the student below the level that unlocks it, and kept while the level still does | No — same skip |
 | API integration / probes | `tests/test_api.py`, `tests/security_test.py`, `tests/security_test_extended.py`, `tests/performance_test.py` | Live endpoint smoke, security probe matrix, latency | **No — the CI job is unreachable, see §10 item 3** |
 | Auth / session live QA | `tests/auth_session_qa.py` (63 checks) | Registration → approval → login, lockout and rate limit, refresh rotation, logout, deactivation, MPIN-reset revocation, self-delete and its cascade — over HTTP against the local stack, reading Postgres and Redis for what the API cannot show | No — a script, not pytest; local stack only |
 | Backend log-redaction tests | `backend/tests/test_log_redaction.py` (6) | The token in a WebSocket handshake path never reaches uvicorn's log; lines without one are untouched | **Yes** (glob) |
 | Flutter unit tests | `frontend/test/unit/` (78, 6 files) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, models, admin setup status, owner API error messages | **Yes** |
-| Flutter widget tests | `frontend/test/widget/` (11 files; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day, and `timetable_default_periods_test.dart` on 2026-10-11, and `student_grade_provider_test.dart` and `teacher_workflow_holiday_test.dart` on 2026-10-12 | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
+| Flutter widget tests | `frontend/test/widget/` (13 files — `presentations_empty_state_test.dart` added 2026-10-12; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day, and `timetable_default_periods_test.dart` on 2026-10-11, and `student_grade_provider_test.dart` and `teacher_workflow_holiday_test.dart` on 2026-10-12 | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
 | Flutter integration tests | `frontend/integration_test/` — `app_test.dart` (5), `all_screens_test.dart` (29) | Auth flows; every screen for every role | No — needs a simulator **and** `--dart-define=LOCAL_DEV=true`, or it hits production |
 | Local stack bootstrap | `docker-compose.yml` + `docker-compose.local.yml`; test accounts documented in `docs/local-test-accounts.md` | Spin up postgres/redis/minio/backend for integration testing | Manual |
 
@@ -67,7 +68,7 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-10-12 — backend unit, backend integration and Flutter unit/widget re-run after today's five fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
+**Date:** 2026-10-12 — backend unit, backend integration and Flutter unit/widget re-run after today's seven fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
@@ -75,7 +76,7 @@ flutter test integration_test/
 
 ### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-12: 431 PASS**
 
-2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests. Re-run the same way after the afternoon's workflow fix: 431.
+2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests. Re-run the same way after the afternoon's workflow fix, and again after the presentation fixes: 431 each time.
 
 2026-10-11: the same way as yesterday — every file in its own process inside `mindforge_backend`, **392 passed**, plus the container's known gaps on the host: `test_prod_guard.py` 24, `test_secrets_gitignore.py` 12, and the 3 host-only cases in `test_subjects.py` / `test_server_header.py`. **431 passed, 0 failed** across 39 files (+1 in `test_schema_invariants.py`).
 
@@ -96,7 +97,7 @@ Previous run (2026-09-13):
 
 Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-### 2.2 Backend integration (live local stack) — **re-run 2026-10-12 on the fixed code: 100/100 PASS in 356 s** (84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`, +7 `test_today_workflow.py`. The table below is the 2026-09-13 breakdown)
+### 2.2 Backend integration (live local stack) — **re-run 2026-10-12 on the fixed code: 106/106 PASS in 406 s** (84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`, +7 `test_today_workflow.py`, +6 `test_presentation_realtime.py`. The table below is the 2026-09-13 breakdown)
 
 > `tests_integration/` reads `../../.env.local`, so it must run **from the host** (`cd backend && python3 -m pytest tests_integration/...`). Inside the container it fails at collection with `FileNotFoundError: /app/tests_integration/../../.env.local`.
 
@@ -113,7 +114,7 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test` (unit + widget, everything) | **PASS — 209/209** (2026-10-12; 201 the day before, +3 `student_grade_provider_test.dart`, +5 `teacher_workflow_holiday_test.dart`; `realtime_sync_test.dart` extended in place) |
+| `flutter test` (unit + widget, everything) | **PASS — 212/212** (2026-10-12; 201 the day before, +3 `student_grade_provider_test.dart`, +5 `teacher_workflow_holiday_test.dart`, +3 `presentations_empty_state_test.dart`; `realtime_sync_test.dart` extended in place) |
 | `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-12, unchanged) |
 | `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-10) |
 | `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-10, 10 m 47 s; no overflow or framework exception in the log) |
@@ -129,7 +130,7 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
 | `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, and §5.5 apart from presentations. Still unticked: the XP card on desktop web, presentations on a screen and the chapter-PDF path, the parent and other-teacher legs of §5.8, push notifications, the web-only rows, most of §5.10 |
+| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, and all of §5.5. Still unticked: the XP card on desktop web, the parent and other-teacher legs of §5.8, push notifications, the web-only rows, most of §5.10 |
 
 ---
 
@@ -327,7 +328,7 @@ Run 2026-10-12 on the simulator and over the API in a school made for it ("QA Wo
 - [x] Pre-fill attendance from previous period — PASS 2026-10-12 (simulator): with period 1 saved with one student absent, period 2 opened unsaved with the same student already absent, and was saved that way. A period that already has its own record shows that record
 - [x] Holiday / no-class day → car advances correctly; whole-school holiday banner shows — PASS 2026-10-12 (simulator): with grade 9 alone on holiday its car skipped Attendance and HW Review to Homework while grade 8 carried on; with every timetabled grade on holiday the roads give way to the "Holiday!" banner. The teacher's banner does not carry the reason the student's does. Homework on a holiday: fixed 2026-10-09, §10 item 18
 - [x] HW review uses most-recent-HW model; tiles color-coded by review status — PASS 2026-10-12 (simulator and API): of two earlier homeworks only the more recent blocked new homework (409; on the phone "Mark yesterday's homework completion before assigning new homework."); another grade was not blocked. The review screen locks a student who was absent today. Once submitted the tile turned from an orange "Pending" to a green "Done", the older one stayed Pending without blocking, and new homework went through
-- [ ] Presentations: upload PDF and `.pptx`, adopt, log a period — *partial 2026-10-10 (API): a ten-slide `.pptx` uploaded READY with 10 slides and 2 recommended periods; a legacy `.ppt` and a non-deck file → 415 with a usable message; period log before adopt → 409; adopt → 201; period log → 201. **The chapter-PDF path (AI writes the deck) was not run**, and none of it on a screen*
+- [x] Presentations: upload PDF and `.pptx`, adopt, log a period — *partial 2026-10-10 (API): a ten-slide `.pptx` uploaded READY with 10 slides and 2 recommended periods; a legacy `.ppt` and a non-deck file → 415 with a usable message; period log before adopt → 409; adopt → 201; period log → 201. **The chapter-PDF path (AI writes the deck) was not run**, and none of it on a screen* **Completed 2026-10-12:** a two-page chapter PDF (own text) was accepted (202), and 73 s later was a READY deck of 30 slides over 3 periods, faithful to the source; a non-PDF, an empty file, a bad grade and a blank chapter name were refused, as were a student and a parent. On the simulator: the deck in the library, Adopt for my class, the progress card and slides with speaker notes, Log this period (10 of 30) and the progress bar moving. Over the API, 32 more checks: per-teacher progress and cards, slide edits with who made them, log correction, clamping at the last slide, completion leaving the dashboard and staying in the library, removal, deletion, and 404 for another school throughout. **Two defects, both fixed, §9.** Picking a file on the phone was not driven — uploads went through the API
 - [x] Auto-quiz appears in the Online Tests tab as "Generating", then flips to ready/failed — PASS 2026-10-10 (API): `generating` in the teacher's test list immediately after the period log, `ready` 9 s later with 5 questions, unpublished until the teacher publishes; once published it showed on the student's Tests tab on the simulator with a 48-hour window. Generated by Gemini — the local stack has no Anthropic key, so the Claude leg cannot be exercised here
 - [x] Retry on a failed auto-quiz card works — **was FAIL, fixed 2026-10-10**: the retry was sent (202) but when it failed again the Retry button never came back. Now PASS on the simulator. §9
 - [x] Broadcasts are shared school-wide across teachers — PASS 2026-10-12: a school-wide and a grade-9 broadcast sent by one teacher both appeared, live and marked unread, on the other teacher's open dashboard, and the two teachers' lists are identical. The grade-9 one reached the grade-9 student and not the grade-8 one; a teacher in another school saw neither
@@ -357,7 +358,7 @@ The WebSocket fan-out was rewritten on 2026-07-24. **First manual pass 2026-10-0
 - [ ] Teacher sends a school-wide broadcast → appears live on student / parent / other-teacher **Broadcasts screen** without navigating or refreshing — *partial 2026-10-12: the other-teacher leg, on the dashboard's Announcements card (simulator); student and parent legs not watched live*
 - [x] Teacher sends a **grade-targeted** broadcast → reaches that grade's students + parents, and all teachers — PASS 2026-10-09 for the student leg: grade-8 broadcast from `chinmay_sir` appeared on `dummy8`'s open Broadcasts screen in ~2 s, no refresh (web, two origins). Parent and other-teacher legs not checked
 - [x] Teacher assigns homework → appears live on the student/parent homework screen **and** on other teachers' dashboards — PASS 2026-10-10 for the student leg, on a device: with `dummy8`'s Homework screen open on the simulator, a grade-8 homework assigned through the API appeared at the top within 3 s, no refresh. Done on a no-class Saturday, so it also confirms the §10 item 18 fix. Parent and other-teacher legs not checked
-- [ ] Auto-quiz from a presentation period log → appears in the teacher Online Tests list immediately, without pull-to-refresh
+- [x] Auto-quiz from a presentation period log → appears in the teacher Online Tests list immediately, without pull-to-refresh — PASS 2026-10-12 (simulator): the card was there as "Generating quiz…" on opening Online Tests straight after the log, and turned into a ready quiz with a Publish button about ten seconds later, untouched
 - [x] Marking homework completion updates the student's Pending/Complete pill live — PASS 2026-10-10 on the simulator: homework 75 flipped Pending → Complete within 3 s of the teacher's `PUT …/completions` (which returned 200 with `attendance_required: false` on a no-class day)
 - [ ] Attendance / timetable / grade events refresh the relevant screen live
 - [x] Events do **not** leak across schools (two schools, two browsers) — PASS 2026-10-09: a Hansel & Gretel grade-8 broadcast did not reach Riverdale's grade-8 `river_kid` (screen unchanged; backend log shows no refetch by user 42 after the `POST … 201`). Riverdale's list also never showed the Hansel broadcast at rest
@@ -466,6 +467,16 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-12 (later — presentations: the chapter-PDF path, on a screen, and two fixes)
+- **The last row of §5.5:** a chapter PDF turned into a deck by the AI, then adopted, taught and logged on the simulator, and the rules around it over the API (39 checks in all). In the same throwaway school as the workflow pass.
+- **Found and fixed — an uploaded deck looked lost.** The Auto Presentations screen lists only decks a teacher has adopted; a newly generated one waits in the school library. So the teacher who had just uploaded a chapter came back to "No presentations yet. Upload a chapter PDF…" — an invitation to upload it again, which costs a generation each time. With decks in the library the screen now says "Nothing in progress. N presentations in the school library…" with a Browse library button that opens the library's Presentations tab. `test/widget/presentations_empty_state_test.dart` (3). Seen on the simulator before and after.
+- **Found and fixed — presentation changes reached nobody else.** The library and the dashboard's progress cards are school-wide, but the server's only event was "ready", sent to the uploader alone. A deck uploaded, adopted, edited, logged against, taken off a dashboard or deleted by one teacher left every other teacher's screen unchanged until refreshed — first noticed as a progress card reading 10 / 30 for a teacher the server had at 0 / 30. All of those now tell the school's staff, and "ready" goes to all of them. `tests_integration/test_presentation_realtime.py` (6; 5 red first — the sixth is the no-leak check) and a case in `realtime_sync_test.dart`, red first. Live afterwards: the admin adopting from another session put a second card on the teacher's open dashboard, and deleting the deck cleared it. Logging a period is covered by the code and the client test only: an automated test of it would buy an AI call on every run.
+- **AI calls made:** seven requests to Gemini — five for the deck, one for each of two quizzes. The local stack has no Anthropic key, so the Claude leg was again not exercised.
+- **Suites after both:** backend unit **431**; `tests_integration/` **106/106**; Flutter **212/212**, analyzer unchanged. Flutter integration on the simulator and the security probe suites not re-run.
+- **Production:** `main` sends "ready" to the uploader only and has the same empty-state wording (read from git, not checked against production).
+- **Seen, not changed** — §10 item 28.
+- **Housekeeping:** the deck and both quizzes were deleted; the school is suspended again; the simulator is logged out.
 
 ### 2026-10-12 (afternoon — the teacher's day: workflow road, attendance, homework review, broadcasts — one fix)
 - **§5.5 apart from presentations:** a school made for it, taken through a whole day on the simulator and over the API. Attendance pre-fill, the homework review gate, the colour-coded tiles and shared broadcasts all work as designed; 21 API checks beside the screens.
@@ -849,6 +860,15 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
     - *The "must review first" message appears behind the Assign dialog,* dimmed, while the dialog stays open.
     - *On a holiday the teacher's subject chips disappear from the welcome card,* and the teacher's banner shows no reason.
     - *The Homework Review screen offers Grade 10 in a school with nobody in it.*
+
+28. **Presentations — seen 2026-10-12, not changed.**
+    - *A short chapter is stretched.* Two pages became 30 slides over three periods; the first eight slides carry one line each.
+    - *The auto-quiz has 5 questions;* the code's own description says 10.
+    - *A quiz is not revised when its period log is corrected* (by design: "slides 1-10" stayed after the log became 12), *and quizzes outlive a deleted deck.* The uploader's attempt to delete the quiz from the other teacher's period was refused (404).
+    - *A finished deck still accepts a period log,* covering no slides.
+    - *A refused upload still counts against the hourly generation limit* (20): the limit is checked before the file is.
+    - *The "Presentations" tab label is cut off* on the phone ("Presentatio").
+    - *The existing integration suite reaches Gemini on every run:* during a run the backend sent eight 45-byte old-test uploads to Gemini, each rejected (400, "no pages") — from the old-test upload suites, by the storage paths in the log; the test files were not read.
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.
