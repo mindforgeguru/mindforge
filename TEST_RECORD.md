@@ -31,13 +31,14 @@
 | Backend realtime delivery integration | `backend/tests_integration/test_realtime_delivery.py` (19) | Real WebSocket: grade broadcast reaches students + staff, `homework_added` reaches both, and neither a school-wide broadcast nor a timetable-config change crosses schools; a fee payment recorded, corrected or deleted reaches the student and the parent and nobody else; a deleted homework, a "no homework" marker and a deleted timetable day are announced like the additions are | No — same skip |
 | Backend re-registration integration | `backend/tests_integration/test_reregister_after_removal.py` (7) | After a year close, and after an admin revoke, the removed account's username, phone and parent username can be registered again and log in; a live username or phone is still refused | No — same skip |
 | Backend admin user-filter integration | `backend/tests_integration/test_admin_user_filters.py` (5) | The admin's role and grade filters, that no filter reaches another school, and that an unknown role is a 422 | No — same skip |
+| Backend student profile-picture integration | `backend/tests_integration/test_student_profile_picture.py` (2) | A student's upload is a 200, both rows and `/auth/me` carry the URL and the image is served; a second upload replaces the first and removes the old file | No — same skip |
 | Backend presentation realtime integration | `backend/tests_integration/test_presentation_realtime.py` (6) | A colleague's socket hears when a deck is uploaded, adopted, edited, taken off a dashboard or deleted; another school hears none of it. Decks are `.pptx`, so no AI call | No — same skip |
 | Backend daily-workflow integration | `backend/tests_integration/test_today_workflow.py` (7) | A school with no timetable is offered the timetable step for each grade that has students, and is not called a holiday; the road from timetable to homework on a working day; one grade on holiday against every grade on holiday | No — same skip |
 | Backend theme-lock integration | `backend/tests_integration/test_xp_theme_lock.py` (2) | A theme is dropped when a deduction takes the student below the level that unlocks it, and kept while the level still does | No — same skip |
 | API integration / probes | `tests/test_api.py`, `tests/security_test.py`, `tests/security_test_extended.py`, `tests/performance_test.py` | Live endpoint smoke, security probe matrix, latency | **No — the CI job is unreachable, see §10 item 3** |
 | Auth / session live QA | `tests/auth_session_qa.py` (63 checks) | Registration → approval → login, lockout and rate limit, refresh rotation, logout, deactivation, MPIN-reset revocation, self-delete and its cascade — over HTTP against the local stack, reading Postgres and Redis for what the API cannot show | No — a script, not pytest; local stack only |
 | Backend log-redaction tests | `backend/tests/test_log_redaction.py` (6) | The token in a WebSocket handshake path never reaches uvicorn's log; lines without one are untouched | **Yes** (glob) |
-| Flutter unit tests | `frontend/test/unit/` (78, 6 files) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, models, admin setup status, owner API error messages | **Yes** |
+| Flutter unit tests | `frontend/test/unit/` (78, 6 files; more since — see the next row and §9) | `AuthState`, `AuthNotifier`, `ApiClient.logoutOnServer`, the token-refresh interceptor (`api_client_token_refresh_test.dart`, 2026-10-12), models, admin setup status, owner API error messages | **Yes** |
 | Flutter widget tests | `frontend/test/widget/` (13 files — `presentations_empty_state_test.dart` added 2026-10-12; 2026-10-10 added `delete_account_dialog_test.dart` and `report_problem_dialog_test.dart`, and label cases to `setup_road_card_test.dart`). `test/unit/` gained `websocket_reconnect_test.dart` the same day, and `timetable_default_periods_test.dart` on 2026-10-11, and `student_grade_provider_test.dart` and `teacher_workflow_holiday_test.dart` on 2026-10-12 | `BadgeDot`, `LoginScreen`, shimmer skeletons, setup road card, **`RealtimeSync` event→cache mapping** | **Yes** |
 | Flutter integration tests | `frontend/integration_test/` — `app_test.dart` (5), `all_screens_test.dart` (29) | Auth flows; every screen for every role | No — needs a simulator **and** `--dart-define=LOCAL_DEV=true`, or it hits production |
 | Local stack bootstrap | `docker-compose.yml` + `docker-compose.local.yml`; test accounts documented in `docs/local-test-accounts.md` | Spin up postgres/redis/minio/backend for integration testing | Manual |
@@ -48,7 +49,7 @@
 # Backend — run each file in its own process (see §10 item 4 for why)
 cd backend
 for f in tests/test_*.py; do python3 -m pytest "$f" -q; done
-# ...or the whole suite in one session, which also passes today:
+# ...or the whole suite in one session, which also passes (again since 2026-10-13, §9):
 python3 -m pytest tests -q
 
 # Backend integration (needs the local stack up first)
@@ -69,13 +70,13 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-10-12 — backend unit, backend integration and Flutter unit/widget re-run after today's nine fixes. The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
+**Date:** 2026-10-13 — backend unit, backend integration and Flutter unit/widget re-run after the profile-picture fix (§9). Before that, 2026-10-12 — the same three re-run after that day's ten fixes (the last touched the Flutter client only, so only the Flutter suite was run again after it). The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
 > **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import (as of 2026-10-09 also `test_ai_fallback_chain.py`, `test_old_test_upload.py` and `test_subjects.py` — the host's `google-genai` lacks `types.GenerateContentConfig`) — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-12: 431 PASS**
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-13: 431 PASS, and 431 in one session**
 
 2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests. Re-run the same way after the afternoon's workflow fix, again after the presentation fixes, and again after the realtime and filter fixes: 431 each time.
 
@@ -98,7 +99,7 @@ Previous run (2026-09-13):
 
 Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-### 2.2 Backend integration (live local stack) — **re-run 2026-10-12 on the fixed code: 117/117 PASS in 452 s** (84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`, +7 `test_today_workflow.py`, +6 `test_presentation_realtime.py`, +6 deletion cases in `test_realtime_delivery.py`, +5 `test_admin_user_filters.py`. The table below is the 2026-09-13 breakdown)
+### 2.2 Backend integration (live local stack) — **re-run 2026-10-13 on the fixed code: 119/119 PASS in 452 s** (117 on 2026-10-12, +2 `test_student_profile_picture.py`; 84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`, +7 `test_today_workflow.py`, +6 `test_presentation_realtime.py`, +6 deletion cases in `test_realtime_delivery.py`, +5 `test_admin_user_filters.py`. The table below is the 2026-09-13 breakdown)
 
 > `tests_integration/` reads `../../.env.local`, so it must run **from the host** (`cd backend && python3 -m pytest tests_integration/...`). Inside the container it fails at collection with `FileNotFoundError: /app/tests_integration/../../.env.local`.
 
@@ -115,7 +116,7 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test` (unit + widget, everything) | **PASS — 212/212** (2026-10-12; 201 the day before, +3 `student_grade_provider_test.dart`, +5 `teacher_workflow_holiday_test.dart`, +3 `presentations_empty_state_test.dart`; `realtime_sync_test.dart` extended in place) |
+| `flutter test` (unit + widget, everything) | **PASS — 216/216** (2026-10-12; 201 the day before, +3 `student_grade_provider_test.dart`, +5 `teacher_workflow_holiday_test.dart`, +3 `presentations_empty_state_test.dart`, +4 `api_client_token_refresh_test.dart`; `realtime_sync_test.dart` extended in place) |
 | `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-12, unchanged) |
 | `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-10) |
 | `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-10, 10 m 47 s; no overflow or framework exception in the log) |
@@ -131,7 +132,7 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
 | `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
 | `pip-audit` | Not run this session |
-| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, all of §5.5, the last row of §5.7 and the rest of §5.8. Still unticked: the XP card on desktop web, push notifications, the web-only rows, most of §5.10 |
+| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, all of §5.5, the last row of §5.7, the rest of §5.8, token expiry in §5.1 and the device rows of §5.10. 2026-10-13: the wide registration form, the XP card on desktop web and the open rows of §5.9. Still unticked: analytics events and push notifications (neither can be done locally), and the release-build sections §6 and §7 |
 
 ---
 
@@ -273,7 +274,7 @@ Run end-to-end before every release build. Tick PASS/FAIL with date.
 - [x] **Register student** → pending screen — PASS 2026-10-10 (API: 201, `is_approved=false`; screen not viewed)
 - [x] **Register teacher** → pending screen — PASS 2026-10-10 (API: 201, `is_approved=false`; screen not viewed)
 - [x] **Register parent (auto-created from student registration)** → exists in DB — PASS 2026-10-10 (pending parent row in the same school, linked from the student profile; logs in with its own MPIN once approved)
-- [ ] **Register with Phone + Email on the wide/web form** → both persist (fixed 2026-07-22) — *partial 2026-10-10: both persist through the API; the web form itself not driven*
+- [x] **Register with Phone + Email on the wide/web form** → both persist (fixed 2026-07-22) — PASS 2026-10-13: a student registered through the wide form of the web build at 1280 px; "Registration submitted! Await admin approval.", and the row holds both the phone and the email (read from Postgres). Through the API on 2026-10-10
 - [x] **Login while pending** → "pending approval" message — PASS 2026-10-10 (403 "Your account is pending admin approval. Please wait.")
 - [x] **Admin approves user** → user can now log in — PASS 2026-10-10
 - [x] **Login with correct MPIN** → correct dashboard for role — PASS 2026-10-09 (web: teacher `chinmay_sir`, students `dummy8` + `river_kid`; sim: admin, teacher, student, parent via `all_screens_test`)
@@ -282,7 +283,7 @@ Run end-to-end before every release build. Tick PASS/FAIL with date.
 - [x] **Login 4 wrong, then correct** → lockout counter clears — PASS 2026-10-10 (counter read 4 in Redis, then gone). *Was "5 wrong": the fifth failure is the one that locks, so a correct MPIN after it is refused for 15 minutes*
 - [x] **Weak/blocklisted MPIN rejected at set/change time** (added 2026-07-07) — PASS 2026-10-10 at register and at admin reset (422); self-service change not driven (covered by unit tests)
 - [x] **Logout** → access + refresh JTIs blacklisted, FCM cleared, secure storage cleared — PASS 2026-10-10: server side over the API (access 401, refresh 401, `fcm_token` NULL); on the simulator, Log Out (with its confirm prompt) returns to the login screen for parent and teacher, and relaunching the app stays logged out. Secure storage not inspected directly
-- [ ] **Access token expiry (~60 min)** → Dio interceptor auto-refreshes
+- [x] **Access token expiry (~60 min)** → Dio interceptor auto-refreshes — PASS 2026-10-12 (simulator; the local backend's access-token lifetime was set to one minute for the login and put back): the first request after expiry got 401, the app made one `POST /auth/refresh` (200) and repeated the request (200), and the student stayed signed in with the screen filled. Repeated after a server outage, with the same result, and the socket reconnected once with the new token. Several requests expiring together share one refresh — unit test. **A refresh that could not reach the server signed the user out — fixed, §9**
 - [x] **Force-revoked token** → next protected call 401 — PASS 2026-10-10 (admin MPIN reset; deactivation, **after the fix in §9**; account deletion)
 
 ### 5.2 Multi-tenancy & owner *(feature landed 2026-07-22; full pass 2026-10-09)*
@@ -314,7 +315,7 @@ Run 2026-10-11 on the simulator against a school created for it ("QA Setup 97622
 - [x] Test review matches the per-student option shuffle — PASS 2026-10-10 (API): two students got different question and option orders; answering by the labels as shown scored 6/6; the review returns the same option mapping the student saw, with the correct-answer label remapped to it. The review lists questions in the original order, not the shuffled one
 - [x] Homework list + submission; completion status auto-refreshes — PASS 2026-10-10 (simulator, §5.8: list shown, pill flipped live). There is no student-side "submission": completion is recorded by the teacher
 - [x] Fees screen — PASS 2026-10-12 (simulator and API, a throwaway grade-8 student). Summary: grade, year, fee breakdown, paid and balance, all matching the admin's structure; Pay: the balance and the school's three payment options. A payment recorded by the admin showed after pull-to-refresh with the right totals. **It did not show on the open screen until refreshed — fixed, §9**; after the fix a second payment appeared within 4 s, untouched
-- [ ] XP card visible (mobile **and** desktop web) — *partial 2026-10-10: visible on the simulator dashboard ("Novice I — 85 / 283 XP"), and on 2026-10-12 followed live through a level-up; desktop web not checked*
+- [x] XP card visible (mobile **and** desktop web) — PASS: on the simulator dashboard 2026-10-10 ("Novice I — 85 / 283 XP"), followed live through a level-up 2026-10-12, and on the web build at 1280 px 2026-10-13 ("Novice I — 105 / 283 XP", under the welcome card)
 - [x] Leaderboard; theme unlock at level threshold — PASS 2026-10-12. API, 28 checks: 1117 XP is level 4 with Tide Breeze locked and refused (400), 1118 is level 5 and it can be selected; only an admin of the same school can adjust XP; the grade board holds the student's own grade only, ranked by XP, without deactivated or removed students; the school board spans grades; another school's board shares no names. Simulator: the level-up dialog arrived live, the selected theme recoloured the app at once, and Class / Points Table / All match the API (the points table matches what the server awards). **Two defects, both fixed, §9:** the picker kept showing the theme locked after the level-up, and a student taken back below level 5 kept wearing it
 - [x] Holiday banner shows on a holiday — PASS 2026-10-12 (simulator): with grade 8's slots for the day all flagged holiday, the dashboard shows "Holiday!" with the reason given ("QA Founders Day") in place of the timetable. With no slots at all it says "No classes today"
 - [x] Profile → Privacy & Data — PASS 2026-10-10 (simulator): the student profile offers **no** delete, matching the policy (a parent or admin removes a student). The "Privacy & Data" heading stood over an empty section — fixed same day, §9
@@ -367,7 +368,7 @@ The WebSocket fan-out was rewritten on 2026-07-24. **First manual pass 2026-10-0
 
 ### 5.9 Web build QA
 
-Last executed **2026-05-19** on Flutter 3.41.7 / Chrome against the local stack. **Not re-run since**, and the web build has changed materially (sidebar nav, Firebase web config, favicon/PWA icons, CSP `blob:` for avatar upload). Treat the ticks below as historical.
+Last executed in full **2026-05-19** on Flutter 3.41.7 / Chrome against the local stack; treat the undated ticks below as historical. **2026-10-13:** the rows added since (Firebase, avatar upload, icons) and the two web rows of §5.1 and §5.4 were run on a release web build (`flutter build web --release --dart-define=LOCAL_DEV=true`, served on `:8080`, 1280 × 800) — and along the way a session with an expired token restored itself, logout emptied localStorage, and the socket connected after the refresh.
 
 - [x] Debug build (`flutter run -d chrome --web-port=5001`) loads — PASS (2026-05-19)
 - [x] CORS preflight from `http://localhost:5001` returns 200 — PASS (2026-05-19)
@@ -379,21 +380,21 @@ Last executed **2026-05-19** on Flutter 3.41.7 / Chrome against the local stack.
 - [x] WebSocket upgrades to 101 and pushes realtime messages — PASS (2026-05-19)
 - [x] Release bundle sanity check via static server — PASS (2026-05-19)
 - [x] Deep-route fallback to `index.html` — PASS (2026-05-19)
-- [ ] **Firebase on web (FCM/Analytics/Crashlytics)** — was FAIL; **config added 2026-06-30**, re-test needed
+- [x] **Firebase on web (FCM/Analytics/Crashlytics)** — PASS 2026-10-13 for what the web build is meant to do: `firebase_core`, `firebase_analytics` and `firebase_messaging` initialise with no console error and no CSP violation. Nothing more happens by design — `Analytics`, `CrashReporter` and `NotificationService` all return early on web, so the web build sends no analytics, no crash reports and receives no push (§10 item 31)
 - [x] Left sidebar nav renders and navigates on desktop widths (new) — PASS 2026-10-09 (student + teacher, 800 px)
-- [ ] Avatar upload works through the CSP (`blob:` in `connect-src`, added 2026-07-03)
+- [x] Avatar upload works through the CSP (`blob:` in `connect-src`, added 2026-07-03) — PASS 2026-10-13 after a fix: the picked file is read and posted with no CSP violation, "Profile picture updated!", and the new picture shows at once. **The student's upload was a 500 on every platform — fixed, §9.** The browser's file chooser was not opened by hand: the page was handed a generated PNG at the point the picker asks for one, and everything after that is the app's own code
 - [x] School logo + avatars **display** on a local web build — PASS 2026-10-09 after adding the local API origins to `img-src` (was FAIL: blocked by CSP, header fell back to the MindForge mark)
-- [ ] MindForge favicon + PWA icons show (new)
+- [x] MindForge favicon + PWA icons show (new) — PASS 2026-10-13: the 32 px favicon and the four manifest icons are served as PNGs and are the MF mark. **The manifest and the page description still carried Flutter's placeholders — fixed, §9.** The two "maskable" icons are byte-for-byte the ordinary ones (§10 item 31). Installing the PWA was not tried
 
 ### 5.10 Cross-cutting
 
-- [ ] Pull-to-refresh on every list screen
-- [ ] Error states show `ErrorView` with retry
-- [ ] Loading states show shimmer skeletons
+- [x] Pull-to-refresh on every list screen — PASS 2026-10-12: every screen file under `features/` has a refresh control except login, two-factor setup, the splash, the logo picker and the test in progress, none of which is a list (read from the code). Pulled on the simulator during the last four passes on the student, teacher and parent dashboards, Fees and the homework list, each refetching; not pulled on every screen
+- [x] Error states show `ErrorView` with retry — PASS 2026-10-12 (simulator, backend stopped): Grades, Tests › Completed and Fees each ended on "No internet connection. Please check your network and try again." with a Try Again button, about eight seconds in (the app retries the connection three times first). With the backend back, Try Again filled the screen. Screens whose data was already loaded kept showing it. In the code 43 error handlers use `ErrorView`; 31 dashboard cards show nothing on error, and 6 show a line of text
+- [x] Loading states show shimmer skeletons — PASS 2026-10-12 for the list screens (Tests › Completed seen on the simulator; 43 loading handlers use a shimmer). **Not everywhere:** 19 screens load behind a spinner — §10 item 30
 - [ ] Push notification received (attendance, test, fees, HW, broadcast) — *not testable locally (2026-10-10): the local backend has no Firebase credentials and no account holds a device token; the simulator is never issued one. Needs a real device against a configured backend*
-- [ ] WebSocket reconnect after backgrounding (no infinite loop)
-- [ ] Desktop web — student XP card visible
-- [ ] All routes emit a `screen_view` analytics event
+- [x] WebSocket reconnect after backgrounding (no infinite loop) — PASS 2026-10-10 (§5.8, and the storm fixed that day); again 2026-10-12: one reconnect after the backend was stopped and started under the running app
+- [x] Desktop web — student XP card visible — PASS 2026-10-13 (§5.4)
+- [ ] All routes emit a `screen_view` analytics event — *not verifiable locally: on the phone it needs Firebase's debug view; on web the observer is a deliberate no-op (2026-10-13)*
 
 ---
 
@@ -468,6 +469,24 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-13 (the web build — one fix that matters, two small ones)
+- **The open web rows:** §5.1's wide registration form, the XP card on desktop web (§5.4, §5.10), and Firebase, avatar upload and icons in §5.9. Release web build against the local stack, 1280 × 800, as a Hansel & Gretel teacher and student.
+- **Found and fixed — a student could not set a profile picture, on any platform.** Change Photo → the server answered 500. The handler fetched the student's profile through the Redis-backed cache, which returns a snapshot (grade, subjects, parent, school) rather than the database row; the snapshot has no picture field, so reading it raised. It has been that way since profiles were cached, and nothing tested it: teachers and admins have their own handlers, which were fine. The handler now loads the row itself and writes the picture to it and to the user. `tests_integration/test_student_profile_picture.py` (2, red first): upload → 200, both rows hold the URL, `/auth/me` returns it, the image is served; a second upload replaces the first and the old file is gone. **Re-checked in the browser:** "Profile picture updated!", the new picture on the profile at once, no CSP violation. `main` has the same bug — §10 item 31.
+- **Fixed — the web app still introduced itself as "A new Flutter project."** That was the page's description (what a search result or a shared link shows) and the PWA manifest's, which also named the app "mindforge", coloured it Flutter's default blue and locked an installed copy to portrait although the web layout is a wide one. Now "MIND FORGE", the login page's own description, the brand navy, a white launch background, any orientation. Read back from the served manifest; not installed as a PWA.
+- **Fixed — three backend unit tests failed when the suite ran in one process.** `test_realtime_fanout.py` patched a Redis manager it had imported itself; in a whole-suite run another file has replaced that module by then, so the service was holding a different object and the patch missed. The fixture now patches the service's own reference. CI was never affected — it runs each file alone — but §1's "one session also passes" had stopped being true. 431 both ways.
+- **Passed first time:** phone and email both saved from the wide form; the XP card on desktop web; favicon and manifest icons; Firebase initialising on web without errors; a session with an expired token restoring itself on load (three refused sockets, one refresh, then connected); logout emptying localStorage.
+- **Suites:** backend unit **431** (per file, and in one session), backend integration **119/119 in 452 s**, Flutter **216/216**, analyzer unchanged (39 infos).
+- **Housekeeping:** the two accounts registered through the form were removed through the admin's reject; no `itest` rows left. `dummy8` keeps the test picture it was given (a navy square with an orange disc).
+
+### 2026-10-12 (token expiry, error and loading states, one fix)
+- **§5.1's token-expiry row and the device rows of §5.10**, on the simulator as a Hansel & Gretel student. The local backend issued one-minute access tokens for two logins (a one-line edit to `config.py`, reverted each time straight after the login; the file is unchanged in git). The backend was also stopped for about a minute to see the error states.
+- **Auto-refresh works.** Expired token → 401 → one refresh → the request repeated → the user never sees it.
+- **Found and fixed — no signal at the wrong moment signed the user out.** When the access token had expired and the refresh call itself could not reach the server — a timeout, a dead connection, a server error — the app treated that as a refused session: it wiped the stored tokens and went to the login screen. A refresh token is good for thirty days; this threw it away for want of coverage. Now only an answer from the server that refuses the session (401, 403) ends it; anything else leaves the session alone and the next request tries again. A refused refresh also fired the sign-out twice; it fires once. `test/unit/api_client_token_refresh_test.dart` (4; these two cases red first), the first tests the interceptor has had. **Not seen on the simulator** — it needs the server to answer 401 and then vanish before the refresh, which the unit test stages and a stopped container does not.
+- **Error and loading states** behave as the checklist says on the list screens; the exceptions are listed in §10 item 30.
+- **Suites:** Flutter **216/216**, analyzer unchanged. No backend change in this pass, so the backend suites stand at 431 and 117/117 from earlier today.
+- **Production:** `main` has the same catch-all in the refresh (read from git). Worth knowing beside the carrier DNS trouble seen before: a user whose network drops the API at the moment their hourly token rolls over is sent back to the MPIN screen.
+- **Housekeeping:** the backend is running with its normal 60-minute tokens (checked with a fresh login); the simulator is logged out.
 
 ### 2026-10-12 (evening — realtime for every role, the admin's user filters, two fixes)
 - **The rest of §5.8 and the last row of §5.7.** Thirteen actions (broadcasts, attendance, timetable, grades, homework, fees, profile edit, XP) were run in the throwaway school with nine sockets listening — every role, two grades, and an outsider — to see who is told what; then the parent's side was watched on the simulator. Every addition reached the right people and nobody in another school.
@@ -885,6 +904,20 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
     - *A profile edit by the admin reaches the student but not the parent.*
     - *The admin dashboard breaks the school name mid-word* ("QA Wor / kflow …").
     - *The admin's Users screen has no bottom bar,* unlike the screens around it.
+
+30. **Loading, errors and tokens — seen 2026-10-12, not changed.**
+    - *Nineteen screens load behind a spinner, not a skeleton:* the student's Grades, Faculty, XP, Leaderboard and test review; the parent's Grades, Faculty and Timetable; the teacher's Database, test detail and presentation view; and most of the admin's screens.
+    - *An unreachable server takes about eight seconds to say so* (three retries at 1, 2 and 4 s), and says "No internet connection" when it is the server that is down.
+    - *Dashboard cards that fail to load show nothing,* not an error.
+    - *The other rows of §5.10 cannot be done here:* analytics events need Firebase's debug view (the route observer is in the code), push needs a real device, and the XP card on desktop web needs the web build on a visible browser.
+
+31. **The web build and profile pictures — seen 2026-10-13, not changed.**
+    - *Production has the student profile-picture bug.* `main` carries the same handler and the same cache class (read from git), so on the live app a student who picks a photo gets "Failed to upload photo" every time, and has since the profile cache went in (`3acd9a5`). The fix is on this branch only.
+    - *Each failed attempt left a file behind:* the picture was written to storage before the handler failed, and nothing pointed at it afterwards. The live bucket will hold one orphan per attempt; the local one has three from today.
+    - *The failure message is the raw exception* — "Failed to upload photo: DioException [bad response]…" — on the student's, teacher's and admin's profile screens alike.
+    - *The web build reports nothing to Firebase.* Analytics, Crashlytics and push each return early on web. That was the right guard while Firebase had no web config; it has had one since 2026-06-30, and the comment in `analytics.dart` still says otherwise. A crash in the web build is invisible today.
+    - *The "maskable" PWA icons are copies of the ordinary ones,* with the mark running close to the edge; a launcher that crops to a circle will clip it.
+    - *The browser pane, when hidden, starves the web build of animation frames* (the splash never finishes). Replacing `requestAnimationFrame` with a timer from the page console gets it moving; that is how today's web rows were driven.
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.
