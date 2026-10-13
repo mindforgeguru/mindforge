@@ -186,7 +186,8 @@ class ApiClient {
                 return handler.next(e);
               }
             }
-            // newToken == null means _executeRefresh already called onUnauthorized
+            // newToken == null: the refresh was refused (session already ended)
+            // or could not be made (session kept). Either way this request fails.
           }
           return handler.next(error);
         },
@@ -218,8 +219,9 @@ class ApiClient {
   // ── Internal refresh helper ───────────────────────────────────────────────
 
   /// Performs a single token refresh. Returns the new access token, or null
-  /// if the refresh token is missing/expired (in which case the user is
-  /// logged out via [onUnauthorized]).
+  /// when there is none to be had: the refresh token is missing or was refused
+  /// (the user is logged out via [onUnauthorized]), or the server could not be
+  /// reached (the session is left as it is).
   Future<String?> _executeRefresh() async {
     try {
       _cachedRefreshToken ??=
@@ -253,11 +255,22 @@ class ApiClient {
         }
       } catch (_) {}
       return newToken;
-    } catch (_) {
-      _cachedToken = null;
-      _cachedRefreshToken = null;
-      try { await _storage.deleteAll(); } catch (_) {}
-      onUnauthorized?.call();
+    } catch (e) {
+      final status = e is DioException ? e.response?.statusCode : null;
+      // 401: the server refused the refresh token. The interceptor's own
+      // branch for the refresh endpoint has already ended the session.
+      if (status == 401) return null;
+      // 403: the account or its school has been shut off.
+      if (status == 403) {
+        _cachedToken = null;
+        _cachedRefreshToken = null;
+        try { await _storage.deleteAll(); } catch (_) {}
+        onUnauthorized?.call();
+        return null;
+      }
+      // Anything else — no connection, a timeout, a server error — says
+      // nothing about the session. Keep the tokens: the refresh token is good
+      // for thirty days, and the next request will try again.
       return null;
     }
   }
