@@ -21,7 +21,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.redis_client import redis_manager
 from app.services import realtime_service
 from app.websockets.manager import WebSocketManager
 
@@ -39,7 +38,12 @@ def captured(monkeypatch):
     async def _publish(event):
         events.append(event)
 
-    monkeypatch.setattr(redis_manager, "publish", _publish, raising=False)
+    # The service's own reference, not a fresh import: in a whole-suite run
+    # another test file may have swapped the redis_client module by the time
+    # this one is imported, and the two would then be different objects.
+    monkeypatch.setattr(
+        realtime_service.redis_manager, "publish", _publish, raising=False
+    )
     return events
 
 
