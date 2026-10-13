@@ -1238,15 +1238,19 @@ async def upload_profile_picture(
     await storage_service.upload_file(bucket, key, file_bytes)
     public_url = storage_service.get_public_url(bucket, key)
 
-    profile = await get_student_profile_cached(current_student.id, db)
+    # The row itself, not get_student_profile_cached: that returns a snapshot
+    # with no picture field, and nothing written to it would be saved.
+    profile_result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == current_student.id)
+    )
+    profile = profile_result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
-    old_url = profile.profile_pic_url
-    profile.profile_pic_url = public_url
-
     user_result = await db.execute(select(User).where(User.id == current_student.id))
     student_user = user_result.scalar_one()
+    old_url = student_user.profile_pic_url or profile.profile_pic_url
+    profile.profile_pic_url = public_url
     student_user.profile_pic_url = public_url
 
     await db.commit()
