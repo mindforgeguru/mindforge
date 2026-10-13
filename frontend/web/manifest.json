@@ -1,12 +1,12 @@
 {
-    "name": "mindforge",
-    "short_name": "mindforge",
+    "name": "MIND FORGE",
+    "short_name": "MIND FORGE",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#FFFFFF",
+    "theme_color": "#1D3557",
+    "description": "AI assisted learning — a complete platform for teachers, students, and parents.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {
