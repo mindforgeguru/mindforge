@@ -76,7 +76,7 @@ flutter test integration_test/
 
 > **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import (as of 2026-10-09 also `test_ai_fallback_chain.py`, `test_old_test_upload.py` and `test_subjects.py` — the host's `google-genai` lacks `types.GenerateContentConfig`) — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-13: 431 PASS, and 431 in one session**
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-13: 437 PASS, and 437 in one session** (431 that morning, +6 `test_sentry_scrub.py`)
 
 2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests. Re-run the same way after the afternoon's workflow fix, again after the presentation fixes, and again after the realtime and filter fixes: 431 each time.
 
@@ -131,8 +131,8 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 |---|---|
 | `tests/performance_test.py` | Not run. Point at the **local** stack only |
 | `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
-| `pip-audit` | Not run this session |
-| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, all of §5.5, the last row of §5.7, the rest of §5.8, token expiry in §5.1 and the device rows of §5.10. 2026-10-13: the wide registration form, the XP card on desktop web and the open rows of §5.9. Still unticked: analytics events and push notifications (neither can be done locally), and the release-build sections §6 and §7 |
+| `pip-audit` | **Run 2026-10-13: no known vulnerabilities**, no ignores — over the 92 packages installed in `mindforge_backend` (`pip freeze`, so transitive ones included), whose 27 pinned versions all match `requirements.txt`. The host's Python 3.14 cannot resolve the file itself (`pymupdf` will not build) |
+| Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, all of §5.5, the last row of §5.7, the rest of §5.8, token expiry in §5.1 and the device rows of §5.10. 2026-10-13: the wide registration form, the XP card on desktop web and the open rows of §5.9. Still unticked: analytics events and push notifications (neither can be done locally), the device rows of §6 (its build rows were read from the APK on 2026-10-13) and §7 |
 
 ---
 
@@ -178,29 +178,29 @@ Every row below was driven over HTTP against the local stack by `tests/auth_sess
 | Wrong MPIN and unknown username answer identically | **PASS** | same status and body |
 | **Suspended school blocks login and refresh; owner exempt** | **PASS** | `test_tenancy_wiring.py` 8/8, re-run today |
 
-### 3.3 Transport security — **partially re-verified 2026-07-24**
+### 3.3 Transport security — **re-verified 2026-10-13**
 
 | Check | Status | Source / evidence |
 |---|---|---|
 | Mobile app CA-pins Let's Encrypt (not leaf-pinned) | **PASS** | `frontend/lib/core/security/ssl_pinning.dart` — pins the issuer org, with known-good leaf fingerprints kept as a fast path / audit trail |
-| Current leaf expiry tracked | **PASS** | Current leaf expires **2026-08-27** (issued 2026-05-29, Let's Encrypt YE1). Under CA pinning a leaf rotation is no longer a release-blocking event |
-| Refresh tokens in OS secure storage | NOT RE-VERIFIED | `flutter_secure_storage` in `auth_provider.dart` |
+| Current leaf expiry tracked | **PASS** (2026-10-13) | The live leaf was issued 2026-09-28 by Let's Encrypt **YR1** and expires **2026-12-27**; it is not one of the three fingerprints listed in `ssl_pinning.dart`, and passes on the issuer rule — the pin's own test run in Dart against the live certificate returns true. The leaf has now rotated at least once under CA pinning without anyone noticing, which was the point |
+| Refresh tokens in OS secure storage | **PASS** (2026-10-13, read from the code) | Both readers of the tokens (`auth_provider.dart`, `api_client.dart`) use `flutter_secure_storage`, with encrypted shared preferences on Android; nothing token- or MPIN-shaped is written to `SharedPreferences`. On web that plugin can only encrypt into localStorage — the browser has no keychain |
 
-### 3.4 Secrets & error reporting — **NOT RE-VERIFIED (last checked 2026-05-19)**
+### 3.4 Secrets & error reporting — **re-verified 2026-10-13, one defect fixed**
 
 | Check | Status | Source |
 |---|---|---|
-| No secrets committed in repo | NOT RE-VERIFIED | `.env` / `.env.local` gitignored |
-| Sentry scrubs MPIN/password/token/cookie keys | NOT RE-VERIFIED | `backend/main.py` — `_SCRUB_KEYS`, `_scrub_event` |
-| Sentry `send_default_pii=False` | NOT RE-VERIFIED | `backend/main.py` |
+| No secrets committed in repo | **PASS** (2026-10-13) | Pattern scan of every tracked file and of all 394 commits on every branch (Anthropic, Groq, AWS, GitHub keys, private keys, service-account JSON, filled-in `JWT_SECRET` / database / Redis / MinIO / Sentry values): the only hits are the Firebase client keys, public by design, and `.env.example`'s placeholders. `.env`, `.env.local`, `key.properties` and the release keystore are ignored and were never added. A grep, not gitleaks — that runs in CI |
+| Sentry scrubs MPIN/password/token/cookie keys | **PASS after a fix** (2026-10-13) | **Was FAIL:** the scrubber cleaned the request body, headers and cookies, and a real crash report still carried the MPIN, the refresh token and a phone number in its stack-frame variables, and the WebSocket token in the query string — §9. `app/core/sentry_scrub.py`, `tests/test_sentry_scrub.py` (14) |
+| Sentry `send_default_pii=False` | **PASS** (2026-10-13) | Set through `sentry_privacy_options()`, with `include_local_variables=False` and the scrubber on traces as well as errors; a test pins all four |
 | Admin seed MPIN from `ADMIN_SEED_MPIN`, skipped + warned if missing/invalid | **PASS** (spot-checked) | `backend/main.py:134` |
 | Firebase **client** API keys are public by design; server secret is `FIREBASE_CREDENTIALS_JSON`, env-only | **PASS** (documented) | `SECURITY.md` — console-side key restriction confirmed in place 2026-08-21 (§10 item 7) |
 
-### 3.5 API surface — **partially re-verified 2026-07-24**
+### 3.5 API surface — **re-verified 2026-10-13**
 
 | Check | Status | Source |
 |---|---|---|
-| `/api/media/{bucket}/{key}` allowlists buckets (profiles only) | **PASS** (spot-checked) | `backend/main.py:362` — `ALLOWED_BUCKETS` |
+| `/api/media/{bucket}/{key}` allowlists buckets (profiles only) | **PASS** (2026-10-13, live) | The documents bucket and an unknown bucket → 403; `../` out of the profiles bucket, plain and percent-encoded → 404. Pictures in the allowed bucket are served without a login, by design — the keys are unguessable, except the older `profiles/teacher/<id>/avatar.jpg` ones (§10 item 33) |
 | CORS forbids wildcard origin | **PASS** (2026-10-10, local) | preflight from `https://evil.example` gets no `Access-Control-Allow-Origin` (400); `http://localhost:5001` is echoed exactly, never `*` |
 | WebSocket requires JWT, validates `sub == user_id`, rejects revoked JTIs | **PASS** | `test_websocket_auth.py`, re-run today (5/5) |
 | Cross-school row access returns 404, not 403 | **PASS** | `test_tenancy.py::TestSameSchoolOr404`, re-run today |
@@ -245,7 +245,7 @@ Driven end to end by `tests/auth_session_qa.py` on the local stack: a teacher se
 | **Anthropic (Claude)** | Prompt content + uploaded files via the Files API | **NOT VERIFIED — new recipient.** Claude became the *primary* generation provider (2026-06-08, `ai_service.py` pipeline is Claude → Gemini → Groq). The May PII sweep predates it. Re-run the prompt audit and update `PRIVACY_POLICY.md` §5/§7 |
 | Gemini | Prompt content only | NOT RE-VERIFIED (clean as of 2026-05-14) |
 | Groq | Text extracted from files | NOT RE-VERIFIED (clean as of 2026-05-14) |
-| Sentry (backend) | No real PII — `send_default_pii=False` + scrubber | NOT RE-VERIFIED |
+| Sentry (backend) | No real PII — `send_default_pii=False` + scrubber | **True from 2026-10-13** — it was not before (§3.4); reports sent earlier may hold MPINs and phone numbers (§10 item 33) |
 | Firebase Crashlytics | Crash trace + device metadata | NOT RE-VERIFIED |
 | Firebase Analytics | Event + screen names | NOT RE-VERIFIED |
 | FCM | Device token + notification payload | NOT RE-VERIFIED |
@@ -424,8 +424,8 @@ flutter build apk --release \
 > Upload per release so crashes stay legible:
 > `firebase crashlytics:symbols:upload --app <android-app-id> build/symbols/$V`
 
-- [ ] Release build is obfuscated (`--obfuscate --split-debug-info` both present)
-- [ ] Symbol files archived for this version, outside `build/`
+- [x] Release build is obfuscated (`--obfuscate --split-debug-info` both present) — PASS 2026-10-13: APK (66.7 MB) and app bundle (64.6 MB) both built with the two flags; none of seven app class and method names looked for (`AuthNotifier`, `ApiClient`, `_executeRefresh`, …) appears in `libapp.so`. The only hosts in it are `api.mindforge.guru` (https and wss) and `fonts.gstatic.com`; no localhost, no private key, one Firebase client key (expected)
+- [ ] Symbol files archived for this version, outside `build/` — *2026-10-13: written to `frontend/build/symbols/1.0.0+1/` (arm, arm64, x64) by today's build; not archived — there is no agreed place for them yet, and today's build is not one that will ship*
 - [ ] Crashlytics symbols uploaded, and a forced crash **symbolicates readably**
 - [ ] APK installs on a real Android device (not emulator)
 - [ ] Login works on release build (catches ProGuard stripping JSON model classes)
@@ -434,8 +434,8 @@ flutter build apk --release \
 - [ ] All dashboards load
 - [ ] Crashlytics receives a forced test crash
 - [ ] Sentry receives a forced backend error in prod
-- [ ] App icon, splash, app name correct
-- [ ] Signed with release keystore (`frontend/android/key.properties`, `mindforge-release.jks`)
+- [ ] App icon, splash, app name correct — *partial 2026-10-13, read from the APK, not seen on a phone: label "Mindforge" (the same on iOS; the app itself says "MIND FORGE"), the MF mark as a legacy and an adaptive icon, a navy launch background. The icon carries a stray four-pointed sparkle at its lower right — §10 item 32*
+- [x] Signed with release keystore (`frontend/android/key.properties`, `mindforge-release.jks`) — PASS 2026-10-13: `apksigner verify` passes (scheme v2; minSdk is 24, so v1 is not needed) and the signer's SHA-256 (`52f75049…2aacc5`, CN=MindForge) is the keystore's own certificate, valid to 2053. The app bundle is signed by the same key. Not debuggable, backups off, cleartext traffic refused, native libraries 16 KB-aligned, target SDK 36
 
 ---
 
@@ -469,6 +469,18 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-13 (evening — the security rows left "not re-verified" since May; one fix)
+- **§3.3, §3.4, §3.5 and the dependency audit,** each checked against something live rather than read off the code: the certificate from `api.mindforge.guru`, the whole git history, a real Sentry event, the running media proxy, the packages inside the backend container.
+- **Found and fixed — crash reports carried MPINs, tokens and phone numbers.** The record said Sentry was scrubbed, and the scrubber's eight tests passed; they fed it hand-built events with the secret in the request body. A real event, captured from the SDK under the app's own settings with marked values in play, showed three other routes out. *Frame variables:* the SDK attaches every local of every frame, so a failure inside a handler shipped `payload = LoginRequest(mpin='…')`, the refresh token and a student's phone as they stood. *The query string:* the WebSocket handshake carries the access token as `?token=`, and Sentry records the query string. *Traces:* one request in ten is traced, handshakes included, and traces never passed through the scrubber at all. Now the SDK collects no frame variables, the scrubber also redacts query strings, URLs and breadcrumbs and drops any frame variables that do arrive, and it runs on traces as well as errors. `tests/test_sentry_scrub.py` +6, red first — one of them runs the real SDK with the app's options and searches everything it would have sent. **Re-checked in the container** against a WebSocket connection, a WebSocket error and a failing POST: five events, none carrying a marked value. What this does not undo is in §10 item 33.
+- **Passed:** the certificate pin against the live leaf (rotated since the record last looked, accepted on the issuer rule); no secret in the tree or in 394 commits; tokens in secure storage; the media proxy's bucket allowlist and path traversal; `pip-audit` clean with no ignores.
+- **Suites:** backend unit **437** (per file, and in one session), backend integration **119/119 in 455 s**. No Flutter change.
+
+### 2026-10-13 (later — the Android release build, read without a phone; one fix)
+- **§6, the rows a build can answer.** `flutter build apk` and `appbundle`, both `--release --obfuscate --split-debug-info`, then the APK taken apart with `apksigner`, `aapt2`, `zipalign` and `strings`. No device or emulator, so nothing was installed.
+- **Found and fixed — the app asked for the advertising ID.** The merged manifest carried `AD_ID`, `ACCESS_ADSERVICES_AD_ID` and `ACCESS_ADSERVICES_ATTRIBUTION`: Firebase Analytics adds them unless told not to. The app shows no ads and most of its users are children; Play's families policy does not allow the advertising ID to leave a child's device, and the Play Console asks every app to declare whether it uses one. The manifest now removes the three permissions and switches off advertising-ID collection and ad-personalisation signals in Analytics. Rebuilt: the three are gone from the APK, the two switches are in it; the rest of Analytics is untouched. Bears on the open COPPA / GDPR-K item.
+- **Passed:** obfuscation, the release signature on both artefacts, not debuggable, backups off, cleartext refused, production hosts only, 16 KB alignment, four exported components (the launcher activity, two Firebase messaging receivers, the profile installer) and no others.
+- **Not ticked, and why:** §10 item 32.
 
 ### 2026-10-13 (the web build — one fix that matters, two small ones)
 - **The open web rows:** §5.1's wide registration form, the XP card on desktop web (§5.4, §5.10), and Firebase, avatar upload and icons in §5.9. Release web build against the local stack, 1280 × 800, as a Hansel & Gretel teacher and student.
@@ -918,6 +930,20 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
     - *The web build reports nothing to Firebase.* Analytics, Crashlytics and push each return early on web. That was the right guard while Firebase had no web config; it has had one since 2026-06-30, and the comment in `analytics.dart` still says otherwise. A crash in the web build is invisible today.
     - *The "maskable" PWA icons are copies of the ordinary ones,* with the mark running close to the edge; a launcher that crops to a circle will clip it.
     - *The browser pane, when hidden, starves the web build of animation frames* (the splash never finishes). Replacing `requestAnimationFrame` with a timer from the page console gets it moving; that is how today's web rows were driven.
+
+32. **The Android release build — seen 2026-10-13, not changed.**
+    - *The launcher icon has a small four-pointed sparkle at its lower right,* the kind an image generator stamps on its output. It is in `ic_launcher.png` and `ic_launcher_foreground.png` (looked at the largest density only); a round mask crops it, a square or squircle one shows it. The web icons do not have it.
+    - *The version is `1.0.0+1`.* Play refuses a version code it has already seen, so if anything was ever uploaded this has to go up first (§6's own example reads `1.0.0+9`).
+    - *Fonts are fetched from `fonts.gstatic.com` at run time* (`google_fonts`, nothing bundled): the first launch without a connection, or on a school network that blocks Google, shows fallback type, and each device tells Google it is running the app.
+    - *The home-screen name is "Mindforge"* on both platforms; everywhere inside the app it is "MIND FORGE".
+    - *Nothing on a device:* no Android phone or emulator is attached to this Mac, so installing, logging in, pinning, push and the forced-crash rows of §6 stand as they were.
+
+33. **Error reporting and the security rows — seen 2026-10-13, not changed.**
+    - *Reports already in Sentry were sent before the fix.* Any crash in a handler that was holding a login, registration or MPIN-change payload will have carried that MPIN in its frame variables, and any WebSocket error or sampled trace the access token. Tokens have expired; MPINs have not. Worth looking through the project's stored events, or shortening its retention — a job for whoever holds the Sentry login.
+    - *Production runs the old scrubber* until this branch is deployed.
+    - *The local stack reports to Sentry too:* `.env.local` carries a DSN, so every 500 raised while testing here (today's included) is filed under `development`.
+    - *Android 7.0 may not connect at all.* The chain now ends at ISRG Root X1, which Android has only shipped since 7.1.1, and the app's minimum is 7.0 (API 24). Not tried — there is no such device here.
+    - *Old teacher pictures sit at a guessable address* (`profiles/teacher/<id>/avatar.jpg`) and the media proxy asks for no login; new uploads get random keys and the old object is removed when a picture is replaced.
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.
