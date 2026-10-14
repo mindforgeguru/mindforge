@@ -45,7 +45,7 @@ if settings.SENTRY_DSN:
 
     # Scrubber extracted to app.core.sentry_scrub so it is unit-tested
     # (test_sentry_scrub.py) rather than only living behind a live DSN.
-    from app.core.sentry_scrub import scrub_event
+    from app.core.sentry_scrub import sentry_privacy_options
 
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
@@ -55,8 +55,7 @@ if settings.SENTRY_DSN:
             FastApiIntegration(transaction_style="endpoint"),
         ],
         traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
-        send_default_pii=False,
-        before_send=scrub_event,
+        **sentry_privacy_options(),
     )
     logger.info(f"Sentry initialized (env={settings.APP_ENV})")
 
