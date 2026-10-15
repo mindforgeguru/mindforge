@@ -23,9 +23,18 @@ ADMIN_USER = os.getenv("MF_PERF_ADMIN_USER", "admin")
 ADMIN_MPIN = os.getenv("MF_PERF_ADMIN_MPIN", os.getenv("ADMIN_MPIN", "300573"))
 SCHOOL_ID = os.getenv("MF_PERF_SCHOOL_ID")
 
+# The dashboard probes need a teacher; an admin's token is refused there (403),
+# and timing a 403 measures nothing. Unset → those probes are skipped.
+TEACHER_USER = os.getenv("MF_PERF_TEACHER_USER")
+TEACHER_MPIN = os.getenv("MF_PERF_TEACHER_MPIN")
 
-def _login_body(mpin=None):
-    body = {"username": ADMIN_USER, "mpin": mpin or ADMIN_MPIN}
+# WebSocket URL follows BASE_URL. It used to be hard-coded to production, so a
+# run aimed at the local stack still opened ten sockets against the live API.
+WS_BASE = BASE_URL.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
+
+
+def _login_body(mpin=None, username=None):
+    body = {"username": username or ADMIN_USER, "mpin": mpin or ADMIN_MPIN}
     if SCHOOL_ID:
         body["school_id"] = int(SCHOOL_ID)
     return body
@@ -43,7 +52,7 @@ async def timed_request(client: httpx.AsyncClient, method: str, url: str, **kwar
         return {"status": 0, "ms": elapsed, "error": str(e)}
 
 
-def stats(results: list[dict], label: str):
+def stats(results: list[dict], label: str, refusals_expected: bool = False):
     times = [r["ms"] for r in results if r["error"] is None]
     errors = [r for r in results if r["error"]]
     statuses = {}
@@ -52,6 +61,10 @@ def stats(results: list[dict], label: str):
 
     if not times:
         print(f"  {label}: ALL FAILED ({len(errors)} errors)")
+        return
+    if not refusals_expected and not any(200 <= r["status"] < 300 for r in results):
+        print(f"\n  {label}: NOT MEASURED — no request succeeded "
+              f"(status codes {statuses}); the timings would be of a refusal")
         return
 
     print(f"\n  {label} ({len(results)} requests):")
@@ -76,13 +89,19 @@ def stats(results: list[dict], label: str):
     print(f"    Rating: {rating}")
 
 
-async def get_token(client):
+async def get_token(client, username=None, mpin=None):
     """Login and return access token."""
     resp = await client.post(f"{BASE_URL}/api/auth/login",
-                             json=_login_body(), timeout=15)
+                             json=_login_body(mpin=mpin, username=username), timeout=15)
     if resp.status_code == 200:
         return resp.json().get("access_token")
     return None
+
+
+async def get_user_id(client, token):
+    resp = await client.get(f"{BASE_URL}/api/auth/me",
+                            headers={"Authorization": f"Bearer {token}"}, timeout=15)
+    return resp.json().get("id") if resp.status_code == 200 else None
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -136,17 +155,19 @@ async def test_sequential_latency(client, token, n=5):
     return results
 
 
-async def test_websocket_connections(n=10):
-    """Open N WebSocket connections simultaneously and measure connect time."""
+async def test_websocket_connections(user_id, token, n=10):
+    """Open N WebSocket connections for one signed-in user at once and measure
+    connect time. The handshake needs the user's own id and access token."""
     import websockets
     results = []
 
-    async def connect_one(user_id):
+    async def connect_one(_):
         import ssl, certifi
-        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        ssl_ctx = (ssl.create_default_context(cafile=certifi.where())
+                   if WS_BASE.startswith("wss://") else None)
         start = time.perf_counter()
         try:
-            ws_url = f"wss://api.mindforge.guru/ws/{user_id}"
+            ws_url = f"{WS_BASE}/ws/{user_id}?token={token}"
             async with websockets.connect(ws_url, ssl=ssl_ctx, open_timeout=10) as ws:
                 elapsed = (time.perf_counter() - start) * 1000
                 await ws.send("ping")
@@ -204,33 +225,42 @@ async def main():
         # 3. Invalid logins (should be 401, not 500)
         print("\n[3] Invalid login attempts (10 concurrent)")
         results = await test_login_invalid(client, n=10)
-        stats(results, "POST /auth/login (invalid)")
+        stats(results, "POST /auth/login (invalid)", refusals_expected=True)
         statuses = set(r["status"] for r in results)
         if statuses <= {401, 429}:
             print("    ✅ All returned 401/429 (no server errors)")
         else:
             print(f"    ⚠️  Unexpected statuses: {statuses - {401, 429}}")
 
-        if token:
+        teacher_token = None
+        if TEACHER_USER and TEACHER_MPIN:
+            teacher_token = await get_token(client, TEACHER_USER, TEACHER_MPIN)
+        if teacher_token:
             # 4. Concurrent dashboard-summary
             print("\n[4] Concurrent dashboard-summary (10 teachers simultaneously)")
-            results = await test_dashboard_concurrent(client, token, n=10)
+            results = await test_dashboard_concurrent(client, teacher_token, n=10)
             stats(results, "GET /teacher/dashboard-summary")
 
             # 5. Sequential baseline
             print("\n[5] Sequential dashboard-summary (5 requests, no concurrency)")
-            results = await test_sequential_latency(client, token, n=5)
+            results = await test_sequential_latency(client, teacher_token, n=5)
             stats(results, "GET /teacher/dashboard-summary (sequential)")
         else:
-            print("\n    ❌ Skipping authenticated tests (no token)")
+            print("\n[4–5] Skipped — set MF_PERF_TEACHER_USER / MF_PERF_TEACHER_MPIN "
+                  "to time the teacher dashboard")
+
+        user_id = await get_user_id(client, token) if token else None
 
     # 6. WebSocket
-    print("\n[6] WebSocket concurrent connections (10)")
-    try:
-        import websockets
-        await test_websocket_connections(n=10)
-    except ImportError:
-        print("    ⚠️  websockets package not available — skipping")
+    print(f"\n[6] WebSocket concurrent connections (10) → {WS_BASE}")
+    if not (token and user_id):
+        print("    ❌ Skipped — no token or user id")
+    else:
+        try:
+            import websockets
+            await test_websocket_connections(user_id, token, n=10)
+        except ImportError:
+            print("    ⚠️  websockets package not available — skipping")
 
     print("\n" + "=" * 60)
     print("  Performance test complete")

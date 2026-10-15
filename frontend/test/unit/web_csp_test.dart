@@ -35,9 +35,11 @@ void main() {
     expect(directive('default-src'), "'self'");
   });
 
-  test('frame-ancestors none — the page cannot be framed (clickjacking)', () {
-    // The one directive iframes obey regardless of the meta-vs-header caveat
-    // for framing; 'none' means no site may embed the app.
+  test('frame-ancestors none is also declared in the meta tag', () {
+    // Browsers IGNORE frame-ancestors in a meta tag (CSP3 §6.4.2; Chrome logs
+    // "ignored when delivered via a <meta> element"). It is kept here only as
+    // documentation of intent — the protection that works is the response
+    // header in web/_headers, pinned below.
     expect(directive('frame-ancestors'), "'none'");
   });
 
@@ -84,5 +86,40 @@ void main() {
     // a wildcard remote origin (https://*) would let an attacker host script.
     final script = directive('script-src');
     expect(RegExp(r'https://\*').hasMatch(script), isFalse, reason: script);
+  });
+
+  group('web/_headers (Netlify) — framing has to be refused by a header', () {
+    // Production serves the web build from Netlify, which applies this file to
+    // every response. Without it the site sent no X-Frame-Options and no CSP
+    // header, so any page could embed the login screen in an iframe
+    // (clickjacking) — the meta tag's frame-ancestors does nothing.
+    late Map<String, String> headers;
+
+    setUpAll(() {
+      final file = File('web/_headers');
+      expect(file.existsSync(), isTrue, reason: 'web/_headers is missing');
+      final lines = file.readAsLinesSync();
+      final start = lines.indexWhere((l) => l.trim() == '/*');
+      expect(start, isNot(-1), reason: 'web/_headers has no `/*` block');
+      headers = {};
+      for (final line in lines.skip(start + 1)) {
+        if (line.trim().isEmpty || !line.startsWith(RegExp(r'\s'))) break;
+        final i = line.indexOf(':');
+        headers[line.substring(0, i).trim().toLowerCase()] =
+            line.substring(i + 1).trim();
+      }
+    });
+
+    test('X-Frame-Options DENY on every path', () {
+      expect(headers['x-frame-options'], 'DENY');
+    });
+
+    test("a CSP header with frame-ancestors 'none'", () {
+      expect(headers['content-security-policy'], contains("frame-ancestors 'none'"));
+    });
+
+    test('nosniff on every path', () {
+      expect(headers['x-content-type-options'], 'nosniff');
+    });
   });
 }

@@ -1,0 +1,8 @@
+# Netlify response headers for the web build (copied into build/web).
+# frame-ancestors only works as a header — browsers ignore it in index.html's
+# <meta> CSP — so framing is refused here (test/unit/web_csp_test.dart).
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import (
-    hash_mpin, verify_mpin, verify_mpin_constant_time,
+    hash_mpin_async, verify_mpin_async, verify_mpin_constant_time_async,
     create_access_token, create_refresh_token,
     decode_access_token, get_current_user, token_predates_revocation,
 )
@@ -251,7 +251,7 @@ async def register_user(
 
     user = User(
         username=payload.username,
-        mpin_hash=hash_mpin(payload.mpin),
+        mpin_hash=await hash_mpin_async(payload.mpin),
         role=payload.role,
         school_id=school.id,
         is_active=True,
@@ -305,7 +305,7 @@ async def register_user(
             if parent:
                 # Existing parent — verify the supplied parent MPIN matches.
                 # Generic error so we don't leak whether the parent exists.
-                if not verify_mpin(payload.parent_mpin, parent.mpin_hash):
+                if not await verify_mpin_async(payload.parent_mpin, parent.mpin_hash):
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Parent username or MPIN is incorrect.",
@@ -334,7 +334,7 @@ async def register_user(
                 # in the same school as the student.
                 new_parent = User(
                     username=payload.parent_username.strip(),
-                    mpin_hash=hash_mpin(payload.parent_mpin),
+                    mpin_hash=await hash_mpin_async(payload.parent_mpin),
                     role="parent",
                     school_id=school.id,
                     is_active=True,
@@ -437,7 +437,7 @@ async def login(
     # done whether or not the username exists. The previous short-circuit
     # skipped hashing entirely for an unknown user, leaving a ~60x latency
     # gap that answered "does this account exist?" despite identical bodies.
-    if not verify_mpin_constant_time(payload.mpin, user):
+    if not await verify_mpin_constant_time_async(payload.mpin, user):
         # Record the failure against the user (if the username exists)
         if user:
             locked = await redis_manager.record_failed_login(user.id, ip)
@@ -965,7 +965,7 @@ async def mfa_disable(
     if not current_user.mfa_enabled:
         return {"enabled": False}
 
-    if not verify_mpin(payload.mpin, current_user.mpin_hash):
+    if not await verify_mpin_async(payload.mpin, current_user.mpin_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect MPIN.",
         )

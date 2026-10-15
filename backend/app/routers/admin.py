@@ -164,13 +164,13 @@ async def change_admin_mpin(
 ):
     """Change the admin's MPIN after verifying the current one."""
     from app.core.security import (
-        hash_mpin, issue_session, revoke_all_sessions, verify_mpin,
+        hash_mpin_async, issue_session, revoke_all_sessions, verify_mpin_async,
     )
-    if not verify_mpin(payload.current_mpin, current_admin.mpin_hash):
+    if not await verify_mpin_async(payload.current_mpin, current_admin.mpin_hash):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
     result = await db.execute(select(User).where(User.id == current_admin.id))
     admin_user = result.scalar_one()
-    admin_user.mpin_hash = hash_mpin(payload.new_mpin)
+    admin_user.mpin_hash = await hash_mpin_async(payload.new_mpin)
     # End every session, including this one, then hand the caller a new pair —
     # changing a suspected-leaked MPIN has to kick whoever else holds a token.
     revoke_all_sessions(admin_user)
@@ -348,8 +348,8 @@ async def edit_user(
 
     # Reset MPIN
     if payload.new_mpin:
-        from app.core.security import hash_mpin, revoke_all_sessions
-        user.mpin_hash = hash_mpin(payload.new_mpin)
+        from app.core.security import hash_mpin_async, revoke_all_sessions
+        user.mpin_hash = await hash_mpin_async(payload.new_mpin)
         # A reset is how a leaked MPIN is recovered; the sessions it opened go too.
         revoke_all_sessions(user)
 
@@ -454,10 +454,10 @@ async def edit_user(
                                         f"parent MPIN to create one."
                                     ),
                                 )
-                            from app.core.security import hash_mpin
+                            from app.core.security import hash_mpin_async
                             new_parent = User(
                                 username=parent_username_clean,
-                                mpin_hash=hash_mpin(payload.parent_mpin),
+                                mpin_hash=await hash_mpin_async(payload.parent_mpin),
                                 role=UserRole.parent,
                                 school_id=current_admin.school_id,
                                 is_active=True,

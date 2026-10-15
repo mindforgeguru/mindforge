@@ -32,6 +32,7 @@
 | Backend re-registration integration | `backend/tests_integration/test_reregister_after_removal.py` (7) | After a year close, and after an admin revoke, the removed account's username, phone and parent username can be registered again and log in; a live username or phone is still refused | No — same skip |
 | Backend admin user-filter integration | `backend/tests_integration/test_admin_user_filters.py` (5) | The admin's role and grade filters, that no filter reaches another school, and that an unknown role is a 422 | No — same skip |
 | Backend student profile-picture integration | `backend/tests_integration/test_student_profile_picture.py` (2) | A student's upload is a 200, both rows and `/auth/me` carry the URL and the image is served; a second upload replaces the first and removes the old file | No — same skip |
+| Backend login concurrency integration | `backend/tests_integration/test_login_does_not_block.py` (1) | While six logins hash at once, an unrelated request is not held behind them | No — same skip |
 | Backend presentation realtime integration | `backend/tests_integration/test_presentation_realtime.py` (6) | A colleague's socket hears when a deck is uploaded, adopted, edited, taken off a dashboard or deleted; another school hears none of it. Decks are `.pptx`, so no AI call | No — same skip |
 | Backend daily-workflow integration | `backend/tests_integration/test_today_workflow.py` (7) | A school with no timetable is offered the timetable step for each grade that has students, and is not called a holiday; the road from timetable to homework on a working day; one grade on holiday against every grade on holiday | No — same skip |
 | Backend theme-lock integration | `backend/tests_integration/test_xp_theme_lock.py` (2) | A theme is dropped when a deduction takes the student below the level that unlocks it, and kept while the level still does | No — same skip |
@@ -70,13 +71,13 @@ flutter test integration_test/
 
 ## 2. Latest Automated Test Run
 
-**Date:** 2026-10-13 — backend unit, backend integration and Flutter unit/widget re-run after the profile-picture fix (§9). Before that, 2026-10-12 — the same three re-run after that day's ten fixes (the last touched the Flutter client only, so only the Flutter suite was run again after it). The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
+**Date:** 2026-10-15 — every automated suite re-run: backend unit and integration after that day's login fix, both security probe suites, the auth/session QA, the performance test (first run) and both Flutter integration suites on the simulator (§9). 2026-10-13 — backend unit, backend integration and Flutter unit/widget re-run after the profile-picture fix. Before that, 2026-10-12 — the same three re-run after that day's ten fixes (the last touched the Flutter client only, so only the Flutter suite was run again after it). The Flutter integration suites on the simulator, both security probe suites and the auth/session live QA were last run 2026-10-10 and are **not** re-run on today's code
 **Branch:** `create_school` at `3271d34`, **with uncommitted work in the tree** (Whiteprint login redesign, `LoginKeys` test handles, dashboard header + MPIN layout fixes, web CSP `img-src`)
 **Environment:** macOS (darwin 25.6.0), Flutter 3.44.0, local Docker stack up (`/api/health` 200), iOS simulator iPhone 17 Pro (iOS 26.2) for integration tests; 2026-09-13 backend suite run inside `mindforge_backend` (Python 3.11, full `requirements.txt` + `pytest pytest-asyncio`, mirroring CI)
 
 > **Where to run the backend suite.** The host `python3.12` lacks `sentry_sdk` and `google-genai`, so `test_alerting.py`, `test_prompt_injection_defence.py` and `test_websocket_auth.py` fail there at import (as of 2026-10-09 also `test_ai_fallback_chain.py`, `test_old_test_upload.py` and `test_subjects.py` — the host's `google-genai` lacks `types.GenerateContentConfig`) — an environment gap, not a defect. Conversely the container only mounts `backend/`, so `test_prod_guard.py` (reads `tests_integration/`) errors and `test_secrets_gitignore.py` skips (no git). Each file below is reported from the environment that can actually run it.
 
-### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-13: 437 PASS, and 437 in one session** (431 that morning, +6 `test_sentry_scrub.py`)
+### 2.1 Backend unit — each file in its own pytest process (mirrors CI) — **re-run 2026-10-15: 437 PASS, and 437 in one session** (431 on the morning of 2026-10-13, +6 `test_sentry_scrub.py`)
 
 2026-10-12: the same way again — 392 in the container, 24 + 12 + 3 on the host. **431 passed, 0 failed**, unchanged: today's backend tests are integration tests. Re-run the same way after the afternoon's workflow fix, again after the presentation fixes, and again after the realtime and filter fixes: 431 each time.
 
@@ -99,7 +100,7 @@ Previous run (2026-09-13):
 
 Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitignore on host) (was 81 on 2026-07-24).
 
-### 2.2 Backend integration (live local stack) — **re-run 2026-10-13 on the fixed code: 119/119 PASS in 452 s** (117 on 2026-10-12, +2 `test_student_profile_picture.py`; 84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`, +7 `test_today_workflow.py`, +6 `test_presentation_realtime.py`, +6 deletion cases in `test_realtime_delivery.py`, +5 `test_admin_user_filters.py`. The table below is the 2026-09-13 breakdown)
+### 2.2 Backend integration (live local stack) — **re-run 2026-10-15 on the fixed code: 120/120 PASS in 473 s** (+1 `test_login_does_not_block.py`; 119 on 2026-10-13; 117 on 2026-10-12, +2 `test_student_profile_picture.py`; 84 on 2026-10-11; +7 fee-payment cases in `test_realtime_delivery.py`, +2 `test_xp_theme_lock.py`, +7 `test_today_workflow.py`, +6 `test_presentation_realtime.py`, +6 deletion cases in `test_realtime_delivery.py`, +5 `test_admin_user_filters.py`. The table below is the 2026-09-13 breakdown)
 
 > `tests_integration/` reads `../../.env.local`, so it must run **from the host** (`cd backend && python3 -m pytest tests_integration/...`). Inside the container it fails at collection with `FileNotFoundError: /app/tests_integration/../../.env.local`.
 
@@ -116,10 +117,10 @@ Total: **331 backend unit tests pass** (295 container + 24 prod_guard + 12 gitig
 
 | Suite | Result |
 |---|---|
-| `flutter test` (unit + widget, everything) | **PASS — 216/216** (2026-10-12; 201 the day before, +3 `student_grade_provider_test.dart`, +5 `teacher_workflow_holiday_test.dart`, +3 `presentations_empty_state_test.dart`, +4 `api_client_token_refresh_test.dart`; `realtime_sync_test.dart` extended in place) |
+| `flutter test` (unit + widget, everything) | **PASS — 219/219** (2026-10-15, +3 `web_csp_test.dart`; 216 on 2026-10-12; 201 the day before, +3 `student_grade_provider_test.dart`, +5 `teacher_workflow_holiday_test.dart`, +3 `presentations_empty_state_test.dart`, +4 `api_client_token_refresh_test.dart`; `realtime_sync_test.dart` extended in place) |
 | `flutter analyze lib test integration_test` | **PASS — 0 errors, 0 warnings, 39 style infos** (2026-10-12, unchanged) |
-| `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-10) |
-| `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-10, 10 m 47 s; no overflow or framework exception in the log) |
+| `integration_test/app_test.dart` (iPhone 17 Pro sim, iOS 26.2, `LOCAL_DEV=true`) | **PASS — 5/5** (2026-10-15, 1 m 2 s; 2026-10-10 before that) |
+| `integration_test/all_screens_test.dart` (same) | **PASS — 29/29** (2026-10-15, 10 m 48 s; no overflow or framework exception in the log. 2026-10-10 before that) |
 
 The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading_underscores_for_local_identifiers`, 1 `prefer_const_declarations`, 1 `dangling_library_doc_comments`. CI runs `--no-fatal-infos`, so none break the build.
 
@@ -129,8 +130,8 @@ The infos: 33 `prefer_const_constructors` across the role screens, 4 `no_leading
 
 | Suite | Why / last result |
 |---|---|
-| `tests/performance_test.py` | Not run. Point at the **local** stack only |
-| `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-10** on the local stack after the bearer-gate fix: 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — same as 2026-10-09 |
+| `tests/performance_test.py` | **First run 2026-10-15**, local stack only (`MF_PERF_BASE_URL`): health 50 at once 56 ms avg; 8 logins at once 484 ms avg (1,637 ms before that day's fix, §9); teacher dashboard 10 at once 167 ms, sequential 21 ms; 10/10 WebSockets in 31 ms with pong. **The script was fixed first** — its WebSocket step was hard-wired to production and its dashboard steps timed 403s (§9) |
+| `tests/security_test.py`, `security_test_extended.py` | **Re-run 2026-10-15** on the local stack (Hansel & Gretel fixture, `MF_SEC_*` overrides): 22 PASS / 1 expected FAIL (HTTPS on `http://localhost`) / 0 WARN, and 48/48 — unchanged since 2026-10-10 |
 | `pip-audit` | **Run 2026-10-13: no known vulnerabilities**, no ignores — over the 92 packages installed in `mindforge_backend` (`pip freeze`, so transitive ones included), whose 27 pinned versions all match `requirements.txt`. The host's Python 3.14 cannot resolve the file itself (`pymupdf` will not build) |
 | Manual QA (§5) | 2026-10-10: §5.1 and the API rows of §5.7 over the API; §5.3, §5.7 and parts of §5.4–§5.6 and §5.8 by hand on the simulator. 2026-10-11: §5.3 in full, on a fresh school. 2026-10-12: the rest of §5.4, all of §5.5, the last row of §5.7, the rest of §5.8, token expiry in §5.1 and the device rows of §5.10. 2026-10-13: the wide registration form, the XP card on desktop web and the open rows of §5.9. Still unticked: analytics events and push notifications (neither can be done locally), the device rows of §6 (its build rows were read from the APK on 2026-10-13) and §7 |
 
@@ -154,7 +155,7 @@ Source: `backend/main.py` — `SecurityHeadersMiddleware` (~line 220). Headers a
 
 > Note: the edge `server` header is now `railway-hikari` (was `railway-edge` in the 2026-05-19 record). Cosmetic; it still overrides uvicorn's banner.
 
-### 3.2 Authentication & sessions — **re-verified live 2026-10-10**
+### 3.2 Authentication & sessions — **re-verified live 2026-10-15** (`auth_session_qa.py` 63/63, twice — before and after the bcrypt change)
 
 Every row below was driven over HTTP against the local stack by `tests/auth_session_qa.py` (63/63 after the fix), with Postgres and Redis read directly where the API cannot show the result. **Two rows failed on the first run and were fixed the same day** — see §9.
 
@@ -210,15 +211,15 @@ Every row below was driven over HTTP against the local stack by `tests/auth_sess
 
 ## 4. Privacy Audit
 
-### 4.1 Account deletion — **backend re-verified live 2026-10-10; the in-app screens not re-checked**
+### 4.1 Account deletion — **backend re-verified live 2026-10-10; the in-app screens 2026-10-15**
 
 Driven end to end by `tests/auth_session_qa.py` on the local stack: a teacher self-deletes, and a parent self-deletes with one linked student.
 
 | Check | Status |
 |---|---|
-| In-app "Delete my account" in teacher/parent profile | NOT RE-VERIFIED (UI; last checked 2026-05-14) |
-| Student profile offers no self-delete, and the API refuses it | **PASS** (API, 2026-10-10) — `DELETE /api/auth/account` as a student → 403, account intact. *This row used to list students as able to self-delete; the policy changed 2026-05-14 — a parent or admin removes a student.* UI not re-checked |
-| Admin cannot self-delete | **PASS** (API, 2026-10-10) — 403, account intact. UI not re-checked |
+| In-app "Delete my account" in teacher/parent profile | **PASS** (simulator, 2026-10-15) — a throwaway teacher and a throwaway parent with one child, each deleted from their own profile under Privacy & Data. The dialog asks for the username; Delete stays disabled until it matches exactly (one letter short: still disabled). The parent's dialog adds a red warning that the linked student account goes too. On Delete: `DELETE /api/auth/account` → 204, the socket closes, the app lands on the login screen. In Postgres: all three rows `is_active=false` with `deleted_at` set, push token cleared, audit rows `self_delete` ×2 and `self_delete_cascade_child`; each of the three then gets 401 at login |
+| Student profile offers no self-delete, and the API refuses it | **PASS** (API, 2026-10-10; simulator, 2026-10-15) — `DELETE /api/auth/account` as a student → 403, account intact. On `dummy8`'s profile there is no Privacy & Data section at all (no delete, and no policy link while its URL is empty). *This row used to list students as able to self-delete; the policy changed 2026-05-14 — a parent or admin removes a student.* |
+| Admin cannot self-delete | **PASS** (API, 2026-10-10) — 403, account intact. The admin profile was seen without a delete option on the simulator the same day (§9, 2026-10-10 evening); the admin profile screen does not include the deletion widget at all (read 2026-10-15) |
 | **Owner cannot self-delete** | **PASS** (2026-10-10) — 403, account intact |
 | Deletion is soft (`deleted_at` + `is_active=False`) | **PASS** (2026-10-10) — read from Postgres |
 | A parent's deletion cascades to the one linked student | **PASS** (2026-10-10) — both rows soft-deleted |
@@ -236,20 +237,21 @@ Driven end to end by `tests/auth_session_qa.py` on the local stack: a teacher se
 | Policy hosted at public URL | **PENDING** | |
 | `AppConstants.privacyPolicyUrl` populated | **PENDING** (re-checked 2026-07-24) | Still `''` at `frontend/lib/core/utils/constants.dart:30`. The in-app link auto-hides while empty |
 | URL entered in Play Console / App Store Connect | **PENDING** | |
-| Policy covers **Anthropic/Claude** as an AI recipient | **PENDING** | New since the policy was written — see §4.3 |
+| Policy covers **Anthropic/Claude** as an AI recipient | **PASS** (2026-10-13) | §5 and §7 name Anthropic and say uploaded documents go to it whole |
+| Policy matches what the app does | **FAIL** (2026-10-13) | Seven statements do not hold, or did not until this week — §10 item 34 |
 
 ### 4.3 Third-party PII flow
 
 | Recipient | Receives PII? | Verified |
 |---|---|---|
-| **Anthropic (Claude)** | Prompt content + uploaded files via the Files API | **NOT VERIFIED — new recipient.** Claude became the *primary* generation provider (2026-06-08, `ai_service.py` pipeline is Claude → Gemini → Groq). The May PII sweep predates it. Re-run the prompt audit and update `PRIVACY_POLICY.md` §5/§7 |
-| Gemini | Prompt content only | NOT RE-VERIFIED (clean as of 2026-05-14) |
-| Groq | Text extracted from files | NOT RE-VERIFIED (clean as of 2026-05-14) |
+| **Anthropic (Claude)** | Prompt content + uploaded files via the Files API | **VERIFIED 2026-10-13 (code).** Three things reach it: test generation, the presentation outline and slides, and the auto-quiz from a deck. Every prompt is built from grade, subject, the chapter name the teacher typed, question counts and the syllabus chapter list — no username, school, student or teacher identity. The files are the teacher's own chapter PDFs and up to five of their old test papers, uploaded whole and deleted from Anthropic straight after the call (`finally` in `claude_generate` and `_generate_with_claude`). The one route for a child's data is the standing caveat below: a scanned paper with names on it. `PRIVACY_POLICY.md` already names Anthropic (updated 2026-08-21) |
+| Gemini | Prompt content **and files** | **VERIFIED 2026-10-13 (code).** The same prompts and files as Claude when Claude fails, plus document metadata and syllabus scans (Gemini first there, Claude not used); uploads deleted after each call |
+| Groq | Text extracted from files | **VERIFIED 2026-10-13 (code).** Last in each chain; gets the same prompt with the files' text extracted locally |
 | Sentry (backend) | No real PII — `send_default_pii=False` + scrubber | **True from 2026-10-13** — it was not before (§3.4); reports sent earlier may hold MPINs and phone numbers (§10 item 33) |
-| Firebase Crashlytics | Crash trace + device metadata | NOT RE-VERIFIED |
-| Firebase Analytics | Event + screen names | NOT RE-VERIFIED |
-| FCM | Device token + notification payload | NOT RE-VERIFIED |
-| MinIO | Profile pictures + uploads | NOT RE-VERIFIED — avatar keys made unguessable 2026-07-07 |
+| Firebase Crashlytics | Crash trace + device metadata | **VERIFIED 2026-10-13 (code).** Plus the account's numeric id and its role (`CrashReporter.setUser`), set at login and cleared at logout. Nothing on web |
+| Firebase Analytics | Event + screen names | **VERIFIED 2026-10-13 (code).** Screen paths (the only ids in them are test ids), a `login` event, and the account's numeric id and role as user id and property. Collection is off in debug builds and absent on web. The advertising ID is no longer collected (§9, 2026-10-13) |
+| FCM | Device token + notification payload | **VERIFIED 2026-10-13 (code).** Every push was read: no child's name in any — "You were marked absent…", "Your child was marked absent…", test and quiz titles, grade and subject, the timetable date. A teacher's broadcast is the exception by nature: its title and first 200 characters of whatever was typed go through Google |
+| MinIO | Profile pictures + uploads | **VERIFIED 2026-10-13.** Self-hosted on Railway, not a third party; the media proxy serves only the profiles bucket (§3.5). Older teacher pictures keep guessable keys (§10 item 33) |
 
 Standing caveat (still applies): teacher-uploaded PDFs may themselves contain student names (scanned answer sheets). Disclosed in `PRIVACY_POLICY.md` §5.
 
@@ -373,13 +375,13 @@ Last executed in full **2026-05-19** on Flutter 3.41.7 / Chrome against the loca
 - [x] Debug build (`flutter run -d chrome --web-port=5001`) loads — PASS (2026-05-19)
 - [x] CORS preflight from `http://localhost:5001` returns 200 — PASS (2026-05-19)
 - [x] Login + golden path on all four roles — PASS (2026-05-19)
-- [x] Responsive at 375 / 768 / 1280 px — PASS (2026-05-19)
-- [x] Hard refresh on a deep route keeps the user logged in — PASS (2026-05-19)
-- [x] Browser back/forward navigates inside the SPA — PASS (2026-05-19)
-- [x] Logout clears `mindforge_*` localStorage keys — PASS (2026-05-19)
-- [x] WebSocket upgrades to 101 and pushes realtime messages — PASS (2026-05-19)
+- [x] Responsive at 375 / 768 / 1280 px — PASS (2026-05-19; again 2026-10-15: bottom navigation at 375 and 768, sidebar at 1280, no horizontal overflow at any — page width equals viewport width)
+- [x] Hard refresh on a deep route keeps the user logged in — PASS (2026-05-19; again 2026-10-15: a full reload of `/student/fees` and of `/student/grades` came back signed in on the same screen. The dashboard's skeleton flashes first and its data is fetched too — the reload passes through `/student`)
+- [x] Browser back/forward navigates inside the SPA — PASS (2026-05-19; again 2026-10-15: Home → Fees → Grades, then back to Fees and forward to Grades, the screen matching the address each time)
+- [x] Logout clears `mindforge_*` localStorage keys — PASS (2026-05-19; again 2026-10-15: nine `FlutterSecureStorage.mindforge_*` keys after sign-in, none after logout)
+- [x] WebSocket upgrades to 101 and pushes realtime messages — PASS (2026-05-19; the upgrade again 2026-10-15 — accepted after each sign-in and reload in the backend log. Realtime delivery itself was covered in §5.8)
 - [x] Release bundle sanity check via static server — PASS (2026-05-19)
-- [x] Deep-route fallback to `index.html` — PASS (2026-05-19)
+- [x] Deep-route fallback to `index.html` — PASS (2026-05-19; 2026-10-15 against a local server that applies `web/_redirects` the way Netlify does — `/student/fees`, `/teacher/attendance` → 200 `index.html`; the plain `http.server` in `launch.json` does not, hence "Flutter App (SPA)")
 - [x] **Firebase on web (FCM/Analytics/Crashlytics)** — PASS 2026-10-13 for what the web build is meant to do: `firebase_core`, `firebase_analytics` and `firebase_messaging` initialise with no console error and no CSP violation. Nothing more happens by design — `Analytics`, `CrashReporter` and `NotificationService` all return early on web, so the web build sends no analytics, no crash reports and receives no push (§10 item 31)
 - [x] Left sidebar nav renders and navigates on desktop widths (new) — PASS 2026-10-09 (student + teacher, 800 px)
 - [x] Avatar upload works through the CSP (`blob:` in `connect-src`, added 2026-07-03) — PASS 2026-10-13 after a fix: the picked file is read and posted with no CSP violation, "Profile picture updated!", and the new picture shows at once. **The student's upload was a 500 on every platform — fixed, §9.** The browser's file chooser was not opened by hand: the page was handed a generated PNG at the point the picker asks for one, and everything after that is the app's own code
@@ -469,6 +471,30 @@ Workflow: `.github/workflows/ci.yml`. Jobs: `backend-unit`, `dependency-audit`, 
 ---
 
 ## 9. Past Test Sessions (History)
+
+### 2026-10-15 (evening — the web build's older rows, and one fix)
+- **§5.9's rows last run 2026-05-19,** on a fresh release web build at 375, 768 and 1280 px in the browser pane, served by a small local server that applies `web/_redirects` as Netlify does (`scripts/spa_server.py`, in `.claude/launch.json` as "Flutter App (SPA)"). All of them passed again: deep-route fallback, a hard reload on a deep route staying signed in, back and forward, the WebSocket upgrade, logout emptying storage, and the three widths.
+- **Found and fixed — the live web app could be framed by any site.** The console said "The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element", which is the CSP specification's rule: framing can only be refused by a response header. `mindforge.guru` (Netlify) sends no `X-Frame-Options` and no CSP header — read from production with `curl -I`, nothing else sent — so the login screen could be embedded in an invisible frame on another site (clickjacking). `web/_headers` now gives every path `X-Frame-Options: DENY`, a header CSP of `frame-ancestors 'none'`, `nosniff` and a referrer policy; the web build copies it next to `_redirects`. `test/unit/web_csp_test.dart` +3, red first; the test that pinned the meta tag claimed iframes obey it there, and its comment now says they do not. Nothing in the repo embeds the app. **Not live until the next Netlify deploy.**
+- **Suites:** Flutter **219/219** (+3), analyzer unchanged (39 infos). No backend change in this pass.
+
+### 2026-10-15 (later — every automated suite on today's code; one fix that matters)
+- **Re-ran everything not run since 2026-10-10** on the local stack: both security probe suites (22 + 1 expected / 48), `auth_session_qa.py` (63/63), `app_test.dart` (5/5) and `all_screens_test.dart` (29/29 in 10 m 48 s, no overflow or framework exception in the log) on the simulator, and `performance_test.py` for the first time.
+- **Found and fixed — a burst of logins froze the server for everyone.** The performance run showed eight simultaneous logins averaging 1.6 s. The login handler is `async` and checked the MPIN with bcrypt directly — about a quarter second of CPU at cost 12 — so the worker's event loop served nothing else meanwhile: no API request, no WebSocket frame. Measured: a health check that answers in 2 ms waited **2.1 s** while eight logins were in flight. Registration, MPIN changes, the admin's MPIN reset and the owner's admin creation had the same shape (16 call sites in six routers). Production runs four workers, which divides the stall but does not remove it, and a class signing in at the start of a lesson is exactly this burst. The bcrypt helpers now have async forms that run on a worker thread (bcrypt releases the GIL), and every handler uses them. After: the eight logins finish in 0.47 s instead of 2.2 s, and the worst health-check wait is 73 ms. `tests_integration/test_login_does_not_block.py`, red first (a 722 ms wait against a 277 ms login). The constant-time login still holds: an unknown username and a wrong MPIN both take ~265 ms.
+- **Fixed — the performance script reached production and measured refusals.** Its WebSocket step was hard-wired to `wss://api.mindforge.guru` whatever the target, so today's first run, aimed at the local stack, opened ten unauthenticated sockets against the live API (all refused, 403; nothing else sent there). It also sent no token, so it could never connect anywhere. The URL now follows `MF_PERF_BASE_URL` and the handshake carries the signed-in user's id and token: 10/10 connected locally. The dashboard steps sent an admin's token to a teacher endpoint and rated the 403s "Excellent"; they now log in a teacher (`MF_PERF_TEACHER_USER` / `_MPIN`) or say they were skipped, and any step where nothing succeeded reports NOT MEASURED instead of a rating.
+- **Suites:** backend unit **437** (per file, and in one session), backend integration **120/120 in 473 s**, auth/session QA **63/63** after the fix. No Flutter code changed.
+
+### 2026-10-15 (§4.1 — deleting an account from the app)
+- **The in-app half of account deletion,** on the iOS simulator against the local stack, with three throwaway accounts made for it (a teacher; a parent and their child) so no standing test account was spent. Rebuilt the app on the current branch first.
+- **Passed:** the teacher's and parent's "Delete my account", the type-your-username guard, the parent's cascade warning, and what each left behind in Postgres and the audit log; a student's profile with no way to delete itself. The backend half was done on 2026-10-10 and is unchanged.
+- **Seen, not changed:** after the account is gone the app still sends its usual logout and one in-flight dashboard request, both refused with 401 because the session is already revoked — log noise only. There is no "your account has been deleted" message; the app simply returns to the login screen.
+- **Housekeeping:** the three throwaway accounts stay soft-deleted, as a real deletion would leave them. The simulator is logged out. The local stack and simulator had been down and were started for this pass; the first simulator boot silently did nothing because macOS has no `timeout` command — a tooling slip, not a product issue.
+- No code changed; no suite re-run.
+
+### 2026-10-13 (night — where personal data goes: §4.3 against the code and the policy)
+- **§4.3, every row.** Each AI call site, every push the backend sends, what Crashlytics and Analytics are told, and the privacy policy read against all of it. No code changed: nothing found was a code defect.
+- **Anthropic, Gemini and Groq receive no identity.** Prompts carry grade, subject, a chapter name and counts; the only personal data that can travel is whatever is printed on a teacher's uploaded paper, and the files are deleted from the provider after each call. Pushes name no child. Crashlytics and Analytics get the numeric account id and role.
+- **The policy does not match the app in seven places** — §10 item 34. The one that matters is §5's promise that teachers review AI output first: a generated online test goes straight to students. Which way to resolve it — a review step like the auto-quiz's, or a truer sentence — is a product call.
+- **Not done:** nothing was captured off the wire — the AI providers were not called and no push was sent (the local stack has no Firebase credentials). This is the code's account of what it sends.
 
 ### 2026-10-13 (evening — the security rows left "not re-verified" since May; one fix)
 - **§3.3, §3.4, §3.5 and the dependency audit,** each checked against something live rather than read off the code: the certificate from `api.mindforge.guru`, the whole git history, a real Sentry event, the running media proxy, the packages inside the backend container.
@@ -944,6 +970,20 @@ Both are debug-mode assertions and do **not** crash release builds. Deliberately
     - *The local stack reports to Sentry too:* `.env.local` carries a DSN, so every 500 raised while testing here (today's included) is filed under `development`.
     - *Android 7.0 may not connect at all.* The chain now ends at ISRG Root X1, which Android has only shipped since 7.1.1, and the app's minimum is 7.0 (API 24). Not tried — there is no such device here.
     - *Old teacher pictures sit at a guessable address* (`profiles/teacher/<id>/avatar.jpg`) and the media proxy asks for no login; new uploads get random keys and the old object is removed when a picture is replaced.
+
+34. **The privacy policy against the app — seen 2026-10-13, not changed** (it is a legal text awaiting counsel; the corrections are theirs to word).
+    - *"Outputs are reviewed by teachers before being recorded"* (§5). A teacher's AI-generated **online** test is published to the grade the moment generation finishes (`teacher.py`, the `is_published=True` update), and a push announces it; the teacher sees the questions at the same time as the students. Auto-quizzes from decks were given a review step on 2026-08-19 (`939667d`) for exactly this reason; the teacher's own generated tests were not. A product decision, not a code bug — but the sentence is not true today.
+    - *"test grading"* (§5): nothing grades with AI. Online tests are marked by comparing answers in `_grade_submission`.
+    - *"We do not collect advertising identifiers"* (§3.3): the Android build asked for the advertising ID until 2026-10-13 (`7b2a61a`, not yet released).
+    - *Crash reports carry "a non-personal user identifier", analytics events are "anonymous"* (§3.2, §7): both carry the account's numeric id, which the school's database ties to a name. Pseudonymous, not anonymous. Sentry reports could carry MPINs and phone numbers until 2026-10-13 (§3.4).
+    - *"short-lived session token and your role" in localStorage* (§12): the web build also keeps the 30-day refresh token there.
+    - *"no third-party trackers on the web app"* (§12) is right about trackers, but the app on every platform loads its fonts from Google at run time (§10 item 32) and the web build loads the Firebase SDK from Google; neither is mentioned.
+    - *Camera and storage permissions* (§14): the release APK requests neither (§6); the photo picker needs no permission. Over-disclosure, harmless, but not accurate.
+
+35. **The web build — seen 2026-10-15, not changed.**
+    - *The web build fetches its renderer and fonts from Google at run time:* CanvasKit from `www.gstatic.com`, Roboto and the Noto fallbacks from `fonts.gstatic.com`, and the Firebase SDK from `www.gstatic.com`. With §10 item 32 this is the whole of the "Google at run time" gap in the policy (§10 item 34).
+    - *"The script has an unsupported MIME type ('text/html')"* appeared once in the console, in the load after a deep-route reload, and not in two loads after it. Some script request got the SPA fallback page. Not chased further.
+    - *The `_headers` fix cannot be seen until Netlify serves it.* After the next deploy, `curl -sI https://mindforge.guru` should show `x-frame-options: DENY`.
 
 ### Resolved (kept for history)
 - ~~Duplicate-school error asks the owner to change a slug they never see~~ — fixed 2026-10-09; name clashes now name the school.

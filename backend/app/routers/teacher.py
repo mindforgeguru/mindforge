@@ -135,13 +135,13 @@ async def change_teacher_mpin(
 ):
     """Change the teacher's MPIN after verifying the current one."""
     from app.core.security import (
-        hash_mpin, issue_session, revoke_all_sessions, verify_mpin,
+        hash_mpin_async, issue_session, revoke_all_sessions, verify_mpin_async,
     )
-    if not verify_mpin(payload.current_mpin, current_teacher.mpin_hash):
+    if not await verify_mpin_async(payload.current_mpin, current_teacher.mpin_hash):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
     result = await db.execute(select(User).where(User.id == current_teacher.id))
     teacher_user = result.scalar_one()
-    teacher_user.mpin_hash = hash_mpin(payload.new_mpin)
+    teacher_user.mpin_hash = await hash_mpin_async(payload.new_mpin)
     # End every session, including this one, then hand the caller a new pair —
     # changing a suspected-leaked MPIN has to kick whoever else holds a token.
     revoke_all_sessions(teacher_user)

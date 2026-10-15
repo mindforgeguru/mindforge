@@ -13,6 +13,7 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from starlette.concurrency import run_in_threadpool
 import jwt
 import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,6 +66,26 @@ def verify_mpin_constant_time(plain_mpin: str, user) -> bool:
         verify_mpin(plain_mpin, _DUMMY_MPIN_HASH)
         return False
     return verify_mpin(plain_mpin, user.mpin_hash)
+
+
+# bcrypt at cost 12 is about a quarter second of CPU. Every caller is an async
+# route handler, and calling the functions above directly holds the event loop
+# for that long: no other request, and no WebSocket frame, on the worker is
+# served while an MPIN is checked. Eight logins at once froze a 2 ms health check
+# for two seconds (tests_integration/test_login_does_not_block.py). Handlers use
+# these; bcrypt releases the GIL while hashing, so the thread really runs
+# alongside the loop.
+
+async def hash_mpin_async(mpin: str) -> str:
+    return await run_in_threadpool(hash_mpin, mpin)
+
+
+async def verify_mpin_async(plain_mpin: str, hashed_mpin: str) -> bool:
+    return await run_in_threadpool(verify_mpin, plain_mpin, hashed_mpin)
+
+
+async def verify_mpin_constant_time_async(plain_mpin: str, user) -> bool:
+    return await run_in_threadpool(verify_mpin_constant_time, plain_mpin, user)
 
 
 # ─── JWT ──────────────────────────────────────────────────────────────────────

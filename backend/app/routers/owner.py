@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_owner, hash_mpin
+from app.core.security import get_current_owner, hash_mpin_async
 from app.models.school import School
 from app.models.user import User, UserRole
 from app.schemas.school import (
@@ -181,7 +181,7 @@ async def create_school_admin(
 
     admin = User(
         username=payload.username,
-        mpin_hash=hash_mpin(payload.mpin),
+        mpin_hash=await hash_mpin_async(payload.mpin),
         role=UserRole.admin,
         school_id=school.id,
         is_active=True,
