@@ -7,16 +7,18 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, literal_column, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.mask_utils import mask_phone, mask_email
 from app.core.redis_client import redis_manager
-from app.core.school_time import school_day_start, school_today
+from app.core.academic_year import since, year_started_at
+from app.core.school_time import parse_iso_date, school_day_start, school_today
 from app.core.security import get_current_teacher
 from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.models.attendance import Attendance, AttendanceStatus
@@ -26,7 +28,7 @@ from app.models.timetable import TimetableConfig, TimetableSlot
 from app.models.user import User, StudentProfile, TeacherProfile, UserRole
 from app.schemas.attendance import AttendanceBulkCreate, AttendanceResponse
 from app.schemas.grade import GradeCreate, GradeResponse
-from app.schemas.test import TestGenerationParams, TestResponse, OfflineGradesBulk
+from app.schemas.test import OfflineGradesBulk, TestGenerationParams, TestQuestionsUpdate, TestResponse
 from app.schemas.timetable import TimetableConfigResponse, TimetableSlotCreate, TimetableSlotResponse
 from app.schemas.user import AdminMpinUpdate, UserResponse, TeacherWithSubjectsResponse
 from app.schemas.homework import (
@@ -43,6 +45,7 @@ from app.models.homework import Homework, HomeworkCompletion, HomeworkType, Broa
 from app.models.xp import XPReason
 from app.services import ai_service, notification_service, pdf_service, storage_service, xp_service
 from app.core.quiz_window import start_window_on_first_publish
+from app.core.mpin_guard import mpin_matches
 from app.services.realtime_service import (
     announce_test_to_students, publish_to_grade, publish_to_school,
 )
@@ -130,14 +133,15 @@ async def upload_teacher_photo(
 @router.put("/profile/mpin", status_code=status.HTTP_200_OK)
 async def change_teacher_mpin(
     payload: AdminMpinUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Change the teacher's MPIN after verifying the current one."""
     from app.core.security import (
-        hash_mpin_async, issue_session, revoke_all_sessions, verify_mpin_async,
+        hash_mpin_async, issue_session, revoke_all_sessions,
     )
-    if not await verify_mpin_async(payload.current_mpin, current_teacher.mpin_hash):
+    if not await mpin_matches(current_teacher, payload.current_mpin, request):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
     result = await db.execute(select(User).where(User.id == current_teacher.id))
     teacher_user = result.scalar_one()
@@ -201,8 +205,11 @@ async def get_attendance_dates(
 ):
     """Return distinct dates (YYYY-MM-DD) that have attendance records for grade in a given month."""
     from datetime import date as dt_date
-    year, mon = int(month.split("-")[0]), int(month.split("-")[1])
-    first_day = dt_date(year, mon, 1)
+    try:
+        year, mon = (int(part) for part in month.split("-"))
+        first_day = dt_date(year, mon, 1)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="month must be YYYY-MM.")
     import calendar as cal_mod
     last_day = dt_date(year, mon, cal_mod.monthrange(year, mon)[1])
     result = await db.execute(
@@ -235,8 +242,7 @@ async def get_attendance(
         Attendance.school_id == current_teacher.school_id,
     )
     if date:
-        from datetime import date as dt_date
-        parsed_date = dt_date.fromisoformat(date)
+        parsed_date = parse_iso_date(date)
         query = query.where(Attendance.date == parsed_date)
     result = await db.execute(query.order_by(Attendance.date.desc(), Attendance.period, Attendance.id))
     rows = result.scalars().all()
@@ -270,14 +276,20 @@ async def mark_attendance(
             )
     student_ids = [item.student_id for item in payload.records]
 
-    # Cross-school guard: every student marked must belong to this teacher's
-    # school. Without this a teacher could mark (and thus create) attendance on
-    # another school's students by passing their ids.
+    # Every student marked must be a live student of this school in this grade.
+    # Without the school check a teacher could create attendance on another
+    # school's students; without the grade and account checks, file a grade-10
+    # student (and their XP) under a grade-8 period, or mark a removed one.
     if student_ids:
         valid_result = await db.execute(
-            select(StudentProfile.user_id).where(
+            select(StudentProfile.user_id)
+            .join(User, User.id == StudentProfile.user_id)
+            .where(
                 StudentProfile.user_id.in_(student_ids),
                 StudentProfile.school_id == current_teacher.school_id,
+                StudentProfile.grade == payload.grade,
+                User.deleted_at.is_(None),
+                User.is_active == True,  # noqa: E712
             )
         )
         valid_ids = {row[0] for row in valid_result.all()}
@@ -334,18 +346,24 @@ async def mark_attendance(
     # even if the teacher resubmits attendance.
     attendance_ref = f"{payload.date.isoformat()}:{payload.period}"
     for item in payload.records:
-        if item.status == AttendanceStatus.present:
-            await xp_service.award_xp(
-                db,
-                student_id=item.student_id,
-                reason=XPReason.ATTENDANCE,
-                amount=xp_service.ATTENDANCE_XP,
+        if item.status != AttendanceStatus.present:
+            # A correction from present takes the award back.
+            await xp_service.revoke_xp(
+                db, student_id=item.student_id, reasons=[XPReason.ATTENDANCE],
                 reference_id=attendance_ref,
-                description=(
-                    f"Present on {payload.date.isoformat()} "
-                    f"(Period {payload.period})"
-                ),
             )
+            continue
+        await xp_service.award_xp(
+            db,
+            student_id=item.student_id,
+            reason=XPReason.ATTENDANCE,
+            amount=xp_service.ATTENDANCE_XP,
+            reference_id=attendance_ref,
+            description=(
+                f"Present on {payload.date.isoformat()} "
+                f"(Period {payload.period})"
+            ),
+        )
 
     # Broadcast attendance update to all students in the grade (+ staff, whose
     # dashboards show today's attendance workflow state).
@@ -489,8 +507,7 @@ async def get_timetable(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Get timetable for a grade on a specific date."""
-    from datetime import date as date_type
-    slot_date = date_type.fromisoformat(date)
+    slot_date = parse_iso_date(date)
     result = await db.execute(
         select(TimetableSlot)
         .where(TimetableSlot.grade == grade,
@@ -509,9 +526,8 @@ async def delete_timetable_for_grade_date(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Delete all timetable slots for a given grade and date."""
-    from datetime import date as date_type
     from sqlalchemy import delete as sql_delete
-    slot_date = date_type.fromisoformat(date)
+    slot_date = parse_iso_date(date)
     result = await db.execute(
         sql_delete(TimetableSlot).where(
             TimetableSlot.grade == grade,
@@ -566,24 +582,19 @@ async def create_timetable_slot(
                 detail="teacher_id does not match a teacher in your school.",
             )
 
-    existing = await db.execute(
-        select(TimetableSlot).where(
-            TimetableSlot.grade == payload.grade,
-            TimetableSlot.school_id == current_teacher.school_id,
-            TimetableSlot.slot_date == payload.slot_date,
-            TimetableSlot.period_number == payload.period_number,
-        )
-    )
-    slot = existing.scalar_one_or_none()
-    is_new_slot = slot is None
-    if slot:
-        for key, value in payload.model_dump().items():
-            setattr(slot, key, value)
-    else:
-        slot = TimetableSlot(**payload.model_dump(), school_id=current_teacher.school_id)
-        db.add(slot)
+    # One statement, so two saves of the same period at once cannot both insert
+    # (uq_timetable_slot_period, migration 039). `xmax = 0` is true only for a
+    # row this statement inserted.
+    fields = payload.model_dump()
+    stmt = pg_insert(TimetableSlot).values(**fields, school_id=current_teacher.school_id)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["school_id", "grade", "slot_date", "period_number"],
+        set_={k: stmt.excluded[k] for k in fields},
+    ).returning(TimetableSlot.id, literal_column("xmax = 0").label("inserted"))
+    row = (await db.execute(stmt)).one()
+    is_new_slot = bool(row.inserted)
     await db.commit()
-    await db.refresh(slot)
+    slot = await db.get(TimetableSlot, row.id, populate_existing=True)
 
     await publish_to_grade(
         db,
@@ -686,16 +697,39 @@ async def create_grade(
     # Cross-school guard: the graded student must belong to this teacher's
     # school, else a teacher could write a grade onto another school's student.
     target = await db.execute(
-        select(StudentProfile.user_id).where(
+        select(StudentProfile).where(
             StudentProfile.user_id == payload.student_id,
             StudentProfile.school_id == current_teacher.school_id,
         )
     )
-    if target.scalar_one_or_none() is None:
+    profile = target.scalar_one_or_none()
+    if profile is None:
         raise HTTPException(status_code=404, detail="Student not found.")
 
+    # A mark tied to a test must be for one of this school's offline tests in
+    # the student's grade. Any test_id was accepted: a nonexistent one was a
+    # 500, another school's earned its test XP. Online tests are marked by the
+    # system, never by hand. The type is the server's, not the client's.
+    grade_type = GradeType.manual
+    if payload.test_id is not None:
+        test = (await db.execute(
+            select(Test).where(
+                Test.id == payload.test_id,
+                Test.school_id == current_teacher.school_id,
+                Test.grade == profile.grade,
+            )
+        )).scalar_one_or_none()
+        if test is None:
+            raise HTTPException(status_code=404, detail="Test not found.")
+        if test.test_type != TestType.offline:
+            raise HTTPException(
+                status_code=409, detail="Online tests are marked automatically.",
+            )
+        grade_type = GradeType.offline
+
     grade_obj = Grade(
-        **payload.model_dump(),
+        **payload.model_dump(exclude={"grade_type"}),
+        grade_type=grade_type,
         teacher_id=current_teacher.id,
         school_id=current_teacher.school_id,
     )
@@ -1097,7 +1131,7 @@ async def get_test(
 @router.put("/tests/{test_id}/questions", response_model=TestResponse)
 async def update_test_questions(
     test_id: int,
-    payload: dict,
+    payload: TestQuestionsUpdate,
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
@@ -1110,9 +1144,19 @@ async def update_test_questions(
         raise HTTPException(status_code=404, detail="Test not found")
     _require_test_owner(test, current_teacher.id)
 
-    questions = payload.get("questions", [])
-    if not isinstance(questions, list):
-        raise HTTPException(status_code=400, detail="questions must be a list")
+    # Locked once anyone has started: changing the key under finished students
+    # left scores that no longer matched the paper, and anyone mid-attempt was
+    # graded against questions they never saw.
+    started = (await db.execute(
+        select(func.count()).select_from(TestSubmission).where(TestSubmission.test_id == test.id)
+    )).scalar_one()
+    if started:
+        raise HTTPException(
+            status_code=409,
+            detail="Students have already started this test, so its questions can no longer be changed.",
+        )
+
+    questions = payload.questions
 
     # Re-number questions sequentially
     for i, q in enumerate(questions):
@@ -1384,7 +1428,7 @@ async def save_offline_grades(
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="Manual grades only allowed for offline tests")
 
-    # Cross-school guard: every graded student must belong to this school.
+    # Every graded student must be in this school and in the test's grade.
     entry_ids = [e.student_id for e in payload.grades]
     if entry_ids:
         valid = {
@@ -1392,11 +1436,20 @@ async def save_offline_grades(
                 select(StudentProfile.user_id).where(
                     StudentProfile.user_id.in_(entry_ids),
                     StudentProfile.school_id == current_teacher.school_id,
+                    StudentProfile.grade == test.grade,
                 )
             )).all()
         }
         if set(entry_ids) - valid:
             raise HTTPException(status_code=404, detail="One or more students were not found.")
+        # Saving again corrects a mark: each save used to add a grade, so a
+        # corrected student had two for one test, both counted.
+        await db.execute(
+            delete(Grade).where(
+                Grade.test_id == test_id,
+                Grade.student_id.in_(entry_ids),
+            )
+        )
 
     saved_grades = []
     for entry in payload.grades:
@@ -1507,6 +1560,11 @@ async def publish_test(
 # ─── Homework ──────────────────────────────────────────────────────────────────
 
 
+# A homework's roster is the grade's students whose account existed when it was
+# set. "Everyone in the grade now" put a student who joined today on yesterday's
+# homework, and the teacher could not assign anything until they recorded the
+# newcomer as not having done homework they never got. Same rule in the gate,
+# the completions screen, its save, and the list's "reviewed" flag.
 async def _pending_hw_review_ids(
     grade: int,
     school_id: int,
@@ -1532,6 +1590,7 @@ async def _pending_hw_review_ids(
     `today` is the school-local date (see core/school_time.py).
     """
     today_start = school_day_start(today)
+    year_start = await year_started_at(db, school_id)
 
     latest = (await db.execute(
         select(Homework)
@@ -1539,6 +1598,8 @@ async def _pending_hw_review_ids(
             Homework.grade == grade,
             Homework.school_id == school_id,
             Homework.created_at < today_start,
+            # Not last year's: this year's class never had it.
+            since(Homework.created_at, year_start),
             # "No homework" markers carry no roster to review.
             Homework.is_no_homework == False,  # noqa: E712
         )
@@ -1557,6 +1618,8 @@ async def _pending_hw_review_ids(
                 StudentProfile.school_id == school_id,
                 User.is_active == True,  # noqa: E712
                 User.is_approved == True,  # noqa: E712
+                # Only those who were here when it was set (note above).
+                User.created_at <= latest.created_at,
             )
         )).all()
     }
@@ -1627,6 +1690,19 @@ async def create_homework(
                 "pending_homework_ids": pending,
             },
         )
+
+    # A linked test must be this school's, for this grade. Any id was stored:
+    # a nonexistent one was a 500, another school's sat on the homework.
+    if payload.test_id is not None:
+        linked = (await db.execute(
+            select(Test.id).where(
+                Test.id == payload.test_id,
+                Test.school_id == current_teacher.school_id,
+                Test.grade == payload.grade,
+            )
+        )).scalar_one_or_none()
+        if linked is None:
+            raise HTTPException(status_code=404, detail="Test not found.")
 
     hw = Homework(
         teacher_id=current_teacher.id,
@@ -1744,11 +1820,11 @@ async def list_teacher_homework(
         return []
 
     # Current roster (active, approved students) for each grade in the list.
-    roster_by_grade: dict[int, set[int]] = {}
+    roster_by_grade: dict[int, dict[int, datetime]] = {}
     for g in {h.grade for h in homeworks}:
         roster_by_grade[g] = {
-            row[0] for row in (await db.execute(
-                select(User.id)
+            row[0]: row[1] for row in (await db.execute(
+                select(User.id, User.created_at)
                 .join(StudentProfile, User.id == StudentProfile.user_id)
                 .where(
                     StudentProfile.grade == g,
@@ -1770,7 +1846,8 @@ async def list_teacher_homework(
     # Review is complete when every current roster student has a status —
     # the same rule the daily workflow gate uses (see _pending_hw_review_ids).
     def _reviewed(h: Homework) -> bool:
-        roster = roster_by_grade.get(h.grade, set())
+        roster = {sid for sid, joined in roster_by_grade.get(h.grade, {}).items()
+                  if joined <= h.created_at}
         return bool(roster) and roster.issubset(marked_by_hw.get(h.id, set()))
 
     return [
@@ -1849,6 +1926,7 @@ async def _build_completions_response(
             StudentProfile.school_id == teacher.school_id,
             User.is_active == True,
             User.is_approved == True,
+            User.created_at <= hw.created_at,
         )
         .order_by(User.username)
     )).scalars().all()
@@ -1974,6 +2052,7 @@ async def upsert_homework_completions(
                 StudentProfile.school_id == current_teacher.school_id,
                 User.is_active == True,
                 User.is_approved == True,
+                User.created_at <= hw.created_at,
             )
         )).all()
     }
@@ -2023,6 +2102,7 @@ async def upsert_homework_completions(
     # also guarded by a unique index keyed on homework_id, but the explicit
     # transition check avoids spurious idempotency-skip work.)
     newly_completed_student_ids: list[int] = []
+    no_longer_completed_ids: list[int] = []
     for rec in payload.records:
         if rec.student_id not in valid_student_ids:
             continue
@@ -2035,6 +2115,8 @@ async def upsert_homework_completions(
             existing[rec.student_id].marked_by = current_teacher.id
             if completed and not was_complete:
                 newly_completed_student_ids.append(rec.student_id)
+            elif was_complete and not completed:
+                no_longer_completed_ids.append(rec.student_id)
         else:
             db.add(HomeworkCompletion(
                 homework_id=homework_id,
@@ -2055,6 +2137,13 @@ async def upsert_homework_completions(
         xp_service.HOMEWORK_ON_TIME_XP if is_on_time
         else xp_service.HOMEWORK_LATE_XP
     )
+    # A correction from done to not done takes the homework XP back.
+    for student_id in no_longer_completed_ids:
+        await xp_service.revoke_xp(
+            db, student_id=student_id,
+            reasons=[XPReason.HOMEWORK_ON_TIME, XPReason.HOMEWORK_LATE],
+            reference_id=f"homework:{homework_id}",
+        )
     for student_id in newly_completed_student_ids:
         await xp_service.award_xp(
             db,
@@ -2119,6 +2208,7 @@ async def get_today_workflow(
     today = school_today()
     lookback = today - timedelta(days=14)
     today_start = school_day_start(today)
+    year_start = await year_started_at(db, current_teacher.school_id)
 
     # Today's slots across all teachers — workflow is grade-wide, so
     # any teacher's slot for the grade satisfies "timetable created".
@@ -2220,6 +2310,7 @@ async def get_today_workflow(
                 Homework.grade == grade,
                 Homework.school_id == current_teacher.school_id,
                 Homework.created_at < today_start,
+                since(Homework.created_at, year_start),
                 Homework.is_no_homework == False,  # noqa: E712
             )
         )).scalar_one()

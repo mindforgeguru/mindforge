@@ -32,6 +32,13 @@ class BrandPalette {
 
   final Color iconContainer;
 
+  /// [accent] and [secondary] in a shade dark enough to be read as text on
+  /// a card or the page background (WCAG AA, 4.5:1). The plain tokens are
+  /// fill colours and several themes' are pale — Tide Breeze's accent is a
+  /// yellow at 1.5:1 on white.
+  final Color accentText;
+  final Color secondaryText;
+
   const BrandPalette({
     required this.id,
     required this.name,
@@ -46,6 +53,8 @@ class BrandPalette {
     required this.accentLight,
     required this.accentDark,
     required this.iconContainer,
+    required this.accentText,
+    required this.secondaryText,
   });
 }
 
@@ -69,6 +78,8 @@ class BrandPalettes {
     accentLight: Color(0xFFE8895F),
     accentDark: Color(0xFFAA4A27),
     iconContainer: Color(0xFFDCE8F5),
+    accentText: Color(0xFFAA4A27),
+    secondaryText: Color(0xFF3B6C8C),
   );
 
   // ── Tier 1 — Tide Breeze (L5) ──────────────────────────────────────────────
@@ -87,6 +98,8 @@ class BrandPalettes {
     accentLight: Color(0xFFFDE047),   // yellow-300
     accentDark: Color(0xFFCA8A04),    // yellow-600
     iconContainer: Color(0xFFCFFAFE), // cyan-100
+    accentText: Color(0xFF854D0E),    // yellow-800
+    secondaryText: Color(0xFF155E75), // cyan-800
   );
 
   // ── Tier 2 — Forest Path (L15) ─────────────────────────────────────────────
@@ -105,6 +118,8 @@ class BrandPalettes {
     accentLight: Color(0xFFFCD34D),   // amber-300
     accentDark: Color(0xFFB45309),    // amber-700
     iconContainer: Color(0xFFDCFCE7), // green-100
+    accentText: Color(0xFF92400E),    // amber-800
+    secondaryText: Color(0xFF3F6212), // lime-800
   );
 
   // ── Tier 3 — Royal Velvet (L30) ────────────────────────────────────────────
@@ -122,6 +137,8 @@ class BrandPalettes {
     accentLight: Color(0xFFF8D766),
     accentDark: Color(0xFFC49B1F),
     iconContainer: Color(0xFFE2D4F0),
+    accentText: Color(0xFF6F5400),
+    secondaryText: Color(0xFF7B2CBF),
   );
 
   // ── Tier 4 — Mythic Aurora (L50) ───────────────────────────────────────────
@@ -141,6 +158,8 @@ class BrandPalettes {
     accentLight: Color(0xFFFCD34D),   // amber-300
     accentDark: Color(0xFFD97706),    // amber-600
     iconContainer: Color(0xFFFEE2E2), // red-100
+    accentText: Color(0xFF92400E),    // amber-800
+    secondaryText: Color(0xFFB91C1C), // red-700
   );
 
   /// All palettes in display order. The first entry is the default.

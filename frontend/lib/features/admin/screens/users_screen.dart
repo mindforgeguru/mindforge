@@ -15,6 +15,7 @@ import '../../../core/widgets/shimmer_list.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
+import '../../../core/utils/api_error.dart';
 
 class AdminUsersScreen extends ConsumerStatefulWidget {
   const AdminUsersScreen({super.key});
@@ -104,7 +105,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Error: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }
@@ -335,7 +336,7 @@ class _PendingUserTile extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Error: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }
@@ -562,7 +563,7 @@ class _EditUserSheetState extends State<_EditUserSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Error: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -1211,7 +1212,7 @@ class _ActiveUserTileState extends ConsumerState<_ActiveUserTile> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Error: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }

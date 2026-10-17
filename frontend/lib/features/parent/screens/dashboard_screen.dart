@@ -25,6 +25,7 @@ import '../../../core/widgets/shimmer_list.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/parent_provider.dart';
 import '../widgets/parent_scaffold.dart';
+import '../widgets/child_switcher.dart';
 import '../../../core/widgets/school_logo.dart';
 
 // File-level DateFormat cache.
@@ -107,6 +108,8 @@ class _ParentDashboardScreenState
   }
 
   Future<void> _refreshDashboard() async {
+    // A child linked since the app opened shows up in the switcher.
+    ref.invalidate(parentChildrenProvider);
     ref.invalidate(parentDashboardSummaryProvider(_todayString));
     await ref
         .read(parentDashboardSummaryProvider(_todayString).future)
@@ -150,7 +153,8 @@ class _ParentDashboardScreenState
     final auth = ref.watch(authProvider);
     final summaryAsync = ref.watch(parentDashboardSummaryProvider(_todayString));
     final mq = MediaQuery.of(context);
-    final topPadding = mq.padding.top;
+    // With the child switcher above it, the switcher takes the status bar.
+    final topPadding = showsChildSwitcher(ref) ? 0.0 : mq.padding.top;
     final sw = mq.size.width;
     final sh = mq.size.height;
     final now = DateTime.now();
@@ -273,6 +277,7 @@ class _ParentDashboardScreenState
                       width: 48,
                       height: 48,
                       child: IconButton(
+                        tooltip: 'Log out',
                         icon: Icon(Icons.logout,
                             color: Colors.white,
                             size: _s(context, 22, min: 18, max: 26)),
@@ -408,29 +413,33 @@ class _ParentDashboardScreenState
                         // Avatar — tappable, min 48×48
                         Positioned(
                           top: 0,
-                          child: GestureDetector(
-                            onTap: () => context.go(
-                                '${RouteNames.parentDashboard}/profile'),
-                            child: Stack(
-                              alignment: Alignment.bottomRight,
-                              children: [
-                                _ProfileAvatar(
-                                  username: auth.username ?? 'P',
-                                  photoUrl: auth.profilePicUrl,
-                                  radius: avatarRadius,
-                                ),
-                                Container(
-                                  padding: EdgeInsets.all(
-                                      _s(context, 4, min: 3, max: 6)),
-                                  decoration:       BoxDecoration(
-                                    color: AppColors.accent,
-                                    shape: BoxShape.circle,
+                          child: Semantics(
+                            button: true,
+                            label: 'My profile',
+                            child: GestureDetector(
+                              onTap: () => context.go(
+                                  '${RouteNames.parentDashboard}/profile'),
+                              child: Stack(
+                                alignment: Alignment.bottomRight,
+                                children: [
+                                  _ProfileAvatar(
+                                    username: auth.username ?? 'P',
+                                    photoUrl: auth.profilePicUrl,
+                                    radius: avatarRadius,
                                   ),
-                                  child: Icon(Icons.edit,
-                                      size: _s(context, 12, min: 10, max: 15),
-                                      color: Colors.white),
-                                ),
-                              ],
+                                  Container(
+                                    padding: EdgeInsets.all(
+                                        _s(context, 4, min: 3, max: 6)),
+                                    decoration:       BoxDecoration(
+                                      color: AppColors.accent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(Icons.edit,
+                                        size: _s(context, 12, min: 10, max: 15),
+                                        color: Colors.white),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -494,7 +503,7 @@ class _ParentDashboardScreenState
                         'See all →',
                         style: GoogleFonts.poppins(
                           fontSize: (w * 0.028).clamp(9.5, 12.0),
-                          color: AppColors.accent,
+                          color: AppColors.accentText,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -791,7 +800,7 @@ class _DashSectionHeader extends StatelessWidget {
                 'See all →',
                 style: GoogleFonts.poppins(
                   fontSize: (w * 0.028).clamp(10.0, 12.0),
-                  color: AppColors.accent,
+                  color: AppColors.accentText,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -881,7 +890,7 @@ class _DashHomeworkTile extends StatelessWidget {
               _fmtDMon.format(hw.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (w * 0.025).clamp(9.0, 11.0),
-                color: AppColors.accent,
+                color: AppColors.accentText,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -963,7 +972,7 @@ class _DashBroadcastTile extends StatelessWidget {
               _fmtDMon.format(broadcast.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (w * 0.025).clamp(9.0, 11.0),
-                color: AppColors.accent,
+                color: AppColors.accentText,
               ),
             ),
           ],

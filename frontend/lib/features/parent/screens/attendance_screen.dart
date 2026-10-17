@@ -311,6 +311,7 @@ class _MonthNavigator extends StatelessWidget {
           width: btnSize,
           height: btnSize,
           child: IconButton(
+            tooltip: 'Previous month',
             icon: Icon(Icons.chevron_left,
                 size: (sw * 0.055).clamp(20.0, 26.0)),
             onPressed: onPrev,
@@ -340,6 +341,7 @@ class _MonthNavigator extends StatelessWidget {
           width: btnSize,
           height: btnSize,
           child: IconButton(
+            tooltip: 'Next month',
             icon: Icon(Icons.chevron_right,
                 size: (sw * 0.055).clamp(20.0, 26.0)),
             onPressed: onNext,

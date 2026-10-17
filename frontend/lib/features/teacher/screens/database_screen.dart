@@ -13,6 +13,7 @@ import '../providers/presentation_provider.dart';
 import '../widgets/old_paper_details_dialog.dart';
 import '../widgets/teacher_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
+import '../../../core/utils/api_error.dart';
 
 class TeacherDatabaseScreen extends ConsumerStatefulWidget {
   /// Tab to open on: 0 Old Tests, 1 Chapters, 2 Syllabus, 3 Presentations.
@@ -136,7 +137,7 @@ class _OldTestsTabState extends ConsumerState<_OldTestsTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Upload failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -151,7 +152,7 @@ class _OldTestsTabState extends ConsumerState<_OldTestsTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Delete failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
       }
     }
@@ -211,7 +212,7 @@ class _OldTestsTabState extends ConsumerState<_OldTestsTab> {
         Expanded(
           child: papersAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
+            error: (e, _) => Center(child: Text('Error: ${apiErrorMessage(e)}')),
             data: (papers) {
               if (papers.isEmpty) {
                 return const Center(
@@ -447,7 +448,7 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Upload failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -462,7 +463,7 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Delete failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
       }
     }
@@ -505,7 +506,7 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
                 children: [
                   Text('Add Chapter Document',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: AppColors.accent,
+                            color: AppColors.accentText,
                             fontWeight: FontWeight.w700,
                           )),
                   const SizedBox(height: 12),
@@ -574,7 +575,7 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
 
           chaptersAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
+            error: (e, _) => Text('Error: ${apiErrorMessage(e)}'),
             data: (chapters) {
               if (chapters.isEmpty) {
                 return const Padding(
@@ -642,6 +643,7 @@ class _ChapterCard extends StatelessWidget {
         subtitle: Text('Grade $grade  •  $subject',
             style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
         trailing: IconButton(
+          tooltip: 'Delete',
           icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.error),
           onPressed: onDelete,
         ),
@@ -723,7 +725,7 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Upload failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -738,7 +740,7 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Delete failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
       }
     }
@@ -780,7 +782,7 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
                 children: [
                   Text('Upload Syllabus PDF',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: AppColors.secondary,
+                            color: AppColors.secondaryText,
                             fontWeight: FontWeight.w700,
                           )),
                   const SizedBox(height: 12),
@@ -844,7 +846,7 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
 
           syllabusAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
+            error: (e, _) => Text('Error: ${apiErrorMessage(e)}'),
             data: (entries) {
               if (entries.isEmpty) {
                 return const Padding(
@@ -918,6 +920,7 @@ class _SyllabusCard extends StatelessWidget {
                 _Tag(subject, AppColors.secondary),
                 const Spacer(),
                 IconButton(
+                  tooltip: 'Delete',
                   icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.error),
                   onPressed: onDelete,
                   constraints: const BoxConstraints(),
@@ -1058,7 +1061,7 @@ class _PresentationsTabState extends ConsumerState<_PresentationsTab> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    'Could not load library.\n$e',
+                    'Could not load library.\n${apiErrorMessage(e)}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                         fontSize: 12, color: AppColors.textMuted),
@@ -1251,7 +1254,7 @@ class _PresentationsTabState extends ConsumerState<_PresentationsTab> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e'),
+        SnackBar(content: Text('Delete failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error),
       );
     }
@@ -1291,7 +1294,7 @@ class _PresentationsTabState extends ConsumerState<_PresentationsTab> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e'),
+        SnackBar(content: Text('Failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error),
       );
     } finally {

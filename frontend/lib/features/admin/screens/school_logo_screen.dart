@@ -12,6 +12,7 @@ import '../../../core/utils/image_pick.dart';
 import '../../../core/widgets/confirm_dialog.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
+import '../../../core/utils/api_error.dart';
 
 /// Setup task 5: upload the school's logo. Once set, it is shown app-wide above
 /// the MindForge logo (see the school badge in the side nav).
@@ -56,7 +57,7 @@ class _AdminSchoolLogoScreenState extends ConsumerState<AdminSchoolLogoScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Upload failed: $e'),
+          content: Text('Upload failed: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }
@@ -74,6 +75,7 @@ class _AdminSchoolLogoScreenState extends ConsumerState<AdminSchoolLogoScreen> {
       appBar: AppBar(
         title: const Text('School Logo'),
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go(RouteNames.adminDashboard),
         ),

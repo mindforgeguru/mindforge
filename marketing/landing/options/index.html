@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MindForge landing page — three options</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../assets/mindforge-mark.png">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..900&family=Manrope:wght@300..800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;background:#F4F5F7;color:#2E3A4C;
+  font-family:Manrope,system-ui,sans-serif;font-size:16px;line-height:1.6;
+  padding:0 clamp(16px,4vw,48px) 70px;
+}
+.wrap{max-width:1180px;margin:0 auto}
+header{padding:34px 0 8px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #D7DBE2}
+header img{width:34px;height:34px}
+header b{font-family:Archivo,sans-serif;font-stretch:92%;font-weight:800;letter-spacing:.16em;text-transform:uppercase;font-size:18px;color:#102848}
+header span{margin-left:auto;font-size:14px;color:#63708A}
+h1{font-family:Archivo,sans-serif;font-stretch:112%;font-weight:800;letter-spacing:-.028em;font-size:clamp(30px,4.4vw,52px);line-height:1.02;color:#102848;margin:34px 0 10px}
+.intro{max-width:62ch;color:#4C5B72;margin:0 0 6px}
+.note{max-width:62ch;color:#63708A;font-size:14.5px;margin:12px 0 0}
+.opts{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
+@media(max-width:940px){.opts{grid-template-columns:1fr}}
+.opt{
+  display:flex;flex-direction:column;background:#fff;border:1px solid #D7DBE2;border-radius:6px;
+  overflow:hidden;text-decoration:none;color:inherit;transition:border-color .18s,transform .18s;
+}
+.opt:hover{border-color:#102848;transform:translateY(-2px)}
+.swatch{height:92px;display:flex}
+.swatch i{flex:1}
+.opt-body{padding:18px 18px 20px;display:flex;flex-direction:column;flex:1}
+.kind{font-family:Archivo,sans-serif;font-stretch:92%;font-weight:800;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:#616E84}
+.opt h2{font-family:Archivo,sans-serif;font-stretch:112%;font-weight:800;letter-spacing:-.024em;font-size:27px;line-height:1.04;color:#102848;margin:7px 0 9px}
+.opt p{margin:0 0 12px;font-size:15px;color:#4C5B72}
+.opt dl{margin:0;font-size:14px;border-top:1px solid #E6E9EE;padding-top:11px}
+.opt dt{font-family:Archivo,sans-serif;font-stretch:92%;font-weight:800;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#616E84;margin-top:8px}
+.opt dt:first-child{margin-top:0}
+.opt dd{margin:2px 0 0;color:#4C5B72}
+.go{margin-top:auto;padding-top:15px;font-family:Archivo,sans-serif;font-stretch:92%;font-weight:800;font-size:12.5px;letter-spacing:.11em;text-transform:uppercase;color:#C0400E;display:flex;align-items:center;gap:7px}
+.opt:hover .go svg{transform:translateX(4px)}
+.go svg{width:16px;height:16px;transition:transform .2s}
+.foot{margin-top:40px;padding-top:20px;border-top:1px solid #D7DBE2;font-size:14px;color:#63708A;max-width:74ch}
+.foot a{color:#102848}
+::selection{background:#F55C1E;color:#fff}
+:focus-visible{outline:2px solid #F55C1E;outline-offset:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="../assets/mindforge-mark.png" alt=""><b>Mind Forge</b>
+    <span>Landing page — three options to choose from</span>
+  </header>
+
+  <h1>Three directions for<br>the MindForge landing page.</h1>
+  <p class="intro">All three carry the same content: a sign-in front door for admin, teacher and student, then a short explainer. All three are light mode only, work down to 360px, and have their own moving graphics. Open each, then tell me which one to take to finish.</p>
+  <p class="note">Every sign-in and app button is a placeholder until the real URLs are supplied. Screens, marks and papers are illustrative samples, not real student records.</p>
+
+  <div class="opts">
+
+    <a class="opt" href="whiteprint.html">
+      <span class="swatch" aria-hidden="true">
+        <i style="background:#E4EBF3"></i><i style="background:#112A4A"></i><i style="background:#F55C1E"></i><i style="background:#F7D9A6"></i>
+      </span>
+      <span class="opt-body">
+        <span class="kind">Option A</span>
+        <h2>Whiteprint</h2>
+        <p>The school day drawn as an engineering whiteprint. Three role doors are three ports drawn in section through the forge, with a heat band running the five stages of a test.</p>
+        <dl>
+          <dt>Moving graphics</dt><dd>Drifting construction grid, a dimension line that extends itself, the heat band breathing, embers rising off the anvil.</dd>
+          <dt>Type</dt><dd>Rajdhani · Karla · Spline Sans Mono</dd>
+          <dt>Feels like</dt><dd>Precise, technical, confident. Closest to your logo's navy-and-orange.</dd>
+        </dl>
+        <span class="go">Open option A <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg></span>
+      </span>
+    </a>
+
+    <a class="opt" href="booklet.html">
+      <span class="swatch" aria-hidden="true">
+        <i style="background:#EFE7D6"></i><i style="background:#1A1A18"></i><i style="background:#1D5FA8"></i><i style="background:#D8401C"></i>
+      </span>
+      <span class="opt-body">
+        <span class="kind">Option B</span>
+        <h2>Answer Booklet</h2>
+        <p>The page is the exam answer booklet and its OMR sheet — the object every student, teacher and school office already handles by hand. The three roles are three boxes you fill to enter.</p>
+        <dl>
+          <dt>Moving graphics</dt><dd>A cyan scan band reading down the sheet, OMR bubbles inking in sequence, bubbles filling as you pick a role.</dd>
+          <dt>Type</dt><dd>Zilla Slab · Lexend · Courier Prime</dd>
+          <dt>Feels like</dt><dd>Warm, familiar, unmistakably an Indian school. The safest of the three.</dd>
+        </dl>
+        <span class="go">Open option B <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg></span>
+      </span>
+    </a>
+
+    <a class="opt" href="step-row.html">
+      <span class="swatch" aria-hidden="true">
+        <i style="background:#EFEFF1"></i><i style="background:#102848"></i><i style="background:#F55C1E"></i><i style="background:#F2A20C"></i>
+      </span>
+      <span class="opt-body">
+        <span class="kind">Option C</span>
+        <h2>Step Row</h2>
+        <p>The school day as a step row on a light instrument panel — eight period keys under a running chase light, three role banks beside them, and a dot-matrix readout naming what it holds.</p>
+        <dl>
+          <dt>Moving graphics</dt><dd>The most of the three. A chase light sweeping the period row, a dot-matrix readout stepping, LEDs lighting under the pointer — all on one clock.</dd>
+          <dt>Type</dt><dd>Archivo · Manrope · Doto</dd>
+          <dt>Feels like</dt><dd>Alive and current. The page has a clock and everything is locked to it.</dd>
+        </dl>
+        <span class="go">Open option C <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg></span>
+      </span>
+    </a>
+
+  </div>
+
+  <p class="foot">For reference, the previous landing page is still at <a href="../index.html">../index.html</a>. Once you pick one of these, it goes through the finish review and becomes the project's recorded design system; the other two can be deleted.</p>
+</div>
+</body>
+</html>

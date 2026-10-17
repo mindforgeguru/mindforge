@@ -5,7 +5,7 @@ TimetableConfig and TimetableSlot SQLAlchemy models.
 from datetime import date, datetime, time
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, String, Time, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, JSON, String, Time, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -33,6 +33,11 @@ class TimetableConfig(TenantMixin, Base):
 class TimetableSlot(TenantMixin, Base):
     """Individual timetable slots per grade/date/period."""
     __tablename__ = "timetable_slots"
+    __table_args__ = (
+        # One slot per period; the save upserts on it (migration 039).
+        Index("uq_timetable_slot_period", "school_id", "grade", "slot_date", "period_number",
+              unique=True),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     grade: Mapped[int] = mapped_column(Integer, nullable=False, index=True)

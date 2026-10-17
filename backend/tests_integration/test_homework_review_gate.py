@@ -77,14 +77,14 @@ def _make_homework(api, token, grade, title):
 
 
 def test_empty_grade_reports_enrolment_not_attendance(api, two_schools):
-    """Grade 11 of a fresh school has nobody in it.
+    """Grade 10 of a fresh school has nobody in it (the fixtures enrol grade 8).
 
     Marking attendance there is a no-op (an empty roster inserts no rows), so
     an "attendance first" error would strand the teacher on an error they have
     no way to clear.
     """
     token = two_schools["a"]["teacher_token"]
-    hw_id = _make_homework(api, token, 11, f"{PREFIX} empty-grade hw")
+    hw_id = _make_homework(api, token, 10, f"{PREFIX} empty-grade hw")
 
     r = api.put(
         f"/api/teacher/homework/{hw_id}/completions",
@@ -121,7 +121,7 @@ def test_other_schools_teacher_cannot_review(api, two_schools):
     """The enrolment check runs before any tenant check could be skipped —
     school B must still get 404, not a leaked enrolment count for school A."""
     hw_id = _make_homework(
-        api, two_schools["a"]["teacher_token"], 11, f"{PREFIX} cross-tenant hw"
+        api, two_schools["a"]["teacher_token"], 10, f"{PREFIX} cross-tenant hw"
     )
 
     r = api.put(

@@ -239,6 +239,7 @@ class SideNav extends StatelessWidget {
             Tooltip(
               message: 'Report a problem',
               child: IconButton(
+                tooltip: 'Report a problem',
                 onPressed: onReportProblem,
                 icon: Icon(Icons.bug_report_outlined, size: 18, color: Colors.white.withValues(alpha: 0.65)),
                 splashRadius: 18,
@@ -247,6 +248,7 @@ class SideNav extends StatelessWidget {
           Tooltip(
             message: 'Logout',
             child: IconButton(
+              tooltip: 'Log out',
               onPressed: onLogout,
               icon: Icon(Icons.logout_rounded, size: 18, color: Colors.white.withValues(alpha: 0.65)),
               splashRadius: 18,

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,6 +12,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/leave_guard.dart' as leave_guard;
 import '../../../core/utils/responsive.dart';
 import '../providers/student_provider.dart';
+import '../../../core/utils/api_error.dart';
 
 /// True when the server ended this attempt because the student left the test
 /// (closed the app, went back, opened it again) rather than because time ran
@@ -52,11 +54,22 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
   Timer? _autosaveTimer;
   String _lastSavedSnapshot = '';
 
+  // Taken while the screen is alive: `ref` cannot be used in dispose().
+  late final ApiClient _api;
+  ProviderContainer? _container;
+
   @override
   void initState() {
     super.initState();
+    _api = ref.read(apiClientProvider);
     WidgetsBinding.instance.addObserver(this);
     _startAttempt();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _container = ProviderScope.containerOf(context, listen: false);
   }
 
   @override
@@ -64,6 +77,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     WidgetsBinding.instance.removeObserver(this);
     _autosaveTimer?.cancel();
     leave_guard.disableLeaveConfirmation();
+    _submitOnLeave();
     for (final c in _textCtrls.values) {
       c.dispose();
     }
@@ -119,6 +133,27 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
         _refreshAttemptOnResume();
       }
     }
+  }
+
+  /// The screen is going away with the attempt still open — the way the
+  /// browser's Back button leaves it on the web, where it skips PopScope and
+  /// its "Are you sure?" dialog. Leaving ends a single-attempt test, so submit
+  /// what has been answered rather than lose everything since the last
+  /// autosave. Fire-and-forget: there is no screen left to report to.
+  void _submitOnLeave() {
+    if (_submitted || _loading || _loadFailed || _questions.isEmpty) return;
+    _submitted = true;
+    _flushAnswers();
+    final container = _container;
+    _api
+        .submitTest(widget.testId, Map<String, dynamic>.from(_answers), true)
+        .then<void>((_) {
+      container?.invalidate(pendingTestsProvider);
+      container?.invalidate(completedTestsProvider);
+      container?.invalidate(studentGradesProvider);
+    }).catchError((_) {
+      // The server finalizes an abandoned attempt on its next /start anyway.
+    });
   }
 
   /// One-time notice shown as soon as the attempt loads, warning the student
@@ -204,6 +239,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
       // If server returned a finalized attempt (i.e. deadline already passed),
       // jump straight to the result dialog.
       if (data['is_finalized'] == true) {
+        _submitted = true; // nothing left to submit on the way out
         if (!mounted) return;
         await _showResultDialog(
           score: (data['score'] as num?)?.toDouble() ?? 0,
@@ -233,7 +269,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Could not start test: $e'),
+            content: Text('Could not start test: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error),
       );
     }
@@ -441,7 +477,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Submission failed: $e'),
+              content: Text('Submission failed: ${apiErrorMessage(e)}'),
               backgroundColor: AppColors.error),
         );
         setState(() => _submitted = false);
@@ -450,7 +486,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Submission failed: $e'),
+              content: Text('Submission failed: ${apiErrorMessage(e)}'),
               backgroundColor: AppColors.error),
         );
         setState(() => _submitted = false);
@@ -525,8 +561,9 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
                   style: const TextStyle(fontSize: 14)),
               Text(
                 '$_answeredCount/${_questions.length} answered',
-                style: const TextStyle(
-                    fontSize: 11, color: AppColors.textSecondary),
+                // On the app bar's dark ground.
+                style: TextStyle(
+                    fontSize: 11, color: Colors.white.withValues(alpha: 0.85)),
               ),
             ],
           ),
@@ -591,7 +628,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
                         '${q['marks']} mark${q['marks'] == 1 ? '' : 's'}',
                         style:       TextStyle(
                             fontSize: 12,
-                            color: AppColors.accent,
+                            color: AppColors.accentText,
                             fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -965,6 +1002,8 @@ class _TextAnswerField extends StatelessWidget {
     return TextField(
       controller: controller,
       maxLines: qType == 'vsa' ? 3 : 2,
+      // The backend keeps up to 5,000 characters per answer (bounds.Answers).
+      inputFormatters: [LengthLimitingTextInputFormatter(5000)],
       decoration: InputDecoration(
         labelText: 'Your Answer',
         hintText: qType == 'fill_blank'

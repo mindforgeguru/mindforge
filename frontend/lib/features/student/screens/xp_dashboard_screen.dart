@@ -11,6 +11,7 @@ import '../providers/xp_provider.dart';
 import '../widgets/student_scaffold.dart';
 import '../widgets/theme_picker.dart';
 import '../widgets/xp_progress_bar.dart';
+import '../../../core/utils/api_error.dart';
 
 final _fmtDate = DateFormat('d MMM • h:mm a');
 
@@ -42,7 +43,7 @@ class XpDashboardScreen extends ConsumerWidget {
         child: xpAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => _ErrorView(
-            error: e.toString(),
+            error: apiErrorMessage(e),
             onRetry: () => ref.invalidate(studentXpProvider),
           ),
           data: (xp) => _XpBody(xp: xp),
@@ -127,7 +128,7 @@ class _XpBody extends ConsumerWidget {
                     style: GoogleFonts.poppins(
                       fontSize: 36,
                       fontWeight: FontWeight.w900,
-                      color: palette.accent,
+                      color: Colors.white,
                       height: 1.0,
                     ),
                   ),

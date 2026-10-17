@@ -305,6 +305,7 @@ class _StudentDashboardScreenState
                       width: 48,
                       height: 48,
                       child: IconButton(
+                        tooltip: 'Log out',
                         icon: Icon(Icons.logout,
                             color: Colors.white,
                             size: _s(context, 22, min: 18, max: 26)),
@@ -421,27 +422,31 @@ class _StudentDashboardScreenState
                         // Avatar sitting on top of the card — tappable
                         Positioned(
                           top: 0,
-                          child: GestureDetector(
-                            onTap: () => context.go(
-                                '${RouteNames.studentDashboard}/profile'),
-                            child: Stack(
-                              alignment: Alignment.bottomRight,
-                              children: [
-                                _ProfileAvatar(
-                                  username: auth.username ?? 'S',
-                                  photoUrl: auth.profilePicUrl,
-                                  radius: avatarRadius,
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration:       BoxDecoration(
-                                    color: AppColors.accent,
-                                    shape: BoxShape.circle,
+                          child: Semantics(
+                            button: true,
+                            label: 'My profile',
+                            child: GestureDetector(
+                              onTap: () => context.go(
+                                  '${RouteNames.studentDashboard}/profile'),
+                              child: Stack(
+                                alignment: Alignment.bottomRight,
+                                children: [
+                                  _ProfileAvatar(
+                                    username: auth.username ?? 'S',
+                                    photoUrl: auth.profilePicUrl,
+                                    radius: avatarRadius,
                                   ),
-                                  child: const Icon(Icons.edit,
-                                      size: 12, color: Colors.white),
-                                ),
-                              ],
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration:       BoxDecoration(
+                                      color: AppColors.accent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.edit,
+                                        size: 12, color: Colors.white),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -471,12 +476,16 @@ class _StudentDashboardScreenState
                       size: _s(context, 15, min: 13, max: 17),
                       color: AppColors.primary),
                   SizedBox(width: _s(context, 8, min: 6, max: 10)),
-                  Text(
-                    "Today's Timetable",
-                    style: GoogleFonts.poppins(
-                      fontSize: _fs(context, 14, min: 12, max: 16),
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                  Flexible(
+                    child: Text(
+                      "Today's Timetable",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                        fontSize: _fs(context, 14, min: 12, max: 16),
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                   Expanded(
@@ -506,7 +515,7 @@ class _StudentDashboardScreenState
                       'See all →',
                       style: GoogleFonts.poppins(
                         fontSize: _fs(context, 11, min: 9, max: 12),
-                        color: AppColors.accent,
+                        color: AppColors.accentText,
                       ),
                     ),
                   ),
@@ -1088,12 +1097,14 @@ class _DashSectionHeader extends StatelessWidget {
               child: Icon(icon, size: (sw * 0.038).clamp(13.0, 16.0), color: AppColors.primary),
             ),
             SizedBox(width: (sw * 0.02).clamp(5.0, 8.0)),
-            Text(title, style: GoogleFonts.poppins(
-              fontSize: (sw * 0.033).clamp(11.0, 14.0),
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            )),
-            const Spacer(),
+            Expanded(
+              child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: (sw * 0.033).clamp(11.0, 14.0),
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  )),
+            ),
             TextButton(
               onPressed: onSeeAll,
               style: TextButton.styleFrom(
@@ -1103,7 +1114,7 @@ class _DashSectionHeader extends StatelessWidget {
               ),
               child: Text('See all →', style: GoogleFonts.poppins(
                 fontSize: (sw * 0.028).clamp(10.0, 12.0),
-                color: AppColors.accent,
+                color: AppColors.accentText,
               )),
             ),
           ],
@@ -1181,7 +1192,7 @@ class _DashHomeworkTile extends StatelessWidget {
               _fmtDMon.format(hw.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (sw * 0.025).clamp(9.0, 11.0),
-                color: AppColors.accent,
+                color: AppColors.accentText,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1256,7 +1267,7 @@ class _DashBroadcastTile extends StatelessWidget {
               _fmtDMon.format(broadcast.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (sw * 0.025).clamp(9.0, 11.0),
-                color: AppColors.accent,
+                color: AppColors.accentText,
               ),
             ),
           ],

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,6 +14,7 @@ import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/api/api_client.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_scaffold.dart';
+import '../../../core/utils/api_error.dart';
 
 // ─── Responsive helpers (local) ───────────────────────────────────────────────
 // Scale a base value linearly with screen width (reference = 390 px).
@@ -287,13 +289,13 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
+          SnackBar(content: Text('Failed: ${apiErrorMessage(e)}')),
         );
       }
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e')),
+        SnackBar(content: Text('Failed: ${apiErrorMessage(e)}')),
       );
     }
   }
@@ -391,8 +393,10 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
                 // Title
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Title'),
+                  inputFormatters: [LengthLimitingTextInputFormatter(300)],
                   onChanged: (v) => _title = v,
-                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 SizedBox(height: _s(context, 10, min: 8, max: 14)),
                 // Type — use Wrap so chips never overflow dialog
@@ -435,6 +439,7 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
                         : 'Description / Instructions',
                   ),
                   maxLines: 3,
+                  maxLength: 2000,
                   onChanged: (v) => _description = v,
                 ),
                 SizedBox(height: _s(context, 10, min: 8, max: 14)),
@@ -556,14 +561,14 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed: $e')),
+            SnackBar(content: Text('Failed: ${apiErrorMessage(e)}')),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
+          SnackBar(content: Text('Failed: ${apiErrorMessage(e)}')),
         );
       }
     } finally {
@@ -707,15 +712,19 @@ class _HomeworkCard extends StatelessWidget {
                       ),
                     ),
                     // Delete — compact tap target aligned with the footer
-                    InkWell(
-                      onTap: onDelete,
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Icon(
-                          Icons.delete_outline,
-                          color: AppColors.error,
-                          size: _s(context, 20, min: 18, max: 24),
+                    Semantics(
+                      button: true,
+                      label: 'Delete homework',
+                      child: InkWell(
+                        onTap: onDelete,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.delete_outline,
+                            color: AppColors.error,
+                            size: _s(context, 20, min: 18, max: 24),
+                          ),
                         ),
                       ),
                     ),

@@ -853,8 +853,10 @@ class ApiClient {
     return res.data as List<dynamic>;
   }
 
-  Future<List<dynamic>> getChildTests() async {
-    final res = await _dio.get('/parent/child/tests');
+  Future<List<dynamic>> getChildTests({int? childId}) async {
+    final res = await _dio.get('/parent/child/tests', queryParameters: {
+      if (childId != null) 'child_id': childId,
+    });
     return res.data as List<dynamic>;
   }
 
@@ -894,26 +896,43 @@ class ApiClient {
 
   // ── Parent ────────────────────────────────────────────────────────────────
 
-  Future<List<dynamic>> getChildAttendance({int skip = 0, int limit = 50}) async {
+  /// The parent's linked children: student_id, username, grade, profile_pic_url.
+  /// Every child call below takes `childId`; without it the server uses the
+  /// first child.
+  Future<List<dynamic>> getParentChildren() async {
+    final res = await _dio.get('/parent/children');
+    return res.data as List<dynamic>;
+  }
+
+  Future<List<dynamic>> getChildAttendance(
+      {int skip = 0, int limit = 50, int? childId}) async {
     final res = await _dio.get('/parent/child/attendance', queryParameters: {
+      if (childId != null) 'child_id': childId,
       if (skip > 0) 'skip': skip,
       if (limit != 50) 'limit': limit,
     });
     return res.data as List<dynamic>;
   }
 
-  Future<Map<String, dynamic>> getChildAttendanceSummary() async {
-    final res = await _dio.get('/parent/child/attendance/summary');
+  Future<Map<String, dynamic>> getChildAttendanceSummary({int? childId}) async {
+    final res = await _dio.get('/parent/child/attendance/summary', queryParameters: {
+      if (childId != null) 'child_id': childId,
+    });
     return res.data as Map<String, dynamic>;
   }
 
-  Future<List<dynamic>> getChildTimetable({required String date}) async {
-    final res = await _dio.get('/parent/child/timetable', queryParameters: {'date': date});
+  Future<List<dynamic>> getChildTimetable({required String date, int? childId}) async {
+    final res = await _dio.get('/parent/child/timetable', queryParameters: {
+      'date': date,
+      if (childId != null) 'child_id': childId,
+    });
     return res.data as List<dynamic>;
   }
 
-  Future<List<dynamic>> getChildGrades({String? subject, String? gradeType, int skip = 0, int limit = 50}) async {
+  Future<List<dynamic>> getChildGrades(
+      {String? subject, String? gradeType, int skip = 0, int limit = 50, int? childId}) async {
     final res = await _dio.get('/parent/child/grades', queryParameters: {
+      if (childId != null) 'child_id': childId,
       if (subject != null) 'subject': subject,
       if (gradeType != null) 'grade_type': gradeType,
       if (skip > 0) 'skip': skip,
@@ -922,8 +941,9 @@ class ApiClient {
     return res.data as List<dynamic>;
   }
 
-  Future<Map<String, dynamic>> getChildFees({String? academicYear}) async {
+  Future<Map<String, dynamic>> getChildFees({String? academicYear, int? childId}) async {
     final res = await _dio.get('/parent/fees', queryParameters: {
+      if (childId != null) 'child_id': childId,
       if (academicYear != null) 'academic_year': academicYear,
     });
     return res.data as Map<String, dynamic>;
@@ -1213,13 +1233,17 @@ class ApiClient {
 
   // ── Homework (Parent) ─────────────────────────────────────────────────────
 
-  Future<List<dynamic>> getChildHomework() async {
-    final res = await _dio.get('/parent/child/homework');
+  Future<List<dynamic>> getChildHomework({int? childId}) async {
+    final res = await _dio.get('/parent/child/homework', queryParameters: {
+      if (childId != null) 'child_id': childId,
+    });
     return res.data as List<dynamic>;
   }
 
-  Future<List<dynamic>> getChildHomeworkCompletions() async {
-    final res = await _dio.get('/parent/child/homework/completions');
+  Future<List<dynamic>> getChildHomeworkCompletions({int? childId}) async {
+    final res = await _dio.get('/parent/child/homework/completions', queryParameters: {
+      if (childId != null) 'child_id': childId,
+    });
     return res.data as List<dynamic>;
   }
 
@@ -1251,8 +1275,10 @@ class ApiClient {
 
   // ── Broadcasts (Parent) ───────────────────────────────────────────────────
 
-  Future<List<dynamic>> getParentBroadcasts() async {
-    final res = await _dio.get('/parent/broadcasts');
+  Future<List<dynamic>> getParentBroadcasts({int? childId}) async {
+    final res = await _dio.get('/parent/broadcasts', queryParameters: {
+      if (childId != null) 'child_id': childId,
+    });
     return res.data as List<dynamic>;
   }
 
@@ -1297,9 +1323,10 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> getParentDashboardSummary({String? date}) async {
+  Future<Map<String, dynamic>> getParentDashboardSummary({String? date, int? childId}) async {
     final res = await _dio.get('/parent/dashboard-summary', queryParameters: {
       if (date != null) 'date': date,
+      if (childId != null) 'child_id': childId,
     });
     return res.data as Map<String, dynamic>;
   }

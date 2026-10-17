@@ -13,6 +13,7 @@ import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
+import '../../../core/utils/api_error.dart';
 
 class TeacherTimetableScreen extends ConsumerStatefulWidget {
   const TeacherTimetableScreen({super.key});
@@ -256,7 +257,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
                                   style:       TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: AppColors.secondary)),
+                                      color: AppColors.secondaryText)),
                             ),
                             title: Text(
                                 slot.subject?.isNotEmpty == true
@@ -737,7 +738,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Error: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }
@@ -796,7 +797,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Error: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }
@@ -866,7 +867,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Error: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1052,7 +1053,7 @@ class _GradeSectionState extends ConsumerState<_GradeSection> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Error: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }
@@ -1087,7 +1088,7 @@ class _GradeSectionState extends ConsumerState<_GradeSection> {
                 style:       TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
-                  color: AppColors.secondary,
+                  color: AppColors.secondaryText,
                 ),
               ),
             ],
@@ -1539,6 +1540,7 @@ class _WeekStrip extends StatelessWidget {
           Row(
             children: [
               IconButton(
+                tooltip: 'Previous week',
                 icon: const Icon(Icons.chevron_left, size: 16),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
@@ -1557,6 +1559,7 @@ class _WeekStrip extends StatelessWidget {
                 ),
               ),
               IconButton(
+                tooltip: 'Next week',
                 icon: const Icon(Icons.chevron_right, size: 16),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 26, minHeight: 26),

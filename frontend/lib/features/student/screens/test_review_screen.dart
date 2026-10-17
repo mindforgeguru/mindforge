@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
@@ -23,7 +24,9 @@ class TestReviewScreen extends ConsumerWidget {
               Text(d['title'] as String, style: const TextStyle(fontSize: 15)),
               Text(
                 '${d['subject']}  ·  Score: ${(d['score'] as num).toStringAsFixed(1)} / ${(d['total_marks'] as num).toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                // On the app bar's dark ground.
+                style: TextStyle(
+                    fontSize: 11, color: Colors.white.withValues(alpha: 0.85)),
               ),
             ],
           ),
@@ -45,6 +48,10 @@ class TestReviewScreen extends ConsumerWidget {
           final studentAnswers =
               (data['student_answers'] as Map<String, dynamic>)
                   .map((k, v) => MapEntry(k, v?.toString() ?? ''));
+          // Set while the test is still open for the class: the answer key is
+          // withheld until then, so nothing can be marked right or wrong yet.
+          final availableAt = data['answers_available_at'] as String?;
+          final answersHidden = availableAt != null;
           final score = (data['score'] as num).toDouble();
           final total = (data['total_marks'] as num).toDouble();
           final pct = total > 0 ? score / total * 100 : 0.0;
@@ -59,7 +66,7 @@ class TestReviewScreen extends ConsumerWidget {
             child: ListView.separated(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
-            itemCount: questions.length + 1,
+            itemCount: questions.length + (answersHidden ? 2 : 1),
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (ctx, i) {
               // Header score card
@@ -106,7 +113,29 @@ class TestReviewScreen extends ConsumerWidget {
                 );
               }
 
-              final q = questions[i - 1];
+              if (answersHidden && i == 1) {
+                final when = DateFormat('d MMM, h:mm a')
+                    .format(DateTime.parse(availableAt).toLocal());
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: mindForgeCardDecoration(),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_clock_outlined, color: AppColors.primary),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Correct answers appear when the test closes — $when. '
+                          'Until then you can see your own answers.',
+                          style: const TextStyle(color: AppColors.textSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final q = questions[i - (answersHidden ? 2 : 1)];
               final qId = q['id'].toString();
               final qType = (q['type'] as String? ?? '').toLowerCase();
               final correctAnswer =
@@ -117,7 +146,8 @@ class TestReviewScreen extends ConsumerWidget {
                   qType, studentAnswer.toLowerCase(), correctAnswer.toLowerCase());
 
               return _QuestionReviewCard(
-                index: i,
+                index: i - (answersHidden ? 1 : 0),
+                answersHidden: answersHidden,
                 question: q,
                 qType: qType,
                 correctAnswer: correctAnswer,
@@ -160,6 +190,9 @@ class _QuestionReviewCard extends StatelessWidget {
   final String studentAnswer;
   final bool isCorrect;
 
+  /// No key yet: show the student's own answers, mark nothing.
+  final bool answersHidden;
+
   const _QuestionReviewCard({
     required this.index,
     required this.question,
@@ -167,23 +200,30 @@ class _QuestionReviewCard extends StatelessWidget {
     required this.correctAnswer,
     required this.studentAnswer,
     required this.isCorrect,
+    this.answersHidden = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final statusColor = studentAnswer.isEmpty
         ? AppColors.textMuted
-        : isCorrect
+        : answersHidden
+            ? AppColors.primary
+            : isCorrect
             ? AppColors.success
             : AppColors.error;
     final statusIcon = studentAnswer.isEmpty
         ? Icons.remove_circle_outline
-        : isCorrect
+        : answersHidden
+            ? Icons.edit_note
+            : isCorrect
             ? Icons.check_circle
             : Icons.cancel;
     final statusLabel = studentAnswer.isEmpty
         ? 'Not Answered'
-        : isCorrect
+        : answersHidden
+            ? 'Answered'
+            : isCorrect
             ? 'Correct'
             : 'Incorrect';
 
@@ -267,22 +307,28 @@ class _QuestionReviewCard extends StatelessWidget {
                     text: studentAnswer.isEmpty ? '(not answered)' : studentAnswer,
                     color: studentAnswer.isEmpty
                         ? AppColors.textMuted
-                        : isCorrect
+                        : answersHidden
+                            ? AppColors.primary
+                            : isCorrect
                             ? AppColors.success
                             : AppColors.error,
                     icon: studentAnswer.isEmpty
                         ? Icons.remove
-                        : isCorrect
-                            ? Icons.check
-                            : Icons.close,
+                        : answersHidden
+                            ? Icons.edit_note
+                            : isCorrect
+                                ? Icons.check
+                                : Icons.close,
                   ),
-                  const SizedBox(height: 6),
-                  _AnswerRow(
-                    label: 'Correct answer',
-                    text: correctAnswer,
-                    color: AppColors.success,
-                    icon: Icons.check_circle_outline,
-                  ),
+                  if (!answersHidden) ...[
+                    const SizedBox(height: 6),
+                    _AnswerRow(
+                      label: 'Correct answer',
+                      text: correctAnswer,
+                      color: AppColors.success,
+                      icon: Icons.check_circle_outline,
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -295,7 +341,8 @@ class _QuestionReviewCard extends StatelessWidget {
   List<Widget> _buildMcqOptions(Map<String, dynamic> opts) {
     return opts.entries.map((entry) {
       final key = entry.key;
-      final isCorrectOpt = key.toLowerCase() == correctAnswer.toLowerCase();
+      final isCorrectOpt = !answersHidden &&
+          key.toLowerCase() == correctAnswer.toLowerCase();
       final isStudentOpt =
           key.toLowerCase() == studentAnswer.toLowerCase();
 
@@ -304,7 +351,12 @@ class _QuestionReviewCard extends StatelessWidget {
       Color textColor;
       Widget? trailing;
 
-      if (isCorrectOpt && isStudentOpt) {
+      if (answersHidden && isStudentOpt) {
+        bg = AppColors.primary.withValues(alpha: 0.08);
+        border = AppColors.primary;
+        textColor = AppColors.primary;
+        trailing = Icon(Icons.edit_note, color: AppColors.primary, size: 18);
+      } else if (isCorrectOpt && isStudentOpt) {
         bg = AppColors.success.withValues(alpha: 0.12);
         border = AppColors.success;
         textColor = AppColors.success;
@@ -365,11 +417,14 @@ class _QuestionReviewCard extends StatelessWidget {
   Widget _buildTrueFalse() {
     return Row(
       children: ['True', 'False'].map((v) {
-        final isCorrectOpt = v.toLowerCase() == correctAnswer.toLowerCase();
+        final isCorrectOpt =
+            !answersHidden && v.toLowerCase() == correctAnswer.toLowerCase();
         final isStudentOpt = v.toLowerCase() == studentAnswer.toLowerCase();
 
         Color color;
-        if (isCorrectOpt && isStudentOpt) {
+        if (answersHidden && isStudentOpt) {
+          color = AppColors.primary;
+        } else if (isCorrectOpt && isStudentOpt) {
           color = AppColors.success;
         } else if (isCorrectOpt) {
           color = AppColors.success;

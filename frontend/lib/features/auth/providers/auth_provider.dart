@@ -346,7 +346,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return 'Connection timed out. Please try again.';
       }
       final status = e.response?.statusCode;
-      if (status == 403) return 'Your account is pending admin approval.';
+      if (status == 403) {
+        // Pending approval and deactivation are both 403s; the server says
+        // which. Fall back to the old text only when it gives no reason.
+        final data = e.response?.data;
+        final detail = data is Map ? data['detail'] : null;
+        return detail is String && detail.isNotEmpty
+            ? detail
+            : 'Your account is pending admin approval.';
+      }
       if (status == 401) return 'Invalid username or MPIN.';
       // Pull a human message out of the body WITHOUT assuming its shape. The
       // body may be a Map ({"detail": "..."} or FastAPI's 422

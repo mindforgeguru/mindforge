@@ -11,6 +11,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -115,7 +116,12 @@ async def create_school(
         subscription_status="active",
     )
     db.add(school)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Created by a request at the same moment (the slug is unique).
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="That school was just created.")
     await db.refresh(school)
     return _to_response(school, await _counts_for(db, school.id))
 
@@ -188,6 +194,13 @@ async def create_school_admin(
         is_approved=True,
     )
     db.add(admin)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Added by a request at the same moment (usernames are unique per school).
+        await db.rollback()
+        raise HTTPException(
+            status_code=409, detail="A user with this username already exists in this school.",
+        )
     await db.refresh(admin)
     return admin

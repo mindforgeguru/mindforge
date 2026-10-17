@@ -19,6 +19,7 @@ import '../providers/database_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 import 'test_detail_screen.dart';
 import '../../../core/widgets/school_logo.dart';
+import '../../../core/utils/api_error.dart';
 
 class TeacherTestScreen extends ConsumerStatefulWidget {
   const TeacherTestScreen({super.key});
@@ -564,6 +565,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
                   child: const Text('Change', style: TextStyle(fontSize: 12)),
                 ),
                 IconButton(
+                  tooltip: 'Remove chapter',
                   icon: const Icon(Icons.close, size: 16, color: AppColors.error),
                   onPressed: () => setState(() => _uploadedChapter = null),
                   padding: EdgeInsets.zero,
@@ -775,7 +777,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Generation failed: $e'),
+              content: Text('Generation failed: ${apiErrorMessage(e)}'),
               backgroundColor: AppColors.error),
         );
       }
@@ -901,6 +903,7 @@ class _CountRow extends StatelessWidget {
                   style: TextStyle(fontSize: R.fs(context, 13, min: 11, max: 15)),
                   overflow: TextOverflow.ellipsis)),
           IconButton(
+            tooltip: 'Fewer',
             icon: const Icon(Icons.remove_circle_outline, size: 20),
             onPressed: value > 0 ? () => onChanged(value - 1) : null,
             padding: EdgeInsets.zero,
@@ -915,6 +918,7 @@ class _CountRow extends StatelessWidget {
             ),
           ),
           IconButton(
+            tooltip: 'More',
             icon: const Icon(Icons.add_circle_outline, size: 20),
             onPressed: () => onChanged(value + 1),
             padding: EdgeInsets.zero,
@@ -1111,7 +1115,7 @@ class _TestTileState extends ConsumerState<_TestTile> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Error: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
         setState(() => _retrying = false);
       }
@@ -1152,7 +1156,7 @@ class _TestTileState extends ConsumerState<_TestTile> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Error: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -1195,7 +1199,7 @@ class _TestTileState extends ConsumerState<_TestTile> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Error: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
         setState(() => _deleting = false);
       }

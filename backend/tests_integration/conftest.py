@@ -257,6 +257,9 @@ def two_schools(api, owner_token):
             "/api/admin/academic-years/init", headers=auth(admin_token)
         )
         assert r.status_code in (200, 201, 409), f"year init {tag}: {r.text}"
+        # Started a month ago, not now: tests insert "yesterday's" homework,
+        # and the current year ignores anything from before it began.
+        asyncio.run(_backdate_year(sid))
 
         schools[tag] = {
             "id": sid,
@@ -269,24 +272,43 @@ def two_schools(api, owner_token):
     return schools
 
 
-async def _make_student(school_id: int, username: str, grade: int = 8) -> int:
+async def _backdate_year(school_id: int) -> None:
+    conn = await asyncpg.connect(DB_DSN)
+    try:
+        await conn.execute(
+            "UPDATE academic_years SET started_at = now() - interval '30 days' "
+            "WHERE school_id = $1 AND is_current",
+            school_id,
+        )
+    finally:
+        await conn.close()
+
+
+async def _make_student(school_id: int, username: str, grade: int = 8,
+                        new: bool = False) -> int:
     """Insert an approved student straight into the database.
 
     Registration is exercised elsewhere and is rate limited; these fixtures
     only need a student row with the right school_id to hang fees and XP off.
     The MPIN hash is a placeholder — nothing logs in as these accounts.
+
+    The account dates from a month ago unless `new`: homework and tests only
+    count students who were there when they were set, and tests backdate those
+    to "yesterday".
     """
     conn = await asyncpg.connect(DB_DSN)
     try:
         uid = await conn.fetchval(
             """
             INSERT INTO users (username, mpin_hash, role, school_id,
-                               is_active, is_approved)
-            VALUES ($1, 'x', 'student', $2, true, true)
+                               is_active, is_approved, created_at)
+            VALUES ($1, 'x', 'student', $2, true, true,
+                    CASE WHEN $3 THEN now() ELSE now() - interval '30 days' END)
             RETURNING id
             """,
             username,
             school_id,
+            new,
         )
         await conn.execute(
             """

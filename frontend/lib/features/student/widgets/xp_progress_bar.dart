@@ -140,7 +140,7 @@ class XPProgressBar extends ConsumerWidget {
           style: GoogleFonts.poppins(
             fontSize: 11,
             fontWeight: FontWeight.w800,
-            color: palette.accentDark,
+            color: palette.accentText,
             letterSpacing: 1,
           ),
         ),

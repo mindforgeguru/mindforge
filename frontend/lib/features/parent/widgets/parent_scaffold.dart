@@ -8,6 +8,7 @@ import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
 import '../../../core/widgets/side_nav.dart';
 import '../../auth/providers/auth_provider.dart';
+import 'child_switcher.dart';
 import 'parent_bottom_nav.dart';
 
 /// Responsive scaffold for parent screens.
@@ -25,6 +26,10 @@ class ParentScaffold extends ConsumerWidget {
   /// their own desktop-wide layout so they fill the browser width.
   final bool wideContent;
 
+  /// Show the child switcher (only appears for a parent with several children).
+  /// Off for screens that are not about a child, like Profile and Faculty.
+  final bool showChildSwitcher;
+
   const ParentScaffold({
     super.key,
     this.appBar,
@@ -33,16 +38,33 @@ class ParentScaffold extends ConsumerWidget {
     this.floatingActionButtonLocation,
     this.backgroundColor,
     this.wideContent = false,
+    this.showChildSwitcher = true,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isWide = MediaQuery.of(context).size.width >= 900;
+    // The switcher only shows for several children. Without an app bar it is
+    // the top of the screen, so it takes the status-bar inset and the body
+    // below it (whose header would add the inset again) loses it.
+    final multiChild = showChildSwitcher && showsChildSwitcher(ref);
+    final content = multiChild
+        ? Column(children: [
+            appBar == null
+                ? const SafeArea(bottom: false, child: ChildSwitcher())
+                : const ChildSwitcher(),
+            Expanded(
+              child: appBar == null
+                  ? MediaQuery.removePadding(context: context, removeTop: true, child: body)
+                  : body,
+            ),
+          ])
+        : body;
 
     if (!isWide) {
       return Scaffold(
         appBar: appBar,
-        body: body,
+        body: content,
         bottomNavigationBar: const ParentBottomNav(),
         floatingActionButton: floatingActionButton,
         floatingActionButtonLocation: floatingActionButtonLocation,
@@ -55,11 +77,11 @@ class ParentScaffold extends ConsumerWidget {
     // that already build a desktop-wide layout opt out with `wideContent`.
     final auth = ref.watch(authProvider);
     final innerBody = wideContent
-        ? body
+        ? content
         : Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 600),
-              child: body,
+              child: content,
             ),
           );
     return Scaffold(

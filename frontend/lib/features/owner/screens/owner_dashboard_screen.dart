@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+import '../../../core/utils/api_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,7 +45,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Could not load schools: $e';
+        _error = 'Could not load schools: ${apiErrorMessage(e)}';
         _loading = false;
       });
     }
@@ -254,11 +254,11 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'School name *')),
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'School name *'), inputFormatters: [LengthLimitingTextInputFormatter(200)]),
             const SizedBox(height: 8),
-            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Contact email')),
+            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Contact email'), inputFormatters: [LengthLimitingTextInputFormatter(255)]),
             const SizedBox(height: 8),
-            TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Contact phone')),
+            TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Contact phone'), inputFormatters: [LengthLimitingTextInputFormatter(20)]),
           ],
         ),
         onSubmit: () async {
@@ -404,37 +404,5 @@ class _SubmitDialogState extends State<_SubmitDialog> {
   }
 }
 
-/// Pull a human message out of an API failure for the owner console. A
-/// DioException's toString() never contains the response body, so the old
-/// indexOf('detail') check always missed and dumped the raw exception at the
-/// user. Dig into the parsed body instead — it may be a Map ({"detail": "..."}
-/// or FastAPI's 422 {"detail": [{"msg": ...}]}); guard every access since a
-/// cold-edge 5xx can return a plain-string or null body.
-String ownerApiErrorMessage(Object e) {
-  if (e is DioException) {
-    final data = e.response?.data;
-    if (data is Map) {
-      final detail = data['detail'];
-      if (detail is String && detail.isNotEmpty) return _clean(detail);
-      if (detail is List && detail.isNotEmpty) {
-        final first = detail.first;
-        if (first is Map && first['msg'] is String) {
-          return _clean(first['msg'] as String);
-        }
-      }
-      if (detail != null) return _clean(detail.toString());
-    }
-    final status = e.response?.statusCode;
-    if (status != null) return 'Request failed (HTTP $status). Please try again.';
-    return 'Request failed. Please try again.';
-  }
-  return 'Something went wrong. Please try again.';
-}
-
-// Pydantic v2 prepends "Value error, " to messages raised from a custom
-// validator (e.g. the weak-MPIN check), and it rides through the 422 body into
-// the UI. Strip that machine prefix so the user sees just the sentence.
-String _clean(String msg) {
-  const prefix = 'Value error, ';
-  return msg.startsWith(prefix) ? msg.substring(prefix.length) : msg;
-}
+/// Kept as the owner console's name for [apiErrorMessage], which grew out of it.
+String ownerApiErrorMessage(Object e) => apiErrorMessage(e);

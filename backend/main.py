@@ -13,7 +13,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import logging
 
+from sqlalchemy.exc import DBAPIError
+
 from app.core.config import settings
+from fastapi.exceptions import RequestValidationError
+from app.core.error_handlers import db_value_error, internal_error, validation_error
 from app.core.database import engine, Base
 from app.core.redis_client import redis_manager
 from app.core.security import decode_access_token
@@ -302,22 +306,12 @@ app.add_middleware(
 # here lets us attach the CORS headers ourselves so the web client sees a real
 # 500 with a JSON body instead of an opaque network error. HTTPExceptions are
 # unaffected — they're handled inside CORSMiddleware and already get the headers.
-@app.exception_handler(Exception)
-async def cors_aware_internal_error(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception(
-        "Unhandled error on %s %s", request.method, request.url.path,
-    )
-    headers: dict[str, str] = {}
-    origin = request.headers.get("origin")
-    if origin and origin in settings.BACKEND_CORS_ORIGINS:
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
-        headers["Vary"] = "Origin"
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error."},
-        headers=headers,
-    )
+# A value the database refuses as too long or out of range is a 422, not a 500
+# (both handlers live in app.core.error_handlers), and a 422 that echoes a NaN
+# can still be sent.
+app.add_exception_handler(Exception, internal_error)
+app.add_exception_handler(DBAPIError, db_value_error)
+app.add_exception_handler(RequestValidationError, validation_error)
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])

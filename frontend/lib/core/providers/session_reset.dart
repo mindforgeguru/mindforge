@@ -49,6 +49,8 @@ final List<ProviderOrFamily> sessionScopedProviders = <ProviderOrFamily>[
   parentChildHomeworkCompletionsProvider,
   parentBroadcastsProvider,
   parentDashboardSummaryProvider,
+  parentChildrenProvider,
+  selectedChildIdProvider,
 
   // ── Student ────────────────────────────────────────────────────────────
   studentAttendanceProvider,

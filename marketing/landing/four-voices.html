@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MindForge — AI assisted learning</title>
+<meta name="description" content="A teacher sets it. A student attempts it. A parent sees it. The school records it. One thread carries all four.">
+<link rel="icon" href="assets/mindforge-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Faustina:ital,wght@0,400..700;1,400..600&family=Libre+Franklin:wght@500..800&family=Martian+Mono:wght@300..600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   MIND FORGE — four voices
+   Black ink on white. One face per role. One hairline between them.
+   ============================================================ */
+
+:root{
+  --paper:   #FBFAF8;
+  --ink:     #0B0B0B;
+  --ink-2:   #3A3A38;
+  --hair:    #0B0B0B;
+  --orange:  #C23A08;
+  --orange-l:#E8490B;
+  --faint:   #E4E1DA;
+
+  --measure: 64ch;
+  --ease:    cubic-bezier(.16,1,.3,1);
+
+  /* the four hands */
+  --v-teacher: "Archivo", sans-serif;
+  --v-student: "Martian Mono", monospace;
+  --v-parent:  "Faustina", serif;
+  --v-office:  "Libre Franklin", sans-serif;
+}
+
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--v-office);font-size:17px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;overflow-x:clip;
+}
+::selection{background:var(--orange);color:var(--paper);}
+::-moz-selection{background:var(--orange);color:var(--paper);}
+:focus-visible{outline:2.5px solid var(--orange);outline-offset:4px;}
+html{scrollbar-color:var(--ink) var(--faint);scrollbar-width:thin;}
+::-webkit-scrollbar{width:11px;height:11px;}
+::-webkit-scrollbar-track{background:var(--faint);}
+::-webkit-scrollbar-thumb{background:var(--ink);border:3px solid var(--faint);}
+::-webkit-scrollbar-thumb:hover{background:var(--orange);}
+a{color:inherit;}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 clamp(16px,4vw,44px);}
+
+/* ============================================================
+   HEADER — set like a title page, not a chrome bar
+   ============================================================ */
+.top{
+  position:sticky;top:0;z-index:50;background:var(--paper);
+  border-bottom:1px solid var(--hair);
+}
+.top-in{
+  max-width:1180px;margin:0 auto;padding:14px clamp(16px,4vw,44px);
+  display:flex;align-items:center;gap:clamp(12px,2vw,26px);
+}
+.mark{display:flex;align-items:center;gap:10px;text-decoration:none;flex:0 0 auto;}
+.mark img{width:34px;height:34px;display:block;}
+.mark b{
+  font-family:var(--v-teacher);font-variation-settings:"wdth" 118;
+  font-weight:800;font-size:16.5px;letter-spacing:.12em;text-transform:uppercase;
+  line-height:1;display:block;
+}
+.mark small{
+  display:block;font-family:var(--v-student);font-weight:300;
+  font-size:11px;letter-spacing:.02em;color:#55534E;margin-top:4px;
+}
+.nav{display:flex;gap:2px;margin-left:auto;}
+.nav a{
+  font-weight:600;font-size:14.5px;color:var(--ink);text-decoration:none;
+  padding:8px 12px;transition:background .15s ease,color .15s ease;
+}
+.nav a:hover{background:var(--ink);color:var(--paper);}
+@media (max-width:880px){.nav{display:none;}}
+
+/* Sign in: the only filled block in the whole page */
+.stampbtn{
+  flex:0 0 auto;margin-left:auto;
+  display:inline-flex;align-items:center;gap:9px;
+  font-family:var(--v-teacher);font-variation-settings:"wdth" 112;
+  font-weight:800;font-size:14px;letter-spacing:.10em;text-transform:uppercase;
+  background:var(--ink);color:var(--paper);text-decoration:none;
+  padding:12px 19px;
+  transition:background .15s ease,transform .12s var(--ease);
+}
+.nav + .stampbtn{margin-left:8px;}
+.stampbtn:hover{background:var(--orange);}
+.stampbtn:active{transform:translateY(2px);}
+.stampbtn svg{width:15px;height:15px;}
+@media (max-width:420px){
+  .stampbtn{padding:10px 13px;font-size:12.5px;letter-spacing:.06em;}
+  .mark small{display:none;}
+}
+
+/* ============================================================
+   THE VOICES
+   ============================================================ */
+.voice{margin:0;}
+.who{
+  display:block;font-family:var(--v-office);
+  font-weight:700;font-size:12.5px;letter-spacing:.04em;
+  text-transform:uppercase;color:#55534E;margin-bottom:10px;
+}
+.teacher{
+  font-family:var(--v-teacher);font-variation-settings:"wdth" 122;
+  font-weight:900;letter-spacing:-.03em;line-height:.92;text-wrap:balance;
+}
+.student{
+  font-family:var(--v-student);font-weight:400;letter-spacing:-.01em;line-height:1.3;
+}
+.parent{
+  font-family:var(--v-parent);font-weight:500;font-style:italic;
+  letter-spacing:-.005em;line-height:1.2;
+}
+.office{
+  font-family:var(--v-office);font-weight:700;letter-spacing:.02em;
+  line-height:1.35;font-variant-numeric:tabular-nums;
+}
+.in-orange{color:var(--orange);}
+
+/* the hairline: the only structural element, and it is the product */
+.thread{
+  border:0;border-top:1px solid var(--hair);margin:0;height:0;
+}
+
+/* ============================================================
+   FIRST VIEWPORT — the exchange
+   ============================================================ */
+.exchange{padding:clamp(34px,6vw,84px) 0 clamp(26px,4vw,56px);}
+.l-teacher{font-size:clamp(40px,8.4vw,124px);margin:0;}
+.l-student{
+  font-size:clamp(17px,2.4vw,31px);margin:clamp(20px,3vw,38px) 0 0;
+  padding-left:clamp(0px,14vw,240px);max-width:34ch;
+}
+.l-parent{
+  font-size:clamp(26px,4.6vw,62px);margin:clamp(18px,2.6vw,34px) 0 0;
+  padding-left:clamp(0px,6vw,110px);
+}
+.exchange .thread{margin:clamp(24px,3.4vw,44px) 0;}
+.threadnote{
+  display:flex;flex-wrap:wrap;gap:10px 26px;align-items:baseline;
+  font-family:var(--v-student);font-weight:300;font-size:14px;color:#44423D;
+}
+.hero-foot{
+  display:flex;flex-wrap:wrap;gap:clamp(18px,3vw,44px);
+  align-items:flex-end;justify-content:space-between;
+  margin-top:clamp(24px,3.4vw,44px);
+}
+.lede{font-size:clamp(16.5px,1.5vw,19px);line-height:1.5;max-width:44ch;margin:0;color:var(--ink-2);}
+.cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+.btn{
+  display:inline-flex;align-items:center;gap:9px;
+  font-family:var(--v-teacher);font-variation-settings:"wdth" 108;
+  font-weight:800;font-size:14.5px;letter-spacing:.07em;text-transform:uppercase;
+  text-decoration:none;padding:14px 21px;
+  transition:background .15s ease,color .15s ease,transform .12s var(--ease);
+}
+.btn svg{width:16px;height:16px;flex:0 0 auto;}
+.btn-fill{background:var(--ink);color:var(--paper);}
+.btn-fill:hover{background:var(--orange);}
+.btn-fill:active{transform:translateY(2px);}
+.btn-rule{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink);}
+.btn-rule:hover{background:var(--ink);color:var(--paper);}
+.btn-rule:active{transform:translateY(2px);}
+.btn[aria-disabled="true"]{opacity:.5;pointer-events:none;box-shadow:inset 0 0 0 1.5px #9B9992;}
+
+/* ============================================================
+   SECTIONS
+   ============================================================ */
+.sec{padding:clamp(48px,7vw,104px) 0 0;}
+.sec > .thread{margin-bottom:clamp(26px,3.6vw,46px);}
+.sec-head{max-width:var(--measure);margin-bottom:clamp(26px,3.8vw,48px);}
+.sec-head h2{
+  font-family:var(--v-teacher);font-variation-settings:"wdth" 118;
+  font-weight:900;font-size:clamp(28px,5vw,64px);line-height:.98;
+  letter-spacing:-.028em;margin:0;text-wrap:balance;
+}
+.sec-head p{font-size:clamp(16px,1.4vw,18.5px);line-height:1.55;color:var(--ink-2);margin:16px 0 0;max-width:56ch;}
+
+/* the four, each in its own hand */
+.cast{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,238px),1fr));gap:0;}
+.role{
+  padding:20px 18px 24px;
+  border-right:1px solid var(--faint);
+}
+@media (min-width:900px){.role{padding:30px 26px 36px;}}
+.role:last-child{border-right:0;}
+@media (max-width:640px){.role{border-right:0;border-bottom:1px solid var(--faint);}.role:last-child{border-bottom:0;}}
+.role .said{font-size:clamp(20px,2.2vw,27px);margin:0 0 14px;}
+.role p{margin:0;font-size:15.5px;line-height:1.5;color:var(--ink-2);}
+
+/* a day, as a script */
+.script{border-top:1px solid var(--hair);padding-top:2px;}
+.beat{
+  display:grid;grid-template-columns:96px 1fr;gap:clamp(14px,2.4vw,34px);
+  padding:18px 0;border-bottom:1px solid var(--faint);
+  align-items:baseline;
+}
+@media (max-width:620px){.beat{grid-template-columns:1fr;gap:8px;}}
+.at{
+  font-family:var(--v-office);font-weight:700;font-size:13px;letter-spacing:.04em;
+  color:#55534E;font-variant-numeric:tabular-nums;text-transform:uppercase;
+}
+.beat .said{font-size:clamp(19px,2.3vw,30px);margin:0 0 8px;}
+.beat{padding-left:2px;}
+@media (min-width:900px){.beat{padding:30px 0 30px 2px;}}
+.beat .gloss{margin:0;font-size:15.5px;line-height:1.5;color:var(--ink-2);max-width:56ch;}
+
+/* the mechanism, still as dialogue */
+.mech{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--hair);padding-top:2px;}
+@media (max-width:760px){.mech{grid-template-columns:1fr;}}
+.mech > div{padding:20px 18px;}
+@media (min-width:900px){.mech > div{padding:34px 30px;}}
+.mech > div:first-child{border-right:1px solid var(--faint);}
+@media (max-width:760px){.mech > div:first-child{border-right:0;border-bottom:1px solid var(--faint);}}
+.mech h3{font-family:var(--v-office);font-weight:700;font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:#55534E;margin:0 0 16px;}
+.ln{height:7px;background:#DCD8D0;margin-bottom:8px;}
+.ln.s{width:58%;} .ln.m{width:84%;} .ln.hl{background:#F0B79C;}
+.q{
+  font-family:var(--v-student);font-weight:400;font-size:13.5px;line-height:1.5;
+  display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--faint);
+}
+.q:last-of-type{border-bottom:0;}
+.q b{color:var(--orange);font-weight:600;flex:0 0 auto;}
+.q .mk{margin-left:auto;color:#55534E;flex:0 0 auto;font-variant-numeric:tabular-nums;}
+
+.terms{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,196px),1fr));border-top:1px solid var(--hair);padding-top:2px;}
+.term{padding:20px 16px 24px;border-right:1px solid var(--faint);}
+@media (min-width:900px){.term{padding:20px 24px 24px;}}
+.term:last-child{border-right:0;}
+@media (max-width:660px){.term{border-right:0;border-bottom:1px solid var(--faint);}.term:last-child{border-bottom:0;}}
+.term dt{font-family:var(--v-office);font-weight:700;font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:#55534E;margin-bottom:9px;}
+.term dd{margin:0;font-family:var(--v-parent);font-style:italic;font-weight:500;font-size:19px;line-height:1.3;}
+
+.synth{
+  font-family:var(--v-student);font-weight:300;font-size:13px;
+  line-height:1.5;color:#55534E;margin:16px 0 0;font-style:normal;
+}
+
+/* close */
+.close{padding:clamp(52px,8vw,118px) 0 clamp(48px,7vw,104px);text-align:center;}
+.close h2{
+  font-family:var(--v-teacher);font-variation-settings:"wdth" 122;
+  font-weight:900;font-size:clamp(32px,6.4vw,86px);line-height:.94;
+  letter-spacing:-.03em;margin:0;text-wrap:balance;
+}
+.close p{font-size:17px;line-height:1.5;color:var(--ink-2);margin:20px auto 0;max-width:44ch;}
+.close .cta{justify-content:center;margin-top:28px;}
+
+footer{border-top:1px solid var(--hair);padding:clamp(28px,4vw,48px) 0;font-size:14.5px;color:var(--ink-2);}
+.foot{display:flex;flex-wrap:wrap;gap:18px 34px;align-items:center;justify-content:space-between;}
+.foot a{color:var(--ink);text-decoration:none;text-underline-offset:4px;}
+.foot a:hover{text-decoration:underline;color:var(--orange);}
+.footmeta{font-family:var(--v-student);font-weight:300;font-size:13px;color:#55534E;}
+.fineprint{font-family:var(--v-student);font-weight:300;font-size:13px;line-height:1.6;color:#55534E;max-width:72ch;margin:20px 0 0;}
+
+/* ============================================================
+   SIGNATURE INTERACTION — follow one voice, the rest fall back.
+   Only on a deliberate hover or focus, and never below readable.
+   ============================================================ */
+@media (hover:hover) and (prefers-reduced-motion:no-preference){
+  .listen[data-follow] .voice{transition:opacity .28s var(--ease);}
+  .listen[data-follow="teacher"] .voice:not(.teacher),
+  .listen[data-follow="student"] .voice:not(.student),
+  .listen[data-follow="parent"]  .voice:not(.parent),
+  .listen[data-follow="office"]  .voice:not(.office){opacity:.3;}
+}
+
+/* ============================================================
+   MOTION — lines enter in reading order, with a beat between.
+   Default is the spoken state, so no-JS hears the whole scene.
+   ============================================================ */
+@media (prefers-reduced-motion:no-preference){
+  .js .cue{animation:speak .62s var(--ease) both;}
+  @keyframes speak{
+    0%  {opacity:0;transform:translateY(14px);clip-path:inset(0 100% 0 0);}
+    60% {opacity:1;}
+    100%{opacity:1;transform:none;clip-path:inset(0 0 0 0);}
+  }
+}
+.js .quiet{opacity:0;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <a class="mark" href="/">
+      <img src="assets/mindforge-logo.png" alt="" width="34" height="34">
+      <span><b>Mind Forge</b><small>AI assisted learning</small></span>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#cast">The four</a>
+      <a href="#day">A day</a>
+      <a href="#paper">How a test is made</a>
+      <a href="#school">For the school</a>
+    </nav>
+    <a class="stampbtn" href="#signin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+      Sign in
+    </a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ THE EXCHANGE ============ -->
+  <section class="exchange listen" id="scene">
+    <h1 class="voice teacher l-teacher quiet" data-cue="0">Chapter 4 test. Friday.</h1>
+
+    <p class="voice student l-student quiet" data-cue="1">
+      <span class="who">The student, that evening</span>
+      attempted 20:40 · submitted 21:12 · 34 / 40
+    </p>
+
+    <p class="voice parent l-parent in-orange quiet" data-cue="2">
+      <span class="who">The parent, before bed</span>
+      I saw it. Well done.
+    </p>
+
+    <hr class="thread">
+
+    <p class="threadnote quiet" data-cue="3">
+      <span>One thread carried all three.</span>
+      <span>That thread is MindForge.</span>
+    </p>
+
+    <div class="hero-foot quiet" data-cue="4">
+      <p class="lede">Homework, tests, attendance, marks and fees for your child, in one place. Sign in with the details your school gave you.</p>
+      <div class="cta">
+        <a class="btn btn-fill" href="#signin">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+          Sign in
+        </a>
+        <a class="btn btn-rule" href="#signin">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>
+          Android app
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE FOUR ============ -->
+  <section class="sec" id="cast">
+    <hr class="thread">
+    <div class="sec-head">
+      <h2>Four people talk about one child. Nobody repeats themselves.</h2>
+      <p>Each of them sees their own screen, writes into the same record, and never has to chase anyone for it.</p>
+    </div>
+
+    <div class="cast listen" id="cast-listen">
+      <article class="role" data-voice="teacher" tabindex="0">
+        <span class="who">The teacher</span>
+        <p class="voice teacher said">Marked. All of 9-A.</p>
+        <p>Sets tests from a chapter, marks attendance, grades written answers, sends a notice to the class.</p>
+      </article>
+      <article class="role" data-voice="student" tabindex="0">
+        <span class="who">The student</span>
+        <p class="voice student said">Due Friday. Started.</p>
+        <p>Sees what is due, attempts the test on a phone, gets the score, checks the timetable.</p>
+      </article>
+      <article class="role" data-voice="parent" tabindex="0">
+        <span class="who">The parent</span>
+        <p class="voice parent said">Fees paid. Receipt saved.</p>
+        <p>Follows marks, attendance, homework and fees without waiting for a meeting.</p>
+      </article>
+      <article class="role" data-voice="office" tabindex="0">
+        <span class="who">The school office</span>
+        <p class="voice office said">Term 2 closed</p>
+        <p>Keeps users, fee structures, academic years and the timetable, all in one admin console.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ A DAY ============ -->
+  <section class="sec" id="day">
+    <hr class="thread">
+    <div class="sec-head">
+      <h2>A Tuesday, start to finish.</h2>
+    </div>
+
+    <div class="script listen">
+      <div class="beat">
+        <span class="at">07:55</span>
+        <div>
+          <p class="voice office said">Period 1 · Mathematics · Room 12</p>
+          <p class="gloss">The timetable is already on every phone in the class.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <span class="at">08:10</span>
+        <div>
+          <p class="voice teacher said" style="font-size:clamp(21px,2.6vw,34px);">Present: 44 of 46.</p>
+          <p class="gloss">Attendance is marked once, and the month counts itself.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <span class="at">11:30</span>
+        <div>
+          <p class="voice teacher said in-orange" style="font-size:clamp(21px,2.6vw,34px);">Chapter 4 test. Friday.</p>
+          <p class="gloss">The teacher uploads the chapter. The paper comes back written from it.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <span class="at">20:40</span>
+        <div>
+          <p class="voice student said">opened test · 1 attempt · closes in 3 days</p>
+          <p class="gloss">One attempt each, open for three days, submitted automatically at the deadline.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <span class="at">21:12</span>
+        <div>
+          <p class="voice student said">submitted · 34 / 40</p>
+          <p class="gloss">Graded on submission. The teacher reads the written answers herself.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <span class="at">21:20</span>
+        <div>
+          <p class="voice parent said in-orange">I saw it. Well done.</p>
+          <p class="gloss">The parent gets it the same night, not at the next meeting.</p>
+        </div>
+      </div>
+    </div>
+    <p class="synth">Illustrative. Not a real class, and not real student records.</p>
+  </section>
+
+  <!-- ============ THE PAPER ============ -->
+  <section class="sec" id="paper">
+    <hr class="thread">
+    <div class="sec-head">
+      <h2>A chapter goes in. A question paper comes out.</h2>
+      <p>The questions come from that chapter, not from a bank of someone else's.</p>
+    </div>
+
+    <div class="mech">
+      <div>
+        <h3>The chapter, as a PDF</h3>
+        <div aria-hidden="true">
+          <div class="ln m"></div><div class="ln"></div><div class="ln hl"></div>
+          <div class="ln s"></div><div class="ln m"></div><div class="ln hl"></div>
+          <div class="ln"></div><div class="ln s"></div>
+        </div>
+      </div>
+      <div>
+        <h3>The paper it wrote</h3>
+        <div class="q"><b>Q1.</b><span>Define photosynthesis in one sentence.</span><span class="mk">[2]</span></div>
+        <div class="q"><b>Q2.</b><span>Name the pigment that absorbs sunlight.</span><span class="mk">[1]</span></div>
+        <div class="q"><b>Q3.</b><span>Why do leaves appear green?</span><span class="mk">[3]</span></div>
+        <div class="q"><b>Q4.</b><span>Label the parts marked A, B and C.</span><span class="mk">[4]</span></div>
+        <p class="synth">Illustrative sample, written from a sample chapter.</p>
+      </div>
+    </div>
+
+    <dl class="terms">
+      <div class="term"><dt>Attempts</dt><dd>One each</dd></div>
+      <div class="term"><dt>Window</dt><dd>Three days</dd></div>
+      <div class="term"><dt>At the deadline</dt><dd>Submits on its own</dd></div>
+      <div class="term"><dt>Grading</dt><dd>Automatic, teacher reads the writing</dd></div>
+    </dl>
+  </section>
+
+  <!-- ============ FOR THE SCHOOL ============ -->
+  <section class="sec" id="school">
+    <hr class="thread">
+    <div class="sec-head">
+      <h2>Your school's name sits beside ours.</h2>
+      <p>Your school's logo appears on every screen inside the app, and the records stay your school's. Teachers and the office get their own consoles.</p>
+    </div>
+  </section>
+
+  <!-- ============ CLOSE ============ -->
+  <section class="sec close" id="signin">
+    <hr class="thread">
+    <h2 style="margin-top:clamp(30px,5vw,70px);">Sign in and see today.</h2>
+    <p>Use the username and password your school gave you. If you do not have one yet, ask the class teacher or the school office.</p>
+    <div class="cta">
+      <a class="btn btn-fill" href="#signin">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+        Sign in
+      </a>
+      <a class="btn btn-rule" href="#signin">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>
+        Android app
+      </a>
+      <span class="btn btn-rule" aria-disabled="true">iPhone app coming soon</span>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <a class="mark" href="/" style="margin-bottom:10px;">
+        <img src="assets/mindforge-logo.png" alt="" width="30" height="30">
+        <span><b style="font-size:15px;">Mind Forge</b></span>
+      </a>
+      <div class="footmeta">AI assisted learning · <a href="https://www.mindforge.guru">mindforge.guru</a></div>
+    </div>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;">
+      <a href="#signin">Sign in</a>
+      <a href="#cast">The four</a>
+      <a href="#school">For schools</a>
+    </div>
+  </div>
+  <div class="wrap">
+    <p class="fineprint">Lines, figures and papers on this page are illustrative samples, not real student records.
+    <!-- [PLACEHOLDER] Owner to add: privacy policy link, terms link, school enquiry contact. --></p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  document.documentElement.classList.add('js');
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)');
+  var cues=[].slice.call(document.querySelectorAll('.quiet'));
+
+  function speak(){
+    cues.forEach(function(el){
+      var d=parseInt(el.getAttribute('data-cue')||'0',10);
+      el.classList.remove('quiet');
+      if(!reduce.matches){
+        el.style.animationDelay=(d*230)+'ms';
+        el.classList.add('cue');
+      }
+    });
+  }
+  if(reduce.matches){cues.forEach(function(e){e.classList.remove('quiet');});}
+  else if(document.readyState!=='loading'){speak();}
+  else{document.addEventListener('DOMContentLoaded',speak);}
+  // safety: nothing stays silent
+  window.addEventListener('load',function(){
+    setTimeout(function(){
+      document.querySelectorAll('.quiet').forEach(function(e){e.classList.remove('quiet');});
+    },2500);
+  });
+
+  // follow one voice; the rest fall back
+  [].slice.call(document.querySelectorAll('.listen')).forEach(function(box){
+    box.addEventListener('pointerover',function(e){
+      var r=e.target.closest('[data-voice]'); if(r) box.setAttribute('data-follow',r.dataset.voice);
+    });
+    box.addEventListener('pointerleave',function(){box.removeAttribute('data-follow');});
+    box.addEventListener('focusin',function(e){
+      var r=e.target.closest('[data-voice]'); if(r) box.setAttribute('data-follow',r.dataset.voice);
+    });
+    box.addEventListener('focusout',function(){box.removeAttribute('data-follow');});
+  });
+})();
+</script>
+</body>
+</html>

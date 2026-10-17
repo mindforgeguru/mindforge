@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -11,6 +12,7 @@ import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/constants.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_scaffold.dart';
+import '../../../core/utils/api_error.dart';
 
 // ─── Responsive helpers ───────────────────────────────────────────────────────
 double _s(BuildContext ctx, double base, {double min = 0, double max = double.infinity}) {
@@ -158,7 +160,7 @@ class _BroadcastCard extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize: _fs(context, 10, min: 9, max: 12),
                     fontWeight: FontWeight.w600,
-                    color: AppColors.accent,
+                    color: AppColors.accentText,
                   ),
                 ),
               ),
@@ -267,17 +269,19 @@ class _SendBroadcastDialogState extends ConsumerState<_SendBroadcastDialog> {
               children: [
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Title'),
+                  inputFormatters: [LengthLimitingTextInputFormatter(200)],
                   onChanged: (v) => _title = v,
                   validator: (v) =>
-                      v == null || v.isEmpty ? 'Required' : null,
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 SizedBox(height: _s(context, 10, min: 8, max: 14)),
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Message'),
                   maxLines: 4,
+                  maxLength: 2000,
                   onChanged: (v) => _message = v,
                   validator: (v) =>
-                      v == null || v.isEmpty ? 'Required' : null,
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 SizedBox(height: _s(context, 10, min: 8, max: 14)),
                 Wrap(
@@ -386,7 +390,7 @@ class _SendBroadcastDialogState extends ConsumerState<_SendBroadcastDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
+          SnackBar(content: Text('Failed: ${apiErrorMessage(e)}')),
         );
       }
     } finally {

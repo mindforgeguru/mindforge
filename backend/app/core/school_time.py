@@ -33,3 +33,14 @@ def school_day_start(day: date) -> datetime:
     """Midnight at the start of `day` in school time, as an aware datetime —
     the boundary for "created today" / "created before today" comparisons."""
     return datetime.combine(day, datetime.min.time(), tzinfo=SCHOOL_TZ)
+
+
+def parse_iso_date(value: str, field: str = "date") -> date:
+    """A YYYY-MM-DD query parameter as a date; a malformed one is the client's
+    error (422), where an unguarded fromisoformat() made it a 500."""
+    from fastapi import HTTPException
+
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"{field} must be YYYY-MM-DD.")

@@ -11,6 +11,7 @@ import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
+import '../../../core/utils/api_error.dart';
 
 class AdminTeachersScreen extends ConsumerWidget {
   const AdminTeachersScreen({super.key});
@@ -146,7 +147,7 @@ class _TeacherEditCard extends ConsumerWidget {
                                   style: GoogleFonts.poppins(
                                       fontSize: 9.5,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.accent)),
+                                      color: AppColors.accentText)),
                             ))
                         .toList(),
                   ),
@@ -245,7 +246,7 @@ class _TeacherEditorDialogState extends ConsumerState<_TeacherEditorDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Photo upload failed: $e'),
+            content: Text('Photo upload failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error));
       }
     } finally {
@@ -264,7 +265,7 @@ class _TeacherEditorDialogState extends ConsumerState<_TeacherEditorDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Save failed: $e'),
+            content: Text('Save failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error));
       }
     } finally {

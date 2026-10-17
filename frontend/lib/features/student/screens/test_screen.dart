@@ -324,7 +324,7 @@ class _OfflineTestCard extends StatelessWidget {
                   ),
                   child:       Text('OFFLINE',
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold,
-                          color: AppColors.accent)),
+                          color: AppColors.accentText)),
                 ),
               ],
             ),

@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/widgets/confirm_dialog.dart';
 import '../providers/admin_provider.dart';
+import '../../../core/utils/api_error.dart';
 
 /// The admin's one-time school-setup workflow, drawn as a graphical "road" that
 /// mirrors the teacher dashboard's Today's Workflow card. Five milestones must
@@ -81,7 +82,7 @@ class SetupRoadCard extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed to close year: $e'),
+          content: Text('Failed to close year: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }
@@ -273,15 +274,19 @@ class _SetupRoad extends StatelessWidget {
               Positioned(
                 left: xAt(i) - carRadius,
                 top: centerY - carRadius,
-                child: GestureDetector(
-                  onTap: steps[i].onTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: SizedBox(
-                    width: carRadius * 2,
-                    height: carRadius * 2,
-                    child: Center(
-                      child: Icon(Icons.directions_car_rounded,
-                          size: 26, color: currentColor),
+                child: Semantics(
+                  button: true,
+                  label: 'Next step: ${steps[i].label}',
+                  child: GestureDetector(
+                    onTap: steps[i].onTap,
+                    behavior: HitTestBehavior.opaque,
+                    child: SizedBox(
+                      width: carRadius * 2,
+                      height: carRadius * 2,
+                      child: Center(
+                        child: Icon(Icons.directions_car_rounded,
+                            size: 26, color: currentColor),
+                      ),
                     ),
                   ),
                 ),

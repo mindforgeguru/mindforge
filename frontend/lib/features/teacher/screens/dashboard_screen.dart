@@ -442,6 +442,7 @@ class _TeacherDashboardScreenState
                       width: 48,
                       height: 48,
                       child: IconButton(
+                        tooltip: 'Log out',
                         icon: Icon(Icons.logout,
                             color: Colors.white,
                             size: _s(context, 22, min: 18, max: 26)),
@@ -508,27 +509,31 @@ class _TeacherDashboardScreenState
                         ),
                         Positioned(
                           top: 0,
-                          child: GestureDetector(
-                            onTap: () => context.go(
-                                '${RouteNames.teacherDashboard}/profile'),
-                            child: Stack(
-                              alignment: Alignment.bottomRight,
-                              children: [
-                                _ProfileAvatar(
-                                  username: auth.username ?? 'T',
-                                  photoUrl: auth.profilePicUrl,
-                                  radius: avatarRadius,
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration:       BoxDecoration(
-                                    color: AppColors.accent,
-                                    shape: BoxShape.circle,
+                          child: Semantics(
+                            button: true,
+                            label: 'My profile',
+                            child: GestureDetector(
+                              onTap: () => context.go(
+                                  '${RouteNames.teacherDashboard}/profile'),
+                              child: Stack(
+                                alignment: Alignment.bottomRight,
+                                children: [
+                                  _ProfileAvatar(
+                                    username: auth.username ?? 'T',
+                                    photoUrl: auth.profilePicUrl,
+                                    radius: avatarRadius,
                                   ),
-                                  child: const Icon(Icons.edit,
-                                      size: 12, color: Colors.white),
-                                ),
-                              ],
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration:       BoxDecoration(
+                                      color: AppColors.accent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.edit,
+                                        size: 12, color: Colors.white),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -618,7 +623,7 @@ class _TeacherDashboardScreenState
                   Icon(Icons.calendar_today_rounded,
                       size: _s(context, 15, min: 13, max: 17), color: AppColors.primary),
                   SizedBox(width: _s(context, 8, min: 6, max: 10)),
-                  Flexible(
+                  Expanded(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
@@ -632,7 +637,6 @@ class _TeacherDashboardScreenState
                       ),
                     ),
                   ),
-                  const Spacer(),
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
@@ -656,7 +660,7 @@ class _TeacherDashboardScreenState
                       'See all →',
                       style: GoogleFonts.poppins(
                         fontSize: _fs(context, 11, min: 9, max: 12),
-                        color: AppColors.accent,
+                        color: AppColors.accentText,
                       ),
                     ),
                   ),
@@ -838,7 +842,7 @@ class _DashSectionHeader extends StatelessWidget {
                 ),
                 child: Text('See all →', style: GoogleFonts.poppins(
                   fontSize: (sw * 0.028).clamp(10.0, 12.0),
-                  color: AppColors.accent,
+                  color: AppColors.accentText,
                 )),
               ),
           ],
@@ -916,7 +920,7 @@ class _DashHomeworkTile extends StatelessWidget {
               _fmtDMon.format(hw.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (sw * 0.025).clamp(9.0, 11.0),
-                color: AppColors.accent,
+                color: AppColors.accentText,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -991,7 +995,7 @@ class _DashBroadcastTile extends StatelessWidget {
               _fmtDMon.format(broadcast.createdAt),
               style: GoogleFonts.poppins(
                 fontSize: (sw * 0.025).clamp(9.0, 11.0),
-                color: AppColors.accent,
+                color: AppColors.accentText,
               ),
             ),
           ],
@@ -1904,17 +1908,21 @@ class _WorkflowRoad extends StatelessWidget {
               Positioned(
                 left: xAt(i) - carRadius,
                 top: centerY - carRadius,
-                child: GestureDetector(
-                  onTap: steps[i].onTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: SizedBox(
-                    width: carRadius * 2,
-                    height: carRadius * 2,
-                    child: Center(
-                      child: Icon(
-                        Icons.directions_car_rounded,
-                        size: 26,
-                        color: color,
+                child: Semantics(
+                  button: true,
+                  label: 'Next step: ${steps[i].label}',
+                  child: GestureDetector(
+                    onTap: steps[i].onTap,
+                    behavior: HitTestBehavior.opaque,
+                    child: SizedBox(
+                      width: carRadius * 2,
+                      height: carRadius * 2,
+                      child: Center(
+                        child: Icon(
+                          Icons.directions_car_rounded,
+                          size: 26,
+                          color: color,
+                        ),
                       ),
                     ),
                   ),

@@ -246,6 +246,19 @@ void main() {
       expect(n.state.error, 'Your account is pending admin approval.');
     });
 
+    // A deactivated account is also a 403 at login. The app said "pending
+    // admin approval" for every 403, so a deactivated user waited for an
+    // approval that would never come (found 2026-10-19).
+    test('403 with the server\'s reason — shows that reason', () async {
+      when(() => api.login(any(), any())).thenThrow(
+          _dioError(403, detail: 'Your account has been deactivated.'));
+
+      final n = _make();
+      await n.login('alice', '123456');
+
+      expect(n.state.error, 'Your account has been deactivated.');
+    });
+
     test('server detail string is surfaced as error', () async {
       when(() => api.login(any(), any()))
           .thenThrow(_dioError(422, detail: 'Custom server message'));

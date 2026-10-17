@@ -59,6 +59,25 @@ def _validate_strong_mpin(v: str) -> str:
 
 # ── Auth / Registration ───────────────────────────────────────────────────────
 
+def _check_phone(v: str) -> str:
+    """Trimmed phone, or "" when blank; raises on anything else that isn't one."""
+    v = v.strip()
+    if v and not re.fullmatch(r"[\d\s\+\-\(\)]{7,20}", v):
+        raise ValueError("Invalid phone number format.")
+    return v
+
+
+def _check_email(v: str) -> str:
+    """Trimmed email, or "" when blank; raises on anything else that isn't one."""
+    v = v.strip()
+    # Bound length BEFORE the regex: caps input so the validator can
+    # never be fed an oversized blob (ReDoS / CPU hygiene). 254 is the
+    # RFC 5321 maximum length of an email address.
+    if v and (len(v) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", v)):
+        raise ValueError("Invalid email address.")
+    return v
+
+
 class UserRegisterRequest(BaseModel):
     username: str
     mpin: str
@@ -93,23 +112,14 @@ class UserRegisterRequest(BaseModel):
     @classmethod
     def validate_phone(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
-            v = v.strip()
-            if v and not re.fullmatch(r"[\d\s\+\-\(\)]{7,20}", v):
-                raise ValueError("Invalid phone number format.")
-            return v or None
+            return _check_phone(v) or None
         return v
 
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
-            v = v.strip()
-            # Bound length BEFORE the regex: caps input so the validator can
-            # never be fed an oversized blob (ReDoS / CPU hygiene). 254 is the
-            # RFC 5321 maximum length of an email address.
-            if v and (len(v) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", v)):
-                raise ValueError("Invalid email address.")
-            return v or None
+            return _check_email(v) or None
         return v
 
     @field_validator("mpin")
@@ -293,6 +303,17 @@ class AdminUserEdit(BaseModel):
         if v is not None and v not in (8, 9, 10):
             raise ValueError("Grade must be 8, 9, or 10.")
         return v
+
+    # A blank phone or email clears it, so "" is kept rather than made None.
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
+        return v if v is None else _check_phone(v)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: Optional[str]) -> Optional[str]:
+        return v if v is None else _check_email(v)
 
     @field_validator("new_mpin")
     @classmethod

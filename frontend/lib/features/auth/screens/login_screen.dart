@@ -166,6 +166,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscureParentMpin = true;
   final List<String> _pin = ['', '', '', '', '', ''];
   int _pinIndex = 0;
+  // The MPIN cells as one tab stop, so a keyboard can type the MPIN — the
+  // keypad's keys are tap-only.
+  final _pinFocus = FocusNode(debugLabel: 'mpin');
   bool _isRegister = false;
   String _selectedRole = 'student';
   int _selectedGrade = 8;
@@ -263,6 +266,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _emailController.dispose();
     _parentUsernameController.dispose();
     _parentMpinController.dispose();
+    _pinFocus.dispose();
     super.dispose();
   }
 
@@ -282,6 +286,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _pinIndex--;
       _pin[_pinIndex] = '';
     });
+  }
+
+  static final _digitKeys = {
+    for (var d = 0; d <= 9; d++) ...{
+      LogicalKeyboardKey(LogicalKeyboardKey.digit0.keyId + d): '$d',
+      LogicalKeyboardKey(LogicalKeyboardKey.numpad0.keyId + d): '$d',
+    },
+  };
+
+  /// Typed digits, Backspace and Enter while the MPIN cells have focus.
+  KeyEventResult _onPinKey(FocusNode _, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final digit = _digitKeys[key];
+    if (digit != null) {
+      _tapDigit(digit);
+    } else if (key == LogicalKeyboardKey.backspace) {
+      _tapDelete();
+    } else if (event is KeyDownEvent &&
+        (key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.numpadEnter)) {
+      if (!ref.read(authProvider).isLoading) _submit();
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
   }
 
   void _clearPin() {
@@ -1224,7 +1254,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ],
                       ),
                       SizedBox(height: compact ? 9 : 11),
-                      _pinCells(context, compact: compact),
+                      Focus(
+                        focusNode: _pinFocus,
+                        onKeyEvent: _onPinKey,
+                        onFocusChange: (_) => setState(() {}),
+                        child: Semantics(
+                          label: 'MPIN, $_pinIndex of 6 digits entered',
+                          child: GestureDetector(
+                            onTap: _pinFocus.requestFocus,
+                            // A ring while focused from a keyboard (not after
+                            // a tap); always padded, so focus does not move
+                            // the cells.
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: _pinFocus.hasFocus &&
+                                          FocusManager.instance.highlightMode ==
+                                              FocusHighlightMode.traditional
+                                      ? _Wp.heat
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: _pinCells(context, compact: compact),
+                            ),
+                          ),
+                        ),
+                      ),
                       SizedBox(height: compact ? 12 : 14),
                       _buildPad(context),
                     ],
@@ -1549,13 +1606,14 @@ class _FilledKey extends StatefulWidget {
 
 class _FilledKeyState extends State<_FilledKey> {
   bool _hover = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final disabled = widget.onTap == null;
     final ground = disabled
         ? _Wp.navy.withValues(alpha: 0.45)
-        : _hover
+        : _hover || _focused
             ? _Wp.heatRead
             : _Wp.navy;
     return Semantics(
@@ -1565,6 +1623,7 @@ class _FilledKeyState extends State<_FilledKey> {
       child: InkWell(
         onTap: widget.onTap,
         onHover: (h) => setState(() => _hover = h),
+        onFocusChange: (f) => setState(() => _focused = f),
         focusColor: const Color(0x33F55C1E),
         borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
         mouseCursor:
@@ -1617,6 +1676,7 @@ class _OutlineKey extends StatefulWidget {
 
 class _OutlineKeyState extends State<_OutlineKey> {
   bool _hover = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1626,6 +1686,7 @@ class _OutlineKeyState extends State<_OutlineKey> {
       child: InkWell(
         onTap: widget.onTap,
         onHover: (h) => setState(() => _hover = h),
+        onFocusChange: (f) => setState(() => _focused = f),
         focusColor: const Color(0x33F55C1E),
         borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
         mouseCursor: SystemMouseCursors.click,
@@ -1634,7 +1695,7 @@ class _OutlineKeyState extends State<_OutlineKey> {
           constraints: const BoxConstraints(minHeight: 48),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
           decoration: BoxDecoration(
-            color: _hover ? _Wp.navy : Colors.transparent,
+            color: _hover || _focused ? _Wp.navy : Colors.transparent,
             border: Border.all(color: _Wp.navy, width: _Wp.rule),
             borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
           ),
@@ -1644,7 +1705,7 @@ class _OutlineKeyState extends State<_OutlineKey> {
               style: GoogleFonts.rajdhani(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _hover ? Colors.white : _Wp.navy,
+                color: _hover || _focused ? Colors.white : _Wp.navy,
                 letterSpacing: 1.6,
                 height: 1.1,
               ),

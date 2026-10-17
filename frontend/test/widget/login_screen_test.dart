@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mindforge/core/api/api_client.dart';
@@ -48,6 +49,19 @@ class _MfaRequiredApiClient extends _FakeApiClient {
         },
       ),
     );
+  }
+}
+
+/// Records the MPIN of every sign-in, then answers like [_MfaRequiredApiClient].
+class _RecordingApiClient extends _MfaRequiredApiClient {
+  final mpins = <String>[];
+
+  @override
+  Future<Map<String, dynamic>> login(String username, String mpin,
+      {int? schoolId, String? mfaCode, String? recoveryCode}) {
+    mpins.add(mpin);
+    return super.login(username, mpin,
+        schoolId: schoolId, mfaCode: mfaCode, recoveryCode: recoveryCode);
   }
 }
 
@@ -277,6 +291,85 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(api.attempts, [(null, null), (null, 'ABCD-EFGH-JKMN')]);
+    });
+  });
+
+  // On the web the MPIN pad was mouse-only: its keys cannot take focus and
+  // nothing listened for typed digits, so a keyboard user could not sign in.
+  group('LoginScreen — keyboard', () {
+    Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+    }
+
+    Future<void> tabToPin(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(_buildLoginScreen(api: _RecordingApiClient()));
+      await tester.pump();
+      await tester.enterText(find.byKey(LoginKeys.username), 'kid');
+      await press(tester, LogicalKeyboardKey.tab);
+    }
+
+    testWidgets('Tab from the username reaches the MPIN, which takes digits',
+        (tester) async {
+      await tabToPin(tester);
+      for (final k in [
+        LogicalKeyboardKey.digit8,
+        LogicalKeyboardKey.digit4,
+        LogicalKeyboardKey.numpad7,
+      ]) {
+        await press(tester, k);
+      }
+      expect(find.text('3 / 6'), findsOneWidget);
+
+      await press(tester, LogicalKeyboardKey.backspace);
+      expect(find.text('2 / 6'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Enter on a full MPIN signs in with the typed digits',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      final api = _RecordingApiClient();
+      await tester.pumpWidget(_buildLoginScreen(api: api));
+      await tester.pump();
+      await tester.enterText(find.byKey(LoginKeys.username), 'kid');
+      await press(tester, LogicalKeyboardKey.tab);
+
+      for (final k in [
+        LogicalKeyboardKey.digit8,
+        LogicalKeyboardKey.digit4,
+        LogicalKeyboardKey.digit7,
+        LogicalKeyboardKey.digit3,
+        LogicalKeyboardKey.digit6,
+        LogicalKeyboardKey.digit2,
+      ]) {
+        await press(tester, k);
+      }
+      await press(tester, LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(api.mpins, ['847362']);
+    });
+
+    testWidgets('Sign in looks different while it has keyboard focus',
+        (tester) async {
+      await tabToPin(tester);
+      Color? ground() {
+        final box = tester.widget<AnimatedContainer>(find.descendant(
+            of: find.byKey(LoginKeys.submit),
+            matching: find.byType(AnimatedContainer)));
+        return (box.decoration as BoxDecoration?)?.color;
+      }
+
+      final idle = ground();
+      await press(tester, LogicalKeyboardKey.tab); // MPIN → Sign in
+      await tester.pumpAndSettle();
+      expect(ground(), isNot(idle));
     });
   });
 }

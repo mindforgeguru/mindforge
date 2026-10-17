@@ -298,7 +298,7 @@ class _PaymentOptionCard extends StatelessWidget {
                         style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
-                            color: AppColors.secondary)),
+                            color: AppColors.secondaryText)),
                   ]),
                   const SizedBox(height: 10),
                   if (info.upiId != null)

@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-eng \
     libpoppler-cpp-dev \
     poppler-utils \
+    fonts-dejavu-core \
     curl \
     gcc \
     && rm -rf /var/lib/apt/lists/*

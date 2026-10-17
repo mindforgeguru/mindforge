@@ -7,6 +7,7 @@ import '../../../core/models/xp.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/brand_palette.dart';
 import '../providers/xp_provider.dart';
+import '../../../core/utils/api_error.dart';
 
 /// Theme picker section for the XP dashboard. Pulls the catalogue from the
 /// backend (which knows lock state) and pairs each row with the local
@@ -38,7 +39,7 @@ class ThemePicker extends ConsumerWidget {
           error: (e, _) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'Could not load themes: $e',
+              'Could not load themes: ${apiErrorMessage(e)}',
               style: GoogleFonts.poppins(
                 fontSize: 11,
                 color: AppColors.textMuted,
@@ -79,7 +80,7 @@ class _ThemeRowState extends ConsumerState<_ThemeRow> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not select theme: $e')),
+        SnackBar(content: Text('Could not select theme: ${apiErrorMessage(e)}')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

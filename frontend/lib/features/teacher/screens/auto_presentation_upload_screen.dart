@@ -13,6 +13,7 @@ import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../providers/presentation_provider.dart';
 import '../widgets/teacher_scaffold.dart';
+import '../../../core/utils/api_error.dart';
 
 class AutoPresentationUploadScreen extends ConsumerWidget {
   const AutoPresentationUploadScreen({super.key});
@@ -191,7 +192,7 @@ class _PickFromDatabaseTabState extends ConsumerState<_PickFromDatabaseTab> {
           ? e.response!.data['detail'] as String
           : 'Failed: ${e.response?.statusCode ?? '?'}');
     } catch (e) {
-      _showError('Failed: $e');
+      _showError('Failed: ${apiErrorMessage(e)}');
     } finally {
       if (mounted) setState(() => _submittingChapterId = null);
     }
@@ -474,7 +475,7 @@ class _UploadNewTabState extends ConsumerState<_UploadNewTab> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload failed: $e'),
+        SnackBar(content: Text('Upload failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error),
       );
     } finally {
@@ -563,6 +564,7 @@ class _UploadNewTabState extends ConsumerState<_UploadNewTab> {
                 ),
                 if (_picked != null)
                   IconButton(
+                    tooltip: 'Remove file',
                     icon: const Icon(Icons.close, size: 18),
                     onPressed: _submitting
                         ? null
@@ -697,7 +699,7 @@ class _UploadDeckTabState extends ConsumerState<_UploadDeckTab> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload failed: $e'),
+        SnackBar(content: Text('Upload failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error),
       );
     } finally {
@@ -811,6 +813,7 @@ class _UploadDeckTabState extends ConsumerState<_UploadDeckTab> {
                 ),
                 if (_picked != null)
                   IconButton(
+                    tooltip: 'Remove file',
                     icon: const Icon(Icons.close, size: 18),
                     onPressed: _submitting
                         ? null

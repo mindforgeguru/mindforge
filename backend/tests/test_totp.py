@@ -17,7 +17,9 @@ the counter, the HMAC and the dynamic truncation correctly.
 import pytest
 
 from app.core.totp import (
+    STEP_SECONDS,
     generate_secret,
+    matched_step,
     provisioning_uri,
     totp_at,
     verify_totp,
@@ -112,3 +114,22 @@ class TestProvisioningURI:
         uri = provisioning_uri("a b/c", "JBSWY3DPEHPK3PXP")
         assert " " not in uri.split("?")[0]
         assert "a b/c" not in uri
+
+
+class TestMatchedStep:
+    """The login refuses a code whose step it has already accepted, so the
+    step must identify the code — the same one wherever in the drift window it
+    is checked."""
+
+    def test_names_the_step_the_code_belongs_to(self):
+        secret = generate_secret()
+        t = 1_800_000_015
+        code = totp_at(secret, t)
+        step = t // STEP_SECONDS
+        assert matched_step(secret, code, now=t) == step
+        # Checked a step later it is still accepted, and still the same step.
+        assert matched_step(secret, code, now=t + STEP_SECONDS) == step
+
+    @pytest.mark.parametrize("code", [None, "", "12345", "abcdef", 123456])
+    def test_junk_is_none(self, code):
+        assert matched_step(generate_secret(), code) is None

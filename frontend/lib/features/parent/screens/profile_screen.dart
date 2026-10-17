@@ -72,6 +72,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
     final username = auth.username ?? 'Parent';
 
     return ParentScaffold(
+      showChildSwitcher: false,
       appBar: AppBar(title: const Text('My Profile')),
       body: SafeArea(
         top: false,
@@ -98,7 +99,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                       style: TextStyle(
                         fontSize: R.fs(context, 36, min: 28, max: 42),
                         fontWeight: FontWeight.bold,
-                        color: AppColors.accent,
+                        color: AppColors.accentText,
                       ),
                     ),
                   ),
@@ -120,7 +121,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.accent,
+                        color: AppColors.accentText,
                         letterSpacing: 1,
                       ),
                     ),
@@ -263,6 +264,7 @@ class _MpinField extends StatelessWidget {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         suffixIcon: IconButton(
+          tooltip: obscure ? 'Show MPIN' : 'Hide MPIN',
           icon: Icon(
               obscure
                   ? Icons.visibility_outlined

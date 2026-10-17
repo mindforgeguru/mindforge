@@ -8,6 +8,7 @@ import '../providers/xp_provider.dart';
 import '../widgets/leaderboard_tile.dart';
 import '../widgets/student_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
+import '../../../core/utils/api_error.dart';
 
 /// Leaderboard screen with three tabs:
 ///   - **Class** — ranking within the viewer's grade
@@ -156,7 +157,7 @@ class _LeaderboardTab extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
-              'Could not load leaderboard.\n$e',
+              'Could not load leaderboard.\n${apiErrorMessage(e)}',
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 12,

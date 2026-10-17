@@ -153,7 +153,7 @@ class _LevelUpDialogState extends ConsumerState<LevelUpDialog>
                       style: GoogleFonts.poppins(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
-                        color: palette.accent,
+                        color: palette.accentText,
                         letterSpacing: 3,
                       ),
                     ),

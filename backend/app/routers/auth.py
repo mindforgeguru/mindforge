@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import (
-    hash_mpin_async, verify_mpin_async, verify_mpin_constant_time_async,
+    hash_mpin_async, verify_mpin_constant_time_async,
     create_access_token, create_refresh_token,
     decode_access_token, get_current_user, token_predates_revocation,
 )
@@ -39,7 +39,10 @@ from app.core.account_state import (
 )
 from app.core.security_events import note_failed_login
 from app.core.mfa import consume_recovery_code
-from app.core.totp import generate_secret, provisioning_uri, verify_totp
+from app.core.mpin_guard import client_ip, mpin_matches
+from app.core.totp import (
+    ALLOWED_DRIFT_STEPS, STEP_SECONDS, generate_secret, matched_step, provisioning_uri, verify_totp,
+)
 from app.core.mfa import generate_recovery_codes
 from app.core.cache import is_school_active_cached
 from app.services import storage_service
@@ -117,21 +120,9 @@ def _clear_session_cookie(response: Response) -> None:
 
 
 def _get_client_ip(request: Request) -> str:
-    """Best-effort real client IP for rate limiting / audit logging.
-
-    We read the *rightmost* X-Forwarded-For entry, not the leftmost. The
-    leftmost value is client-controlled and trivially spoofable; the rightmost
-    is the one appended by the closest trusted hop (our nginx). nginx itself
-    overwrites XFF with the real peer IP, so in practice the header carries a
-    single value — but taking the last entry keeps this safe even if an
-    upstream is ever reconfigured to append rather than overwrite.
-    """
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
-        if parts:
-            return parts[-1]
-    return request.client.host if request.client else "unknown"
+    """Best-effort real client IP for rate limiting / audit logging (see
+    app.core.mpin_guard.client_ip)."""
+    return client_ip(request)
 
 
 def _registration_conflict() -> HTTPException:
@@ -305,7 +296,14 @@ async def register_user(
             if parent:
                 # Existing parent — verify the supplied parent MPIN matches.
                 # Generic error so we don't leak whether the parent exists.
-                if not await verify_mpin_async(payload.parent_mpin, parent.mpin_hash):
+                parent_wrong = HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Parent username or MPIN is incorrect.",
+                )
+                if not await mpin_matches(
+                    parent, payload.parent_mpin, request,
+                    locked_status=parent_wrong.status_code, locked_detail=parent_wrong.detail,
+                ):
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Parent username or MPIN is incorrect.",
@@ -480,12 +478,20 @@ async def login(
     # privileged and enrolled, for free — the same enumeration mistake the
     # constant-time MPIN check exists to avoid. By this point the caller has
     # already proved they know the MPIN, so revealing it costs nothing.
+    #
+    # A wrong code counts towards the lockout exactly as a wrong MPIN does. The
+    # login rate limit is per IP, so without this, guesses spread across many
+    # addresses had no limit on a six-digit code.
     if user.mfa_enabled:
         if payload.recovery_code:
+            # Re-read the codes under a row lock: five logins sending the same
+            # code at once each found it unspent and each got a session.
+            await db.refresh(user, attribute_names=["mfa_recovery_codes"], with_for_update=True)
             ok, remaining = consume_recovery_code(
                 payload.recovery_code, user.mfa_recovery_codes
             )
             if not ok:
+                await redis_manager.record_failed_login(user.id, ip)
                 logger.warning(
                     "MFA recovery code rejected user_id=%s ip=%s", user.id, ip,
                 )
@@ -508,12 +514,26 @@ async def login(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="mfa_required",
             )
-        elif not verify_totp(user.mfa_secret, payload.mfa_code):
-            logger.warning("MFA code rejected user_id=%s ip=%s", user.id, ip)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication code.",
+        else:
+            step = matched_step(user.mfa_secret, payload.mfa_code)
+            # Each code signs in once. It stays valid for its whole drift
+            # window, so a code read over a shoulder or relayed by a phishing
+            # page could otherwise be used again. SET NX makes the claim
+            # atomic, so two logins with one code at once cannot both pass.
+            fresh = step is not None and await redis_manager.consume_idempotency_key(
+                f"mfa_step:{user.id}:{step}",
+                ttl_seconds=(2 * ALLOWED_DRIFT_STEPS + 1) * STEP_SECONDS,
             )
+            if not fresh:
+                await redis_manager.record_failed_login(user.id, ip)
+                logger.warning(
+                    "MFA code rejected user_id=%s ip=%s%s", user.id, ip,
+                    " (already used)" if step is not None else "",
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication code.",
+                )
 
     # Successful login — clear any prior failure counters for this caller
     await redis_manager.clear_failed_logins(user.id, ip)
@@ -952,6 +972,7 @@ async def mfa_confirm(
 @router.post("/mfa/disable")
 async def mfa_disable(
     payload: MfaDisableRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -965,7 +986,7 @@ async def mfa_disable(
     if not current_user.mfa_enabled:
         return {"enabled": False}
 
-    if not await verify_mpin_async(payload.mpin, current_user.mpin_hash):
+    if not await mpin_matches(current_user, payload.mpin, request):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect MPIN.",
         )

@@ -5,9 +5,11 @@ Admin router — all endpoints require admin role.
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 
 from sqlalchemy import func as sqlfunc
 
@@ -16,6 +18,8 @@ from app.core.redis_client import redis_manager
 from app.services.realtime_service import publish_to_school, publish_to_users
 from app.core.security import get_current_admin
 from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
+from app.core.school_time import school_today
+from app.core.mpin_guard import mpin_matches
 from app.models.academic_year import AcademicYear
 from app.models.audit_log import AuditLog
 from app.models.fees import FeePayment, FeeStructure, PaymentInfo
@@ -159,14 +163,15 @@ async def change_admin_username(
 @router.put("/profile/mpin", status_code=status.HTTP_200_OK)
 async def change_admin_mpin(
     payload: AdminMpinUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
     """Change the admin's MPIN after verifying the current one."""
     from app.core.security import (
-        hash_mpin_async, issue_session, revoke_all_sessions, verify_mpin_async,
+        hash_mpin_async, issue_session, revoke_all_sessions,
     )
-    if not await verify_mpin_async(payload.current_mpin, current_admin.mpin_hash):
+    if not await mpin_matches(current_admin, payload.current_mpin, request):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
     result = await db.execute(select(User).where(User.id == current_admin.id))
     admin_user = result.scalar_one()
@@ -1039,7 +1044,12 @@ async def create_fee_structure(
 
     structure = FeeStructure(**payload.model_dump(), school_id=current_admin.school_id)
     db.add(structure)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Created by a request running at the same moment (uq_fee_structure_school).
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Fee structure for this grade/year already exists.")
     await db.refresh(structure)
     return structure
 
@@ -1234,20 +1244,18 @@ async def update_payment_info(
     """Update or create a payment option by slot (1, 2, or 3)."""
     if slot not in (1, 2, 3):
         raise HTTPException(status_code=400, detail="Slot must be 1, 2, or 3.")
-    result = await db.execute(select(PaymentInfo).where(
-        PaymentInfo.slot == slot,
-        PaymentInfo.school_id == current_admin.school_id,
-    ))
-    info = result.scalar_one_or_none()
-    if info:
-        for field, value in payload.model_dump().items():
-            setattr(info, field, value)
-    else:
-        info = PaymentInfo(slot=slot, school_id=current_admin.school_id, **payload.model_dump())
-        db.add(info)
+    # Only the fields sent: the app saves the bank details without the QR code,
+    # which is uploaded separately, and writing every field erased it. One
+    # upsert, so two saves at once cannot both insert the slot.
+    fields = payload.model_dump(exclude_unset=True)
+    stmt = pg_insert(PaymentInfo).values(slot=slot, school_id=current_admin.school_id, **fields)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["school_id", "slot"],
+        set_={**{k: stmt.excluded[k] for k in fields}, "updated_at": sqlfunc.now()},
+    ).returning(PaymentInfo.id)
+    info_id = (await db.execute(stmt)).scalar_one()
     await db.commit()
-    await db.refresh(info)
-    return info
+    return await db.get(PaymentInfo, info_id, populate_existing=True)
 
 
 @router.post("/fees/payment-info/{slot}/qr", response_model=PaymentInfoResponse)
@@ -1260,25 +1268,42 @@ async def upload_qr_code(
     """Upload a QR code image for a specific payment slot."""
     if slot not in (1, 2, 3):
         raise HTTPException(status_code=400, detail="Slot must be 1, 2, or 3.")
-    file_bytes = await file.read()
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else "png"
-    # Namespace the object by school so one school's QR can't overwrite another's.
-    key = f"payment/{current_admin.school_id}/qr_code_slot{slot}.{ext}"
-    url = await storage_service.upload_file("mindforge-profiles", key, file_bytes)
+    # The same checks as the school logo: an image, under the size cap, EXIF
+    # stripped. This took any file of any size.
+    reject_if_oversize(file)
+    file_bytes, ext = validate_and_strip_exif(await file.read(), file.filename or "upload")
+    bucket = "mindforge-profiles"
+    # Namespaced by school, and a new name every upload: the old fixed name kept
+    # the URL the same, so an app that had cached the old QR kept showing it.
+    key = storage_service.profile_object_key(
+        f"payment/{current_admin.school_id}/slot{slot}", ext)
+    await storage_service.upload_file(bucket, key, file_bytes)
+    url = storage_service.get_public_url(bucket, key)
 
     result = await db.execute(select(PaymentInfo).where(
         PaymentInfo.slot == slot,
         PaymentInfo.school_id == current_admin.school_id,
     ))
     info = result.scalar_one_or_none()
+    old_url = None
     if not info:
         info = PaymentInfo(slot=slot, qr_code_url=url, school_id=current_admin.school_id)
         db.add(info)
     else:
+        old_url = info.qr_code_url
         info.qr_code_url = url
     await db.commit()
     await db.refresh(info)
+    await _delete_old_qr(old_url)
     return info
+
+
+async def _delete_old_qr(old: Optional[str]) -> None:
+    """Remove the QR an upload replaced — a media URL, or the "bucket/key" that
+    uploads stored before 2026-10-16."""
+    if old and not old.startswith("http") and "/" in old:
+        old = storage_service.get_public_url(*old.split("/", 1))
+    await storage_service.delete_by_media_url(old)
 
 
 # ─── Timetable Config ─────────────────────────────────────────────────────────
@@ -1324,6 +1349,17 @@ async def update_timetable_config(
             school_id=current_admin.school_id,
         )
         db.add(config)
+    # Periods past the new count no longer exist. The teacher's screens draw
+    # only `periods_per_day`, so a slot beyond it could not be seen, deleted or
+    # have attendance taken, yet the attendance step still expected it. Past
+    # days keep theirs: that is what was taught.
+    await db.execute(
+        delete(TimetableSlot).where(
+            TimetableSlot.school_id == current_admin.school_id,
+            TimetableSlot.period_number > payload.periods_per_day,
+            TimetableSlot.slot_date >= school_today(),
+        )
+    )
     await db.commit()
     await db.refresh(config)
     from app.core.cache import invalidate_timetable_config
@@ -1476,6 +1512,20 @@ async def get_users_by_year(
     ]
 
 
+async def _lock_school_years(db: AsyncSession, school_id: int) -> None:
+    """Hold the school's row until this transaction ends.
+
+    Starting or closing a year reads the current year and then writes. Two at
+    once — a second tap while a close is still running, or two admins — both
+    read the same year, so each created a current year of its own, and
+    registration failed for the whole school from then on. Taking the school
+    row first makes the second wait for the first and then see what it did.
+    (uq_academic_year_current, migration 040, refuses a second current year
+    outright.)
+    """
+    await db.execute(select(School.id).where(School.id == school_id).with_for_update())
+
+
 @router.post("/academic-years/new", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def start_new_academic_year(
     db: AsyncSession = Depends(get_db),
@@ -1488,6 +1538,7 @@ async def start_new_academic_year(
     3. Clear timetable slots.
     4. Create a new AcademicYear record marked as current.
     """
+    await _lock_school_years(db, current_admin.school_id)
     now = datetime.now(timezone.utc)
 
     # 1. Close current year if one exists (this school only)
@@ -1565,6 +1616,7 @@ async def init_academic_year(
     current_admin: User = Depends(get_current_admin),
 ):
     """Create the first academic year (only if none exists yet for this school)."""
+    await _lock_school_years(db, current_admin.school_id)
     existing = await db.execute(
         select(AcademicYear).where(AcademicYear.school_id == current_admin.school_id)
     )

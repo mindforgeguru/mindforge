@@ -14,6 +14,8 @@ import '../providers/teacher_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
 import '../../../core/security/screen_security.dart';
+import '../../../core/utils/api_error.dart';
+import '../../../core/utils/decimal_input.dart';
 
 class TeacherGradeScreen extends ConsumerStatefulWidget {
   const TeacherGradeScreen({super.key});
@@ -653,9 +655,12 @@ class _GradeEntrySheetState extends ConsumerState<_GradeEntrySheet> {
     final grades = <Map<String, dynamic>>[];
     for (final student in students) {
       final ctrl = _marksCtrls[student.id];
-      final marks = double.tryParse(ctrl?.text.trim() ?? '');
-      if (marks == null) continue;
-      if (marks < 0 || marks > widget.test.totalMarks) {
+      final text = ctrl?.text.trim() ?? '';
+      if (text.isEmpty) continue;
+      // Anything typed that isn't a number is an error, not a skipped student:
+      // the save used to drop it and still say "Grades saved successfully!".
+      final marks = double.tryParse(text);
+      if (marks == null || marks < 0 || marks > widget.test.totalMarks) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -694,7 +699,7 @@ class _GradeEntrySheetState extends ConsumerState<_GradeEntrySheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error: $e'),
+              content: Text('Error: ${apiErrorMessage(e)}'),
               backgroundColor: AppColors.error),
         );
       }
@@ -770,6 +775,7 @@ class _GradeEntrySheetState extends ConsumerState<_GradeEntrySheet> {
                   ),
                 ),
                 IconButton(
+                  tooltip: 'Close',
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
                 ),
@@ -861,6 +867,7 @@ class _GradeEntrySheetState extends ConsumerState<_GradeEntrySheet> {
                             keyboardType:
                                 const TextInputType.numberWithOptions(
                                     decimal: true),
+                            inputFormatters: [DecimalInputFormatter.marks()],
                             textAlign: TextAlign.center,
                             decoration: InputDecoration(
                               isDense: true,

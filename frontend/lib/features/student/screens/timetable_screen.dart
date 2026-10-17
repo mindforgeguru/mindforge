@@ -81,6 +81,7 @@ class _StudentTimetableScreenState
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
+                      tooltip: 'Previous month',
                       icon: const Icon(Icons.chevron_left, size: 18),
                       onPressed: _prevMonth,
                       padding: EdgeInsets.zero,
@@ -96,6 +97,7 @@ class _StudentTimetableScreenState
                           fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                     IconButton(
+                      tooltip: 'Next month',
                       icon: const Icon(Icons.chevron_right, size: 18),
                       onPressed: _nextMonth,
                       padding: EdgeInsets.zero,

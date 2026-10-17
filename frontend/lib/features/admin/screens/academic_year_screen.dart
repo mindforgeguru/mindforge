@@ -8,6 +8,7 @@ import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
+import '../../../core/utils/api_error.dart';
 
 class AdminAcademicYearScreen extends ConsumerWidget {
   const AdminAcademicYearScreen({super.key});
@@ -172,7 +173,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error: $e'),
+              content: Text('Error: ${apiErrorMessage(e)}'),
               backgroundColor: AppColors.error),
         );
       }

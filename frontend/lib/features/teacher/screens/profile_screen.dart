@@ -11,6 +11,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/privacy_data_section.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../widgets/teacher_scaffold.dart';
+import '../../../core/utils/api_error.dart';
 
 /// Teacher profile screen. Visual layout mirrors the student + parent
 /// profiles for cross-role consistency: avatar card → "TEACHER" pill →
@@ -62,7 +63,7 @@ class _TeacherProfileScreenState extends ConsumerState<TeacherProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Upload failed: $e'),
+            content: Text('Upload failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error));
       }
     } finally {
@@ -144,7 +145,7 @@ class _TeacherProfileScreenState extends ConsumerState<TeacherProfileScreen> {
                                   fontSize: R.fs(context, 26,
                                       min: 20, max: 30),
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.secondary,
+                                  color: AppColors.secondaryText,
                                 ),
                               );
                               if (auth.profilePicUrl == null) return initials;
@@ -351,6 +352,7 @@ class _MpinField extends StatelessWidget {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         suffixIcon: IconButton(
+          tooltip: obscure ? 'Show MPIN' : 'Hide MPIN',
           icon: Icon(
               obscure
                   ? Icons.visibility_outlined

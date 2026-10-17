@@ -7,9 +7,10 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 
 from app.core.database import get_db
@@ -48,6 +49,9 @@ from app.core.cache import (
     get_timetable_config_cached,
     get_current_academic_year_cached,
 )
+from app.core.academic_year import since, year_started_at
+from app.core.school_time import parse_iso_date, school_today
+from app.core.mpin_guard import mpin_matches
 
 router = APIRouter()
 
@@ -172,10 +176,16 @@ async def get_class_attendance_leaderboard(
         return []
 
     # Get all student user_ids in the same grade *and same school*
+    # Live accounts only: a year close removes students but keeps their
+    # profiles, and last year's class stayed on this year's board.
     classmates_result = await db.execute(
-        select(StudentProfile.user_id).where(
+        select(StudentProfile.user_id)
+        .join(User, User.id == StudentProfile.user_id)
+        .where(
             StudentProfile.grade == profile.grade,
             StudentProfile.school_id == current_student.school_id,
+            User.deleted_at.is_(None),
+            User.is_active == True,  # noqa: E712
         )
     )
     classmate_ids = [row[0] for row in classmates_result.all()]
@@ -270,8 +280,7 @@ async def get_my_timetable(
     current_student: User = Depends(get_current_student),
 ):
     """Get the timetable for the student's grade on a specific date."""
-    from datetime import date as date_type
-    slot_date = date_type.fromisoformat(date)
+    slot_date = parse_iso_date(date)
 
     profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
@@ -408,6 +417,31 @@ def _grade_submission(
     return score
 
 
+async def _expected_takers(db: AsyncSession, test: Test) -> set[int]:
+    """The students who could have taken `test`: live and approved, in its
+    grade and school, with an account that existed before it closed.
+
+    Every student profile in the grade used to count. After a year close that
+    gave this year's students a zero for last year's tests, gave last year's
+    removed students one too, and kept such a test from ever being "fully
+    graded".
+    """
+    query = (
+        select(User.id)
+        .join(StudentProfile, StudentProfile.user_id == User.id)
+        .where(
+            StudentProfile.grade == test.grade,
+            StudentProfile.school_id == test.school_id,
+            User.deleted_at.is_(None),
+            User.is_active == True,  # noqa: E712
+            User.is_approved == True,  # noqa: E712
+        )
+    )
+    if test.expires_at is not None:
+        query = query.where(User.created_at <= test.expires_at)
+    return {row[0] for row in (await db.execute(query)).all()}
+
+
 async def _finalize_submission(
     submission: TestSubmission,
     test: Test,
@@ -416,7 +450,8 @@ async def _finalize_submission(
     auto_submitted: bool,
     finalized_at: Optional[datetime] = None,
     forfeit: bool = False,
-) -> None:
+    answers: Optional[dict] = None,
+) -> bool:
     """Score, persist, and broadcast the finalization of a TestSubmission.
 
     Idempotent: if the submission is already finalized this is a no-op. Used
@@ -425,20 +460,46 @@ async def _finalize_submission(
     `forfeit=True` forces score=0 regardless of saved answers. No longer used
     by the exit paths (back/app-close auto-submit the saved answers now); kept
     only for the never-attempted 48h sweep, which materializes a genuine 0.
+
+    `answers`, when given, replace the saved ones as part of finalizing.
+
+    Returns False when the attempt was already finalized — including by a
+    request running at the same moment.
     """
     if submission.is_finalized:
-        return
+        return False
 
     from app.models.grade import Grade, GradeType
 
+    if answers is None:
+        answers = submission.answers
     score = 0.0 if forfeit else _grade_submission(
-        test, submission.answers or {},
+        test, answers or {},
         student_id=submission.student_id, test_id=test.id,
     )
-    submission.score = score
-    submission.auto_submitted = auto_submitted
-    submission.is_finalized = True
-    submission.submitted_at = finalized_at or datetime.now(timezone.utc)
+
+    # Compare-and-set. Two requests can both have read the attempt as open — a
+    # double tap, the timer's auto-submit against the Submit button, the expiry
+    # sweep a list request runs — and each used to write a Grade. Only the
+    # UPDATE that still finds the row open wins; the other waits on the row
+    # lock, then matches nothing and leaves.
+    won = (await db.execute(
+        update(TestSubmission)
+        .where(TestSubmission.id == submission.id, TestSubmission.is_finalized.is_(False))
+        .values(
+            answers=answers,
+            score=score,
+            auto_submitted=auto_submitted,
+            is_finalized=True,
+            submitted_at=finalized_at or datetime.now(timezone.utc),
+        )
+        .returning(TestSubmission.id)
+        .execution_options(synchronize_session=False)
+    )).scalar_one_or_none()
+    if won is None:
+        await db.commit()
+        await db.refresh(submission)
+        return False
 
     db.add(
         Grade(
@@ -474,24 +535,15 @@ async def _finalize_submission(
                 ),
             )
 
-    # Mark the test fully graded once every student in the grade has finalized.
-    student_count_result = await db.execute(
-        select(func.count()).select_from(StudentProfile).where(
-            StudentProfile.grade == test.grade,
-            StudentProfile.school_id == test.school_id,
-        )
-    )
-    student_count = student_count_result.scalar_one()
-    finalized_count_result = await db.execute(
-        select(func.count())
-        .select_from(TestSubmission)
-        .where(
+    # Mark the test fully graded once every student who could take it has.
+    expected = await _expected_takers(db, test)
+    finalized_ids = {row[0] for row in (await db.execute(
+        select(TestSubmission.student_id).where(
             TestSubmission.test_id == test.id,
             TestSubmission.is_finalized == True,  # noqa: E712
         )
-    )
-    finalized_count = finalized_count_result.scalar_one()
-    if student_count > 0 and finalized_count >= student_count:
+    )).all()}
+    if expected and expected <= finalized_ids:
         test.is_graded = True
         await db.commit()
         # Same event the teacher-side grading path emits — scoped to the
@@ -539,6 +591,8 @@ async def _finalize_submission(
                 "max_marks": test.total_marks,
             },
         })
+
+    return True
 
 
 async def _sweep_expired_attempts_for_student(
@@ -591,8 +645,8 @@ async def _sweep_missed_tests_for_grade(
     and that isn't fully graded yet:
       1. finalise any in-progress (started-but-unfinalised) attempts that ran
          out of time, grading whatever was saved;
-      2. create a finalised score=0 submission for every student in the grade
-         with no submission at all.
+      2. create a finalised score=0 submission for every student who could
+         have taken it (`_expected_takers`) and has no submission at all.
 
     Once every student has a finalised row, `_finalize_submission` flips the
     test's `is_graded` flag, so this is a one-shot per test (cheap thereafter).
@@ -612,18 +666,8 @@ async def _sweep_missed_tests_for_grade(
     if not tests:
         return
 
-    student_ids = {
-        row[0] for row in (await db.execute(
-            select(StudentProfile.user_id).where(
-                StudentProfile.grade == grade,
-                StudentProfile.school_id == school_id,
-            )
-        )).all()
-    }
-    if not student_ids:
-        return
-
     for test in tests:
+        student_ids = await _expected_takers(db, test)
         subs = (await db.execute(
             select(TestSubmission).where(TestSubmission.test_id == test.id)
         )).scalars().all()
@@ -860,6 +904,7 @@ async def get_pending_tests(
         .where(
             Test.grade == profile.grade,
             Test.school_id == current_student.school_id,
+        since(Test.created_at, await year_started_at(db, current_student.school_id)),
             Test.is_published == True,
             Test.test_type == "online",
             Test.expires_at > now,
@@ -887,6 +932,7 @@ async def get_offline_tests(
         select(Test)
         .where(Test.grade == profile.grade,
                Test.school_id == current_student.school_id,
+        since(Test.created_at, await year_started_at(db, current_student.school_id)),
                Test.test_type == TestType.offline,
                Test.is_published == True)
     )
@@ -923,7 +969,9 @@ async def get_completed_tests(
         .where(Test.id.in_(finalized_ids), Test.test_type == TestType.online)
         .order_by(Test.created_at.desc())
     )
-    return result.scalars().all()
+    # Without the key: the test may still be open for classmates. The review
+    # endpoint shows it once the test has closed.
+    return _tests_without_answers(result.scalars().all())
 
 
 @router.post("/tests/{test_id}/start", response_model=TestAttemptResponse)
@@ -1151,12 +1199,15 @@ async def submit_test(
             school_id=test.school_id,
         )
         db.add(submission)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Another submit created the row first (uidx_submission_test_student).
+            await db.rollback()
+            raise HTTPException(status_code=409, detail="You have already submitted this test.")
         await db.refresh(submission)
     elif submission.is_finalized:
         raise HTTPException(status_code=409, detail="You have already submitted this test.")
-    else:
-        submission.answers = payload.answers
 
     deadline_passed = bool(
         submission.attempt_expires_at and submission.attempt_expires_at <= now
@@ -1168,13 +1219,15 @@ async def submit_test(
         if deadline_passed and submission.attempt_expires_at
         else now
     )
-    await _finalize_submission(
+    if not await _finalize_submission(
         submission,
         test,
         db,
         auto_submitted=auto_submitted,
         finalized_at=finalized_at,
-    )
+        answers=payload.answers,
+    ):
+        raise HTTPException(status_code=409, detail="You have already submitted this test.")
 
     return submission
 
@@ -1208,18 +1261,27 @@ async def get_test_review(
     if not submission.is_finalized:
         raise HTTPException(status_code=409, detail="Attempt is still in progress.")
 
+    questions = _personalize_questions_for_review(
+        test.questions or [],
+        student_id=current_student.id,
+        test_id=test.id,
+    )
+    # Nor while the test is open for anyone else: a student who finished early
+    # could read every correct answer and pass them on. Until it closes, the
+    # review is the score and their own answers, and says when the key appears.
+    still_open = test.expires_at is not None and test.expires_at > datetime.now(timezone.utc)
+    if still_open:
+        questions = _strip_answer_key(questions)
+
     return {
         "test_id": test.id,
         "title": test.title,
         "subject": test.subject,
         "total_marks": test.total_marks,
         "score": submission.score,
-        "questions": _personalize_questions_for_review(
-            test.questions or [],
-            student_id=current_student.id,
-            test_id=test.id,
-        ),
+        "questions": questions,
         "student_answers": submission.answers or {},
+        "answers_available_at": test.expires_at.isoformat() if still_open else None,
     }
 
 
@@ -1263,6 +1325,7 @@ async def upload_profile_picture(
 @router.put("/profile/mpin", status_code=status.HTTP_200_OK)
 async def change_student_mpin(
     payload: AdminMpinUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_student: User = Depends(get_current_student),
 ):
@@ -1272,12 +1335,12 @@ async def change_student_mpin(
     weak-MPIN blocklist on ``new_mpin`` (422 on a predictable PIN) — the same
     strength gate registration and admin resets use."""
     from app.core.security import (
-        hash_mpin_async, issue_session, revoke_all_sessions, verify_mpin_async,
+        hash_mpin_async, issue_session, revoke_all_sessions,
     )
 
     # current_mpin is already shape-validated (6 digits) by the schema, so the
     # bcrypt call can't overflow.
-    if not await verify_mpin_async(payload.current_mpin, current_student.mpin_hash):
+    if not await mpin_matches(current_student, payload.current_mpin, request):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
 
     result = await db.execute(select(User).where(User.id == current_student.id))
@@ -1310,6 +1373,7 @@ async def get_student_homework(
         .where(
             Homework.grade == profile.grade,
             Homework.school_id == current_student.school_id,
+            since(Homework.created_at, await year_started_at(db, current_student.school_id)),
             Homework.is_no_homework == False,  # noqa: E712
         )
         .order_by(Homework.created_at.desc())
@@ -1361,7 +1425,7 @@ async def get_student_broadcasts(
     q = (
         select(Broadcast, User)
         .join(User, Broadcast.sender_id == User.id)
-        .where(Broadcast.school_id == current_student.school_id)
+        .where(Broadcast.school_id == current_student.school_id, since(Broadcast.created_at, await year_started_at(db, current_student.school_id)))
     )
     if grade is not None:
         q = q.where(
@@ -1399,7 +1463,6 @@ async def get_my_fees(
     current_student: User = Depends(get_current_student),
 ):
     """Get the current student's own fee summary."""
-    import asyncio
 
     profile = await get_student_profile_cached(current_student.id, db)
     if not profile:
@@ -1448,21 +1511,8 @@ async def get_my_fees(
     )
     payment_options_raw = pi_result.scalars().all()
 
-    # Resolve presigned QR URLs in parallel instead of sequentially
-    async def _resolve_qr(pi):
-        resp = PaymentInfoResponse.model_validate(pi)
-        if pi.qr_code_url and not pi.qr_code_url.startswith("http"):
-            parts = pi.qr_code_url.split("/", 1)
-            if len(parts) == 2:
-                try:
-                    resp.qr_code_url = await storage_service.get_presigned_url(
-                        parts[0], parts[1], expires_seconds=604800
-                    )
-                except Exception:
-                    resp.qr_code_url = None
-        return resp
-
-    payment_options = list(await asyncio.gather(*[_resolve_qr(pi) for pi in payment_options_raw]))
+    # The schema gives qr_code_url as a media-proxy URL.
+    payment_options = [PaymentInfoResponse.model_validate(pi) for pi in payment_options_raw]
 
     return StudentFeeSummary(
         student_id=current_student.id,
@@ -1493,7 +1543,7 @@ async def get_student_dashboard_summary(
     Returns timetable, broadcasts, homework, attendance summary,
     pending tests, offline tests, grades, and fees — in one round trip.
     """
-    from datetime import date as date_type, datetime, timezone
+    from datetime import datetime, timezone
     from sqlalchemy import or_
     from app.models.attendance import AttendanceStatus
 
@@ -1501,7 +1551,7 @@ async def get_student_dashboard_summary(
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
-    today = date_type.fromisoformat(date) if date else date_type.today()
+    today = parse_iso_date(date) if date else school_today()
 
     # Timetable for today
     config = await get_timetable_config_cached(db, current_student.school_id)
@@ -1535,7 +1585,7 @@ async def get_student_dashboard_summary(
     bc_rows = (await db.execute(
         select(Broadcast, User)
         .join(User, Broadcast.sender_id == User.id)
-        .where(Broadcast.school_id == current_student.school_id)
+        .where(Broadcast.school_id == current_student.school_id, since(Broadcast.created_at, await year_started_at(db, current_student.school_id)))
         .where(or_(
             Broadcast.target_type == "all",
             (Broadcast.target_type == "grade") & (Broadcast.target_grade == profile.grade),
@@ -1556,6 +1606,7 @@ async def get_student_dashboard_summary(
         select(Homework).where(
             Homework.grade == profile.grade,
             Homework.school_id == current_student.school_id,
+            since(Homework.created_at, await year_started_at(db, current_student.school_id)),
             Homework.is_no_homework == False,  # noqa: E712
         ).order_by(Homework.created_at.desc())
     )).scalars().all()
@@ -1593,6 +1644,7 @@ async def get_student_dashboard_summary(
     }
     pending_q = select(Test).where(
         Test.grade == profile.grade, Test.school_id == current_student.school_id,
+        since(Test.created_at, await year_started_at(db, current_student.school_id)),
         Test.is_published == True,
         Test.test_type == "online", Test.expires_at > now,
     )
@@ -1602,6 +1654,7 @@ async def get_student_dashboard_summary(
     pending_tests = (await db.execute(pending_q.order_by(Test.created_at.desc()))).scalars().all()
     offline_q = select(Test).where(
         Test.grade == profile.grade, Test.school_id == current_student.school_id,
+        since(Test.created_at, await year_started_at(db, current_student.school_id)),
         Test.test_type == TestType.offline, Test.is_published == True
     )
     offline_q = _apply_subject_filter(offline_q, profile)
@@ -1652,8 +1705,9 @@ async def get_student_dashboard_summary(
         "broadcasts": broadcasts,
         "homework": [HomeworkResponse.model_validate(h) for h in homework],
         "attendance": attendance,
-        "pending_tests": [TestResponse.model_validate(t) for t in pending_tests],
-        "offline_tests": [TestResponse.model_validate(t) for t in offline_tests],
+        # Without the key: these are tests the student has not taken yet.
+        "pending_tests": _tests_without_answers(pending_tests),
+        "offline_tests": _tests_without_answers(offline_tests),
         "grades": [GradeResponse.model_validate(g) for g in grades],
         "fees": fees,
     }

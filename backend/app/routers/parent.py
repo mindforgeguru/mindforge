@@ -5,12 +5,15 @@ Parents can view their linked child's attendance, timetable, grades, and fees.
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 
 from app.core.database import get_db
 from app.core.security import get_current_parent
+from app.core.academic_year import since, year_started_at
+from app.core.school_time import parse_iso_date, school_today
+from app.core.mpin_guard import mpin_matches
 from app.models.attendance import Attendance, AttendanceStatus
 from app.models.fees import FeePayment, FeeStructure, PaymentInfo
 from app.models.grade import Grade
@@ -39,6 +42,7 @@ router = APIRouter()
 @router.put("/profile/mpin", status_code=status.HTTP_200_OK)
 async def change_parent_mpin(
     payload: AdminMpinUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
 ):
@@ -48,12 +52,12 @@ async def change_parent_mpin(
     weak-MPIN blocklist on ``new_mpin`` (422 on a predictable PIN) — the same
     strength gate registration and admin resets use."""
     from app.core.security import (
-        hash_mpin_async, issue_session, revoke_all_sessions, verify_mpin_async,
+        hash_mpin_async, issue_session, revoke_all_sessions,
     )
 
     # current_mpin is already shape-validated (6 digits) by the schema, so the
     # bcrypt call can't overflow.
-    if not await verify_mpin_async(payload.current_mpin, current_parent.mpin_hash):
+    if not await mpin_matches(current_parent, payload.current_mpin, request):
         raise HTTPException(status_code=400, detail="Current MPIN is incorrect.")
 
     result = await db.execute(select(User).where(User.id == current_parent.id))
@@ -66,18 +70,57 @@ async def change_parent_mpin(
     return {"message": "MPIN updated successfully.", **issue_session(parent_user)}
 
 
-async def _get_child_profile(parent: User, db: AsyncSession) -> StudentProfile:
-    """Helper to retrieve the parent's linked child's StudentProfile."""
-    result = await db.execute(
-        select(StudentProfile).where(StudentProfile.parent_user_id == parent.id)
+async def _get_child_profile(
+    parent: User, db: AsyncSession, child_id: Optional[int] = None,
+) -> StudentProfile:
+    """The linked child a request is about.
+
+    A parent can have several children in the school — registration links a
+    second student to an existing parent — and every endpoint here used to
+    expect exactly one, so a second child made them all 500s. `child_id` picks
+    one; without it the first (lowest id) is used, so one-child families and
+    older apps that never send it see no change. Another family's child is a
+    404, the same as no child at all.
+    """
+    query = (
+        select(StudentProfile)
+        .join(User, User.id == StudentProfile.user_id)
+        .where(StudentProfile.parent_user_id == parent.id, User.deleted_at.is_(None))
     )
-    profile = result.scalar_one_or_none()
+    if child_id is not None:
+        query = query.where(StudentProfile.user_id == child_id)
+    profile = (await db.execute(
+        query.order_by(StudentProfile.user_id).limit(1)
+    )).scalar_one_or_none()
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No child account is linked to this parent account.",
         )
     return profile
+
+
+# Every child endpoint takes it; see _get_child_profile.
+_CHILD_ID = Query(None, description="Which linked child; defaults to the first.")
+
+
+@router.get("/children")
+async def list_children(
+    db: AsyncSession = Depends(get_db),
+    current_parent: User = Depends(get_current_parent),
+):
+    """The parent's linked children, for the app's child switcher."""
+    rows = (await db.execute(
+        select(User.id, User.username, User.profile_pic_url, StudentProfile.grade)
+        .join(StudentProfile, StudentProfile.user_id == User.id)
+        .where(StudentProfile.parent_user_id == current_parent.id, User.deleted_at.is_(None))
+        .order_by(User.id)
+    )).all()
+    return [
+        {"student_id": r.id, "username": r.username,
+         "profile_pic_url": r.profile_pic_url, "grade": r.grade}
+        for r in rows
+    ]
 
 
 # ─── Attendance ────────────────────────────────────────────────────────────────
@@ -89,9 +132,10 @@ async def get_child_attendance(
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """Get child's attendance records."""
-    profile = await _get_child_profile(current_parent, db)
+    profile = await _get_child_profile(current_parent, db, child_id)
     query = select(Attendance).where(Attendance.student_id == profile.user_id)
     if period:
         query = query.where(Attendance.period == period)
@@ -103,9 +147,10 @@ async def get_child_attendance(
 async def get_child_attendance_summary(
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """Get aggregated attendance stats for the child."""
-    profile = await _get_child_profile(current_parent, db)
+    profile = await _get_child_profile(current_parent, db, child_id)
     result = await db.execute(
         select(func.count(Attendance.id)).where(Attendance.student_id == profile.user_id)
     )
@@ -136,11 +181,11 @@ async def get_child_timetable(
     date: str = Query(...),  # YYYY-MM-DD
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """Get the timetable for the child's grade on a specific date."""
-    from datetime import date as date_type
-    slot_date = date_type.fromisoformat(date)
-    profile = await _get_child_profile(current_parent, db)
+    slot_date = parse_iso_date(date)
+    profile = await _get_child_profile(current_parent, db, child_id)
 
     config_result = await db.execute(
         select(TimetableConfig).where(TimetableConfig.school_id == profile.school_id)
@@ -190,11 +235,12 @@ async def get_child_grades(
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """Get the child's grades."""
     from app.routers.student import _sweep_missed_tests_for_grade
 
-    profile = await _get_child_profile(current_parent, db)
+    profile = await _get_child_profile(current_parent, db, child_id)
     # Surface 0s for online tests the child missed within the 48h window.
     await _sweep_missed_tests_for_grade(profile.grade, profile.school_id, db)
     query = select(Grade).where(Grade.student_id == profile.user_id)
@@ -212,20 +258,24 @@ async def get_child_grades(
 async def get_child_tests(
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """Get all tests (online + offline) for the child's grade."""
-    from app.routers.student import _sweep_missed_tests_for_grade
+    from app.routers.student import _sweep_missed_tests_for_grade, _tests_without_answers
 
-    profile = await _get_child_profile(current_parent, db)
+    profile = await _get_child_profile(current_parent, db, child_id)
     await _sweep_missed_tests_for_grade(profile.grade, profile.school_id, db)
     result = await db.execute(
         select(Test)
         .where(Test.grade == profile.grade,
                Test.school_id == profile.school_id,
+        since(Test.created_at, await year_started_at(db, profile.school_id)),
                Test.is_published == True)
         .order_by(Test.created_at.desc())
     )
-    return result.scalars().all()
+    # Never the answer key: it went to the parent for every published test,
+    # including ones the child had not yet taken.
+    return _tests_without_answers(result.scalars().all())
 
 
 # ─── Fees ──────────────────────────────────────────────────────────────────────
@@ -235,9 +285,10 @@ async def get_child_fees(
     academic_year: Optional[str] = Query(None, description="e.g. '2024-25'"),
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """Get the child's fee summary including total, paid, and balance due."""
-    profile = await _get_child_profile(current_parent, db)
+    profile = await _get_child_profile(current_parent, db, child_id)
 
     # Determine academic year — use the active year from DB, fall back to calendar heuristic
     if not academic_year:
@@ -294,7 +345,6 @@ async def get_child_fees(
     total_paid = sum(p.amount for p in payments)
 
     # Fetch all payment options and resolve QR presigned URLs
-    from app.services import storage_service
     pi_result = await db.execute(
         select(PaymentInfo)
         .where(PaymentInfo.school_id == profile.school_id)
@@ -304,17 +354,8 @@ async def get_child_fees(
 
     payment_options = []
     for pi in payment_options_raw:
-        resp = PaymentInfoResponse.model_validate(pi)
-        if pi.qr_code_url and not pi.qr_code_url.startswith("http"):
-            parts = pi.qr_code_url.split("/", 1)
-            if len(parts) == 2:
-                try:
-                    resp.qr_code_url = await storage_service.get_presigned_url(
-                        parts[0], parts[1], expires_seconds=604800
-                    )
-                except Exception:
-                    resp.qr_code_url = None
-        payment_options.append(resp)
+        # The schema gives qr_code_url as a media-proxy URL.
+        payment_options.append(PaymentInfoResponse.model_validate(pi))
 
     return StudentFeeSummary(
         student_id=profile.user_id,
@@ -338,20 +379,17 @@ async def get_child_fees(
 async def get_child_homework(
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """List all homework assigned to the linked child's grade."""
-    result = await db.execute(
-        select(StudentProfile).where(StudentProfile.parent_user_id == current_parent.id)
-    )
-    child_profile = result.scalar_one_or_none()
-    if not child_profile:
-        raise HTTPException(status_code=404, detail="No linked child found")
+    child_profile = await _get_child_profile(current_parent, db, child_id)
 
     hw_result = await db.execute(
         select(Homework)
         .where(
             Homework.grade == child_profile.grade,
             Homework.school_id == child_profile.school_id,
+            since(Homework.created_at, await year_started_at(db, child_profile.school_id)),
             Homework.is_no_homework == False,  # noqa: E712
         )
         .order_by(Homework.created_at.desc())
@@ -366,15 +404,10 @@ async def get_child_homework(
 async def get_child_homework_completions(
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """Return the linked child's homework completion rows."""
-    child = (await db.execute(
-        select(StudentProfile).where(
-            StudentProfile.parent_user_id == current_parent.id
-        )
-    )).scalar_one_or_none()
-    if not child:
-        raise HTTPException(status_code=404, detail="No linked child found")
+    child = await _get_child_profile(current_parent, db, child_id)
 
     rows = (await db.execute(
         select(HomeworkCompletion).where(
@@ -397,19 +430,21 @@ async def get_child_homework_completions(
 async def get_parent_broadcasts(
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """List broadcast messages visible to this parent (all + child's grade)."""
-    result = await db.execute(
-        select(StudentProfile).where(StudentProfile.parent_user_id == current_parent.id)
-    )
-    child_profile = result.scalar_one_or_none()
-    grade = child_profile.grade if child_profile else None
+    try:
+        grade = (await _get_child_profile(current_parent, db, child_id)).grade
+    except HTTPException:
+        if child_id is not None:
+            raise
+        grade = None  # no linked child: the school-wide notices still apply
 
     from sqlalchemy import or_
     q = (
         select(Broadcast, User)
         .join(User, Broadcast.sender_id == User.id)
-        .where(Broadcast.school_id == current_parent.school_id)
+        .where(Broadcast.school_id == current_parent.school_id, since(Broadcast.created_at, await year_started_at(db, current_parent.school_id)))
     )
     if grade is not None:
         q = q.where(
@@ -477,19 +512,21 @@ async def get_parent_dashboard_summary(
     date: Optional[str] = Query(None, description="YYYY-MM-DD, defaults to today"),
     db: AsyncSession = Depends(get_db),
     current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
 ):
     """
     Single aggregated endpoint for the parent dashboard.
     Returns child_timetable, broadcasts, homework, child_grades, child_tests,
     and child_fees — in one round trip.
     """
-    from datetime import date as date_type
     from sqlalchemy import or_
     from sqlalchemy.orm import aliased as sa_aliased
     from app.core.cache import get_timetable_config_cached
 
-    profile = await _get_child_profile(current_parent, db)
-    today = date_type.fromisoformat(date) if date else date_type.today()
+    from app.routers.student import _tests_without_answers
+
+    profile = await _get_child_profile(current_parent, db, child_id)
+    today = parse_iso_date(date) if date else school_today()
 
     # Child's timetable for today
     config = await get_timetable_config_cached(db, profile.school_id)
@@ -523,7 +560,7 @@ async def get_parent_dashboard_summary(
     bc_rows = (await db.execute(
         select(Broadcast, User)
         .join(User, Broadcast.sender_id == User.id)
-        .where(Broadcast.school_id == profile.school_id)
+        .where(Broadcast.school_id == profile.school_id, since(Broadcast.created_at, await year_started_at(db, profile.school_id)))
         .where(or_(
             Broadcast.target_type == "all",
             (Broadcast.target_type == "grade") & (Broadcast.target_grade == profile.grade),
@@ -544,6 +581,7 @@ async def get_parent_dashboard_summary(
         select(Homework).where(
             Homework.grade == profile.grade,
             Homework.school_id == profile.school_id,
+            since(Homework.created_at, await year_started_at(db, profile.school_id)),
             Homework.is_no_homework == False,  # noqa: E712
         ).order_by(Homework.created_at.desc())
     )).scalars().all()
@@ -558,6 +596,7 @@ async def get_parent_dashboard_summary(
         select(Test)
         .where(Test.grade == profile.grade,
                Test.school_id == profile.school_id,
+        since(Test.created_at, await year_started_at(db, profile.school_id)),
                Test.is_published == True)
         .order_by(Test.created_at.desc())
     )).scalars().all()
@@ -616,6 +655,7 @@ async def get_parent_dashboard_summary(
         "broadcasts": broadcasts,
         "homework": [HomeworkResponse.model_validate(h) for h in homework],
         "child_grades": [GradeResponse.model_validate(g) for g in child_grades],
-        "child_tests": [TestResponse.model_validate(t) for t in child_tests],
+        # Never the answer key (see get_child_tests).
+        "child_tests": _tests_without_answers(child_tests),
         "child_fees": child_fees,
     }

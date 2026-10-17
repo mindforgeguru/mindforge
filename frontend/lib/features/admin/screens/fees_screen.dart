@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -15,6 +16,8 @@ import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
 import '../../../core/security/screen_security.dart';
+import '../../../core/utils/api_error.dart';
+import '../../../core/utils/decimal_input.dart';
 
 class AdminFeesScreen extends ConsumerStatefulWidget {
   /// Tab to open on first build: 0 = Fee Structures, 1 = Payments,
@@ -84,9 +87,20 @@ class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
             child: DropdownButton<String>(
               value: _selectedYear,
               dropdownColor: Colors.white,
-              style:       TextStyle(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.w700),
+              // The items are dark for the white menu; the chosen year is
+              // drawn separately, in white, on the app bar's dark ground.
+              selectedItemBuilder: (_) => _yearOptions()
+                  .map((y) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(y,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700)),
+                      ))
+                  .toList(),
               underline: const SizedBox.shrink(),
-              icon:       Icon(Icons.arrow_drop_down, color: AppColors.accent),
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
               items: _yearOptions().map((y) => DropdownMenuItem(
                 value: y,
                 child: Text(y, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
@@ -278,7 +292,7 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'), backgroundColor: AppColors.error));
+            content: Text('Error: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error));
       }
     }
   }
@@ -698,7 +712,9 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
                             prefixIcon: Icon(Icons.currency_rupee),
                             isDense: true,
                           ),
-                          keyboardType: TextInputType.number,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: [DecimalInputFormatter.money()],
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -710,6 +726,9 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
                             prefixIcon: Icon(Icons.note_outlined),
                             isDense: true,
                           ),
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(1000)
+                          ],
                         ),
                       ),
                     ],
@@ -798,7 +817,7 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Error: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error));
       }
     } finally {
@@ -939,7 +958,7 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'), backgroundColor: AppColors.error));
+            content: Text('Error: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -964,7 +983,7 @@ class _PaymentSlotCardState extends ConsumerState<_PaymentSlotCard> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Upload failed: $e'), backgroundColor: AppColors.error));
+            content: Text('Upload failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error));
       }
     } finally {
       if (mounted) setState(() => _uploadingQr = false);
@@ -1176,7 +1195,8 @@ class _FeeField extends StatelessWidget {
       child: TextField(
         controller: ctrl,
         decoration: InputDecoration(labelText: label, prefixText: '₹ '),
-        keyboardType: TextInputType.number,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [DecimalInputFormatter.money()],
       ),
     );
   }
@@ -1244,7 +1264,7 @@ class _FeeStructureTileState extends ConsumerState<_FeeStructureTile> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Error: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error));
       }
     } finally {
@@ -1286,7 +1306,7 @@ class _FeeStructureTileState extends ConsumerState<_FeeStructureTile> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Error: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error));
       }
     }
@@ -1461,7 +1481,7 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'), backgroundColor: AppColors.error));
+            content: Text('Error: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1496,7 +1516,7 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'), backgroundColor: AppColors.error));
+            content: Text('Error: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error));
       }
     }
   }
@@ -1531,7 +1551,9 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
                           prefixIcon: Icon(Icons.currency_rupee, size: 16),
                           isDense: true,
                         ),
-                        keyboardType: TextInputType.number,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [DecimalInputFormatter.money()],
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1543,6 +1565,9 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
                           prefixIcon: Icon(Icons.note_outlined, size: 16),
                           isDense: true,
                         ),
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(1000)
+                        ],
                       ),
                     ),
                   ],

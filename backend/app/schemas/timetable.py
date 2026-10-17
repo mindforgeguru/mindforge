@@ -5,7 +5,9 @@ Pydantic schemas for Timetable.
 from datetime import date, time
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas.bounds import Period, SchoolGrade, Text
 
 
 class PeriodTime(BaseModel):
@@ -15,7 +17,7 @@ class PeriodTime(BaseModel):
 
 
 class TimetableConfigCreate(BaseModel):
-    periods_per_day: int
+    periods_per_day: int = Field(ge=1, le=12)
     enable_weekends: bool = False
     period_times: Optional[list[Any]] = None
 
@@ -31,24 +33,24 @@ class TimetableConfigResponse(BaseModel):
 
 
 class TimetableSlotCreate(BaseModel):
-    grade: int
+    grade: SchoolGrade
     slot_date: date          # specific calendar date
-    period_number: int
-    subject: Optional[str] = None
+    period_number: Period
+    subject: Optional[Text(100)] = None
     teacher_id: Optional[int] = None
     start_time: Optional[time] = None
     end_time: Optional[time] = None
     is_holiday: bool = False
-    comment: Optional[str] = None
+    comment: Optional[Text(300)] = None
 
 
 class TimetableSlotUpdate(BaseModel):
-    subject: Optional[str] = None
+    subject: Optional[Text(100)] = None
     teacher_id: Optional[int] = None
     start_time: Optional[time] = None
     end_time: Optional[time] = None
     is_holiday: Optional[bool] = None
-    comment: Optional[str] = None
+    comment: Optional[Text(300)] = None
 
 
 class TimetableSlotResponse(BaseModel):

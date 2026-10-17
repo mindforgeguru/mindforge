@@ -12,6 +12,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../providers/student_provider.dart';
 import '../../../core/utils/responsive.dart';
 import '../widgets/student_scaffold.dart';
+import '../../../core/utils/api_error.dart';
 
 class StudentProfileScreen extends ConsumerStatefulWidget {
   const StudentProfileScreen({super.key});
@@ -64,7 +65,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to upload photo: $e'),
+            content: Text('Failed to upload photo: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -152,7 +153,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                                   fontSize: R.fs(context, 26,
                                       min: 20, max: 30),
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.secondary,
+                                  color: AppColors.secondaryText,
                                 ),
                               );
                               if (auth.profilePicUrl == null) return initials;
@@ -430,6 +431,7 @@ class _MpinField extends StatelessWidget {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         suffixIcon: IconButton(
+          tooltip: obscure ? 'Show MPIN' : 'Hide MPIN',
           icon: Icon(
               obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
               size: 18),

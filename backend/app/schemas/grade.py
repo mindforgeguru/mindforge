@@ -5,32 +5,32 @@ Pydantic schemas for Grade.
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, model_validator
 
 from app.models.grade import GradeType
+from app.schemas.bounds import Marks, PositiveMarks, Required
 
 
 class GradeCreate(BaseModel):
     student_id: int
-    subject: str
-    chapter: str
-    marks_obtained: float
-    max_marks: float
+    subject: Required(100)
+    chapter: Required(200)
+    marks_obtained: Marks
+    max_marks: PositiveMarks
     grade_type: GradeType = GradeType.manual
     test_id: Optional[int] = None
 
-    @field_validator("marks_obtained", "max_marks")
-    @classmethod
-    def validate_marks(cls, v: float) -> float:
-        if v < 0:
-            raise ValueError("Marks cannot be negative.")
-        return v
+    @model_validator(mode="after")
+    def _obtained_within_max(self):
+        if self.marks_obtained > self.max_marks:
+            raise ValueError("Marks obtained cannot be more than the maximum marks.")
+        return self
 
 
 class GradeUpdate(BaseModel):
-    marks_obtained: Optional[float] = None
-    max_marks: Optional[float] = None
-    chapter: Optional[str] = None
+    marks_obtained: Optional[Marks] = None
+    max_marks: Optional[PositiveMarks] = None
+    chapter: Optional[Required(200)] = None
 
 
 class GradeResponse(BaseModel):

@@ -495,7 +495,7 @@ class _ProfileColumn extends ConsumerWidget {
                 final initials = Text(
                   username.isNotEmpty ? username[0].toUpperCase() : 'S',
                   style: GoogleFonts.poppins(
-                      fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.secondary),
+                      fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.secondaryText),
                 );
                 if (auth.profilePicUrl == null) return initials;
                 return ClipOval(
@@ -763,7 +763,7 @@ class _DonutLeaderboardColumn extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text('${list.length}',
-                              style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.accent)),
+                              style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.accentText)),
                         ),
                       ],
                     ),
@@ -806,7 +806,7 @@ class _DonutLeaderboardColumn extends ConsumerWidget {
                               child: Builder(
                                 builder: (_) {
                                   final initials = Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.secondary));
+                                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.secondaryText));
                                   if (picUrl == null) return initials;
                                   return ClipOval(
                                     child: CachedNetworkImage(
@@ -908,6 +908,7 @@ class _TimetableStyleMonthNav extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         IconButton(
+          tooltip: 'Previous month',
           icon: const Icon(Icons.chevron_left, size: 18),
           onPressed: onPrev,
           padding: EdgeInsets.zero,
@@ -926,6 +927,7 @@ class _TimetableStyleMonthNav extends StatelessWidget {
           ),
         ),
         IconButton(
+          tooltip: 'Next month',
           icon: const Icon(Icons.chevron_right, size: 18),
           onPressed: onNext,
           padding: EdgeInsets.zero,

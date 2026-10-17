@@ -246,7 +246,7 @@ class _FacultyCard extends StatelessWidget {
                                   style: GoogleFonts.poppins(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.accent)),
+                                      color: AppColors.accentText)),
                             ))
                         .toList(),
                   ),
@@ -337,7 +337,7 @@ class _FacultyCardMobile extends StatelessWidget {
                                   style: GoogleFonts.poppins(
                                       fontSize: 9.5,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.accent)),
+                                      color: AppColors.accentText)),
                             ))
                         .toList(),
                   ),

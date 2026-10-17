@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MindForge — AI assisted learning</title>
+<meta name="description" content="MindForge holds your school's tests, homework, attendance, marks, timetable and fees in one place. Sign in as admin, teacher or student.">
+<link rel="icon" href="../assets/mindforge-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Karla:ital,wght@0,300..800;1,300..700&family=Spline+Sans+Mono:wght@300..700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* ground */
+  --print:#E4EBF3;          /* drafting blue ground */
+  --print-deep:#D6E0EB;     /* recessed field */
+  --sheet:#F2F6FA;          /* the lifted drawing sheet */
+
+  /* line work */
+  --navy:#112A4A;           /* logo navy — all line work, display ink */
+  --navy-mid:#22436B;
+  --navy-soft:rgba(17,42,74,.42);
+  --line:rgba(17,42,74,.30);
+  --line-soft:rgba(17,42,74,.15);
+  --grid-fine:rgba(17,42,74,.055);
+  --grid-coarse:rgba(17,42,74,.115);
+
+  /* heat */
+  --heat:#F55C1E;           /* molten — marks, arrows, fills */
+  --heat-read:#AE3607;      /* text-safe cut of the heat, holds on the drafting ground */
+  --amber:#E8A00C;
+  --scale:#F7D9A6;
+
+  --body:#1B3355;
+  --mute:#4A5F7E;
+
+  --gut:clamp(16px,3.6vw,52px);
+  --rule:1.5px;
+  --clock:18s;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--print);
+  color:var(--body);
+  font-family:Karla,system-ui,sans-serif;
+  font-size:16.5px;
+  line-height:1.62;
+  font-variant-numeric:tabular-nums;
+  overflow-x:hidden;
+}
+
+/* ---- browser surfaces belong to the design ---- */
+::selection{background:var(--heat);color:#fff}
+::-moz-selection{background:var(--heat);color:#fff}
+:focus-visible{outline:2px solid var(--heat);outline-offset:3px}
+input,textarea{caret-color:var(--heat)}
+html{scrollbar-color:var(--navy-soft) var(--print-deep);scrollbar-width:thin}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:var(--print-deep)}
+::-webkit-scrollbar-thumb{background:var(--navy-soft);border:3px solid var(--print-deep)}
+::-webkit-scrollbar-thumb:hover{background:var(--navy)}
+a{color:inherit;text-underline-offset:3px;text-decoration-thickness:1px}
+
+/* ---- the construction grid: a committed ground, not a backdrop ---- */
+.field{
+  position:fixed;inset:-60px;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(var(--grid-coarse) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-coarse) 1px,transparent 1px),
+    linear-gradient(var(--grid-fine) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-fine) 1px,transparent 1px);
+  background-size:96px 96px,96px 96px,16px 16px,16px 16px;
+  animation:drift 120s linear infinite;
+}
+@keyframes drift{to{background-position:96px 96px,96px 96px,16px 16px,16px 16px}}
+
+.wrap{max-width:1320px;margin:0 auto;padding:0 var(--gut);position:relative;z-index:1}
+
+/* ---- type ---- */
+h1,h2,h3,.disp{
+  font-family:Rajdhani,Karla,sans-serif;
+  font-weight:600;color:var(--navy);
+  text-transform:uppercase;letter-spacing:.005em;
+  margin:0;text-wrap:balance;
+}
+h1{font-size:clamp(42px,6.9vw,104px);line-height:.92;letter-spacing:-.012em;font-weight:700}
+h2{font-size:clamp(30px,4.3vw,62px);line-height:.96;letter-spacing:-.008em}
+h3{font-size:22px;line-height:1.1;font-weight:600;letter-spacing:.012em}
+.dim{
+  font-family:'Spline Sans Mono',ui-monospace,Menlo,monospace;
+  font-size:12.5px;font-weight:500;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--navy-mid);
+}
+.dim-heat{color:var(--heat-read)}
+.dim-sent{text-transform:none;letter-spacing:.02em;font-weight:400}
+.lede{font-size:clamp(16.5px,1.34vw,19.5px);line-height:1.56;max-width:46ch;color:var(--body)}
+p{margin:0 0 1em}
+p:last-child{margin-bottom:0}
+
+/* ---- top rail ---- */
+.rail{
+  position:sticky;top:0;z-index:40;
+  background:color-mix(in srgb,var(--print) 88%,transparent);
+  backdrop-filter:blur(7px);
+  border-bottom:var(--rule) solid var(--navy);
+}
+.rail-in{max-width:1320px;margin:0 auto;padding:11px var(--gut);display:flex;align-items:center;gap:20px}
+.brand{display:flex;align-items:center;gap:11px;text-decoration:none;flex:0 0 auto}
+.brand img{width:31px;height:31px;display:block}
+.brand span{
+  font-family:Rajdhani,sans-serif;font-weight:700;font-size:20px;
+  letter-spacing:.17em;color:var(--navy);text-transform:uppercase;line-height:1;
+}
+.nav{margin-left:auto;display:flex;gap:4px}
+.nav a{
+  font-size:14px;padding:7px 12px;text-decoration:none;color:var(--body);
+  border:1px solid transparent;transition:border-color .16s,color .16s;
+}
+.nav a:hover{border-color:var(--line);color:var(--navy)}
+@media(max-width:940px){.nav{display:none}}
+
+/* ---- controls ---- */
+.btn{
+  display:inline-flex;align-items:center;gap:9px;
+  font-family:Karla,sans-serif;font-weight:700;font-size:14.5px;letter-spacing:.01em;
+  padding:11px 18px;border-radius:3px;text-decoration:none;cursor:pointer;
+  border:var(--rule) solid var(--navy);transition:background .16s,color .16s,transform .1s;
+}
+.btn svg{width:15px;height:15px;flex:0 0 auto}
+.btn-fill{background:var(--navy);color:var(--sheet)}
+.btn-fill:hover{background:var(--heat-read);border-color:var(--heat-read)}
+.btn-line{background:transparent;color:var(--navy)}
+.btn-line:hover{background:var(--navy);color:var(--sheet)}
+.btn:active{transform:translateY(1px)}
+.btn[aria-disabled="true"]{opacity:.42;border-style:dashed;pointer-events:none}
+
+/* ---- hero ---- */
+.hero{padding:clamp(34px,5.4vw,74px) 0 0}
+.hero-grid{display:grid;grid-template-columns:1.06fr .94fr;gap:clamp(26px,4vw,66px);align-items:end}
+@media(max-width:1000px){.hero-grid{grid-template-columns:1fr;gap:34px;align-items:start}}
+
+.h1-heat{color:var(--heat-read)}
+.hero-lede{margin-top:20px}
+.hero-acts{display:flex;flex-wrap:wrap;gap:11px;margin-top:24px}
+.hero-note{margin-top:14px;max-width:44ch;font-size:14.5px;color:var(--mute)}
+
+/* dimension leader under the headline */
+.leader{margin-top:26px;display:flex;align-items:center;gap:10px}
+.leader-line{
+  flex:1 1 auto;height:9px;position:relative;
+  border-left:var(--rule) solid var(--navy);border-right:var(--rule) solid var(--navy);
+}
+.leader-line::after{
+  content:"";position:absolute;left:0;right:0;top:50%;height:var(--rule);
+  background:var(--navy);transform-origin:left;
+  animation:extend 1.15s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes extend{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media(max-width:620px){.leader{flex-wrap:wrap;gap:4px 14px}.leader-line{display:none}}
+
+/* ---- the forge in section: three ports ---- */
+.forge{
+  position:relative;background:var(--sheet);
+  border:var(--rule) solid var(--navy);
+}
+.forge-cap{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:9px 14px;border-bottom:var(--rule) solid var(--navy);background:var(--navy);
+}
+.forge-cap .dim{color:#BFD2E6}
+.forge-cap .dim-heat{color:var(--scale)}
+
+.port{
+  display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:15px;
+  padding:17px 16px;text-decoration:none;position:relative;
+  border-bottom:1px solid var(--line-soft);
+  transition:background .2s;
+}
+.port:last-of-type{border-bottom:0}
+.port::before{ /* hatch that heats on hover */
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:0;
+  background:repeating-linear-gradient(45deg,var(--heat) 0 1.5px,transparent 1.5px 8px);
+  transition:opacity .22s;
+}
+.port:hover,.port:focus-visible{background:#FDF3EC}
+.port:hover::before,.port:focus-visible::before{opacity:.13}
+
+.bubble{
+  width:52px;height:52px;border-radius:50%;
+  border:var(--rule) solid var(--navy);display:grid;place-items:center;
+  font-family:Rajdhani,sans-serif;font-weight:700;font-size:25px;line-height:1;
+  color:var(--navy);background:var(--print);transition:background .2s,color .2s,border-color .2s;
+}
+.port:hover .bubble,.port:focus-visible .bubble{background:var(--heat);border-color:var(--heat);color:#fff}
+.port-name{display:block;font-family:Rajdhani,sans-serif;font-weight:700;font-size:27px;line-height:1;letter-spacing:.02em;color:var(--navy);text-transform:uppercase}
+.port-sub{display:block;font-size:14.5px;line-height:1.42;color:var(--mute);margin-top:4px;max-width:34ch}
+.port-go{
+  display:flex;align-items:center;gap:7px;color:var(--heat-read);
+  font-family:'Spline Sans Mono',monospace;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+}
+.port-go svg{width:17px;height:17px;transition:transform .22s cubic-bezier(.16,1,.3,1)}
+.port:hover .port-go svg{transform:translateX(5px)}
+@media(max-width:560px){
+  .port{grid-template-columns:42px 1fr;gap:13px;padding:15px 13px}
+  .bubble{width:42px;height:42px;font-size:21px}
+  .port-go{grid-column:2;margin-top:6px}
+}
+.forge-foot{
+  padding:10px 14px;border-top:var(--rule) solid var(--navy);
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+}
+
+/* ---- the heat band: the temperature scale of one test ---- */
+.band-block{margin-top:clamp(40px,5.6vw,80px)}
+.band{
+  height:64px;position:relative;border:var(--rule) solid var(--navy);overflow:hidden;
+  background:linear-gradient(90deg,
+    var(--navy) 0%, var(--navy-mid) 15%, var(--heat-read) 36%,
+    var(--heat) 55%, var(--amber) 74%, var(--scale) 90%, var(--sheet) 100%);
+}
+.band::after{ /* the breathing forge glow, one clock */
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent 30%,rgba(255,255,255,.4) 55%,transparent 78%);
+  animation:breathe var(--clock) ease-in-out infinite;
+}
+@keyframes breathe{0%,100%{opacity:.08;transform:translateX(-7%)}50%{opacity:.4;transform:translateX(7%)}}
+.band-ticks{display:grid;grid-template-columns:repeat(5,1fr);border:var(--rule) solid var(--navy);border-top:0}
+.band-tick{padding:9px 11px 11px;border-right:1px solid var(--line-soft)}
+.band-tick:last-child{border-right:0}
+.band-tick b{display:block;font-family:Rajdhani,sans-serif;font-weight:600;font-size:18px;color:var(--navy);text-transform:uppercase;letter-spacing:.02em;line-height:1.1;margin-top:3px}
+.band-tick span{font-size:13.5px;color:var(--mute);line-height:1.4;display:block;margin-top:2px}
+@media(max-width:760px){
+  .band{height:44px}
+  .band-ticks{grid-template-columns:1fr}
+  .band-tick{border-right:0;border-bottom:1px solid var(--line-soft)}
+  .band-tick:last-child{border-bottom:0}
+}
+
+/* ---- title block ---- */
+.titleblock{
+  margin-top:clamp(36px,5vw,64px);
+  display:grid;grid-template-columns:1fr auto;gap:0;
+  border:var(--rule) solid var(--navy);background:var(--navy);color:#DCE7F2;
+}
+.tb-main{padding:17px 19px}
+.tb-main .dim{color:#9FB9D4}
+.tb-title{margin:0;font-family:Rajdhani,sans-serif;font-weight:600;font-size:clamp(22px,2.1vw,30px);line-height:1.08;letter-spacing:0;color:#fff}
+.tb-rows{display:grid;grid-template-columns:repeat(3,minmax(94px,auto));border-left:1px solid rgba(255,255,255,.22)}
+.tb-cell{padding:13px 15px;border-right:1px solid rgba(255,255,255,.22)}
+.tb-cell:last-child{border-right:0}
+.tb-cell .dim{color:#9FB9D4;display:block}
+.tb-cell b{display:block;font-family:Rajdhani,sans-serif;font-weight:600;font-size:19px;color:#fff;margin-top:3px;text-transform:uppercase;letter-spacing:.02em}
+@media(max-width:700px){
+  .titleblock{grid-template-columns:1fr}
+  .tb-rows{border-left:0;border-top:1px solid rgba(255,255,255,.22)}
+}
+
+/* ---- sections ---- */
+section{padding-top:clamp(54px,7.4vw,112px)}
+.head{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,3vw,48px);align-items:end;padding-bottom:26px}
+.head p{max-width:50ch;font-size:16.5px;color:var(--mute)}
+@media(max-width:860px){.head{grid-template-columns:1fr;gap:14px}}
+
+/* ---- drafting schedule ---- */
+.sched{width:100%;border-collapse:collapse;border-top:var(--rule) solid var(--navy);border-bottom:var(--rule) solid var(--navy)}
+.sched th{
+  text-align:left;padding:9px 12px 9px 0;border-bottom:var(--rule) solid var(--navy);
+  font-family:'Spline Sans Mono',monospace;font-size:12.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--navy);white-space:nowrap;
+}
+.sched td{padding:15px 12px 15px 0;border-bottom:1px solid var(--line-soft);vertical-align:top;font-size:15.5px;color:var(--body)}
+.sched tr:last-child td{border-bottom:0}
+.sched .c-ref{width:52px}
+.sched .c-ref span{
+  display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;
+  border:1px solid var(--heat-read);color:var(--heat-read);
+  font-family:Rajdhani,sans-serif;font-weight:700;font-size:17px;line-height:1;
+}
+.sched .c-name{width:23%;min-width:110px}
+.sched .c-name b{font-family:Rajdhani,sans-serif;font-weight:600;font-size:23px;color:var(--navy);text-transform:uppercase;letter-spacing:.02em;line-height:1.05;display:block}
+@media(max-width:700px){
+  .sched,.sched tbody,.sched tr,.sched td{display:block;width:100%}
+  .sched thead{display:none}
+  .sched tr{padding:15px 0;border-bottom:1px solid var(--line-soft)}
+  .sched tr:last-child{border-bottom:0}
+  .sched td{border-bottom:0;padding:0 0 5px}
+  .sched .c-ref{padding-bottom:9px}
+  .sched .c-name{width:auto}
+}
+
+/* ---- the mechanism: chapter in, paper out ---- */
+.mech{display:grid;grid-template-columns:1fr auto 1fr;gap:clamp(14px,2.2vw,30px);align-items:center;margin-top:8px}
+@media(max-width:900px){.mech{grid-template-columns:1fr;gap:20px}}
+.plate{background:var(--sheet);border:var(--rule) solid var(--navy)}
+.plate-cap{padding:8px 13px;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;gap:10px}
+.plate-body{padding:15px 14px 13px}
+
+.chapter{background:#fff;border:1px solid var(--line-soft);padding:15px 15px 13px}
+.ch-title{margin:4px 0 11px;font-family:Rajdhani,sans-serif;font-weight:600;font-size:29px;color:var(--navy);line-height:1}
+.ln{height:6px;background:var(--line-soft);margin-bottom:7px}
+.ln.s{width:74%}.ln.m{width:92%}.ln.heat{background:rgba(245,92,30,.3)}
+.figbox{border:1px solid var(--line-soft);height:78px;margin:11px 0;display:grid;place-items:center;background:var(--print)}
+.figbox svg{width:52px;height:52px}
+
+.q{display:grid;grid-template-columns:34px 1fr 34px;gap:9px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:14.5px;align-items:baseline}
+.q:last-of-type{border-bottom:0}
+.q i{font-style:normal;font-family:'Spline Sans Mono',monospace;font-size:12.5px;font-weight:600;color:var(--heat-read);letter-spacing:.06em}
+.q em{font-style:normal;font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:var(--mute);text-align:right}
+
+.arrowcol{display:grid;place-items:center}
+.arrowcol svg{width:64px;height:26px;overflow:visible}
+.arrowcol path{stroke:var(--heat);stroke-width:1.6;fill:none}
+.arrowcol .dash{stroke-dasharray:5 7;animation:travel 1.6s linear infinite}
+@keyframes travel{to{stroke-dashoffset:-24}}
+@media(max-width:900px){.arrowcol svg{transform:rotate(90deg)}}
+
+.synth{
+  margin-top:11px;padding-left:11px;border-left:2px solid var(--heat);
+  font-family:'Spline Sans Mono',monospace;font-size:12.5px;line-height:1.55;color:var(--mute);
+}
+
+/* ---- parts list ---- */
+.parts{border-top:var(--rule) solid var(--navy);margin-top:8px}
+.part{
+  display:grid;grid-template-columns:52px 1fr 1.5fr;gap:15px;align-items:baseline;
+  padding:14px 0;border-bottom:1px solid var(--line-soft);
+}
+.part:last-child{border-bottom:0}
+.part .dim{padding-top:5px}
+.part b{font-family:Rajdhani,sans-serif;font-weight:600;font-size:24px;color:var(--navy);text-transform:uppercase;letter-spacing:.02em;line-height:1.05}
+.part span{font-size:15.5px;color:var(--mute);line-height:1.5}
+@media(max-width:640px){
+  .part{grid-template-columns:44px 1fr;gap:12px}
+  .part span{grid-column:2}
+}
+
+/* ---- close ---- */
+.close{padding:clamp(58px,8vw,124px) 0 clamp(40px,5vw,70px);position:relative}
+.close-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(24px,4vw,60px);align-items:end}
+@media(max-width:900px){.close-grid{grid-template-columns:1fr;gap:28px}}
+.embers{position:relative;height:150px;border:var(--rule) solid var(--navy);background:var(--sheet);overflow:hidden}
+.embers .anvil{position:absolute;left:0;right:0;bottom:0;height:34px;background:repeating-linear-gradient(45deg,var(--navy) 0 1.5px,transparent 1.5px 9px);border-top:var(--rule) solid var(--navy)}
+.ember{position:absolute;bottom:34px;width:5px;height:5px;background:var(--heat);border-radius:50%;animation:rise 6s ease-in infinite}
+@keyframes rise{
+  0%{transform:translateY(0) scale(1);opacity:0}
+  12%{opacity:.95}
+  100%{transform:translateY(-118px) scale(.25);opacity:0}
+}
+.close-acts{display:flex;flex-wrap:wrap;gap:11px;margin-top:22px}
+
+/* ---- owner notice ---- */
+.owed{
+  margin-top:clamp(30px,4vw,52px);padding:13px 15px;
+  border:1px dashed var(--heat);background:#FDF3EC;
+  font-family:'Spline Sans Mono',monospace;font-size:12.5px;line-height:1.62;color:var(--heat-read);
+}
+.owed b{display:block;letter-spacing:.02em;margin-bottom:5px}
+
+/* ---- footer ---- */
+footer{margin-top:clamp(44px,6vw,86px);border-top:var(--rule) solid var(--navy);padding:22px 0 42px}
+.foot{display:flex;flex-wrap:wrap;gap:18px 30px;align-items:center}
+.foot-links{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.foot-links a{font-size:14px;padding:5px 9px;text-decoration:none;border:1px solid transparent}
+.foot-links a:hover{border-color:var(--line);color:var(--navy)}
+.foot-note{width:100%;font-size:13.5px;color:var(--mute);margin-top:5px}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .leader-line::after{transform:scaleX(1)}
+  .band::after{opacity:.2}
+  .ember{opacity:0}
+}
+</style>
+</head>
+<body>
+<div class="field" aria-hidden="true"></div>
+
+<header class="rail">
+  <div class="rail-in">
+    <a class="brand" href="#top"><img src="../assets/mindforge-mark.png" alt="MindForge"><span>Mind Forge</span></a>
+    <nav class="nav">
+      <a href="#doors">Sign in</a>
+      <a href="#behind">What each door opens</a>
+      <a href="#made">How a paper is made</a>
+      <a href="#holds">What it holds</a>
+    </nav>
+    <a class="btn btn-fill" href="#doors">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+      Sign in
+    </a>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="hero wrap" style="padding-top:clamp(34px,5.4vw,74px)">
+  <div class="hero-grid">
+    <div>
+      <h1>Your school,<br>already<br><span class="h1-heat">running.</span></h1>
+      <p class="lede hero-lede">Tests, homework, attendance, marks, the timetable and fees: one record per student, kept by the people who already keep it. Open the door for who you are.</p>
+      <div class="leader" aria-hidden="true">
+        <span class="dim">Mind Forge</span>
+        <span class="leader-line"></span>
+        <span class="dim dim-heat">AI assisted learning</span>
+      </div>
+      <p class="hero-note">Use the username and password your school gave you. Don't have one yet? Ask the class teacher or the school office.</p>
+    </div>
+
+    <div class="forge" id="doors">
+      <div class="forge-cap">
+        <span class="dim">Sign in — three doors</span>
+        <span class="dim dim-heat">Your school only</span>
+      </div>
+
+      <a class="port" href="#signin-placeholder">
+        <span class="bubble" aria-hidden="true">A</span>
+        <span>
+          <span class="port-name">Admin</span>
+          <span class="port-sub">Users, fee structures, academic years and the timetable — the whole school in one console.</span>
+        </span>
+        <span class="port-go">Open
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+        </span>
+      </a>
+
+      <a class="port" href="#signin-placeholder">
+        <span class="bubble" aria-hidden="true">B</span>
+        <span>
+          <span class="port-name">Teacher</span>
+          <span class="port-sub">Turn a chapter into a test, mark attendance, grade written answers, send a notice to the class.</span>
+        </span>
+        <span class="port-go">Open
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+        </span>
+      </a>
+
+      <a class="port" href="#signin-placeholder">
+        <span class="bubble" aria-hidden="true">C</span>
+        <span>
+          <span class="port-name">Student</span>
+          <span class="port-sub">What's due, the test itself, your marks, your timetable and your attendance, on the phone in your hand.</span>
+        </span>
+        <span class="port-go">Open
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+        </span>
+      </a>
+
+      <div class="forge-foot">
+        <span class="dim dim-sent">Parents sign in with the student</span>
+        <span class="dim">Grades 8 to 10</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- heat band: the temperature scale of one test -->
+  <div class="band-block">
+    <div class="band" role="img" aria-label="The five stages a test passes through, drawn as a forge temperature scale."></div>
+    <div class="band-ticks">
+      <div class="band-tick"><span class="dim dim-heat">Stage 1</span><b>Chapter in</b><span>The teacher uploads the chapter as a PDF.</span></div>
+      <div class="band-tick"><span class="dim dim-heat">Stage 2</span><b>Paper written</b><span>Questions come from that chapter, not a bank.</span></div>
+      <div class="band-tick"><span class="dim dim-heat">Stage 3</span><b>Attempted</b><span>One attempt, three-day window, on any phone.</span></div>
+      <div class="band-tick"><span class="dim dim-heat">Stage 4</span><b>Graded</b><span>Automatic on submit; written answers by the teacher.</span></div>
+      <div class="band-tick"><span class="dim dim-heat">Stage 5</span><b>On the record</b><span>Straight into marks, where the parent sees it.</span></div>
+    </div>
+  </div>
+
+  <!-- title block -->
+  <div class="titleblock">
+    <div class="tb-main">
+      <p class="tb-title">One platform for the whole school day</p>
+    </div>
+    <div class="tb-rows">
+      <div class="tb-cell"><span class="dim">Made for</span><b>Grades 8–10</b></div>
+      <div class="tb-cell"><span class="dim">Works on</span><b>Any phone</b></div>
+      <div class="tb-cell"><span class="dim">Sign-in</span><b>By school</b></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT EACH DOOR OPENS ============ -->
+<section class="wrap" id="behind">
+  <div class="head">
+    <h2>What sits<br>behind<br>each door.</h2>
+    <p>Four people, one record. Nobody re-enters what somebody else already wrote down, and the letters here are the same letters on the doors above.</p>
+  </div>
+
+  <table class="sched">
+    <thead>
+      <tr><th class="c-ref">Ref</th><th class="c-name">Door</th><th>Opens onto</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="c-ref"><span>A</span></td>
+        <td class="c-name"><b>Admin</b></td>
+        <td>The school office. Add and remove users, set fee structures, open an academic year, build the timetable. Set once, used by everybody else all year.</td>
+      </tr>
+      <tr>
+        <td class="c-ref"><span>B</span></td>
+        <td class="c-name"><b>Teacher</b></td>
+        <td>Generate a test from a chapter PDF, mark attendance for the class, grade the written answers on one screen, and broadcast a notice that reaches every parent's phone.</td>
+      </tr>
+      <tr>
+        <td class="c-ref"><span>C</span></td>
+        <td class="c-name"><b>Student</b></td>
+        <td>What's due today, the test to attempt, the score when it lands, the timetable for tomorrow, and how many days present this month.</td>
+      </tr>
+      <tr>
+        <td class="c-ref"><span>D</span></td>
+        <td class="c-name"><b>Parent</b></td>
+        <td>Marks, attendance, homework and fees for their own child, without chasing a teacher or waiting for the next meeting. Signs in alongside the student.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ HOW A PAPER IS MADE ============ -->
+<section class="wrap" id="made">
+  <div class="head">
+    <h2>A chapter goes in.<br>A paper<br>comes out.</h2>
+    <p>The teacher uploads the chapter. MindForge reads it and writes the paper. The questions come from that chapter, not from somebody else's question bank.</p>
+  </div>
+
+  <div class="mech">
+    <div class="plate">
+      <div class="plate-cap"><span class="dim">Input</span><span class="dim">The chapter, as a PDF</span></div>
+      <div class="plate-body">
+        <div class="chapter">
+          <span class="dim">Chapter 4</span>
+          <p class="ch-title">Photosynthesis</p>
+          <div class="ln m"></div><div class="ln s"></div><div class="ln heat m"></div>
+          <div class="figbox">
+            <svg viewBox="0 0 48 48" fill="none" stroke="#112A4A" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M24 42V20"/><path d="M24 26c0-7 5-13 13-14 1 8-4 15-13 15z"/><path d="M24 33c0-5-4-10-10-11-1 6 3 12 10 11z"/>
+            </svg>
+          </div>
+          <div class="ln m"></div><div class="ln s"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:11px"><span class="dim">Science · Class 9</span><span class="dim">64</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrowcol" aria-hidden="true">
+      <svg viewBox="0 0 64 26"><path class="dash" d="M2 13h50"/><path d="M46 6l8 7-8 7"/></svg>
+    </div>
+
+    <div class="plate">
+      <div class="plate-cap"><span class="dim">Output</span><span class="dim dim-heat">The paper it wrote</span></div>
+      <div class="plate-body">
+        <div class="q"><i>Q1</i><span>Define photosynthesis in one sentence.</span><em>[2]</em></div>
+        <div class="q"><i>Q2</i><span>Name the pigment that absorbs sunlight.</span><em>[1]</em></div>
+        <div class="q"><i>Q3</i><span>Why do leaves appear green?</span><em>[3]</em></div>
+        <div class="q"><i>Q4</i><span>Label the parts marked A, B and C.</span><em>[4]</em></div>
+        <p class="synth">Illustrative sample, written from a sample chapter. Not a real paper.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT THE RECORD HOLDS ============ -->
+<section class="wrap" id="holds">
+  <div class="head">
+    <h2>What the<br>record holds.</h2>
+    <p>One login covers every part of the school day. Each line below is a thing the school already records on paper, kept in the same place instead.</p>
+  </div>
+
+  <div class="parts">
+    <div class="part"><span class="dim dim-heat">01</span><b>Tests</b><span>Set from a chapter by the teacher, attempted on a phone, graded on submission.</span></div>
+    <div class="part"><span class="dim dim-heat">02</span><b>Homework</b><span>What was given, in which subject, by when, and whether it has been done.</span></div>
+    <div class="part"><span class="dim dim-heat">03</span><b>Marks</b><span>Every result as it is graded, and the report that adds them up at term's end.</span></div>
+    <div class="part"><span class="dim dim-heat">04</span><b>Attendance</b><span>Marked daily by the class teacher, counted for the month, visible at once.</span></div>
+    <div class="part"><span class="dim dim-heat">05</span><b>Timetable</b><span>Period by period, including the day it changes, for the class and the teacher both.</span></div>
+    <div class="part"><span class="dim dim-heat">06</span><b>Fees</b><span>What's due, what's paid, and a receipt that can be downloaded and kept.</span></div>
+    <div class="part"><span class="dim dim-heat">07</span><b>Notices</b><span>Sent once by the school, delivered to every parent's phone as a notification.</span></div>
+  </div>
+</section>
+
+<!-- ============ CLOSE ============ -->
+<section class="close wrap">
+  <div class="close-grid">
+    <div>
+      <h2>Open your door<br>and see today.</h2>
+      <p class="lede" style="margin-top:18px">Use the username and password your school gave you. If you don't have one yet, ask the class teacher or the school office. Every account is created by your own school.</p>
+      <div class="close-acts">
+        <a class="btn btn-fill" href="#signin-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+          Sign in
+        </a>
+        <a class="btn btn-line" href="#playstore-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>
+          Android app
+        </a>
+        <span class="btn btn-line" aria-disabled="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>
+          iPhone app coming soon
+        </span>
+      </div>
+    </div>
+    <div class="embers" role="img" aria-label="Embers rising from an anvil, drawn in section.">
+      <span class="ember" style="left:18%;animation-delay:0s"></span>
+      <span class="ember" style="left:31%;animation-delay:1.3s"></span>
+      <span class="ember" style="left:47%;animation-delay:2.4s"></span>
+      <span class="ember" style="left:63%;animation-delay:.7s"></span>
+      <span class="ember" style="left:79%;animation-delay:3.4s"></span>
+      <span class="anvil"></span>
+    </div>
+  </div>
+
+  <div class="owed">
+    <b>[Placeholder: for the site owner]</b>
+    Sign-in URL, Play Store URL, privacy policy and terms links are still to be supplied.
+    Every sign-in and app button on this page points at a placeholder anchor until they are.
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <a class="brand" href="#top"><img src="../assets/mindforge-mark.png" alt=""><span>Mind Forge</span></a>
+    <span class="dim dim-sent">AI assisted learning · mindforge.guru</span>
+    <span class="foot-links">
+      <a href="#doors">Sign in</a>
+      <a href="#behind">What each door opens</a>
+      <a href="#holds">What it holds</a>
+    </span>
+    <span class="foot-note">Screens, marks and papers on this page are illustrative samples, not real student records.</span>
+  </div>
+</footer>
+</body>
+</html>

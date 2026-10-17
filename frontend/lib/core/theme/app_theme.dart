@@ -47,6 +47,10 @@ class AppColors {
 
   static Color get iconContainer => _palette.iconContainer;
 
+  /// Use these, not [accent] / [secondary], for text: see [BrandPalette].
+  static Color get accentText => _palette.accentText;
+  static Color get secondaryText => _palette.secondaryText;
+
   // ── Fixed neutrals & surfaces (const — don't vary by theme) ────────────────
   static const Color surface = Color(0xFFFFFFFF);
   static const Color background = Color(0xFFEDF2F8);
@@ -54,15 +58,15 @@ class AppColors {
   static const Color divider = Color(0xFFC5D3E0);
 
   // Status — kept stable so success/warning/error semantics never shift.
-  static const Color success = Color(0xFF2E7D52);
-  static const Color warning = Color(0xFFB07A20);
+  static const Color success = Color(0xFF2B7A4F);
+  static const Color warning = Color(0xFF8A5F12);
   static const Color error = Color(0xFFB03030);
   static const Color info = Color(0xFF457B9D);
 
   // Text — stable readability against white card backgrounds.
   static const Color textPrimary = Color(0xFF1D3557);
-  static const Color textSecondary = Color(0xFF457B9D);
-  static const Color textMuted = Color(0xFF8A9BAD);
+  static const Color textSecondary = Color(0xFF3B6C8C);
+  static const Color textMuted = Color(0xFF5C6E82);
   static const Color textOnDark = Color(0xFFFFFFFF);
 
   // Dark theme surfaces (rarely used today; kept for completeness).

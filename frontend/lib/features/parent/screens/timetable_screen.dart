@@ -91,6 +91,7 @@ class _ParentTimetableScreenState
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
+                      tooltip: 'Previous month',
                       icon: const Icon(Icons.chevron_left),
                       onPressed: _prevMonth,
                       style: IconButton.styleFrom(
@@ -104,6 +105,7 @@ class _ParentTimetableScreenState
                           fontSize: R.fs(context, 15, min: 13, max: 17), fontWeight: FontWeight.bold),
                     ),
                     IconButton(
+                      tooltip: 'Next month',
                       icon: const Icon(Icons.chevron_right),
                       onPressed: _nextMonth,
                       style: IconButton.styleFrom(

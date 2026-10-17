@@ -15,6 +15,7 @@ import '../../../core/widgets/error_view.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/presentation_provider.dart';
 import '../widgets/teacher_scaffold.dart';
+import '../../../core/utils/api_error.dart';
 
 // ── Grade colour palette ─────────────────────────────────────────────────────
 // Same hues the dashboard's Today's Workflow card uses for grade pills, so
@@ -137,7 +138,7 @@ class _AutoPresentationViewScreenState
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e'),
+        SnackBar(content: Text('Delete failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error),
       );
     }
@@ -160,6 +161,7 @@ class _AutoPresentationViewScreenState
         backgroundColor: AppColors.primary,
         actions: [
           IconButton(
+            tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.invalidate(
                 presentationDetailProvider(widget.presentationId)),
@@ -690,6 +692,7 @@ class _SlideViewer extends StatelessWidget {
         Row(
           children: [
             IconButton(
+              tooltip: 'Previous slide',
               icon: const Icon(Icons.chevron_left),
               onPressed: viewerIndex == 0
                   ? null
@@ -713,6 +716,7 @@ class _SlideViewer extends StatelessWidget {
               onPressed: () => onEditSlide(cur),
             ),
             IconButton(
+              tooltip: 'Next slide',
               icon: const Icon(Icons.chevron_right),
               onPressed: viewerIndex >= slides.length - 1
                   ? null
@@ -860,6 +864,7 @@ class _FullscreenSlideOverlayState extends State<_FullscreenSlideOverlay> {
                 left: 0, top: 0, bottom: 0,
                 child: Center(
                   child: IconButton(
+                    tooltip: 'Previous slide',
                     iconSize: 36,
                     icon: const Icon(Icons.chevron_left, color: Colors.white70),
                     onPressed: _idx == 0 ? null : () => _go(-1),
@@ -870,6 +875,7 @@ class _FullscreenSlideOverlayState extends State<_FullscreenSlideOverlay> {
                 right: 0, top: 0, bottom: 0,
                 child: Center(
                   child: IconButton(
+                    tooltip: 'Next slide',
                     iconSize: 36,
                     icon: const Icon(Icons.chevron_right, color: Colors.white70),
                     onPressed: _idx >= total - 1 ? null : () => _go(1),
@@ -1233,7 +1239,7 @@ Future<void> _adoptThisDeck(
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Adopt failed: $e'),
+      SnackBar(content: Text('Adopt failed: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error),
     );
   }
@@ -1292,7 +1298,7 @@ Future<void> _unadoptThisDeck(
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Remove failed: $e'),
+      SnackBar(content: Text('Remove failed: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error),
     );
   }
@@ -1341,6 +1347,7 @@ Future<void> _showPeriodLogDialog(
             Row(
               children: [
                 IconButton(
+                  tooltip: 'One slide fewer',
                   icon: const Icon(Icons.remove),
                   onPressed: slidesCoveredTo <= myCurrent
                       ? null
@@ -1357,6 +1364,7 @@ Future<void> _showPeriodLogDialog(
                   ),
                 ),
                 IconButton(
+                  tooltip: 'One slide more',
                   icon: const Icon(Icons.add),
                   onPressed: slidesCoveredTo >= total
                       ? null
@@ -1433,7 +1441,7 @@ Future<void> _showPeriodLogDialog(
                     } catch (e) {
                       if (ctx.mounted) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text('Error: $e'),
+                          SnackBar(content: Text('Error: ${apiErrorMessage(e)}'),
                               backgroundColor: AppColors.error),
                         );
                       }
@@ -1494,6 +1502,7 @@ Future<void> _showEditPeriodLogDialog(
             Row(
               children: [
                 IconButton(
+                  tooltip: 'One slide fewer',
                   icon: const Icon(Icons.remove),
                   onPressed: slidesCoveredTo <= slidesFrom
                       ? null
@@ -1510,6 +1519,7 @@ Future<void> _showEditPeriodLogDialog(
                   ),
                 ),
                 IconButton(
+                  tooltip: 'One slide more',
                   icon: const Icon(Icons.add),
                   onPressed: slidesCoveredTo >= total
                       ? null
@@ -1593,7 +1603,7 @@ Future<void> _showEditPeriodLogDialog(
                     } catch (e) {
                       if (ctx.mounted) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text('Error: $e'),
+                          SnackBar(content: Text('Error: ${apiErrorMessage(e)}'),
                               backgroundColor: AppColors.error),
                         );
                       }
@@ -1690,7 +1700,7 @@ Future<void> _showEditSlideDialog(
                     } catch (e) {
                       if (ctx.mounted) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text('Save failed: $e'),
+                          SnackBar(content: Text('Save failed: ${apiErrorMessage(e)}'),
                               backgroundColor: AppColors.error),
                         );
                       }

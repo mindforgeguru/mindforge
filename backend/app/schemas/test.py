@@ -5,9 +5,10 @@ Pydantic schemas for Test and TestSubmission.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.test import TestType
+from app.schemas.bounds import Answers
 
 
 class TestGenerationParams(BaseModel):
@@ -91,13 +92,13 @@ class OfflineGradesBulk(BaseModel):
 
 class TestSubmissionCreate(BaseModel):
     """Sent by student when submitting their answers."""
-    answers: Dict[str, Any]  # {question_id: answer_given}
+    answers: Answers  # {question_id: answer_given}
     auto_submitted: bool = False
 
 
 class TestAnswersSave(BaseModel):
     """Autosave during an in-progress attempt."""
-    answers: Dict[str, Any]
+    answers: Answers
 
 
 class TestSubmissionResponse(BaseModel):
@@ -128,3 +129,19 @@ class TestAttemptResponse(BaseModel):
     is_finalized: bool
     score: Optional[float] = None
     auto_submitted: bool
+
+
+class TestQuestionsUpdate(BaseModel):
+    """The teacher's question editor. Each question is the free-form dict the
+    generator produces, but it must be an object with numeric marks — the
+    untyped body let a malformed one through to a 500."""
+    questions: List[Dict[str, Any]] = Field(max_length=200)
+
+    @field_validator("questions")
+    @classmethod
+    def _numeric_marks(cls, v: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        for q in v:
+            marks = q.get("marks", 1)
+            if isinstance(marks, bool) or not isinstance(marks, (int, float)) or not 0 < marks <= 100:
+                raise ValueError("Each question's marks must be a number from 1 to 100.")
+        return v

@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
+from app.schemas.bounds import Text
+
 from app.schemas.user import _validate_strong_mpin
 
 
@@ -28,13 +30,13 @@ class SchoolOwnerResponse(BaseModel):
     id: int
     name: str
     slug: str
-    logo_url: Optional[str] = None
-    address: Optional[str] = None
-    contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
+    logo_url: Optional[Text(500)] = None
+    address: Optional[Text(500)] = None
+    contact_email: Optional[Text(255)] = None
+    contact_phone: Optional[Text(20)] = None
     is_active: bool
     subscription_status: str
-    subscription_plan: Optional[str] = None
+    subscription_plan: Optional[Text(50)] = None
     created_at: datetime
     admin_count: int = 0
     teacher_count: int = 0
@@ -47,11 +49,11 @@ class SchoolOwnerResponse(BaseModel):
 class SchoolCreate(BaseModel):
     name: str
     slug: Optional[str] = None  # auto-derived from name when omitted
-    logo_url: Optional[str] = None
-    address: Optional[str] = None
-    contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
-    subscription_plan: Optional[str] = None
+    logo_url: Optional[Text(500)] = None
+    address: Optional[Text(500)] = None
+    contact_email: Optional[Text(255)] = None
+    contact_phone: Optional[Text(20)] = None
+    subscription_plan: Optional[Text(50)] = None
 
     @field_validator("name")
     @classmethod
@@ -74,13 +76,13 @@ class SchoolCreate(BaseModel):
 
 class SchoolUpdate(BaseModel):
     name: Optional[str] = None
-    logo_url: Optional[str] = None
-    address: Optional[str] = None
-    contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
+    logo_url: Optional[Text(500)] = None
+    address: Optional[Text(500)] = None
+    contact_email: Optional[Text(255)] = None
+    contact_phone: Optional[Text(20)] = None
     is_active: Optional[bool] = None
-    subscription_status: Optional[str] = None
-    subscription_plan: Optional[str] = None
+    subscription_status: Optional[Text(30)] = None
+    subscription_plan: Optional[Text(50)] = None
 
     @field_validator("name")
     @classmethod

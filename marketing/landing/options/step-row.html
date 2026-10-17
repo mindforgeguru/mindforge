@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MindForge — AI assisted learning</title>
+<meta name="description" content="MindForge holds your school's tests, homework, attendance, marks, timetable and fees in one place. Sign in as admin, teacher or student.">
+<link rel="icon" href="../assets/mindforge-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..900&family=Manrope:wght@300..800&family=Doto:wght@500..900&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* the panel */
+  --panel:#EFEFF1;          /* moulded panel grey */
+  --panel-hi:#FAFAFC;       /* the raised plate */
+  --well:#E2E3E7;           /* the recessed well */
+  --well-edge:#C7CAD2;      /* the well's inner rule */
+  --bare:#D5D8DF;           /* an unlit key */
+
+  /* silkscreen */
+  --navy:#102848;
+  --navy-mid:#2A4A74;
+  --silk:#3C5478;           /* secondary silkscreen */
+  --hair:rgba(16,40,72,.16);
+  --hair-soft:rgba(16,40,72,.09);
+
+  /* the lit states */
+  --run:#F55C1E;            /* the period running now */
+  --run-read:#AD3906;       /* the cut that reads as text on every ground, well included */
+  --due:#F2A20C;            /* due, not yet done */
+  --due-read:#8A5A00;
+  --done:#1D4E89;           /* done */
+
+  --gut:clamp(15px,3.4vw,50px);
+  --clock:8s;               /* one bar of the school day — everything locks to this */
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--panel);color:#2D3E56;
+  font-family:Manrope,system-ui,sans-serif;font-size:16.5px;line-height:1.62;
+  font-variant-numeric:tabular-nums;overflow-x:hidden;
+  /* the panel is a moulded material, not a flat fill */
+  background-image:repeating-linear-gradient(90deg,rgba(16,40,72,.022) 0 1px,transparent 1px 4px);
+}
+
+/* ---- browser surfaces ---- */
+::selection{background:var(--run);color:#fff}
+::-moz-selection{background:var(--run);color:#fff}
+:focus-visible{outline:2px solid var(--run);outline-offset:3px}
+input,textarea{caret-color:var(--run)}
+html{scrollbar-color:var(--well-edge) var(--well);scrollbar-width:thin}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:var(--well)}
+::-webkit-scrollbar-thumb{background:var(--well-edge);border:3px solid var(--well)}
+::-webkit-scrollbar-thumb:hover{background:var(--navy-mid)}
+a{color:inherit;text-underline-offset:3px;text-decoration-thickness:1px}
+
+.wrap{max-width:1340px;margin:0 auto;padding:0 var(--gut)}
+
+/* ---- type ---- */
+h1,h2,h3{
+  font-family:Archivo,system-ui,sans-serif;font-weight:800;color:var(--navy);
+  margin:0;text-wrap:balance;font-stretch:112%;letter-spacing:-.028em;
+}
+h1{font-size:clamp(40px,6vw,90px);line-height:.96}
+h2{font-size:clamp(28px,3.8vw,54px);line-height:1}
+h3{font-size:21px;line-height:1.14;font-weight:700;letter-spacing:-.012em}
+.silk{
+  font-family:Archivo,system-ui,sans-serif;font-stretch:92%;
+  font-size:12.5px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--silk);
+}
+.silk-run{color:var(--run-read)}
+.silk-sent{text-transform:none;letter-spacing:.02em;font-weight:600}
+.lede{font-size:clamp(16.5px,1.3vw,19.5px);line-height:1.56;max-width:47ch;color:#3A4D67}
+p{margin:0 0 1em}p:last-child{margin-bottom:0}
+
+/* ---- the top rail ---- */
+.rail{
+  position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--panel) 91%,transparent);
+  backdrop-filter:blur(7px);border-bottom:1px solid var(--hair);
+}
+.rail-in{max-width:1340px;margin:0 auto;padding:10px var(--gut);display:flex;align-items:center;gap:20px}
+.brand{display:flex;align-items:center;gap:11px;text-decoration:none;flex:0 0 auto}
+.brand img{width:31px;height:31px;display:block}
+.brand span{font-family:Archivo,sans-serif;font-stretch:92%;font-weight:800;font-size:19px;letter-spacing:.17em;color:var(--navy);text-transform:uppercase;line-height:1}
+.nav{margin-left:auto;display:flex;gap:3px}
+.nav a{font-size:14px;padding:7px 11px;text-decoration:none;color:#3A4D67;border-radius:4px;transition:background .16s,color .16s}
+.nav a:hover{background:var(--well);color:var(--navy)}
+@media(max-width:960px){.nav{display:none}}
+
+/* ---- keys (the only control) ---- */
+.key{
+  display:inline-flex;align-items:center;gap:9px;
+  font-family:Archivo,sans-serif;font-stretch:100%;font-weight:700;font-size:14.5px;letter-spacing:.008em;
+  padding:11px 18px;border-radius:4px;text-decoration:none;cursor:pointer;
+  border:1px solid var(--hair);background:var(--panel-hi);color:var(--navy);
+  transition:background .14s,color .14s,border-color .14s,transform .08s;
+}
+.key svg{width:15px;height:15px;flex:0 0 auto}
+.key-navy{background:var(--navy);border-color:var(--navy);color:var(--panel-hi)}
+.key-navy:hover{background:var(--run);border-color:var(--run);color:#2E0F00}
+.key:not(.key-navy):hover{background:var(--well)}
+.key:active{transform:translateY(1px)}
+.key[aria-disabled="true"]{opacity:.42;border-style:dashed;pointer-events:none;background:transparent}
+
+/* ---- hero ---- */
+.hero{padding-top:clamp(26px,4.2vw,58px)}
+.hero-grid{display:grid;grid-template-columns:1.32fr .68fr;gap:clamp(22px,3.2vw,52px);align-items:start}
+@media(max-width:1040px){.hero-grid{grid-template-columns:1fr;gap:30px}}
+.h1-run{color:var(--run-read)}
+.hero-lede{margin-top:19px}
+
+/* ---- the readout window ---- */
+.readout{
+  margin-top:26px;background:var(--navy);border-radius:4px;
+  padding:13px 17px;display:flex;align-items:center;gap:16px;overflow:hidden;
+}
+.readout .silk{color:#7E9AC0;flex:0 0 auto}
+.rmask{flex:1 1 auto;height:26px;overflow:hidden;position:relative}
+.rlist{
+  position:absolute;left:0;top:0;width:100%;
+  animation:step calc(var(--clock) * 1) steps(8,end) infinite;
+}
+.rlist span{
+  display:block;height:26px;line-height:26px;white-space:nowrap;
+  font-family:Doto,'Courier New',ui-monospace,monospace;font-weight:700;
+  font-size:21px;letter-spacing:.06em;color:#FF8A4C;text-transform:uppercase;
+}
+@keyframes step{to{transform:translateY(-208px)}}  /* 8 × 26px */
+
+/* ---- the step row: the school day ---- */
+.well{
+  margin-top:20px;background:var(--well);border:1px solid var(--well-edge);
+  border-radius:4px;padding:13px;position:relative;overflow:hidden;
+}
+.well-cap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:0 2px 11px}
+.steps{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;position:relative;z-index:2}
+.step{
+  border-radius:4px;border:1px solid rgba(16,40,72,.13);padding:10px 8px 11px;
+  background:var(--bare);min-height:84px;display:flex;flex-direction:column;justify-content:space-between;
+  position:relative;overflow:hidden;
+}
+.step b{
+  display:block;font-family:Archivo,sans-serif;font-stretch:92%;font-weight:800;
+  font-size:11.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--silk);
+}
+.step i{
+  font-style:normal;display:block;font-family:Archivo,sans-serif;font-stretch:104%;
+  font-weight:800;font-size:15px;line-height:1.1;color:var(--navy);margin-top:7px;
+}
+.step em{font-style:normal;display:block;font-size:12.5px;font-weight:700;margin-top:4px;color:var(--silk)}
+/* each key's own state — one vocabulary, four stages */
+.step.done{background:#C6D6E9;border-color:#A9C0DB}
+.step.done b,.step.done em{color:#1D4E89}
+.step.run{background:var(--run);border-color:var(--run)}
+.step.run b,.step.run em{color:#3D1400}
+.step.run i{color:#2E0F00}
+.step.due{background:var(--due);border-color:#D68F06}
+.step.due b,.step.due em{color:#5E3D00}
+.step.due i{color:#301F00}
+/* the chase light, locked to the one clock */
+.step::after{
+  content:"";position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;
+  animation:chase var(--clock) linear infinite;
+}
+@keyframes chase{0%,10%{opacity:.34}18%,100%{opacity:0}}
+.step:nth-child(1)::after{animation-delay:0s}
+.step:nth-child(2)::after{animation-delay:calc(var(--clock)/8)}
+.step:nth-child(3)::after{animation-delay:calc(var(--clock)/8*2)}
+.step:nth-child(4)::after{animation-delay:calc(var(--clock)/8*3)}
+.step:nth-child(5)::after{animation-delay:calc(var(--clock)/8*4)}
+.step:nth-child(6)::after{animation-delay:calc(var(--clock)/8*5)}
+.step:nth-child(7)::after{animation-delay:calc(var(--clock)/8*6)}
+.step:nth-child(8)::after{animation-delay:calc(var(--clock)/8*7)}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:13px;padding:0 2px}
+.legend span{display:flex;align-items:center;gap:7px}
+.legend i{width:12px;height:12px;border-radius:3px;display:block;border:1px solid rgba(16,40,72,.16)}
+
+@media(max-width:900px){
+  .steps{grid-template-columns:repeat(4,1fr)}
+  .step{min-height:76px}
+}
+@media(max-width:520px){
+  .steps{grid-template-columns:repeat(2,1fr);gap:7px}
+  .step i{font-size:14px}
+}
+
+/* ---- the three role banks ---- */
+.banks{display:flex;flex-direction:column;gap:10px}
+.bank{
+  display:grid;grid-template-columns:auto 1fr;gap:13px;align-items:start;
+  background:var(--panel-hi);border:1px solid var(--hair);border-radius:4px;
+  padding:16px 16px 15px;text-decoration:none;transition:background .18s,border-color .18s;
+}
+.bank:hover,.bank:focus-visible{background:#FFF1EA;border-color:var(--run)}
+.led{
+  width:13px;height:13px;border-radius:50%;margin-top:7px;
+  background:var(--bare);border:1px solid rgba(16,40,72,.22);transition:background .18s,border-color .18s;
+}
+.bank:hover .led,.bank:focus-visible .led{background:var(--run);border-color:var(--run)}
+.bank-name{
+  display:block;font-family:Archivo,sans-serif;font-stretch:112%;font-weight:800;
+  font-size:26px;line-height:1;color:var(--navy);letter-spacing:-.022em;
+}
+.bank-sub{display:block;font-size:14.5px;line-height:1.45;color:#4A5F7C;margin-top:6px;max-width:38ch}
+.bank-go{
+  display:flex;align-items:center;gap:7px;margin-top:11px;color:var(--run-read);
+  font-family:Archivo,sans-serif;font-stretch:92%;font-weight:800;font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;
+}
+.bank-go svg{width:16px;height:16px;transition:transform .2s cubic-bezier(.16,1,.3,1)}
+.bank:hover .bank-go svg{transform:translateX(5px)}
+.banks-note{font-size:14px;color:#4A5F7C;margin-top:4px}
+
+/* ---- sections ---- */
+section{padding-top:clamp(52px,7vw,104px)}
+.head{display:grid;grid-template-columns:1fr 1fr;gap:clamp(18px,3vw,46px);align-items:end;padding-bottom:24px}
+.head p{max-width:50ch;color:#4A5F7C}
+@media(max-width:860px){.head{grid-template-columns:1fr;gap:14px}}
+
+/* ---- the patch list ---- */
+.patch{border-top:1px solid var(--navy)}
+.prow{
+  display:grid;grid-template-columns:104px 1fr 1.6fr;gap:18px;align-items:baseline;
+  padding:16px 0;border-bottom:1px solid var(--hair-soft);
+}
+.prow:last-child{border-bottom:1px solid var(--navy)}
+.prow b{font-family:Archivo,sans-serif;font-stretch:112%;font-weight:800;font-size:24px;color:var(--navy);line-height:1.04;letter-spacing:-.022em}
+.prow span{font-size:15.5px;color:#4A5F7C;line-height:1.5}
+.tagkey{
+  display:inline-block;padding:4px 9px;border-radius:3px;background:var(--well);
+  border:1px solid var(--well-edge);font-family:Archivo,sans-serif;font-stretch:92%;
+  font-weight:800;font-size:11.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--silk);
+}
+@media(max-width:700px){
+  .prow{grid-template-columns:1fr;gap:6px}
+  .prow .tagkey{justify-self:start}
+}
+
+/* ---- the mechanism ---- */
+.mech{display:grid;grid-template-columns:1fr auto 1fr;gap:clamp(13px,2vw,28px);align-items:center}
+@media(max-width:900px){.mech{grid-template-columns:1fr;gap:20px}}
+.mod{background:var(--panel-hi);border:1px solid var(--hair);border-radius:4px;overflow:hidden}
+.mod-cap{padding:9px 14px;background:var(--well);border-bottom:1px solid var(--well-edge);display:flex;justify-content:space-between;gap:10px}
+.mod-body{padding:15px 15px 14px}
+.ch-title{margin:5px 0 12px;font-family:Archivo,sans-serif;font-stretch:112%;font-weight:800;font-size:28px;color:var(--navy);line-height:1;letter-spacing:-.024em}
+.ln{height:6px;background:var(--well);border-radius:2px;margin-bottom:8px}
+.ln.s{width:72%}.ln.m{width:93%}.ln.hot{background:rgba(245,92,30,.26)}
+.figbox{border:1px solid var(--hair);border-radius:3px;height:80px;margin:12px 0;display:grid;place-items:center;background:var(--well)}
+.figbox svg{width:52px;height:52px}
+.q{display:grid;grid-template-columns:36px 1fr 36px;gap:9px;padding:9px 0;border-bottom:1px solid var(--hair-soft);font-size:14.8px;align-items:baseline}
+.q:last-of-type{border-bottom:0}
+.q i{font-style:normal;font-family:Archivo,sans-serif;font-stretch:92%;font-size:12.5px;font-weight:800;color:var(--run-read);letter-spacing:.06em}
+.q em{font-style:normal;font-family:Archivo,sans-serif;font-stretch:92%;font-size:12.5px;color:var(--silk);text-align:right;font-weight:700}
+.arrowcol{display:grid;place-items:center}
+.arrowcol svg{width:62px;height:26px;overflow:visible}
+.arrowcol path{stroke:var(--run);stroke-width:1.8;fill:none}
+.arrowcol .dash{stroke-dasharray:5 7;animation:travel 1.6s linear infinite}
+@keyframes travel{to{stroke-dashoffset:-24}}
+@media(max-width:900px){.arrowcol svg{transform:rotate(90deg)}}
+.synth{margin-top:11px;padding-left:11px;border-left:2px solid var(--run);font-size:12.5px;line-height:1.55;color:var(--silk);font-family:Archivo,sans-serif;font-stretch:92%;font-weight:600}
+
+/* ---- close ---- */
+.close{padding:clamp(56px,7.6vw,118px) 0 clamp(36px,4.6vw,64px)}
+.close-grid{display:grid;grid-template-columns:1.06fr .94fr;gap:clamp(24px,4vw,58px);align-items:end}
+@media(max-width:900px){.close-grid{grid-template-columns:1fr;gap:28px}}
+.close-acts{display:flex;flex-wrap:wrap;gap:11px;margin-top:22px}
+/* the closing meter: one bar of the day, still running */
+.meter{background:var(--well);border:1px solid var(--well-edge);border-radius:4px;padding:15px}
+.meter-row{display:grid;grid-template-columns:repeat(8,1fr);gap:7px}
+.meter-row i{height:44px;border-radius:3px;background:var(--bare);border:1px solid rgba(16,40,72,.13);display:block;animation:lamp var(--clock) linear infinite}
+@keyframes lamp{0%,9%{background:var(--run);border-color:var(--run)}17%,100%{background:var(--bare);border-color:rgba(16,40,72,.13)}}
+.meter-row i:nth-child(1){animation-delay:0s}
+.meter-row i:nth-child(2){animation-delay:calc(var(--clock)/8)}
+.meter-row i:nth-child(3){animation-delay:calc(var(--clock)/8*2)}
+.meter-row i:nth-child(4){animation-delay:calc(var(--clock)/8*3)}
+.meter-row i:nth-child(5){animation-delay:calc(var(--clock)/8*4)}
+.meter-row i:nth-child(6){animation-delay:calc(var(--clock)/8*5)}
+.meter-row i:nth-child(7){animation-delay:calc(var(--clock)/8*6)}
+.meter-row i:nth-child(8){animation-delay:calc(var(--clock)/8*7)}
+
+.owed{margin-top:clamp(28px,4vw,50px);padding:13px 15px;border:1px dashed var(--run);border-radius:4px;background:#FFF1EA;font-size:12.5px;line-height:1.6;color:var(--run-read);font-family:Archivo,sans-serif;font-stretch:92%;font-weight:600}
+.owed b{display:block;letter-spacing:.02em;margin-bottom:5px;font-weight:800}
+
+footer{margin-top:clamp(40px,5.4vw,80px);border-top:1px solid var(--navy);padding:22px 0 42px}
+.foot{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center}
+.foot-links{margin-left:auto;display:flex;gap:3px;flex-wrap:wrap}
+.foot-links a{font-size:14px;padding:5px 9px;text-decoration:none;border-radius:4px}
+.foot-links a:hover{background:var(--well);color:var(--navy)}
+.foot-note{width:100%;font-size:13.5px;color:#4A5F7C;margin-top:4px}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .rlist{transform:none}
+  .rlist span:not(:first-child){display:none}
+  .meter-row i:nth-child(4){background:var(--run);border-color:var(--run)}
+}
+</style>
+</head>
+<body>
+
+<header class="rail">
+  <div class="rail-in">
+    <a class="brand" href="#top"><img src="../assets/mindforge-mark.png" alt="MindForge"><span>Mind Forge</span></a>
+    <nav class="nav">
+      <a href="#doors">Sign in</a>
+      <a href="#behind">Who gets what</a>
+      <a href="#made">How a paper is made</a>
+      <a href="#holds">What it holds</a>
+    </nav>
+    <a class="key key-navy" href="#doors">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+      Sign in
+    </a>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO: THE PANEL ============ -->
+<section class="hero wrap">
+  <div class="hero-grid">
+    <div>
+      <h1>The school day,<br>already <span class="h1-run">running.</span></h1>
+      <p class="lede hero-lede">Tests, homework, attendance, marks, the timetable and fees: one record per student, kept by the people who already keep it.</p>
+
+      <div class="readout" role="img" aria-label="A readout cycling through what MindForge holds: tests, homework, attendance, marks, timetable, fees and notices.">
+        <span class="silk">Holding</span>
+        <span class="rmask"><span class="rlist">
+          <span>Tests</span><span>Homework</span><span>Attendance</span><span>Marks</span>
+          <span>Timetable</span><span>Fees</span><span>Notices</span><span>Tests</span>
+        </span></span>
+      </div>
+
+      <div class="well">
+        <div class="well-cap">
+          <span class="silk">Today · Class 9-A</span>
+          <span class="silk silk-run">Period 4 running</span>
+        </div>
+        <div class="steps">
+          <div class="step done"><b>P1</b><i>Maths</i><em>Done</em></div>
+          <div class="step done"><b>P2</b><i>English</i><em>Done</em></div>
+          <div class="step done"><b>P3</b><i>Hindi</i><em>Done</em></div>
+          <div class="step run"><b>P4</b><i>Science</i><em>Now</em></div>
+          <div class="step due"><b>P5</b><i>Science</i><em>Test due</em></div>
+          <div class="step"><b>P6</b><i>Social</i><em>—</em></div>
+          <div class="step due"><b>P7</b><i>Maths</i><em>HW due</em></div>
+          <div class="step"><b>P8</b><i>Games</i><em>—</em></div>
+        </div>
+        <div class="legend">
+          <span><i style="background:#C6D6E9;border-color:#A9C0DB"></i><span class="silk">Done</span></span>
+          <span><i style="background:var(--run);border-color:var(--run)"></i><span class="silk">Running now</span></span>
+          <span><i style="background:var(--due);border-color:#D68F06"></i><span class="silk">Due</span></span>
+          <span><i style="background:var(--bare)"></i><span class="silk">Not yet</span></span>
+          <span class="silk silk-sent" style="margin-left:auto">Illustrative sample · not a real timetable</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="doors">
+      <p class="silk" style="margin-bottom:11px">Sign in — pick your bank</p>
+      <div class="banks">
+        <a class="bank" href="#signin-placeholder">
+          <span class="led" aria-hidden="true"></span>
+          <span>
+            <span class="bank-name">Admin</span>
+            <span class="bank-sub">Users, fee structures, academic years and the timetable — the whole school in one console.</span>
+            <span class="bank-go">Sign in
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+            </span>
+          </span>
+        </a>
+        <a class="bank" href="#signin-placeholder">
+          <span class="led" aria-hidden="true"></span>
+          <span>
+            <span class="bank-name">Teacher</span>
+            <span class="bank-sub">Turn a chapter into a test, mark attendance, grade written answers, send a notice to the class.</span>
+            <span class="bank-go">Sign in
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+            </span>
+          </span>
+        </a>
+        <a class="bank" href="#signin-placeholder">
+          <span class="led" aria-hidden="true"></span>
+          <span>
+            <span class="bank-name">Student</span>
+            <span class="bank-sub">What's due, the test itself, your marks, your timetable and your attendance, on the phone in your hand.</span>
+            <span class="bank-go">Sign in
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+            </span>
+          </span>
+        </a>
+      </div>
+      <p class="banks-note">Use the username and password your school gave you. Don't have one yet? Ask the class teacher or the school office. Parents sign in alongside the student.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHO GETS WHAT ============ -->
+<section class="wrap" id="behind">
+  <div class="head">
+    <h2>Four people,<br>one record.</h2>
+    <p>Nobody re-enters what somebody else already wrote down. The teacher marks attendance once and the parent sees it the same day.</p>
+  </div>
+
+  <div class="patch">
+    <div class="prow"><span class="tagkey">Bank A</span><b>Admin</b><span>The school office. Add and remove users, set fee structures, open an academic year, build the timetable. Set once, used by everybody else all year.</span></div>
+    <div class="prow"><span class="tagkey">Bank B</span><b>Teacher</b><span>Generate a test from a chapter PDF, mark attendance for the class, grade the written answers on one screen, and broadcast a notice that reaches every parent's phone.</span></div>
+    <div class="prow"><span class="tagkey">Bank C</span><b>Student</b><span>What's due today, the test to attempt, the score when it lands, the timetable for tomorrow, and how many days present this month.</span></div>
+    <div class="prow"><span class="tagkey">Alongside</span><b>Parent</b><span>Marks, attendance, homework and fees for their own child, without chasing a teacher or waiting for the next meeting.</span></div>
+  </div>
+</section>
+
+<!-- ============ HOW A PAPER IS MADE ============ -->
+<section class="wrap" id="made">
+  <div class="head">
+    <h2>A chapter goes in.<br>A paper comes out.</h2>
+    <p>The teacher uploads the chapter. MindForge reads it and writes the paper. The questions come from that chapter, not from somebody else's question bank.</p>
+  </div>
+
+  <div class="mech">
+    <div class="mod">
+      <div class="mod-cap"><span class="silk">Input</span><span class="silk">The chapter, as a PDF</span></div>
+      <div class="mod-body">
+        <div class="chapter">
+          <span class="silk">Chapter 4</span>
+          <p class="ch-title">Photosynthesis</p>
+          <div class="ln m"></div><div class="ln s"></div><div class="ln hot m"></div>
+          <div class="figbox">
+            <svg viewBox="0 0 48 48" fill="none" stroke="#2A4A74" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M24 42V20"/><path d="M24 26c0-7 5-13 13-14 1 8-4 15-13 15z"/><path d="M24 33c0-5-4-10-10-11-1 6 3 12 10 11z"/>
+            </svg>
+          </div>
+          <div class="ln m"></div><div class="ln s"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:11px"><span class="silk">Science · Class 9</span><span class="silk">P. 64</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrowcol" aria-hidden="true"><svg viewBox="0 0 62 26"><path class="dash" d="M2 13h48"/><path d="M44 6l8 7-8 7"/></svg></div>
+
+    <div class="mod">
+      <div class="mod-cap"><span class="silk">Output</span><span class="silk silk-run">The paper it wrote</span></div>
+      <div class="mod-body">
+        <div class="q"><i>Q1</i><span>Define photosynthesis in one sentence.</span><em>[2]</em></div>
+        <div class="q"><i>Q2</i><span>Name the pigment that absorbs sunlight.</span><em>[1]</em></div>
+        <div class="q"><i>Q3</i><span>Why do leaves appear green?</span><em>[3]</em></div>
+        <div class="q"><i>Q4</i><span>Label the parts marked A, B and C.</span><em>[4]</em></div>
+        <p class="synth">Illustrative sample, written from a sample chapter. Not a real paper.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT IT HOLDS ============ -->
+<section class="wrap" id="holds">
+  <div class="head">
+    <h2>What the<br>record holds.</h2>
+    <p>Each line below is a thing the school already records on paper, kept in the same place instead. One login covers all of them.</p>
+  </div>
+
+  <div class="patch">
+    <div class="prow"><span class="tagkey">01</span><b>Tests</b><span>Set from a chapter by the teacher, attempted on a phone, graded on submission. One attempt, three-day window, auto-submit at the end.</span></div>
+    <div class="prow"><span class="tagkey">02</span><b>Homework</b><span>What was given, in which subject, by when, and whether it has been done.</span></div>
+    <div class="prow"><span class="tagkey">03</span><b>Marks</b><span>Every result as it is graded, and the report that adds them up at term's end.</span></div>
+    <div class="prow"><span class="tagkey">04</span><b>Attendance</b><span>Marked daily by the class teacher, counted for the month, visible at once.</span></div>
+    <div class="prow"><span class="tagkey">05</span><b>Timetable</b><span>Period by period, including the day it changes, for the class and the teacher both.</span></div>
+    <div class="prow"><span class="tagkey">06</span><b>Fees</b><span>What's due, what's paid, and a receipt that can be downloaded and kept.</span></div>
+    <div class="prow"><span class="tagkey">07</span><b>Notices</b><span>Sent once by the school, delivered to every parent's phone as a notification.</span></div>
+  </div>
+</section>
+
+<!-- ============ CLOSE ============ -->
+<section class="close wrap">
+  <div class="close-grid">
+    <div>
+      <h2>Press your bank<br>and sign in.</h2>
+      <p class="lede" style="margin-top:18px">Use the username and password your school gave you. If you don't have one yet, ask the class teacher or the school office. Every account is created by your own school.</p>
+      <div class="close-acts">
+        <a class="key key-navy" href="#signin-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+          Sign in
+        </a>
+        <a class="key" href="#playstore-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>
+          Android app
+        </a>
+        <span class="key" aria-disabled="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>
+          iPhone app coming soon
+        </span>
+      </div>
+    </div>
+    <div class="meter">
+      <div class="well-cap"><span class="silk">One bar of the day</span><span class="silk silk-run">Still running</span></div>
+      <div class="meter-row" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+  </div>
+
+  <div class="owed">
+    <b>[Placeholder: for the site owner]</b>
+    Sign-in URL, Play Store URL, privacy policy and terms links are still to be supplied.
+    Every sign-in and app key on this page points at a placeholder anchor until they are.
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <a class="brand" href="#top"><img src="../assets/mindforge-mark.png" alt=""><span>Mind Forge</span></a>
+    <span class="silk silk-sent">AI assisted learning · mindforge.guru</span>
+    <span class="foot-links">
+      <a href="#doors">Sign in</a><a href="#behind">Who gets what</a><a href="#holds">What it holds</a>
+    </span>
+    <span class="foot-note">Screens, marks, timetables and papers on this page are illustrative samples, not real student records.</span>
+  </div>
+</footer>
+</body>
+</html>

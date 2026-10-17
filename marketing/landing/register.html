@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MindForge — AI assisted learning</title>
+<meta name="description" content="The register your school has always kept, now kept for you. Homework, tests, attendance, marks and fees in one place.">
+<link rel="icon" href="assets/mindforge-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,300..900;1,400..700&family=Martian+Mono:wght@300..700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   MIND FORGE — the register
+   Oxide-red buckram, red-ruled columns, tabular ink, cloth tabs.
+   ============================================================ */
+
+:root{
+  --cloth:      #8E2A1F;
+  --cloth-deep: #6B1D14;
+  --cloth-lit:  #A6392B;
+  --board:      #4C140E;
+
+  --page:       #EFE6D2;
+  --page-lit:   #F7F1E2;
+  --page-edge:  #D8CBAF;
+
+  --ink:        #14223C;
+  --ink-mid:    #3B4660;
+  --rule:       #B8503C;
+  --rule-soft:  rgba(184,80,60,.34);
+  --stamp:      #B03A12;
+  --green:      #17663C;
+
+  --gutter:     clamp(18px,3vw,46px);
+  --measure:    66ch;
+  --ease:       cubic-bezier(.16,1,.3,1);
+}
+
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+
+body{
+  margin:0;
+  background:var(--board);
+  color:var(--page);
+  font-family:"Libre Franklin",system-ui,sans-serif;
+  font-size:17px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* the browser's own surfaces, bound into the book */
+::selection{background:var(--stamp);color:var(--page-lit);}
+::-moz-selection{background:var(--stamp);color:var(--page-lit);}
+:focus-visible{outline:3px solid var(--stamp);outline-offset:3px;border-radius:2px;}
+html{scrollbar-color:var(--cloth-lit) var(--board);scrollbar-width:thin;}
+::-webkit-scrollbar{width:12px;height:12px;}
+::-webkit-scrollbar-track{background:var(--board);}
+::-webkit-scrollbar-thumb{background:var(--cloth-lit);border:3px solid var(--board);border-radius:99px;}
+::-webkit-scrollbar-thumb:hover{background:#C2452F;}
+a{color:inherit;}
+
+/* ============================================================
+   BUCKRAM — the binding the whole page sits in
+   ============================================================ */
+.binding{
+  position:relative;overflow-x:clip;min-height:100vh;
+  background:
+    radial-gradient(120% 80% at 18% 0%, rgba(255,255,255,.10), rgba(255,255,255,0) 55%),
+    radial-gradient(100% 90% at 82% 100%, rgba(0,0,0,.34), rgba(0,0,0,0) 58%),
+    var(--cloth);
+}
+/* woven buckram grain */
+.binding::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23b)' opacity='0.55'/%3E%3C/svg%3E");
+  opacity:.26;mix-blend-mode:overlay;
+}
+.wrap{max-width:1280px;margin:0 auto;padding:0 clamp(14px,3vw,34px);position:relative;z-index:2;}
+
+/* ============================================================
+   THE SPINE — header, fixed, with the cloth index tab
+   ============================================================ */
+.spine{
+  position:sticky;top:0;z-index:60;height:74px;
+  background:linear-gradient(180deg,var(--cloth-lit) 0%,var(--cloth) 40%,var(--cloth-deep) 100%);
+  box-shadow:0 8px 22px rgba(0,0,0,.4);
+  border-bottom:2px solid rgba(0,0,0,.34);
+}
+.spine::after{
+  content:"";position:absolute;left:0;right:0;top:0;height:1px;
+  background:rgba(255,255,255,.28);
+}
+.spine-in{
+  max-width:1280px;margin:0 auto;height:100%;
+  padding:0 clamp(14px,3vw,34px);
+  display:flex;align-items:center;gap:clamp(10px,2vw,24px);
+}
+.mark{display:flex;align-items:center;gap:11px;text-decoration:none;flex:0 0 auto;}
+.mark img{width:36px;height:36px;display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45));}
+.mark b{
+  font-weight:800;font-size:17.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--page-lit);line-height:1;display:block;
+}
+.mark span small{
+  display:block;font-family:"Martian Mono",monospace;font-weight:300;
+  font-size:11px;letter-spacing:.04em;color:#FCE4DC;margin-top:4px;
+}
+.nav{display:flex;gap:4px;margin-left:auto;}
+.nav a{
+  font-size:14px;font-weight:600;color:#F7DDD5;text-decoration:none;
+  padding:9px 13px;border-radius:2px;transition:background .16s ease,color .16s ease;
+}
+.nav a:hover{background:rgba(0,0,0,.24);color:#fff;}
+@media (max-width:900px){.nav{display:none;}}
+
+/* the cloth index tab — the book's own affordance */
+.tab{
+  flex:0 0 auto;margin-left:auto;
+  display:inline-flex;align-items:center;gap:9px;
+  font-weight:800;font-size:14.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:#F9F2E6;text-decoration:none;
+  padding:13px 22px 13px 18px;
+  background:linear-gradient(180deg,#C43B26 0%,#9C2A19 100%);
+  border-left:2px solid #F0C9BC;
+  clip-path:polygon(0 0,100% 0,calc(100% - 11px) 50%,100% 100%,0 100%);
+  padding-right:30px;
+  box-shadow:0 4px 12px rgba(0,0,0,.42);
+  transition:transform .13s var(--ease),filter .13s var(--ease);
+}
+.nav + .tab{margin-left:8px;}
+.tab:hover{transform:translateX(3px);filter:brightness(1.1);}
+.tab:active{transform:translateX(0) translateY(2px);filter:brightness(.94);}
+.tab svg{width:15px;height:15px;}
+@media (max-width:430px){
+  .tab{padding:11px 24px 11px 14px;font-size:13px;letter-spacing:.05em;}
+  .mark span small{display:none;}
+}
+
+/* ============================================================
+   THE PAGE — ruled, cream, with a real gutter
+   ============================================================ */
+.leaf{
+  background:var(--page);
+  color:var(--ink);
+  padding:20px;
+  box-shadow:0 3px 6px rgba(0,0,0,.3),0 14px 26px rgba(0,0,0,.34);
+  position:relative;
+}
+@media (min-width:900px){.leaf{padding:34px;}}
+.leaf::before{ /* laid paper grain */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='130' height='130' filter='url(%23g)' opacity='0.4'/%3E%3C/svg%3E");
+  opacity:.30;mix-blend-mode:multiply;
+}
+
+/* the open spread */
+.spread{
+  display:grid;
+  grid-template-columns:1fr var(--gutter) 1fr;
+  margin:clamp(26px,4vw,54px) 0 clamp(22px,3vw,40px);
+}
+@media (max-width:900px){
+  .spread{grid-template-columns:1fr;}
+  .gutter{height:26px;width:auto;}
+}
+.gutter{
+  background:
+    linear-gradient(90deg,
+      rgba(0,0,0,.34) 0%, rgba(0,0,0,.14) 26%, rgba(0,0,0,.05) 50%,
+      rgba(0,0,0,.14) 74%, rgba(0,0,0,.34) 100%),
+    var(--page-edge);
+  position:relative;z-index:3;
+}
+@media (max-width:900px){
+  .gutter{background:linear-gradient(180deg,rgba(0,0,0,.3),rgba(0,0,0,.06) 50%,rgba(0,0,0,.3)),var(--page-edge);}
+}
+
+
+.page-l{border-right:1px solid var(--page-edge);}
+
+
+/* the title band across the top of the spread */
+.band{
+  border-top:2.5px solid var(--rule);
+  border-bottom:2.5px solid var(--rule);
+  padding:14px 0;margin-bottom:22px;
+  display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;
+}
+.band h1{
+  font-weight:900;font-size:clamp(30px,4.6vw,56px);line-height:.98;
+  letter-spacing:-.025em;margin:0;color:var(--ink);text-wrap:balance;
+}
+.band .sub{
+  font-family:"Martian Mono",monospace;font-weight:400;
+  font-size:13px;letter-spacing:.02em;color:#5A3A30;
+}
+
+.caption{
+  font-family:"Martian Mono",monospace;font-weight:500;
+  font-size:12.5px;letter-spacing:.01em;color:#6A3C30;
+  display:block;margin-bottom:14px;
+}
+.page h2{
+  font-weight:800;font-size:19px;letter-spacing:-.008em;
+  margin:0 0 4px;color:var(--ink);
+}
+
+/* the register grid itself */
+.reg{width:100%;border-collapse:collapse;font-family:"Martian Mono",monospace;}
+.reg caption{text-align:left;}
+.reg th{
+  font-weight:600;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:#6A3C30;text-align:left;padding:0 6px 8px 0;
+  border-bottom:2px solid var(--rule);white-space:nowrap;
+}
+.reg th.n,.reg td.n{text-align:right;font-variant-numeric:tabular-nums;}
+.reg td{
+  font-size:13.5px;font-weight:400;color:var(--ink);
+  padding:9px 6px 9px 0;
+  border-bottom:1px solid var(--rule-soft);
+  font-variant-numeric:tabular-nums;
+}
+.reg tr:last-child td{border-bottom:0;}
+.reg .nm{font-family:"Libre Franklin",sans-serif;font-size:14.5px;font-weight:500;}
+.tick,.reg td.tick{color:var(--green);font-weight:700;}
+.gap{color:#8A5A4E;}
+.blank{color:#A8796B;letter-spacing:.2em;}
+
+/* the left page is kept by hand: uneven baselines, gaps, a correction */
+.byhand td{position:relative;}
+.byhand tr:nth-child(2n) td{transform:translateY(.6px);}
+.byhand tr:nth-child(3n) td{transform:translateY(-.8px);}
+.byhand .struck{text-decoration:line-through;text-decoration-color:var(--rule);color:#8A5A4E;}
+
+/* the right page fills itself */
+.live td{transition:color .3s ease;}
+
+.note{
+  margin:18px 0 0;font-size:14.5px;line-height:1.5;color:#3A2A24;
+}
+.synth{
+  margin:16px 0 0;font-family:"Martian Mono",monospace;font-weight:300;
+  font-size:13px;line-height:1.5;color:#6A3C30;font-style:italic;
+}
+
+/* stamp */
+.stamp{
+  display:inline-block;font-weight:900;font-size:clamp(12.5px,1.4vw,15px);
+  letter-spacing:.18em;text-transform:uppercase;color:var(--stamp);
+  border:3px solid var(--stamp);padding:8px 15px;border-radius:3px;
+  transform:rotate(-3deg);
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='s'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0, 0 0 0 0 0, 0 0 0 0 0, 1 0 0 0 0.35'/%3E%3C/filter%3E%3Crect width='90' height='90' filter='url(%23s)'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='s'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0, 0 0 0 0 0, 0 0 0 0 0, 1 0 0 0 0.35'/%3E%3C/filter%3E%3Crect width='90' height='90' filter='url(%23s)'/%3E%3C/svg%3E");
+}
+
+/* buttons */
+.cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:24px;}
+.btn{
+  display:inline-flex;align-items:center;gap:9px;
+  font-weight:700;font-size:15px;letter-spacing:.02em;text-decoration:none;
+  padding:13px 20px;border-radius:2px;
+  transition:transform .12s var(--ease),box-shadow .12s var(--ease),background .16s ease;
+}
+.btn svg{width:16px;height:16px;flex:0 0 auto;}
+.btn-ink{background:var(--ink);color:var(--page-lit);box-shadow:0 2px 0 #09101F;}
+.btn-ink:hover{background:#20314F;transform:translateY(-1px);box-shadow:0 3px 0 #09101F;}
+.btn-ink:active{transform:translateY(2px);box-shadow:none;}
+.btn-out{background:transparent;color:var(--ink);border:1.5px solid rgba(20,34,60,.42);}
+.btn-out:hover{background:rgba(20,34,60,.07);border-color:rgba(20,34,60,.68);}
+.btn-out:active{transform:translateY(2px);}
+.btn[aria-disabled="true"]{opacity:.55;pointer-events:none;border-style:dashed;}
+
+/* ============================================================
+   SECTIONS — each one a further page of the same book
+   ============================================================ */
+.sec{padding:clamp(40px,6vw,86px) 0 0;}
+.sec-head{max-width:var(--measure);margin-bottom:clamp(22px,3vw,38px);}
+.sec-head h2{
+  font-weight:900;font-size:clamp(27px,4vw,48px);line-height:1.02;
+  letter-spacing:-.024em;margin:0;color:var(--page-lit);text-wrap:balance;
+}
+.sec-head p{font-size:clamp(16px,1.4vw,18.5px);line-height:1.55;color:#F5CFC3;margin:15px 0 0;max-width:58ch;}
+
+/* the columns, explained as columns */
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,232px),1fr));}
+.col{
+  background:var(--page);color:var(--ink);
+  padding:22px 20px 24px;border-right:1px solid var(--page-edge);
+  box-shadow:0 3px 6px rgba(0,0,0,.3);
+}
+.col:last-child{border-right:0;}
+@media (max-width:640px){.col{border-right:0;border-bottom:1px solid var(--page-edge);}}
+.col h3{font-weight:800;font-size:18px;margin:14px 0 8px;color:var(--ink);letter-spacing:-.008em;}
+.col p{margin:0;font-size:15px;line-height:1.5;color:#33302C;}
+.ico{width:28px;height:28px;color:var(--stamp);display:block;}
+
+/* the mechanism */
+.forge{display:grid;grid-template-columns:1fr auto 1fr;gap:clamp(12px,2vw,24px);align-items:center;}
+@media (max-width:820px){.forge{grid-template-columns:1fr;}.arrow{transform:rotate(90deg);margin:0 auto;}}
+.arrow{width:clamp(44px,6vw,92px);height:30px;color:#F0C9BC;}
+.slab{background:var(--page);color:var(--ink);padding:22px 22px 24px;box-shadow:0 3px 6px rgba(0,0,0,.3),0 14px 26px rgba(0,0,0,.3);}
+.ln{height:7px;background:rgba(20,34,60,.18);border-radius:1px;margin-bottom:8px;}
+.ln.s{width:60%;} .ln.m{width:86%;} .ln.hl{background:rgba(176,58,18,.4);}
+.q{font-family:"Martian Mono",monospace;font-size:13px;line-height:1.5;color:var(--ink);padding:8px 0;display:flex;gap:9px;}
+.q + .q{border-top:1px solid var(--rule-soft);}
+.q b{color:var(--stamp);flex:0 0 auto;}
+.q .mk{margin-left:auto;color:#6A3C30;flex:0 0 auto;font-variant-numeric:tabular-nums;}
+
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,208px),1fr));margin-top:clamp(22px,3vw,38px);border:1px solid rgba(255,255,255,.26);background:rgba(0,0,0,.2);}
+.rule-i{padding:19px 21px;border-right:1px solid rgba(255,255,255,.2);}
+.rule-i:last-child{border-right:0;}
+@media (max-width:660px){.rule-i{border-right:0;border-bottom:1px solid rgba(255,255,255,.2);}.rule-i:last-child{border-bottom:0;}}
+.rule-i dt{font-family:"Martian Mono",monospace;font-weight:500;font-size:12.5px;letter-spacing:.04em;color:#FAD8CE;margin-bottom:8px;}
+.rule-i dd{margin:0;font-weight:700;font-size:16.5px;line-height:1.35;color:var(--page-lit);}
+
+/* the close */
+.close{padding:clamp(40px,6vw,86px) 0 clamp(44px,6vw,92px);}
+.close-leaf{max-width:660px;margin:0 auto;text-align:center;}
+@media (min-width:900px){.close-leaf{padding:46px;}}
+.close-leaf h2{font-weight:900;font-size:clamp(26px,3.8vw,44px);line-height:1.03;letter-spacing:-.024em;margin:0;color:var(--ink);text-wrap:balance;}
+.close-leaf p{font-size:16.5px;line-height:1.5;color:#33302C;margin:15px auto 0;max-width:44ch;}
+.close .cta{justify-content:center;}
+
+footer{background:var(--board);border-top:1px solid rgba(0,0,0,.5);box-shadow:inset 0 6px 16px rgba(0,0,0,.45);padding:clamp(26px,4vw,44px) 0;color:#E7B6A8;font-size:14.5px;}
+.foot{display:flex;flex-wrap:wrap;gap:18px 34px;align-items:center;justify-content:space-between;}
+.foot a{color:#F7DDD5;text-decoration:none;text-underline-offset:4px;}
+.foot a:hover{text-decoration:underline;color:#fff;}
+.footmeta{font-family:"Martian Mono",monospace;font-weight:300;font-size:13px;color:#E7B6A8;}
+.fineprint{font-family:"Martian Mono",monospace;font-weight:300;font-size:13px;line-height:1.6;color:#E0A79A;max-width:72ch;margin:20px 0 0;}
+
+/* ============================================================
+   MOTION — one authored moment: the columns fill themselves,
+   row by row, the way a register is actually written up.
+   Default state is the filled state, so no-JS loses nothing.
+   ============================================================ */
+@media (prefers-reduced-motion:no-preference){
+  /* The columns are readable before, during and after the fill. Motion is the
+     flourish; it never decides whether a figure is on the page. */
+  .js .live tr.written td.fillable{animation:ink .5s var(--ease);}
+  @keyframes ink{
+    0%  {opacity:0;filter:blur(2.5px);transform:translateY(-3px);}
+    100%{opacity:1;filter:blur(0);transform:none;}
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="binding">
+
+  <header class="spine">
+    <div class="spine-in">
+      <a class="mark" href="/">
+        <img src="assets/mindforge-logo.png" alt="" width="36" height="36">
+        <span><b>Mind Forge</b><small>AI assisted learning</small></span>
+      </a>
+      <nav class="nav" aria-label="Sections">
+        <a href="#columns">The columns</a>
+        <a href="#forge">How a test is made</a>
+        <a href="#school">For the school</a>
+      </nav>
+      <a class="tab" href="#signin">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+        Sign in
+      </a>
+    </div>
+  </header>
+
+  <div class="wrap">
+
+    <!-- ============ THE OPEN SPREAD ============ -->
+    <section class="spread">
+
+      <div class="leaf page page-l">
+        <div class="band">
+          <h1>The register your school has always kept.</h1>
+          <span class="sub">Class 9-A · Attendance &amp; marks</span>
+        </div>
+
+        <span class="caption">Left page: kept by hand</span>
+        <h2>Written once, seen by nobody else.</h2>
+
+        <table class="reg byhand">
+          <thead>
+            <tr><th class="n">Roll</th><th>Name</th><th class="n">Days</th><th class="n">Maths</th><th class="n">Sci</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="n">01</td><td class="nm">A. Iyer</td><td class="n">22</td><td class="n">34</td><td class="n">31</td></tr>
+            <tr><td class="n">02</td><td class="nm">B. Khan</td><td class="n">21</td><td class="n struck">28</td><td class="n">33</td></tr>
+            <tr><td class="n">03</td><td class="nm">C. Nair</td><td class="n">23</td><td class="n">36</td><td class="n blank">···</td></tr>
+            <tr><td class="n">04</td><td class="nm">D. Patel</td><td class="n gap">—</td><td class="n">30</td><td class="n">29</td></tr>
+            <tr><td class="n">05</td><td class="nm">E. Rao</td><td class="n">22</td><td class="n blank">···</td><td class="n">35</td></tr>
+          </tbody>
+        </table>
+
+        <p class="note">One copy, in one cupboard. If you want to know how your child is doing, you wait for the meeting.</p>
+        <p class="synth">Illustrative. Not a real class.</p>
+      </div>
+
+      <div class="gutter" aria-hidden="true"></div>
+
+      <div class="leaf page">
+        <div class="band">
+          <h1 style="font-size:clamp(30px,4.6vw,56px);">The same register, kept for you.</h1>
+          <span class="sub">Updated as it happens</span>
+        </div>
+
+        <span class="caption">Right page: kept by MindForge</span>
+        <h2>Same columns. Open on your phone.</h2>
+
+        <table class="reg live" id="live">
+          <thead>
+            <tr><th class="n">Roll</th><th>Name</th><th class="n">Days</th><th class="n">Maths</th><th class="n">Sci</th><th class="n">Fees</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="n">01</td><td class="nm">A. Iyer</td><td class="n fillable">22</td><td class="n fillable">34</td><td class="n fillable">31</td><td class="n fillable t tick">Paid</td></tr>
+            <tr><td class="n">02</td><td class="nm">B. Khan</td><td class="n fillable">21</td><td class="n fillable">32</td><td class="n fillable">33</td><td class="n fillable t tick">Paid</td></tr>
+            <tr><td class="n">03</td><td class="nm">C. Nair</td><td class="n fillable">23</td><td class="n fillable">36</td><td class="n fillable">34</td><td class="n fillable t tick">Paid</td></tr>
+            <tr><td class="n">04</td><td class="nm">D. Patel</td><td class="n fillable">20</td><td class="n fillable">30</td><td class="n fillable">29</td><td class="n fillable">Due</td></tr>
+            <tr><td class="n">05</td><td class="nm">E. Rao</td><td class="n fillable">22</td><td class="n fillable">33</td><td class="n fillable">35</td><td class="n fillable t tick">Paid</td></tr>
+          </tbody>
+        </table>
+
+        <div style="margin-top:20px;"><span class="stamp">AI assisted learning</span></div>
+
+        <p class="note">Homework, tests, attendance, marks and fees for your child, in one place. Sign in with the details your school gave you.</p>
+
+        <div class="cta">
+          <a class="btn btn-ink" href="#signin">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+            Sign in
+          </a>
+          <a class="btn btn-out" href="#signin">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>
+            Get the Android app
+          </a>
+        </div>
+        <p class="synth">Illustrative. Not a real class.</p>
+      </div>
+
+    </section>
+
+    <!-- ============ THE COLUMNS ============ -->
+    <section class="sec" id="columns">
+      <div class="sec-head">
+        <h2>Nothing was thrown away. Only the writing.</h2>
+        <p>Every column the school already keeps is still here. It just fills itself in, and you can read it the same day.</p>
+      </div>
+      <div class="cols">
+        <article class="col">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="M7.5 14.5l2 2 4-4.5"/></svg>
+          <h3>Attendance</h3>
+          <p>Marked daily by the class teacher, counted for the month, visible to you at once.</p>
+        </article>
+        <article class="col">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+          <h3>Marks and reports</h3>
+          <p>Every test result as it is graded, and the report that adds them up at the end of term.</p>
+        </article>
+        <article class="col">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5.5A2.5 2.5 0 0 1 5.5 3H10a2 2 0 0 1 2 2v15a1.6 1.6 0 0 0-1.6-1.6H3z"/><path d="M21 5.5A2.5 2.5 0 0 0 18.5 3H14a2 2 0 0 0-2 2v15a1.6 1.6 0 0 1 1.6-1.6H21z"/></svg>
+          <h3>Homework</h3>
+          <p>What was given, in which subject, by when, and whether it has been done.</p>
+        </article>
+        <article class="col">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 10h19M6 14.5h4"/></svg>
+          <h3>Fees</h3>
+          <p>What is due, what is paid, and a receipt you can download and keep.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============ THE MECHANISM ============ -->
+    <section class="sec" id="forge">
+      <div class="sec-head">
+        <h2>A chapter goes in. A question paper comes out.</h2>
+        <p>The teacher uploads the chapter PDF. MindForge reads it and writes the paper: the questions come from that chapter, not from a bank of someone else's.</p>
+      </div>
+
+      <div class="forge">
+        <article class="slab">
+          <span class="caption">The chapter, as a PDF</span>
+          <div aria-hidden="true">
+            <div class="ln m"></div><div class="ln"></div><div class="ln hl"></div>
+            <div class="ln s"></div><div class="ln m"></div><div class="ln hl"></div>
+            <div class="ln"></div><div class="ln s"></div>
+          </div>
+        </article>
+
+        <svg class="arrow" viewBox="0 0 92 30" fill="none" aria-hidden="true">
+          <path d="M2 15h80" stroke="currentColor" stroke-width="1.6" stroke-dasharray="5 4"/>
+          <path d="M76 9l8 6-8 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+
+        <article class="slab">
+          <span class="caption">The paper it wrote</span>
+          <div class="q"><b>Q1.</b><span>Define photosynthesis in one sentence.</span><span class="mk">[2]</span></div>
+          <div class="q"><b>Q2.</b><span>Name the pigment that absorbs sunlight.</span><span class="mk">[1]</span></div>
+          <div class="q"><b>Q3.</b><span>Why do leaves appear green?</span><span class="mk">[3]</span></div>
+          <div class="q"><b>Q4.</b><span>Label the parts marked A, B and C.</span><span class="mk">[4]</span></div>
+          <p class="synth">Illustrative sample, written from a sample chapter.</p>
+        </article>
+      </div>
+
+      <dl class="rules">
+        <div class="rule-i"><dt>Attempts</dt><dd>One attempt per student</dd></div>
+        <div class="rule-i"><dt>Window</dt><dd>Open for three days</dd></div>
+        <div class="rule-i"><dt>At the deadline</dt><dd>Submits on its own</dd></div>
+        <div class="rule-i"><dt>Grading</dt><dd>Automatic, with the teacher reading written answers</dd></div>
+      </dl>
+    </section>
+
+    <!-- ============ FOR THE SCHOOL ============ -->
+    <section class="sec" id="school">
+      <div class="sec-head">
+        <h2>For teachers and the school office.</h2>
+      </div>
+      <div class="cols">
+        <article class="col">
+          <h3>Teachers</h3>
+          <p>Generate a test from a chapter, mark attendance, grade written answers on one screen, and send a notice to the whole class.</p>
+        </article>
+        <article class="col">
+          <h3>The office</h3>
+          <p>Users, fee structures, academic years and timetables, set once, in one admin console.</p>
+        </article>
+        <article class="col">
+          <h3>Your school's own book</h3>
+          <p>Your school's logo and name sit beside ours everywhere inside the app. The records stay your school's.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============ CLOSE ============ -->
+    <section class="sec close" id="signin">
+      <div class="leaf close-leaf">
+        <h2>Sign in and see today.</h2>
+        <p>Use the username and password your school gave you. If you do not have one yet, ask the class teacher or the school office.</p>
+        <div class="cta">
+          <a class="btn btn-ink" href="#signin">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+            Sign in
+          </a>
+          <a class="btn btn-out" href="#signin">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>
+            Android app
+          </a>
+          <span class="btn btn-out" aria-disabled="true">iPhone app coming soon</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <a class="mark" href="/" style="margin-bottom:10px;">
+        <img src="assets/mindforge-logo.png" alt="" width="32" height="32">
+        <span><b style="font-size:16px;">Mind Forge</b></span>
+      </a>
+      <div class="footmeta">AI assisted learning · <a href="https://www.mindforge.guru">mindforge.guru</a></div>
+    </div>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;">
+      <a href="#signin">Sign in</a>
+      <a href="#columns">The columns</a>
+      <a href="#school">For schools</a>
+    </div>
+  </div>
+  <div class="wrap">
+    <p class="fineprint">Registers and figures on this page are illustrative samples, not real student records.
+    <!-- [PLACEHOLDER] Owner to add: privacy policy link, terms link, school enquiry contact. --></p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  document.documentElement.classList.add('js');
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)');
+  var live=document.getElementById('live');
+  if(!live||reduce.matches||!('IntersectionObserver' in window)) return;
+  var rows=[].slice.call(live.querySelectorAll('tbody tr'));
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if(!e.isIntersecting) return;
+      io.disconnect();
+      rows.forEach(function(r,i){
+        setTimeout(function(){r.classList.add('written');}, i*170);
+      });
+    });
+  },{threshold:.25});
+  io.observe(live);
+  // safety: never leave a column blank
+  window.addEventListener('load',function(){
+    setTimeout(function(){rows.forEach(function(r){r.classList.add('written');});},3000);
+  });
+})();
+</script>
+</body>
+</html>

@@ -10,6 +10,7 @@ from pydantic import BaseModel, field_validator
 from app.core.attendance_window import attendance_date_reason
 from app.core.school_time import school_today
 from app.models.attendance import AttendanceStatus
+from app.schemas.bounds import Period, SchoolGrade
 
 
 class AttendanceCreate(BaseModel):
@@ -22,8 +23,8 @@ class AttendanceCreate(BaseModel):
 
 class AttendanceBulkCreate(BaseModel):
     """Used by teachers to mark attendance for a whole class in one request."""
-    grade: int
-    period: int
+    grade: SchoolGrade
+    period: Period
     date: date
     records: List[AttendanceCreate]
 

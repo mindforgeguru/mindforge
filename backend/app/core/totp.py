@@ -70,27 +70,34 @@ def totp_at(secret, when: Optional[int] = None, digits: int = 6) -> str:
     return str(code % (10 ** digits)).zfill(digits)
 
 
-def verify_totp(secret, code, now: Optional[int] = None, digits: int = 6) -> bool:
-    """True if `code` is valid for `secret` now, within the drift window.
+def matched_step(secret, code, now: Optional[int] = None, digits: int = 6) -> Optional[int]:
+    """The time step `code` is valid for, within the drift window, or None.
 
-    Returns False for anything malformed rather than raising — this is reached
+    The step identifies the code, so a caller can refuse to accept it twice.
+    Returns None for anything malformed rather than raising — this is reached
     straight from a request body, and a junk code must be a 401, not a 500.
     """
     if not isinstance(code, str):
-        return False
+        return None
     code = code.strip()
     if len(code) != digits or not code.isdigit():
-        return False
+        return None
     if _decode_secret(secret) is None:
-        return False
+        return None
 
     now = int(now if now is not None else time.time())
     for drift in range(-ALLOWED_DRIFT_STEPS, ALLOWED_DRIFT_STEPS + 1):
-        candidate = totp_at(secret, now + drift * STEP_SECONDS, digits)
+        when = now + drift * STEP_SECONDS
+        candidate = totp_at(secret, when, digits)
         # compare_digest so a wrong code cannot be narrowed down by timing.
         if hmac.compare_digest(candidate, code):
-            return True
-    return False
+            return when // STEP_SECONDS
+    return None
+
+
+def verify_totp(secret, code, now: Optional[int] = None, digits: int = 6) -> bool:
+    """True if `code` is valid for `secret` now, within the drift window."""
+    return matched_step(secret, code, now, digits) is not None
 
 
 def provisioning_uri(username: str, secret: str) -> str:

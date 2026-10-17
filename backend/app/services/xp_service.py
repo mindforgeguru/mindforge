@@ -17,6 +17,7 @@ from typing import List, Optional
 from sqlalchemy import desc, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.redis_client import redis_manager
 from app.models.user import StudentProfile, User
@@ -57,20 +58,32 @@ def xp_for_test_score(percentage: float) -> tuple[int, XPReason]:
 
 
 async def _get_or_create_student_xp(
-    db: AsyncSession, student_id: int, school_id: Optional[int] = None
+    db: AsyncSession,
+    student_id: int,
+    school_id: Optional[int] = None,
+    *,
+    for_update: bool = False,
 ) -> StudentXP:
-    row = (await db.execute(
-        select(StudentXP).where(StudentXP.student_id == student_id)
-    )).scalar_one_or_none()
+    """The student's XP row, created if missing.
+
+    `for_update` locks it until the transaction ends. award_xp needs that: it
+    reads the total, adds, and writes back, and two awards at once each added to
+    the same old total — ten +10s at once left a student 80 short. Creating is
+    an INSERT ... ON CONFLICT DO NOTHING, so first awards arriving together do
+    not collide on the unique index (that was a 500).
+    """
+    query = select(StudentXP).where(StudentXP.student_id == student_id)
+    if for_update:
+        query = query.with_for_update()
+    row = (await db.execute(query)).scalar_one_or_none()
     if row is not None:
         return row
-    row = StudentXP(
-        student_id=student_id, total_xp=0, current_level=1, school_id=school_id
+    await db.execute(
+        pg_insert(StudentXP)
+        .values(student_id=student_id, total_xp=0, current_level=1, school_id=school_id)
+        .on_conflict_do_nothing(index_elements=["student_id"])
     )
-    db.add(row)
-    # Flush so subsequent UPDATEs in the same transaction see the row.
-    await db.flush()
-    return row
+    return (await db.execute(query.execution_options(populate_existing=True))).scalar_one()
 
 
 async def _level_for_xp(db: AsyncSession, total_xp: int) -> LevelConfig:
@@ -141,6 +154,55 @@ async def _publish_level_up(
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
+async def _set_total(db: AsyncSession, xp_row: StudentXP, total: int) -> LevelConfig:
+    """Set the (locked) row's total, floored at 0, and recompute its level.
+
+    A deduction can take a student below the level that unlocked the theme they
+    are wearing; select_theme would refuse it now, so it cannot stay.
+    """
+    old_level = xp_row.current_level
+    xp_row.total_xp = max(0, total)
+    new_level_cfg = await _level_for_xp(db, xp_row.total_xp)
+    xp_row.current_level = new_level_cfg.level
+    if new_level_cfg.level < old_level and xp_row.selected_theme:
+        unlock_level = await _theme_unlock_level(db, xp_row.selected_theme)
+        if unlock_level is None or unlock_level > new_level_cfg.level:
+            xp_row.selected_theme = None
+    return new_level_cfg
+
+
+async def revoke_xp(
+    db: AsyncSession,
+    student_id: int,
+    reasons: list[XPReason],
+    reference_id: str,
+) -> int:
+    """Take back what award_xp gave for `reference_id` — a teacher's correction.
+
+    Marking a student present or homework done awards XP; correcting the mark
+    to absent or not done used to leave it, so a student kept points for a
+    period they missed. Deletes the award's transaction (so marking again awards
+    once more, never twice) and lowers the total under the row lock. Returns
+    the amount removed; 0 when there was nothing to take back.
+    """
+    txns = (await db.execute(
+        select(XPTransaction).where(
+            XPTransaction.student_id == student_id,
+            XPTransaction.reason.in_(reasons),
+            XPTransaction.reference_id == reference_id,
+        )
+    )).scalars().all()
+    if not txns:
+        return 0
+    amount = sum(t.amount for t in txns)
+    xp_row = await _get_or_create_student_xp(db, student_id, for_update=True)
+    for t in txns:
+        await db.delete(t)
+    await _set_total(db, xp_row, xp_row.total_xp - amount)
+    await db.commit()
+    return amount
+
+
 async def award_xp(
     db: AsyncSession,
     student_id: int,
@@ -157,8 +219,8 @@ async def award_xp(
     level threshold.
 
     Caller is responsible for committing the surrounding transaction —
-    this function does its own commit so the row + level recompute are
-    atomic with respect to other concurrent awards.
+    this function does its own commit. The XP row is locked from read to
+    commit, so concurrent awards add up rather than overwrite each other.
     """
     if amount == 0:
         return None
@@ -194,19 +256,9 @@ async def award_xp(
     )
     db.add(txn)
 
-    xp_row = await _get_or_create_student_xp(db, student_id, school_id)
+    xp_row = await _get_or_create_student_xp(db, student_id, school_id, for_update=True)
     old_level = xp_row.current_level
-    xp_row.total_xp = max(0, xp_row.total_xp + amount)
-
-    new_level_cfg = await _level_for_xp(db, xp_row.total_xp)
-    xp_row.current_level = new_level_cfg.level
-
-    # A deduction can take a student below the level that unlocked the theme
-    # they are wearing. select_theme would refuse it now, so it cannot stay.
-    if new_level_cfg.level < old_level and xp_row.selected_theme:
-        unlock_level = await _theme_unlock_level(db, xp_row.selected_theme)
-        if unlock_level is None or unlock_level > new_level_cfg.level:
-            xp_row.selected_theme = None
+    new_level_cfg = await _set_total(db, xp_row, xp_row.total_xp + amount)
 
     try:
         await db.commit()

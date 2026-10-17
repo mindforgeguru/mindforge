@@ -3,18 +3,19 @@ Pydantic schemas for Homework and Broadcast.
 """
 
 from datetime import date, datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.models.homework import HomeworkType
+from app.schemas.bounds import Required, SchoolGrade, Text
 
 
 class HomeworkCreate(BaseModel):
-    grade: int
-    subject: str
-    title: str
-    description: Optional[str] = None
+    grade: SchoolGrade
+    subject: Required(100)
+    title: Required(300)
+    description: Optional[Text(2000)] = None
     homework_type: HomeworkType = HomeworkType.written
     test_id: Optional[int] = None
     due_date: Optional[date] = None
@@ -96,10 +97,19 @@ class StudentHomeworkCompletion(BaseModel):
 
 
 class BroadcastCreate(BaseModel):
-    title: str
-    message: str
-    target_type: str = "all"   # "all" or "grade"
-    target_grade: Optional[int] = None
+    title: Required(200)
+    message: Required(2000)
+    target_type: Literal["all", "grade"] = "all"
+    target_grade: Optional[SchoolGrade] = None
+
+    @model_validator(mode="after")
+    def _grade_needs_a_grade(self):
+        # Stored without one, a grade broadcast reached nobody.
+        if self.target_type == "grade" and self.target_grade is None:
+            raise ValueError("Choose the grade to send this to.")
+        if self.target_type == "all":
+            self.target_grade = None
+        return self
 
 
 class BroadcastResponse(BaseModel):

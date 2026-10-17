@@ -218,16 +218,20 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                           child: SchoolLogo(fit: BoxFit.contain),
                         ),
                         const SizedBox(width: 10),
-                        Flexible(
+                        // Expanded, not Flexible + Spacer: those split the
+                        // free space in half, and on a 320 px phone the name
+                        // got so little that "Hansel" broke as "Han / se…".
+                        // Below 360 px a second line runs under the avatar.
+                        Expanded(
                           child: Text(
                             auth.schoolName ?? 'MIND FORGE',
-                            maxLines: 2,
+                            maxLines:
+                                MediaQuery.sizeOf(context).width < 360 ? 1 : 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.poppins(
                                 fontSize: 20, fontWeight: FontWeight.w800,
                                 color: Colors.white, height: 1.1, letterSpacing: 1)),
                         ),
-                        const Spacer(),
                         IconButton(
                           icon: const Icon(Icons.bug_report_outlined,
                               color: Colors.white, size: 24),
@@ -235,12 +239,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                           onPressed: () => showReportProblemDialog(context, ref),
                         ),
                         IconButton(
+                          tooltip: 'My profile',
                           icon: const Icon(Icons.person_outline_rounded,
                               color: Colors.white, size: 26),
                           onPressed: () =>
                               context.go('${RouteNames.adminDashboard}/profile'),
                         ),
                         IconButton(
+                          tooltip: 'Log out',
                           icon: const Icon(Icons.logout,
                               color: Colors.white, size: 24),
                           onPressed: () => confirmLogout(context, ref),

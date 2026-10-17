@@ -12,6 +12,7 @@ import '../../../core/widgets/app_about_section.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../widgets/admin_scaffold.dart';
 import '../../auth/screens/mfa_setup_screen.dart';
+import '../../../core/utils/api_error.dart';
 
 class AdminProfileScreen extends ConsumerStatefulWidget {
   const AdminProfileScreen({super.key});
@@ -147,7 +148,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Failed: $e'), backgroundColor: AppColors.error));
+            content: Text('Failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error));
       }
     } finally {
       if (mounted) setState(() => _savingUsername = false);
@@ -174,7 +175,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Upload failed: $e'),
+            content: Text('Upload failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error));
       }
     } finally {
@@ -293,22 +294,26 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                       },
                     ),
                   ),
-                  GestureDetector(
-                    onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration:       BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
+                  Semantics(
+                    button: true,
+                    label: 'Change photo',
+                    child: GestureDetector(
+                      onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration:       BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: _uploadingPhoto
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.camera_alt,
+                                size: 18, color: Colors.white),
                       ),
-                      child: _uploadingPhoto
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.camera_alt,
-                              size: 18, color: Colors.white),
                     ),
                   ),
                 ],
@@ -337,6 +342,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                         ),
                         const SizedBox(width: 4),
                         IconButton(
+                          tooltip: 'Save username',
                           icon: _savingUsername
                               ? const SizedBox(width: 18, height: 18,
                                   child: CircularProgressIndicator(strokeWidth: 2))
@@ -344,6 +350,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                           onPressed: _savingUsername ? null : () => _saveUsername(username),
                         ),
                         IconButton(
+                          tooltip: 'Cancel',
                           icon: const Icon(Icons.close, color: AppColors.error),
                           onPressed: () => setState(() => _editingUsername = false),
                         ),
@@ -355,6 +362,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                         Text(username, style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(width: 4),
                         IconButton(
+                          tooltip: 'Edit username',
                           icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.textMuted),
                           onPressed: () {
                             _usernameCtrl.text = username;

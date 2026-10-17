@@ -17,6 +17,25 @@ from reportlab.platypus import (
     HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 )
 
+
+# ── Fonts ─────────────────────────────────────────────────────────────────────
+# ReportLab's built-in Helvetica has no ₹, so "Price ₹500" printed as
+# "Price I500" — and rupee amounts are in half the maths word problems a school
+# sets. DejaVu Sans has it; the image installs fonts-dejavu-core. Where it is
+# missing (a bare dev machine) the built-ins are used, as before. DejaVu's
+# oblique face is not in -core, so italic styles use the regular face.
+_FONT, _BOLD, _ITALIC = "Helvetica", "Helvetica-Bold", "Helvetica-Oblique"
+_DEJAVU_DIR = "/usr/share/fonts/truetype/dejavu"
+try:
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    pdfmetrics.registerFont(TTFont("DejaVuSans", f"{_DEJAVU_DIR}/DejaVuSans.ttf"))
+    pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", f"{_DEJAVU_DIR}/DejaVuSans-Bold.ttf"))
+    _FONT, _BOLD, _ITALIC = "DejaVuSans", "DejaVuSans-Bold", "DejaVuSans"
+except Exception:  # noqa: BLE001 — fonts are a nicety; never fail the import
+    logging.getLogger(__name__).info("DejaVu Sans not found; PDFs use Helvetica")
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +68,7 @@ def _get_styles() -> dict:
             "brand_title",
             parent=base["Title"],
             fontSize=24,
-            fontName="Helvetica-Bold",
+            fontName=_BOLD,
             textColor=BRAND_PURPLE,
             spaceAfter=2,
             alignment=1,  # center
@@ -58,7 +77,7 @@ def _get_styles() -> dict:
             "tagline",
             parent=base["Normal"],
             fontSize=10,
-            fontName="Helvetica-Oblique",
+            fontName=_ITALIC,
             textColor=BRAND_GOLD,
             spaceAfter=6,
             alignment=1,
@@ -67,7 +86,7 @@ def _get_styles() -> dict:
             "test_title",
             parent=base["Heading1"],
             fontSize=16,
-            fontName="Helvetica-Bold",
+            fontName=_BOLD,
             textColor=BRAND_BLUE,
             spaceAfter=4,
             alignment=1,
@@ -76,7 +95,7 @@ def _get_styles() -> dict:
             "section_header",
             parent=base["Heading2"],
             fontSize=12,
-            fontName="Helvetica-Bold",
+            fontName=_BOLD,
             textColor=BRAND_PURPLE,
             spaceBefore=10,
             spaceAfter=4,
@@ -85,7 +104,7 @@ def _get_styles() -> dict:
             "question",
             parent=base["Normal"],
             fontSize=11,
-            fontName="Helvetica-Bold",
+            fontName=_BOLD,
             spaceBefore=8,
             spaceAfter=2,
             leftIndent=0,
@@ -94,7 +113,7 @@ def _get_styles() -> dict:
             "option",
             parent=base["Normal"],
             fontSize=10,
-            fontName="Helvetica",
+            fontName=_FONT,
             leftIndent=20,
             spaceAfter=1,
         ),
@@ -102,7 +121,7 @@ def _get_styles() -> dict:
             "answer_line",
             parent=base["Normal"],
             fontSize=10,
-            fontName="Helvetica",
+            fontName=_FONT,
             textColor=colors.gray,
             leftIndent=0,
             spaceBefore=4,
@@ -112,14 +131,14 @@ def _get_styles() -> dict:
             "meta",
             parent=base["Normal"],
             fontSize=10,
-            fontName="Helvetica",
+            fontName=_FONT,
             alignment=1,
         ),
         "instructions": ParagraphStyle(
             "instructions",
             parent=base["Normal"],
             fontSize=9,
-            fontName="Helvetica-Oblique",
+            fontName=_ITALIC,
             textColor=colors.gray,
             leftIndent=10,
             spaceAfter=2,
@@ -250,7 +269,7 @@ async def generate_offline_test_pdf(
     ]
     info_table = Table(info_data, colWidths=[10 * cm, 7 * cm])
     info_table.setStyle(TableStyle([
-        ("FONT", (0, 0), (-1, -1), "Helvetica", 10),
+        ("FONT", (0, 0), (-1, -1), _FONT, 10),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(info_table)
@@ -276,7 +295,7 @@ async def generate_offline_test_pdf(
             "legend",
             parent=getSampleStyleSheet()["Normal"],
             fontSize=7,
-            fontName="Helvetica",
+            fontName=_FONT,
             textColor=colors.HexColor("#888888"),
             leftIndent=0,
             spaceAfter=1,
@@ -421,7 +440,7 @@ async def generate_answer_key_pdf(
         "answer",
         parent=base["Normal"],
         fontSize=10,
-        fontName="Helvetica-Bold",
+        fontName=_BOLD,
         textColor=colors.HexColor("#2E7D32"),
         leftIndent=20,
         spaceAfter=6,
@@ -430,7 +449,7 @@ async def generate_answer_key_pdf(
         "explanation",
         parent=base["Normal"],
         fontSize=9,
-        fontName="Helvetica-Oblique",
+        fontName=_ITALIC,
         textColor=colors.HexColor("#1565C0"),
         leftIndent=20,
         spaceAfter=8,
@@ -439,7 +458,7 @@ async def generate_answer_key_pdf(
         "confidential",
         parent=base["Normal"],
         fontSize=11,
-        fontName="Helvetica-Bold",
+        fontName=_BOLD,
         textColor=colors.red,
         alignment=1,
         spaceAfter=6,
@@ -597,12 +616,12 @@ async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, 0), _BOLD),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F5F7FA")]),
                 ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFF3E0")),
-                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                ("FONTNAME", (0, -1), (-1, -1), _BOLD),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
                 ("TOPPADDING", (0, 0), (-1, -1), 5),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
@@ -614,7 +633,7 @@ async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic
         story.append(Paragraph(
             f"Grand Total Pending: Rs.{grand_total:,.2f}",
             ParagraphStyle("grand", parent=getSampleStyleSheet()["Normal"],
-                           fontSize=12, fontName="Helvetica-Bold",
+                           fontSize=12, fontName=_BOLD,
                            textColor=BRAND_PURPLE, alignment=2, spaceAfter=4)))
 
     story.append(HRFlowable(width="100%", thickness=1, color=BRAND_PURPLE, spaceBefore=10, spaceAfter=4))
@@ -653,12 +672,12 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
         bd_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), _BOLD),
             ("FONTSIZE", (0, 0), (-1, -1), 10),
             ("ALIGN", (1, 0), (1, -1), "RIGHT"),
             ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F5F7FA")]),
             ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#EDE7F6")),
-            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+            ("FONTNAME", (0, -1), (-1, -1), _BOLD),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
             ("TOPPADDING", (0, 0), (-1, -1), 6),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
@@ -675,12 +694,12 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
     st.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, 0), _BOLD),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("BACKGROUND", (2, 1), (2, 1),
          colors.HexColor("#FFEBEE") if student["balance_due"] > 0 else colors.HexColor("#E8F5E9")),
-        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 1), (-1, 1), _BOLD),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
         ("TOPPADDING", (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
@@ -707,7 +726,7 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
         pt.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), _BOLD),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ALIGN", (2, 0), (2, -1), "RIGHT"),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F7FA")]),
@@ -721,7 +740,7 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
     status_text = "FULLY PAID" if student["balance_due"] <= 0 else f"BALANCE DUE: Rs.{student['balance_due']:,.2f}"
     status_color = colors.HexColor("#2E7D32") if student["balance_due"] <= 0 else colors.HexColor("#B71C1C")
     story.append(Paragraph(status_text, ParagraphStyle("status", parent=getSampleStyleSheet()["Normal"],
-                                                        fontSize=13, fontName="Helvetica-Bold",
+                                                        fontSize=13, fontName=_BOLD,
                                                         textColor=status_color, alignment=1, spaceAfter=4)))
     story.append(HRFlowable(width="100%", thickness=1, color=BRAND_PURPLE, spaceBefore=10, spaceAfter=4))
     story.append(Paragraph("MIND FORGE | AI Assisted Learning — Confidential",

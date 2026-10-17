@@ -12,6 +12,7 @@ import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_scaffold.dart';
+import '../../../core/utils/api_error.dart';
 
 double _s(BuildContext ctx, double base,
     {double min = 0, double max = double.infinity}) {
@@ -106,7 +107,7 @@ class _TeacherHomeworkCompletionScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(detail ?? 'Error: $e'),
+            content: Text(detail ?? 'Error: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -115,7 +116,7 @@ class _TeacherHomeworkCompletionScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Error: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -380,7 +381,7 @@ class _SubmittedBanner extends StatelessWidget {
               'Make changes below and tap Update to save.',
               style: GoogleFonts.poppins(
                   fontSize: _fs(context, 12, min: 10, max: 13),
-                  color: AppColors.accent,
+                  color: AppColors.accentText,
                   fontWeight: FontWeight.w500),
             ),
           ),

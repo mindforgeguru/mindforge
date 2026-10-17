@@ -82,23 +82,25 @@ class TestParentCannotChooseTheChild:
     def test_student_id_parameter_cannot_redirect_the_read(
         self, api, parent_a, students, path, required
     ):
-        # Hand the endpoint a real student id from the *other* school. Today the
-        # child comes from the token and the parameter is ignored, so the answer
-        # must be byte-identical to the unparameterised call. This fails the day
-        # someone adds a student_id parameter without an ownership check.
+        # Hand the endpoint a real student id from the *other* school. Parameters
+        # the endpoint does not take must change nothing. `child_id` it does take
+        # (a parent with several children picks one, 2026-10-17) — and for a
+        # student who is not this parent's child it must be a 404, not their data.
         victim = students["b"]
         baseline = api.get(path, headers=auth(parent_a["token"]), params=required)
         steered = api.get(
             path,
             headers=auth(parent_a["token"]),
-            params={**required,
-                    "student_id": victim, "child_id": victim, "user_id": victim},
+            params={**required, "student_id": victim, "user_id": victim},
         )
         assert steered.status_code == baseline.status_code
         assert steered.text == baseline.text, (
             f"{path} changed its response when handed another school's student "
             f"id — the caller may be choosing whose records they read"
         )
+        chosen = api.get(path, headers=auth(parent_a["token"]),
+                         params={**required, "child_id": victim})
+        assert chosen.status_code == 404, f"{path}: {chosen.status_code} {chosen.text[:200]}"
 
     def test_dashboard_cannot_be_redirected(self, api, parent_a, students):
         base = api.get("/api/parent/dashboard-summary", headers=auth(parent_a["token"]))

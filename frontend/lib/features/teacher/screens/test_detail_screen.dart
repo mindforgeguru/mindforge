@@ -9,6 +9,8 @@ import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/teacher_provider.dart';
+import '../../../core/utils/api_error.dart';
+import '../../../core/utils/decimal_input.dart';
 
 class TestDetailScreen extends ConsumerStatefulWidget {
   final TestModel test;
@@ -84,7 +86,7 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Delete failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
         setState(() => _deleting = false);
       }
@@ -116,7 +118,7 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Save failed: ${apiErrorMessage(e)}'), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -172,7 +174,7 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Download failed: $e'),
+              content: Text('Download failed: ${apiErrorMessage(e)}'),
               backgroundColor: AppColors.error),
         );
       }
@@ -839,6 +841,7 @@ class _EditQuestionDialogState extends State<_EditQuestionDialog> {
                 ),
                 const Spacer(),
                 IconButton(
+                  tooltip: 'Close',
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
                   padding: EdgeInsets.zero,
@@ -900,6 +903,7 @@ class _EditQuestionDialogState extends State<_EditQuestionDialog> {
                 const Text('Marks: ',
                     style: TextStyle(fontWeight: FontWeight.w600)),
                 IconButton(
+                  tooltip: 'Fewer marks',
                   icon: const Icon(Icons.remove_circle_outline),
                   onPressed: _marks > 1
                       ? () => setState(() => _marks--)
@@ -916,6 +920,7 @@ class _EditQuestionDialogState extends State<_EditQuestionDialog> {
                   ),
                 ),
                 IconButton(
+                  tooltip: 'More marks',
                   icon: const Icon(Icons.add_circle_outline),
                   onPressed: () => setState(() => _marks++),
                   constraints: const BoxConstraints(),
@@ -1329,7 +1334,7 @@ class _OfflineGradeEntryTabState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Save failed: $e'),
+            content: Text('Save failed: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error));
       }
     } finally {
@@ -1386,6 +1391,7 @@ class _MarkEntryRow extends StatelessWidget {
                 controller: controller,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [DecimalInputFormatter.marks()],
                 decoration: InputDecoration(
                   hintText: '/ ${maxMarks.toInt()}',
                   contentPadding: const EdgeInsets.symmetric(

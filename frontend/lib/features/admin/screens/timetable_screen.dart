@@ -7,6 +7,7 @@ import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
+import '../../../core/utils/api_error.dart';
 
 /// The timing pre-filled for a period that follows one ending at
 /// [previousEnd], or for the first period of the day when there is none.
@@ -130,7 +131,7 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed: $e'),
+          content: Text('Failed: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }
@@ -178,7 +179,7 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Save failed: $e'),
+          content: Text('Save failed: ${apiErrorMessage(e)}'),
           backgroundColor: AppColors.error,
         ));
       }
