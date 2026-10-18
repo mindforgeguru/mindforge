@@ -82,3 +82,18 @@ def test_correcting_homework_to_not_done_takes_the_xp_back(api, teacher):
     assert _xp(student) == 0
     mark(True)
     assert _xp(student) == earned
+
+
+def test_a_deduction_beyond_the_balance_records_what_was_taken(api, two_schools):
+    # Taking 5,000 from 100 left 0 but recorded -5,000, so the student's
+    # activity list no longer added up to their total.
+    sid = two_schools["a"]["id"]
+    student = asyncio.run(_make_student(sid, f"{PREFIX}_xpc_deduct", new=True))
+    headers = auth(two_schools["a"]["admin_token"])
+    for amount in (100, -5000):
+        r = api.post("/api/xp/admin/adjust", headers=headers,
+                     json={"student_id": student, "amount": amount, "reason": "qa"})
+        assert r.status_code == 201, r.text
+    ledger = asyncio.run(_sql("SELECT sum(amount) FROM xp_transactions WHERE student_id = $1", student))
+    assert _xp(student) == 0
+    assert ledger == 0

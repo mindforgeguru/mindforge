@@ -85,3 +85,47 @@ def test_wrong_codes_lock_the_account_like_wrong_mpins(api, enrolled):
         assert _login(api, sid, username, mfa_code=wrong).status_code == 401
     r = _login(api, sid, username, mfa_code=right)
     assert r.status_code == 429, r.text
+
+
+# ── Turning MFA off needs re-authentication ───────────────────────────────────
+# Disabling is the dangerous operation: without a second check, anyone at an
+# unlocked, already-signed-in session could strip the factor off. The endpoint
+# requires the MPIN *and* a current authenticator/recovery code; verified by
+# code 2026-10-18 and pinned here.
+
+def _session(api, sid, username, codes):
+    # Sign in with a recovery code so no TOTP step is consumed for the session.
+    r = _login(api, sid, username, recovery_code=codes[-1])
+    assert r.status_code == 200, r.text
+    return auth(r.json()["access_token"])
+
+
+def test_offmfa_mpin_required(api, enrolled):
+    sid, username, totp, codes = enrolled
+    headers = _session(api, sid, username, codes)
+    r = api.post("/api/auth/mfa/disable", headers=headers,
+                 json={"mpin": "111111", "code": totp.now()})
+    assert r.status_code == 401, r.text
+    assert api.get("/api/auth/mfa/status", headers=headers).json()["enabled"] is True
+
+
+def test_offmfa_factor_needed(api, enrolled):
+    sid, username, totp, codes = enrolled
+    headers = _session(api, sid, username, codes)
+    # Correct MPIN but no code or recovery code supplied.
+    r = api.post("/api/auth/mfa/disable", headers=headers, json={"mpin": TEST_MPIN})
+    assert r.status_code == 401, r.text
+    assert api.get("/api/auth/mfa/status", headers=headers).json()["enabled"] is True
+
+
+def test_offmfa_clears_all(api, enrolled):
+    sid, username, totp, codes = enrolled
+    headers = _session(api, sid, username, codes)
+    r = api.post("/api/auth/mfa/disable", headers=headers,
+                 json={"mpin": TEST_MPIN, "code": totp.now()})
+    assert r.status_code == 200, r.text
+    status = api.get("/api/auth/mfa/status", headers=headers).json()
+    assert status["enabled"] is False
+    assert status["recovery_codes_remaining"] == 0
+    # A later login no longer demands a second factor.
+    assert _login(api, sid, username).status_code == 200

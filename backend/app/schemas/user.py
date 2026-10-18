@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.user import UserRole
 
@@ -379,3 +379,27 @@ class MfaDisableRequest(BaseModel):
     mpin: str
     code: Optional[str] = None
     recovery_code: Optional[str] = None
+
+
+# Bodies that were read as a bare dict, where a number or a list in place of
+# text was a 500.
+
+class UsernameUpdate(BaseModel):
+    username: str
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 3 or len(v) > 100:
+            raise ValueError("Username must be 3–100 characters.")
+        return v
+
+
+class BioUpdate(BaseModel):
+    # Blank clears it. The admin's editor caps it at 500 as well.
+    bio: Optional[str] = Field(None, max_length=500)
+
+
+class FcmTokenUpdate(BaseModel):
+    fcm_token: str = Field(min_length=1, max_length=512)

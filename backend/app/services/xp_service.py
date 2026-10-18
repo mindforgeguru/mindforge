@@ -246,19 +246,26 @@ async def award_xp(
         select(User.school_id).where(User.id == student_id)
     )).scalar_one_or_none()
 
+    xp_row = await _get_or_create_student_xp(db, student_id, school_id, for_update=True)
+    old_level = xp_row.current_level
+    # The total stops at 0, so record what was actually taken: a 5,000
+    # deduction from 100 used to be logged as -5,000, and the student's
+    # activity list no longer added up to their total.
+    applied = max(amount, -xp_row.total_xp)
+    if applied == 0:
+        await db.commit()  # release the row lock; nothing to take
+        return None
+
     txn = XPTransaction(
         student_id=student_id,
-        amount=amount,
+        amount=applied,
         reason=reason,
         reference_id=reference_id,
         description=description,
         school_id=school_id,
     )
     db.add(txn)
-
-    xp_row = await _get_or_create_student_xp(db, student_id, school_id, for_update=True)
-    old_level = xp_row.current_level
-    new_level_cfg = await _set_total(db, xp_row, xp_row.total_xp + amount)
+    new_level_cfg = await _set_total(db, xp_row, xp_row.total_xp + applied)
 
     try:
         await db.commit()

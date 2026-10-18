@@ -117,6 +117,23 @@ class TestASchoolWithNoTimetableYet:
         assert sorted(grades) == [8]
 
 
+class TestOneGradeTimetabledAnotherNot:
+    """A grade with students but no timetable used to vanish from the road as
+    soon as any other grade had one, so nothing prompted anyone to set it up
+    (found 2026-10-12, fixed 2026-10-18)."""
+
+    def test_the_untimetabled_grade_is_still_offered_the_step(self, api, owner_token):
+        school = _new_school(api, owner_token, "half", "103")
+        asyncio.run(_make_student(school["id"], f"{PREFIX}_wf_half_8", grade=8))
+        asyncio.run(_make_student(school["id"], f"{PREFIX}_wf_half_9", grade=9))
+        _slot(api, school, 8, 1, subject="maths")
+        _, grades = _workflow(api, school)
+        assert sorted(grades) == [8, 9]
+        assert grades[8]["timetable_created"] is True
+        assert grades[9]["timetable_created"] is False
+        assert grades[9]["next_step"] == "create_timetable"
+
+
 class TestASchoolWithNobodyInIt:
     def test_no_grades_and_still_not_a_holiday(self, api, owner_token):
         school = _new_school(api, owner_token, "empty", "102")

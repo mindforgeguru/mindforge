@@ -30,7 +30,7 @@ from app.schemas.attendance import AttendanceBulkCreate, AttendanceResponse
 from app.schemas.grade import GradeCreate, GradeResponse
 from app.schemas.test import OfflineGradesBulk, TestGenerationParams, TestQuestionsUpdate, TestResponse
 from app.schemas.timetable import TimetableConfigResponse, TimetableSlotCreate, TimetableSlotResponse
-from app.schemas.user import AdminMpinUpdate, UserResponse, TeacherWithSubjectsResponse
+from app.schemas.user import AdminMpinUpdate, BioUpdate, UserResponse, TeacherWithSubjectsResponse
 from app.schemas.homework import (
     HomeworkCreate,
     NoHomeworkCreate,
@@ -54,14 +54,33 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _require_test_owner(test: Test, teacher_id: int) -> None:
+async def _require_test_owner(test: Test, teacher: User, db: AsyncSession) -> None:
     # Defend against cross-teacher IDOR on owned-test endpoints. Return 404
     # (not 403) so other teachers' test IDs are indistinguishable from
     # non-existent ones. The /tests listing is intentionally school-wide,
     # but operating on a specific test (read details, modify, delete,
-    # download artifacts, post grades, publish) must be owner-only.
-    if test.teacher_id != teacher_id:
-        raise HTTPException(status_code=404, detail="Test not found")
+    # download artifacts, post grades, publish) is for its creator —
+    # unless the creator has left. A removed teacher's tests used to be
+    # stranded: nobody could unpublish them, mark them or see submissions,
+    # and the admin has no test screens. A colleague in the same school may
+    # look after those.
+    if test.teacher_id == teacher.id:
+        return
+    if test.school_id == teacher.school_id and not await _creator_is_active(test, db):
+        return
+    raise HTTPException(status_code=404, detail="Test not found")
+
+
+async def _creator_is_active(test: Test, db: AsyncSession) -> bool:
+    if test.teacher_id is None:
+        return False
+    return (await db.execute(
+        select(User.id).where(
+            User.id == test.teacher_id,
+            User.deleted_at.is_(None),
+            User.is_active == True,  # noqa: E712
+        )
+    )).scalar_one_or_none() is not None
 
 
 # ─── Teacher Profile ───────────────────────────────────────────────────────────
@@ -89,12 +108,12 @@ async def get_teacher_bio(
 
 @router.put("/profile/bio")
 async def update_teacher_bio(
-    payload: dict,
+    payload: BioUpdate,
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Update the teacher's bio (max 500 chars)."""
-    bio = (payload.get("bio") or "").strip()[:500]
+    bio = (payload.bio or "").strip()
     result = await db.execute(
         select(TeacherProfile).where(TeacherProfile.user_id == current_teacher.id)
     )
@@ -274,6 +293,15 @@ async def mark_attendance(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Duplicate request: this attendance submission was already processed.",
             )
+    # The school's day has `periods_per_day` periods (8 until the admin sets
+    # it, as in the app); a later period does not exist — it was accepted, and
+    # earned the student XP.
+    from app.core.cache import get_timetable_config_cached
+    config = await get_timetable_config_cached(db, current_teacher.school_id)
+    per_day = config.periods_per_day if config else 8
+    if payload.period > per_day:
+        raise HTTPException(status_code=422, detail=f"The school day has {per_day} periods.")
+
     student_ids = [item.student_id for item in payload.records]
 
     # Every student marked must be a live student of this school in this grade.
@@ -1124,7 +1152,7 @@ async def get_test(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
-    _require_test_owner(test, current_teacher.id)
+    await _require_test_owner(test, current_teacher, db)
     return test
 
 
@@ -1142,7 +1170,7 @@ async def update_test_questions(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
-    _require_test_owner(test, current_teacher.id)
+    await _require_test_owner(test, current_teacher, db)
 
     # Locked once anyone has started: changing the key under finished students
     # left scores that no longer matched the paper, and anyone mid-attempt was
@@ -1185,7 +1213,7 @@ async def delete_test(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
-    _require_test_owner(test, current_teacher.id)
+    await _require_test_owner(test, current_teacher, db)
 
     # Collect affected student IDs from grades before deleting
     grade_rows = await db.execute(
@@ -1238,7 +1266,7 @@ async def get_test_pdf_urls(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
-    _require_test_owner(test, current_teacher.id)
+    await _require_test_owner(test, current_teacher, db)
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="PDF URLs only available for offline tests")
 
@@ -1268,7 +1296,7 @@ async def download_test_pdf(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
-    _require_test_owner(test, current_teacher.id)
+    await _require_test_owner(test, current_teacher, db)
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="PDF only available for offline tests")
 
@@ -1299,7 +1327,7 @@ async def download_answer_key_pdf(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
-    _require_test_owner(test, current_teacher.id)
+    await _require_test_owner(test, current_teacher, db)
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="PDF only available for offline tests")
 
@@ -1424,7 +1452,7 @@ async def save_offline_grades(
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
-    _require_test_owner(test, current_teacher.id)
+    await _require_test_owner(test, current_teacher, db)
     if test.test_type != TestType.offline:
         raise HTTPException(status_code=400, detail="Manual grades only allowed for offline tests")
 
@@ -1528,10 +1556,12 @@ async def publish_test(
 ):
     """Toggle publish state of a test. Only the creator can publish/unpublish."""
     result = await db.execute(
-        select(Test).where(Test.id == test_id, Test.teacher_id == current_teacher.id)
+        select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
     )
     test = result.scalar_one_or_none()
     if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if test.teacher_id != current_teacher.id and await _creator_is_active(test, db):
         raise HTTPException(status_code=403, detail="Only the teacher who created this test can publish/unpublish it")
     test.is_published = not test.is_published
     start_window_on_first_publish(test)
@@ -2238,24 +2268,23 @@ async def get_today_workflow(
 
     grades_to_show = sorted(set(today_by_grade.keys()) | recent_grades)
 
-    # A school with no timetable today or recently — a new school, or one
-    # back from a long break — would otherwise have no road at all, and so
-    # nothing offering the step that ends that state. Fall back to the
-    # grades that have students in them.
-    if not grades_to_show:
-        enrolled_rows = (await db.execute(
-            select(StudentProfile.grade)
-            .join(User, User.id == StudentProfile.user_id)
-            .where(
-                User.school_id == current_teacher.school_id,
-                User.role == UserRole.student,
-                User.is_active == True,  # noqa: E712
-                User.is_approved == True,  # noqa: E712
-                User.deleted_at.is_(None),
-            )
-            .distinct()
-        )).all()
-        grades_to_show = sorted({row[0] for row in enrolled_rows})
+    # Every grade with students is on the road too. A grade with no timetable
+    # today or recently — in a new school, after a long break, or simply the
+    # one nobody has scheduled yet while others have — would otherwise be
+    # missing, and so nothing would offer the step that fixes it.
+    enrolled_rows = (await db.execute(
+        select(StudentProfile.grade)
+        .join(User, User.id == StudentProfile.user_id)
+        .where(
+            User.school_id == current_teacher.school_id,
+            User.role == UserRole.student,
+            User.is_active == True,  # noqa: E712
+            User.is_approved == True,  # noqa: E712
+            User.deleted_at.is_(None),
+        )
+        .distinct()
+    )).all()
+    grades_to_show = sorted(set(grades_to_show) | {row[0] for row in enrolled_rows})
 
     grade_results = []
     for grade in grades_to_show:

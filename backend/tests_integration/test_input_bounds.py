@@ -240,3 +240,35 @@ def test_attendance_only_for_the_class_and_period(api, two_schools, case):
                      "date": _school_today(), "status": "present"}],
     })
     assert r.status_code in (404, 422), f"{case}: {r.status_code} {r.text[:200]}"
+
+
+def test_attendance_for_a_period_past_the_days_count_is_refused(api, two_schools):
+    # The school's day has `periods_per_day` periods; period 12 of it was
+    # accepted (and earned XP) whatever the day's length.
+    import asyncio
+
+    import asyncpg
+
+    from .conftest import DB_DSN, PREFIX, _make_student
+
+    school = two_schools["a"]
+    student = asyncio.run(_make_student(school["id"], f"{PREFIX}_att_p12", new=True))
+
+    async def periods():
+        conn = await asyncpg.connect(DB_DSN)
+        try:
+            return await conn.fetchval(
+                "SELECT periods_per_day FROM timetable_configs WHERE school_id = $1 "
+                "ORDER BY id DESC LIMIT 1", school["id"])
+        finally:
+            await conn.close()
+
+    per_day = asyncio.run(periods()) or 8
+    if per_day >= 12:
+        pytest.skip("this school's day already has 12 periods")
+    r = api.post("/api/teacher/attendance", headers=auth(school["teacher_token"]), json={
+        "grade": 8, "period": 12, "date": _school_today(),
+        "records": [{"student_id": student, "grade": 8, "period": 12,
+                     "date": _school_today(), "status": "present"}],
+    })
+    assert r.status_code == 422, r.text

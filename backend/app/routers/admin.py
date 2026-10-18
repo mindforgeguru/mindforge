@@ -33,7 +33,10 @@ from app.schemas.fees import (
 )
 from app.schemas.feedback import FeedbackResponse
 from app.schemas.timetable import TimetableConfigCreate, TimetableConfigResponse
-from app.schemas.user import AdminMpinUpdate, AdminUserEdit, UserResponse, UserUpdate, UserWithProfileResponse
+from app.schemas.user import (
+    AdminMpinUpdate, AdminUserEdit, BioUpdate, UserResponse, UserUpdate, UsernameUpdate,
+    UserWithProfileResponse,
+)
 from app.services import storage_service
 from app.services import pdf_service
 from fastapi.responses import Response
@@ -135,14 +138,12 @@ async def upload_school_logo(
 
 @router.put("/profile/username", status_code=status.HTTP_200_OK)
 async def change_admin_username(
-    payload: dict,
+    payload: UsernameUpdate,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
     """Change the admin's own username."""
-    new_username = (payload.get("username") or "").strip()
-    if not new_username or len(new_username) < 3:
-        raise HTTPException(status_code=400, detail="Username must be at least 3 characters.")
+    new_username = payload.username
     conflict = await db.execute(
         select(User).where(
             User.username == new_username,
@@ -421,31 +422,23 @@ async def edit_user(
                     if payload.parent_username.strip() == "":
                         sp.parent_user_id = None
                     else:
-                        from sqlalchemy import func as sa_func
+                        from app.core.usernames import find_by_username
                         parent_username_clean = payload.parent_username.strip()
-                        parent_res = await db.execute(
-                            select(User).where(
-                                sa_func.lower(User.username) == parent_username_clean.lower(),
-                                User.role == UserRole.parent,
-                                User.school_id == current_admin.school_id,
-                                User.deleted_at.is_(None),
+                        parents = await find_by_username(
+                            db, current_admin.school_id, parent_username_clean, UserRole.parent)
+                        if len(parents) > 1:
+                            raise HTTPException(
+                                status_code=409,
+                                detail=(f"More than one parent account matches '{parent_username_clean}'. "
+                                        f"Type the username exactly, with the same capital letters."),
                             )
-                        )
-                        parent = parent_res.scalar_one_or_none()
-                        if parent:
-                            sp.parent_user_id = parent.id
+                        if parents:
+                            sp.parent_user_id = parents[0].id
                         else:
                             # No parent with that username — but the admin may be
                             # backfilling a parent for a legacy student account.
                             # If a non-parent user already has that username, refuse.
-                            collision = await db.execute(
-                                select(User).where(
-                                    sa_func.lower(User.username) == parent_username_clean.lower(),
-                                    User.school_id == current_admin.school_id,
-                                    User.deleted_at.is_(None),
-                                )
-                            )
-                            if collision.scalar_one_or_none():
+                            if await find_by_username(db, current_admin.school_id, parent_username_clean):
                                 raise HTTPException(
                                     status_code=409,
                                     detail=f"The username '{parent_username_clean}' is already in use by another account.",
@@ -475,7 +468,7 @@ async def edit_user(
 
         # No role change — update student_username link if parent
         elif user.role == UserRole.parent and payload.student_username is not None:
-            from sqlalchemy import func as sa_func
+            from app.core.usernames import find_by_username
             if payload.student_username.strip() == "":
                 # Unlink: clear parent_user_id on any student linked to this parent
                 linked_res = await db.execute(
@@ -485,15 +478,15 @@ async def edit_user(
                     sp.parent_user_id = None
             else:
                 # Find the student by username and set their parent_user_id
-                student_user_res = await db.execute(
-                    select(User).where(
-                        sa_func.lower(User.username) == payload.student_username.strip().lower(),
-                        User.role == UserRole.student,
-                        User.school_id == current_admin.school_id,
-                        User.deleted_at.is_(None),
+                matches = await find_by_username(
+                    db, current_admin.school_id, payload.student_username, UserRole.student)
+                if len(matches) > 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(f"More than one student account matches '{payload.student_username.strip()}'. "
+                                f"Type the username exactly, with the same capital letters."),
                     )
-                )
-                student_user = student_user_res.scalar_one_or_none()
+                student_user = matches[0] if matches else None
                 if not student_user:
                     raise HTTPException(
                         status_code=404,
@@ -617,13 +610,26 @@ async def set_user_active(
                  "user", user.id,
                  {"username": user.username, "is_active": payload.is_active})
 
-    # Cascade: deactivating a student also deactivates their linked parent
+    # Cascade: deactivating a student also deactivates their linked parent —
+    # unless the parent has another child still active here.
     if user.role == UserRole.student and payload.is_active is False:
         profile_result = await db.execute(
             select(StudentProfile).where(StudentProfile.user_id == user_id)
         )
         profile = profile_result.scalar_one_or_none()
+        other_active_children = 0
         if profile and profile.parent_user_id:
+            other_active_children = (await db.execute(
+                select(sqlfunc.count()).select_from(StudentProfile)
+                .join(User, User.id == StudentProfile.user_id)
+                .where(
+                    StudentProfile.parent_user_id == profile.parent_user_id,
+                    StudentProfile.user_id != user_id,
+                    User.is_active == True,  # noqa: E712
+                    User.deleted_at.is_(None),
+                )
+            )).scalar_one()
+        if profile and profile.parent_user_id and not other_active_children:
             parent_result = await db.execute(
                 select(User).where(User.id == profile.parent_user_id, User.deleted_at.is_(None))
             )
@@ -708,9 +714,33 @@ async def delete_pending_user(
             detail="User is already approved — use revoke instead.",
         )
 
+    # Registering a student created their parent's account too. Deleted alone,
+    # the student left a childless pending parent holding the username, and
+    # the family's next try with a different parent MPIN was refused. Take the
+    # parent as well while it is still pending and has no other child.
+    orphan_parent = None
+    if user.role == UserRole.student:
+        parent_id = (await db.execute(
+            select(StudentProfile.parent_user_id).where(StudentProfile.user_id == user.id)
+        )).scalar_one_or_none()
+        if parent_id is not None:
+            siblings = (await db.execute(
+                select(sqlfunc.count()).select_from(StudentProfile).where(
+                    StudentProfile.parent_user_id == parent_id,
+                    StudentProfile.user_id != user.id,
+                )
+            )).scalar_one()
+            parent = await db.get(User, parent_id)
+            if parent is not None and not parent.is_approved and siblings == 0:
+                orphan_parent = parent
+
     await _audit(db, current_admin.id, "delete_pending_user", "user", user.id,
-                 {"username": user.username, "role": user.role.value})
+                 {"username": user.username, "role": user.role.value,
+                  **({"with_parent": orphan_parent.username} if orphan_parent else {})})
     await db.delete(user)
+    if orphan_parent is not None:
+        await db.flush()
+        await db.delete(orphan_parent)
     await db.commit()
 
 
@@ -729,8 +759,26 @@ async def delete_all_pending_users(
         )
     )
     pending = result.scalars().all()
+    # Approving a student leaves their parent pending; that parent belongs to an
+    # approved student, not to the backlog. Deleting it unlinked the child
+    # (the link is SET NULL) while the dialog promised approved users were not
+    # affected.
+    kept_parent_ids = {
+        row[0] for row in (await db.execute(
+            select(StudentProfile.parent_user_id)
+            .join(User, User.id == StudentProfile.user_id)
+            .where(
+                StudentProfile.school_id == current_admin.school_id,
+                StudentProfile.parent_user_id.is_not(None),
+                User.is_approved == True,  # noqa: E712
+                User.deleted_at.is_(None),
+            )
+        )).all()
+    }
     deleted = 0
     for user in pending:
+        if user.id in kept_parent_ids:
+            continue
         await _audit(db, current_admin.id, "delete_pending_user", "user", user.id,
                      {"username": user.username, "role": user.role.value, "bulk": True})
         await db.delete(user)
@@ -809,7 +857,7 @@ async def list_teachers_for_admin(
 @router.put("/teachers/{teacher_id}/bio")
 async def admin_update_teacher_bio(
     teacher_id: int,
-    payload: dict,
+    payload: BioUpdate,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
@@ -826,7 +874,7 @@ async def admin_update_teacher_bio(
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found.")
 
-    bio = (payload.get("bio") or "").strip()[:500]
+    bio = (payload.bio or "").strip()
     profile_result = await db.execute(
         select(TeacherProfile).where(TeacherProfile.user_id == teacher_id)
     )

@@ -144,7 +144,12 @@ async def get_my_attendance_summary(
             func.sum(
                 func.cast(Attendance.status == AttendanceStatus.present, type_=func.count(Attendance.id).type)
             ).label("present"),
-        ).where(Attendance.student_id == current_student.id)
+        ).where(
+            Attendance.student_id == current_student.id,
+            # Last year's attendance must not set this year's percentage — the
+            # same year cut-off tests, homework and broadcasts use.
+            since(Attendance.created_at, await year_started_at(db, current_student.school_id)),
+        )
     )
     row = result.one()
     total = row.total or 0
@@ -201,7 +206,12 @@ async def get_class_attendance_leaderboard(
                 case((Attendance.status == AttendanceStatus.present, 1), else_=0)
             ).label("present"),
         )
-        .where(Attendance.student_id.in_(classmate_ids))
+        .where(
+            Attendance.student_id.in_(classmate_ids),
+            # Scoped to the current year, like the student's own summary: after
+            # a close, last year's class must not carry its percentage over.
+            since(Attendance.created_at, await year_started_at(db, current_student.school_id)),
+        )
         .group_by(Attendance.student_id)
     )
     rows = agg.all()

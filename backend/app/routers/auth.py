@@ -27,6 +27,7 @@ from app.models.academic_year import AcademicYear
 from app.models.school import School
 from app.models.user import User, StudentProfile, TeacherProfile, UserRole
 from app.schemas.user import (
+    FcmTokenUpdate,
     UserRegisterRequest, UserLoginRequest, TokenResponse,
     RefreshRequest, RefreshResponse, UserResponse, MfaCodeRequest, MfaDisableRequest,
 )
@@ -283,16 +284,17 @@ async def register_user(
                     detail="A parent MPIN is required to register a student account.",
                 )
 
-            from sqlalchemy import func as sa_func
-            parent_result = await db.execute(
-                select(User).where(
-                    sa_func.lower(User.username) == payload.parent_username.strip().lower(),
-                    User.role == "parent",
-                    User.school_id == school.id,
-                    User.deleted_at.is_(None),
+            from app.core.usernames import find_by_username
+            parents = await find_by_username(db, school.id, payload.parent_username, UserRole.parent)
+            if len(parents) > 1:
+                # Two parents differ only in capital letters; the family must
+                # type theirs exactly. Same wording as a mismatch, so it says
+                # nothing more about which accounts exist.
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Parent username or MPIN is incorrect.",
                 )
-            )
-            parent = parent_result.scalar_one_or_none()
+            parent = parents[0] if parents else None
             if parent:
                 # Existing parent — verify the supplied parent MPIN matches.
                 # Generic error so we don't leak whether the parent exists.
@@ -314,14 +316,7 @@ async def register_user(
                 # teacher, or student). Username uniqueness is per-role-blind
                 # in the schema but we don't want a student creating a "parent"
                 # row that collides with an admin's username.
-                conflict = await db.execute(
-                    select(User).where(
-                        sa_func.lower(User.username) == payload.parent_username.strip().lower(),
-                        User.school_id == school.id,
-                        User.deleted_at.is_(None),
-                    )
-                )
-                if conflict.scalar_one_or_none():
+                if await find_by_username(db, school.id, payload.parent_username):
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
                         detail="The parent username is already in use by another account.",
@@ -672,18 +667,12 @@ async def logout(
 
 @router.put("/fcm-token", status_code=status.HTTP_204_NO_CONTENT)
 async def update_fcm_token(
-    payload: dict,
+    payload: FcmTokenUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Store or update the FCM device token for the authenticated user."""
-    token = payload.get("fcm_token")
-    if not token or not isinstance(token, str):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="fcm_token is required.",
-        )
-    current_user.fcm_token = token.strip()
+    current_user.fcm_token = payload.fcm_token.strip()
     await db.commit()
 
 

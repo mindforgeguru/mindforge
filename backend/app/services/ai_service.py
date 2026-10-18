@@ -10,6 +10,7 @@ Pipeline:
 
 import asyncio
 import json
+import math
 import logging
 import os
 import re
@@ -658,6 +659,27 @@ source_category must be one of:
 JSON array:"""
 
 
+def _coerce_marks(value: Any, default: float) -> float:
+    """A question's marks as a usable positive number.
+
+    The models often type numbers as strings ("2"), omit the field, or return
+    something odd. Left as-is it flowed into `total_marks = sum(...)` at
+    generation and `score += marks` at grading, where a non-number raises
+    TypeError (a 500 on an otherwise valid test). Coerce here so every stored
+    question carries a real number, clamped to the same 1..100 the teacher's
+    editor enforces.
+    """
+    if isinstance(value, bool):
+        return default
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(n) or n <= 0:
+        return default
+    return min(n, 100.0)
+
+
 # Enforced marks per question type
 _TYPE_MARKS: Dict[str, int] = {
     "mcq": 1,
@@ -699,13 +721,16 @@ def _parse_questions(raw: str, params: Any = None) -> List[Dict[str, Any]]:
             continue
         if _url_pattern.search(q_text) or _url_pattern.search(a_text):
             continue
-        q_type = q.get("type", "vsa")
+        # Canonicalise the type so the enforced-marks lookup here and the
+        # grader (which lowercases) agree; a model that returns "MCQ" otherwise
+        # misses _TYPE_MARKS and falls through to its own marks value.
+        q_type = str(q.get("type", "vsa")).strip().lower()
 
         # Handle match_following specially
         if q_type == "match_following":
             col_a = q.get("column_a") or []
             col_b = q.get("column_b") or []
-            marks = len(col_a) if col_a else q.get("marks", 4)
+            marks = len(col_a) if col_a else _coerce_marks(q.get("marks"), 4)
             validated.append({
                 "id": len(validated) + 1,
                 "type": "match_following",
@@ -730,7 +755,8 @@ def _parse_questions(raw: str, params: Any = None) -> List[Dict[str, Any]]:
             "question": q_text,
             "options": options,
             "answer": a_text,
-            "marks": _TYPE_MARKS.get(q_type, q.get("marks", 1)),
+            "marks": _TYPE_MARKS[q_type] if q_type in _TYPE_MARKS
+                     else _coerce_marks(q.get("marks"), 1),
             "source_category": q.get("source_category"),
         })
     return validated
