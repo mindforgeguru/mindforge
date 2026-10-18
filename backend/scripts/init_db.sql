@@ -1,12 +1,13 @@
 -- =============================================================================
--- MIND FORGE — Seed Data Only
+-- MIND FORGE — Database bootstrap (no credentials)
 -- Tables are created by SQLAlchemy (create_all) on startup.
--- This script only seeds the default admin account.
+-- This file deliberately seeds NO accounts. In particular it does not create a
+-- default admin: a hardcoded credential in a repo file is public and runs at
+-- every deploy (the old `admin`/`123456` seed, removed). The first admin and
+-- the platform owner are provisioned by the backend's env-gated startup seed
+-- (ADMIN_SEED_MPIN / OWNER_SEED_MPIN, each a 6-digit MPIN); with neither set,
+-- no account is created.
 -- =============================================================================
 
--- Wait for tables to exist before inserting
--- (This runs before the app starts, so we just ensure the admin exists
---  via the app's own startup logic. This file is intentionally minimal.)
-
--- The actual seed is handled by the backend startup via SQLAlchemy create_all.
--- Nothing to do here.
+-- Nothing to do here — tables come from SQLAlchemy create_all, and any
+-- provisioning is the app's env-gated startup logic, not this file.
