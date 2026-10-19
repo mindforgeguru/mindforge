@@ -19,6 +19,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/widgets/badge_dot.dart';
+import '../../../core/widgets/chapter_rings_box.dart';
 import '../../../core/widgets/holiday_banner.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
 import '../../../core/widgets/shimmer_list.dart';
@@ -460,6 +461,23 @@ class _StudentDashboardScreenState
 
           // ── XP card ────────────────────────────────────────────────────
           const SliverToBoxAdapter(child: _XpHomeCard()),
+
+          // ── Class progress: one ring per chapter ──────────────────────
+          SliverToBoxAdapter(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final presAsync = ref.watch(studentPresentationsProvider);
+                return presAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (rows) {
+                    if (rows.isEmpty) return const SizedBox.shrink();
+                    return ChapterRingsBox(rows: rows);
+                  },
+                );
+              },
+            ),
+          ),
 
           // ── Today's timetable header ──────────────────────────────────
           SliverToBoxAdapter(

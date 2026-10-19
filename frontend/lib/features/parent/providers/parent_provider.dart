@@ -42,6 +42,14 @@ final parentFacultyProvider =
   return raw.cast<Map<String, dynamic>>();
 });
 
+final parentChildPresentationsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  final childId = ref.watch(selectedChildIdProvider);
+  final raw = await api.getChildPresentations(childId: childId);
+  return raw.cast<Map<String, dynamic>>();
+});
+
 final parentChildAttendanceSummaryProvider =
     FutureProvider<AttendanceSummaryModel>((ref) async {
   final api = ref.watch(apiClientProvider);

@@ -893,23 +893,39 @@ async def list_library(
 # ── GET / (list) ─────────────────────────────────────────────────────────────
 
 
-@router.get("/", response_model=List[PresentationListItem])
-async def list_presentations(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+async def in_progress_presentation_items(
+    db: AsyncSession,
+    *,
+    school_id: int,
+    grade: Optional[int] = None,
 ) -> List[PresentationListItem]:
-    """School-wide dashboard list — IN-PROGRESS decks only. One card per
-    (teacher_progress) row so the same chapter taught by three teachers
-    shows three cards.
+    """In-progress READY decks for a school, optionally narrowed to one grade.
 
-    A deck disappears from the dashboard once the teacher has finished it
-    (slides_covered >= total_slides OR periods_used >= recommended_periods),
-    but it stays in the library tab as "completed". Only READY presentations
-    are shown — PROCESSING and FAILED rows live exclusively in the library.
+    Shared by the teacher/admin school-wide dashboard list and the grade-scoped
+    student/parent dashboards (one card per teacher_progress row, so the same
+    chapter taught by three teachers shows three). A deck drops out once the
+    teacher has finished it (slides or periods). `grade=None` keeps the whole
+    school; a grade value narrows it to that class, which is how a student/parent
+    sees only their own grade's chapters.
     """
     from sqlalchemy import or_
 
-    _require_teacher_or_admin(current_user)
+    conditions = [
+        ChapterPresentation.school_id == school_id,
+        ChapterPresentation.status == PresentationStatus.READY,
+        or_(
+            ChapterPresentation.total_slides == 0,
+            PresentationTeacherProgress.current_slide_index
+                < ChapterPresentation.total_slides,
+        ),
+        or_(
+            ChapterPresentation.recommended_periods == 0,
+            PresentationTeacherProgress.periods_used
+                < ChapterPresentation.recommended_periods,
+        ),
+    ]
+    if grade is not None:
+        conditions.append(ChapterPresentation.grade == grade)
 
     rows = (await db.execute(
         select(ChapterPresentation, PresentationTeacherProgress)
@@ -917,22 +933,7 @@ async def list_presentations(
             PresentationTeacherProgress,
             PresentationTeacherProgress.presentation_id == ChapterPresentation.id,
         )
-        .where(
-            ChapterPresentation.school_id == current_user.school_id,
-            ChapterPresentation.status == PresentationStatus.READY,
-            # NOT completed by slide-count
-            or_(
-                ChapterPresentation.total_slides == 0,
-                PresentationTeacherProgress.current_slide_index
-                    < ChapterPresentation.total_slides,
-            ),
-            # AND NOT completed by period-count
-            or_(
-                ChapterPresentation.recommended_periods == 0,
-                PresentationTeacherProgress.periods_used
-                    < ChapterPresentation.recommended_periods,
-            ),
-        )
+        .where(*conditions)
         .order_by(PresentationTeacherProgress.updated_at.desc())
     )).all()
 
@@ -968,6 +969,26 @@ async def list_presentations(
             periods_used=prog.periods_used,
         ))
     return items
+
+
+@router.get("/", response_model=List[PresentationListItem])
+async def list_presentations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[PresentationListItem]:
+    """School-wide dashboard list — IN-PROGRESS decks only. One card per
+    (teacher_progress) row so the same chapter taught by three teachers
+    shows three cards.
+
+    A deck disappears from the dashboard once the teacher has finished it
+    (slides_covered >= total_slides OR periods_used >= recommended_periods),
+    but it stays in the library tab as "completed". Only READY presentations
+    are shown — PROCESSING and FAILED rows live exclusively in the library.
+    """
+    _require_teacher_or_admin(current_user)
+    return await in_progress_presentation_items(
+        db, school_id=current_user.school_id
+    )
 
 
 # ── GET /{id} ────────────────────────────────────────────────────────────────

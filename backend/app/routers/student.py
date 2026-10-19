@@ -33,6 +33,7 @@ from app.schemas.test import (
     TestSubmissionResponse,
 )
 from app.schemas.timetable import TimetableSlotWithTeacherResponse
+from app.schemas.presentation import PresentationListItem
 from app.schemas.homework import (
     HomeworkResponse,
     BroadcastResponse,
@@ -247,6 +248,26 @@ async def get_class_attendance_leaderboard(
         })
 
     return leaderboard
+
+
+# ─── Presentation progress (this student's grade) ──────────────────────────────
+
+@router.get("/presentations", response_model=List[PresentationListItem])
+async def get_my_presentations(
+    db: AsyncSession = Depends(get_db),
+    current_student: User = Depends(get_current_student),
+) -> List[PresentationListItem]:
+    """In-progress presentation decks for the student's own grade, so the
+    student sees which chapter each teacher is on. Grade-scoped, read-only —
+    the teacher/admin dashboard list is school-wide; this is just this class."""
+    from app.routers.presentations import in_progress_presentation_items
+
+    profile = await get_student_profile_cached(current_student.id, db)
+    if not profile:
+        return []
+    return await in_progress_presentation_items(
+        db, school_id=current_student.school_id, grade=profile.grade
+    )
 
 
 # ─── Faculty ──────────────────────────────────────────────────────────────────

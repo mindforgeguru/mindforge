@@ -27,6 +27,7 @@ from app.schemas.fees import FeePaymentResponse, PaymentInfoResponse, StudentFee
 from app.schemas.grade import GradeResponse
 from app.schemas.test import TestResponse
 from app.schemas.timetable import TimetableSlotWithTeacherResponse
+from app.schemas.presentation import PresentationListItem
 from app.schemas.homework import (
     HomeworkResponse,
     BroadcastResponse,
@@ -250,6 +251,25 @@ async def get_child_grades(
         query = query.where(Grade.grade_type == grade_type)
     result = await db.execute(query.order_by(Grade.created_at.desc()).offset(skip).limit(limit))
     return result.scalars().all()
+
+
+# ─── Presentation progress (the chosen child's grade) ──────────────────────────
+
+@router.get("/child/presentations", response_model=List[PresentationListItem])
+async def get_child_presentations(
+    db: AsyncSession = Depends(get_db),
+    current_parent: User = Depends(get_current_parent),
+    child_id: Optional[int] = _CHILD_ID,
+) -> List[PresentationListItem]:
+    """In-progress presentation decks for the chosen child's grade, so the
+    parent sees which chapter each teacher is on. Scoped to that child's
+    grade + school (cross-family children are already a 404 via the resolver)."""
+    from app.routers.presentations import in_progress_presentation_items
+
+    profile = await _get_child_profile(current_parent, db, child_id)
+    return await in_progress_presentation_items(
+        db, school_id=profile.school_id, grade=profile.grade
+    )
 
 
 # ─── Tests ─────────────────────────────────────────────────────────────────────

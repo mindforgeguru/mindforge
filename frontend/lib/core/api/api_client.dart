@@ -802,6 +802,11 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
+  Future<List<dynamic>> getStudentPresentations() async {
+    final res = await _dio.get('/student/presentations');
+    return res.data as List<dynamic>;
+  }
+
   Future<List<dynamic>> getFaculty() async {
     final res = await _dio.get('/student/faculty');
     return res.data as List<dynamic>;
@@ -937,6 +942,13 @@ class ApiClient {
       if (gradeType != null) 'grade_type': gradeType,
       if (skip > 0) 'skip': skip,
       if (limit != 50) 'limit': limit,
+    });
+    return res.data as List<dynamic>;
+  }
+
+  Future<List<dynamic>> getChildPresentations({int? childId}) async {
+    final res = await _dio.get('/parent/child/presentations', queryParameters: {
+      if (childId != null) 'child_id': childId,
     });
     return res.data as List<dynamic>;
   }

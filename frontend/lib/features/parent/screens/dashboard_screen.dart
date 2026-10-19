@@ -19,6 +19,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/badge_dot.dart';
+import '../../../core/widgets/chapter_rings_box.dart';
 import '../../../core/widgets/holiday_banner.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
 import '../../../core/widgets/shimmer_list.dart';
@@ -448,6 +449,23 @@ class _ParentDashboardScreenState
                   ),
                 ],
               ),
+            ),
+          ),
+
+          // ── Class progress: one ring per chapter (chosen child) ───────
+          SliverToBoxAdapter(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final presAsync = ref.watch(parentChildPresentationsProvider);
+                return presAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (rows) {
+                    if (rows.isEmpty) return const SizedBox.shrink();
+                    return ChapterRingsBox(rows: rows);
+                  },
+                );
+              },
             ),
           ),
 
