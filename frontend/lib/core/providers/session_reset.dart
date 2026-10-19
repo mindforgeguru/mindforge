@@ -49,6 +49,7 @@ final List<ProviderOrFamily> sessionScopedProviders = <ProviderOrFamily>[
   parentChildHomeworkCompletionsProvider,
   parentBroadcastsProvider,
   parentDashboardSummaryProvider,
+  parentChildPresentationsProvider,
   parentChildrenProvider,
   selectedChildIdProvider,
 
@@ -72,6 +73,7 @@ final List<ProviderOrFamily> sessionScopedProviders = <ProviderOrFamily>[
   studentFeesProvider,
   studentBroadcastsProvider,
   studentDashboardSummaryProvider,
+  studentPresentationsProvider,
 
   // ── Student XP / gamification ──────────────────────────────────────────
   studentXpProvider,
