@@ -138,6 +138,39 @@ MPINs for new accounts: pick at test time and write them into `docs/local-test-a
 | I-02 | Admin · iOS | Close Year → Cancel | Nothing changes | TODO |
 | I-03 | Admin · iOS | Close Year → Confirm, then Start Year 2027–28 | New year; road resets; last year's homework/broadcasts/open tests not shown to students | TODO |
 
+## J. Extreme cases
+
+Edge conditions a real school will eventually hit. Run after A–I; anything destructive goes on throwaway accounts.
+
+| ID | Persona · Platform | What the user does | What they should see | Status |
+|---|---|---|---|---|
+| J-01 | Admin · Web | Registers/approves 60 grade-8 students (script the sign-ups, approve in UI), then Iyer takes attendance | List scrolls smoothly; save takes < 3 s; counts correct | TODO |
+| J-02 | Students · Web | Names in Devanagari/Gujarati, an apostrophe (D'Souza), 60-char name, emoji | Stored and shown correctly everywhere, incl. PDFs and leaderboard; no layout overflow | TODO |
+| J-03 | Someone · Web | Registers `Aarav8` when `aarav8` exists; school name "sunrise public school" | Treated as duplicates (case-insensitive) | TODO |
+| J-04 | Iyer · Web | Broadcast / homework text `<script>alert(1)</script>` and `'; DROP TABLE users;--` | Shown as plain text; nothing runs; nothing breaks | TODO |
+| J-05 | Iyer · iOS | Test with 0 questions; end time before start; window entirely in the past | Can't publish; clear message for each | TODO |
+| J-06 | Aarav · iOS | Test window closes while he is mid-test | Auto-submitted with answers so far (or clear rule); no crash, no second attempt | TODO |
+| J-07 | Aarav · iOS | Airplane mode just before tapping Submit, then back online | Submission not lost or double-counted; clear status shown | TODO |
+| J-08 | Aarav · iOS | Double/triple-taps Submit; Iyer double-taps Save attendance; admin double-taps Record payment | Exactly one record each | TODO |
+| J-09 | Aarav · iOS | Phone clock set 1 day ahead / behind, then opens tests and timetable | Server time wins; can't start a test early or late | TODO |
+| J-10 | Iyer · iOS | Takes attendance at 23:59 and saves at 00:01 | Lands on the right day (IST); no duplicate | TODO |
+| J-11 | Admin · iOS | Fee payment of ₹0, ₹0.50, more than the balance, ₹99,99,999 | Zero/over-balance refused or clearly flagged; paise handled; big number formats with Indian commas | TODO |
+| J-12 | Admin · iOS | Changes grade 8 fee structure after payments exist | Paid history kept; balance recalculated sensibly | TODO |
+| J-13 | Mum · Web | Parent with two children (register Aarav's sibling with same parent phone) | Child switcher; each screen follows the selected child; no mixing | TODO |
+| J-14 | Admin · iOS | Moves Aarav from grade 8 to 9 mid-year | His timetable/homework switch to grade 9; past marks kept | TODO |
+| J-15 | Admin · iOS | Deactivates Mr. Iyer while his test is open and homework pending | Students can still finish the test; Ms. Das can take over/unpublish; homework still visible | TODO |
+| J-16 | Aarav · iOS + Web | Logged in on two devices at once; logs out on one | Other device keeps working (or is signed out — whichever is the rule, consistently) | TODO |
+| J-17 | Aarav · iOS | App left idle overnight (or access token expired), then opened | Silent refresh; no login loop; no data from cache that's wrong | TODO |
+| J-18 | Iyer · iOS | Uploads 25 MB photo, HEIC, a `.txt` renamed `.jpg` as avatar | Big/fake refused with a message; HEIC works or is refused cleanly | TODO |
+| J-19 | Iyer · Web | Presentation: corrupt `.pptx`, 200-slide deck, password-protected PDF | Corrupt/locked refused clearly; big deck processes or fails with a message, not a spinner forever | TODO |
+| J-20 | Iyer · Web | AI test generation with all AI keys removed/invalid | Friendly failure + Retry; no half-made test left behind | TODO |
+| J-21 | Iyer + Das · Web ×2 | Both edit the same grade-8 timetable slot at the same moment | One wins cleanly; the other is told; no duplicate period | TODO |
+| J-22 | Admin · iOS | Whole-school holiday on a weekday; Sunday; a day with no timetable | Holiday banner for all roles; road doesn't nag for attendance | TODO |
+| J-23 | Any · iOS | Largest Dynamic Type text size, dark mode, iPad landscape | Readable; no clipped buttons or overflow stripes | TODO |
+| J-24 | Any · iOS | Paste letters/emoji/7 digits into the MPIN pad; spam pull-to-refresh; tab-switch rapidly | Input rejected; no duplicate requests storm; no crash | TODO |
+| J-25 | Admin · iOS | Close Year with a test still open and unpaid fees | Warned; open test closes/expires correctly; unpaid balances carried or reported | TODO |
+| J-26 | Aarav · iOS | Delete app, reinstall, log in | Clean start; push notifications re-register | TODO |
+
 ---
 
 ## Run log
