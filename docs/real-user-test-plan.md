@@ -171,6 +171,89 @@ Edge conditions a real school will eventually hit. Run after A–I; anything des
 | J-25 | Admin · iOS | Close Year with a test still open and unpaid fees | Warned; open test closes/expires correctly; unpaid balances carried or reported | TODO |
 | J-26 | Aarav · iOS | Delete app, reinstall, log in | Clean start; push notifications re-register | TODO |
 
+## K. Adversarial / security checklist
+
+Authorized security QA of **our own app, local stack only** — never production, which holds real users. Each row is phrased as an abuse attempt and the defence we expect to hold. A row **PASSES when the attempt is refused/contained**; a row that succeeds is a FAIL and gets logged in `SECURITY_RISK_REGISTER.md`. This complements `tests/security_test*.py` and §3 of `TEST_RECORD.md` by driving the attempts through a real client + proxy rather than a probe script. Tooling: browser devtools, `curl`, an intercepting proxy on the simulator, token decoding.
+
+### K.1 Authentication & session
+
+| ID | Attempt | Defence expected (PASS = held) | Status |
+|---|---|---|---|
+| K-01 | Brute-force one real MPIN past the lockout; keep trying from several IPs | Account lockout + rate limit hold; attempts don't reset the counter | TODO |
+| K-02 | Replay an old refresh token after it was rotated / after logout | Rejected; rotation invalidates the old one | TODO |
+| K-03 | Use an access token after logout / after the account is deactivated | Rejected on the next request and on the WebSocket | TODO |
+| K-04 | Edit a JWT payload (role student→admin, different `sub`/`school_id`) and resend | Signature check fails → 401; no privilege gained | TODO |
+| K-05 | Present a `none`-alg or unsigned token; present an expired token | Refused | TODO |
+| K-06 | Call protected endpoints with no token / a malformed `Authorization` header | 401, consistent message | TODO |
+| K-07 | Enumerate usernames via login/registration error wording and timing | Same generic reply and similar timing for known vs unknown | TODO |
+| K-08 | Parent-MPIN guessing at registration across many addresses (per §tests) | Throttled/locked as the integration test expects | TODO |
+
+### K.2 Authorization & tenancy (the big one)
+
+| ID | Attempt | Defence expected (PASS = held) | Status |
+|---|---|---|---|
+| K-09 | As a student, call teacher/admin/owner endpoints directly (change role in the path/body) | 403/404; no data or write | TODO |
+| K-10 | IDOR: as Aarav, fetch another student's marks/fees/profile by guessing IDs | 404, not another student's row | TODO |
+| K-11 | Cross-tenant: with a Sunrise token, read/write a Riverdale row by its ID | 404 (not 403), no leak — matches the tenancy tests | TODO |
+| K-12 | Parent reads a child that isn't theirs by changing `child_id` | 404 | TODO |
+| K-13 | Student POSTs marks/attendance/XP for themselves | Refused; those are staff-only writes | TODO |
+| K-14 | Open a test before its window / re-enter after submit / fetch the answer key while the test is open | All refused; key only after close | TODO |
+| K-15 | Mass-assignment: send extra fields (`is_approved`, `role`, `school_id`, `xp`) on a profile/registration update | Extra fields ignored, not trusted | TODO |
+
+### K.3 Injection & input
+
+| ID | Attempt | Defence expected (PASS = held) | Status |
+|---|---|---|---|
+| K-16 | SQL-ish payloads in names, usernames, homework, broadcast, search, filters | Treated as data; parameterised queries; no error leak | TODO |
+| K-17 | Stored XSS: `<script>`, `<img onerror>`, `javascript:` in any text that's shown to another user (names, broadcasts, homework, feedback) | Rendered inert on web and in PDFs | TODO |
+| K-18 | Oversized / deeply-nested / malformed JSON bodies; wrong content-type | 422/400, no 500, no crash | TODO |
+| K-19 | Path traversal / weird filenames in uploads (`../`, null byte, double extension) | Sanitised; stored under a safe key | TODO |
+| K-20 | Upload a non-image or script disguised as an image/pptx; polyglot file | Refused by content sniff, not just extension | TODO |
+| K-21 | Unicode / homoglyph usernames to impersonate or dodge the uniqueness check | Normalised; no collision bypass | TODO |
+
+### K.4 Transport, headers & web
+
+| ID | Attempt | Defence expected (PASS = held) | Status |
+|---|---|---|---|
+| K-22 | Downgrade to HTTP; strip/alter TLS (cert/CA pinning on the app) | App refuses; see `project_ssl_pinning` | TODO |
+| K-23 | Load the web app inside an `<iframe>` from another origin | Framing refused (frame-ancestors) | TODO |
+| K-24 | Hit the API with a cross-origin `fetch` from an untrusted origin | CORS blocks it; only allowed origins pass | TODO |
+| K-25 | Inspect responses for missing security headers / verbose stack traces / secrets | Headers present (§3.1); errors generic; no secrets in body or logs | TODO |
+| K-26 | Pull tokens/MPIN from web localStorage, logs, Sentry events, URL query strings | Not present in URLs/logs; Sentry scrubbed (per `project`) | TODO |
+
+### K.5 Business-logic abuse
+
+| ID | Attempt | Defence expected (PASS = held) | Status |
+|---|---|---|---|
+| K-27 | Submit a test many times / race two submissions to inflate score or XP | Single attempt enforced; XP awarded once | TODO |
+| K-28 | Replay a "homework done" or "attendance" write to farm XP | Idempotent; XP not duplicated | TODO |
+| K-29 | Self-approve a pending registration, or approve across schools | Refused | TODO |
+| K-30 | Record a negative/huge fee payment to zero out or overflow a balance | Bounds enforced; no overflow | TODO |
+| K-31 | Register/approve in a loop to exhaust resources (no CAPTCHA) → DoS-ish | Rate limits / size caps blunt it; app stays up | TODO |
+| K-32 | Request a huge paginated range (`limit=10_000_000`) or deep page offsets | Capped; no slow query takedown | TODO |
+
+### K.6 Realtime / WebSocket
+
+| ID | Attempt | Defence expected (PASS = held) | Status |
+|---|---|---|---|
+| K-33 | Connect `/ws/{other_user_id}` with your own token (sub mismatch) | Refused — matches `test_websocket_auth` | TODO |
+| K-34 | Subscribe to another school's / grade's channel | No events delivered | TODO |
+| K-35 | Connect with a refresh-type or revoked-JTI token | Refused | TODO |
+| K-36 | Flood the socket with messages / rapid reconnects | Server stays healthy; connection throttled or dropped | TODO |
+
+## L. Extreme security / stress
+
+| ID | Attempt | Defence expected (PASS = held) | Status |
+|---|---|---|---|
+| L-01 | 50 simultaneous logins for one account while an unrelated request runs | Unrelated request not blocked (per `test_login_does_not_block`); no lockout bypass | TODO |
+| L-02 | 500 concurrent students hitting `dashboard-summary` at once | Latency stays reasonable; no 5xx storm | TODO |
+| L-03 | Submit the same test from 10 threads at the same millisecond | Exactly one graded result; no double XP | TODO |
+| L-04 | Upload 100 presentations / trigger 20 AI generations at once | Queue holds; no key/billing meltdown takes the app down (watch logs per `project_ai_generation_fallback`) | TODO |
+| L-05 | 10 k-char homework/broadcast, 1000-row timetable, 200-slide deck repeatedly | Size caps refuse the abusive ones; app doesn't OOM | TODO |
+| L-06 | Leave a WebSocket open and idle for hours; open hundreds of sockets | Reaped/limited; memory stable | TODO |
+| L-07 | Clock-skew + token-expiry storm: many clients with expired tokens refreshing at once | Refresh path holds; no thundering-herd lockout | TODO |
+| L-08 | Fill MinIO / disk with repeated max-size uploads | Quota/size caps; graceful refusal, no data loss (watch for the `project_minio_volume_dataloss` symptom) | TODO |
+
 ---
 
 ## Run log
