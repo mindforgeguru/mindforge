@@ -352,3 +352,14 @@ Driven with `curl` + a small urllib/websockets harness against the local stack. 
 Load driven with a threaded urllib + websockets harness against the single-worker local backend. All held or partial; no 5xx storms, no crash, health stayed 200 throughout. **Notes:** L-02 latency degrades to ~4 s p50 under 500 concurrent (single dev worker); L-06 no per-user socket cap (200 opened fine); L-08 real disk-fill not exercised (payload compressed small); L-04 mass-AI skipped to avoid live billing. meera8 left globally locked ~15 min by the L-01 burst.
 
 **All 102 cases (A-01 … L-08) have now been run.** Outstanding bugs are catalogued in the numbered run-log notes above and the per-row Status cells; the security FAILs (K-21 homoglyph, J-03 case-sensitivity) still need logging in `SECURITY_RISK_REGISTER.md`.
+
+### 2026-10-25 — fixes (first batch)
+
+Started fixing the most important findings. Backend, verified against the live local stack:
+
+- **J-06 fixed — test window closing mid-attempt no longer loses answers.** Both `/student/tests/{id}/start` and `/submit` ran the `expires_at` → 410 guard *before* loading the attempt, so a student mid-test when the window closed got 410 and their saved answers were never graded. Extracted the ordering rule to `app/core/attempt_policy.py` (`resolve_attempt_action`) and reordered both handlers: an in-progress attempt is always finalized/graded (auto-submitted), and only a student who never started is blocked (410). Live: submit-after-close → 201 with a real score; never-started → 410; re-open grades saved answers. 7 unit tests (`tests/test_attempt_window.py`).
+- **J-03 / K-21 fixed at registration — confusable/case username collisions refused.** `app/core/username_identity.py` `confusable_skeleton` (NFKC → case-fold → common Cyrillic/Greek Latin look-alikes); registration (`auth.py`) now rejects a signup whose skeleton matches an existing live username in the school. Live: `ZEPHYR_T` and Cyrillic `zерhyr_t` refused against `zephyr_t`; a distinct and a Devanagari handle still register. 7 unit tests (`tests/test_username_identity.py`). Register + rendered HTML + artifact updated. Residual: login stays exact-match; a stored-skeleton unique index is the remaining depth.
+
+Targeted suites green: grading/submission 171, username/attempt 13, auth/account/token 29.
+
+**Still to fix (next batch, client-side — need a Flutter rebuild):** duplicate fee payment on double-tap (J-08 — backend already supports `X-Idempotency-Key`; wire the admin Pay button to send it + disable on tap), dashboard date roll-over after midnight (#1), broadcast times in UTC (#20, add `.toLocal()`), Class High/Low showing the student's own min/max (#19). Backend-side: no upper fee bound (J-11), 0-question test publishable (J-05), auto-publish of online tests (#12).

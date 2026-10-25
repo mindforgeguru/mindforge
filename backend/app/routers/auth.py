@@ -39,6 +39,7 @@ from app.core.account_state import (
     self_delete_block_response,
 )
 from app.core.security_events import note_failed_login
+from app.core.username_identity import confusable_skeleton
 from app.core.mfa import consume_recovery_code
 from app.core.mpin_guard import client_ip, mpin_matches
 from app.core.totp import (
@@ -173,14 +174,19 @@ async def register_user(
     # (the chosen username is not PII; users expect clear "already taken"
     # feedback at signup) — but pair it with the rate limit above so it can't be
     # used to enumerate usernames quickly.
-    existing = await db.execute(
-        select(User).where(
-            User.username == payload.username,
+    # Uniqueness is confusable-aware: a handle that differs from an existing one
+    # only by case or a cross-script look-alike (e.g. Cyrillic а vs ASCII a) is
+    # refused, so it can't be registered to impersonate a real user (J-03/K-21).
+    # The DB's exact (school_id, username) unique index still guards exact dups
+    # (incl. a race); this adds the case/Unicode folding the index can't.
+    new_skeleton = confusable_skeleton(payload.username)
+    existing_names = (await db.execute(
+        select(User.username).where(
             User.school_id == school.id,
             User.deleted_at.is_(None),
         )
-    )
-    if existing.scalar_one_or_none():
+    )).scalars().all()
+    if any(confusable_skeleton(name) == new_skeleton for name in existing_names):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username already taken.",

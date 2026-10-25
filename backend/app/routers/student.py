@@ -53,6 +53,7 @@ from app.core.cache import (
 from app.core.academic_year import since, year_started_at
 from app.core.school_time import parse_iso_date, school_today
 from app.core.mpin_guard import mpin_matches
+from app.core.attempt_policy import resolve_attempt_action
 
 router = APIRouter()
 
@@ -1035,8 +1036,7 @@ async def start_test_attempt(
         raise HTTPException(status_code=400, detail="Test is not published.")
 
     now = datetime.now(timezone.utc)
-    if test.expires_at and test.expires_at < now:
-        raise HTTPException(status_code=410, detail="Test submission window has expired.")
+    window_expired = bool(test.expires_at and test.expires_at < now)
 
     sub_result = await db.execute(
         select(TestSubmission).where(
@@ -1046,7 +1046,18 @@ async def start_test_attempt(
     )
     submission = sub_result.scalar_one_or_none()
 
-    if submission is None:
+    # An in-progress attempt is finalized (its saved answers graded) even if
+    # the window has since closed; only a student who never started is blocked
+    # by the window. See app.core.attempt_policy.
+    action = resolve_attempt_action(
+        has_submission=submission is not None,
+        is_finalized=bool(submission and submission.is_finalized),
+        window_expired=window_expired,
+    )
+    if action == "expired":
+        raise HTTPException(status_code=410, detail="Test submission window has expired.")
+
+    if action == "create":
         # First attempt — lock the student in.
         time_limit = test.time_limit_minutes
         if time_limit and time_limit > 0:
@@ -1205,8 +1216,7 @@ async def submit_test(
     await _ensure_test_in_student_grade(test, current_student.id, db)
 
     now = datetime.now(timezone.utc)
-    if test.expires_at and test.expires_at < now:
-        raise HTTPException(status_code=410, detail="Test submission window has expired.")
+    window_expired = bool(test.expires_at and test.expires_at < now)
 
     sub_result = await db.execute(
         select(TestSubmission).where(
@@ -1216,7 +1226,20 @@ async def submit_test(
     )
     submission = sub_result.scalar_one_or_none()
 
-    if submission is None:
+    # An in-progress attempt is graded even if the window just closed (so the
+    # student doesn't lose answers they entered before the close); only a
+    # student who never started is blocked by the window. See attempt_policy.
+    action = resolve_attempt_action(
+        has_submission=submission is not None,
+        is_finalized=bool(submission and submission.is_finalized),
+        window_expired=window_expired,
+    )
+    if action == "result":
+        raise HTTPException(status_code=409, detail="You have already submitted this test.")
+    if action == "expired":
+        raise HTTPException(status_code=410, detail="Test submission window has expired.")
+
+    if action == "create":
         # Legacy / no-start path: create a one-shot finalized row.
         submission = TestSubmission(
             test_id=test_id,
@@ -1237,10 +1260,8 @@ async def submit_test(
             await db.rollback()
             raise HTTPException(status_code=409, detail="You have already submitted this test.")
         await db.refresh(submission)
-    elif submission.is_finalized:
-        raise HTTPException(status_code=409, detail="You have already submitted this test.")
 
-    deadline_passed = bool(
+    deadline_passed = window_expired or bool(
         submission.attempt_expires_at and submission.attempt_expires_at <= now
     )
     auto_submitted = payload.auto_submitted or deadline_passed
