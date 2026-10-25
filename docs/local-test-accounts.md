@@ -77,3 +77,13 @@ pair useful for tenant-isolation checks: a leak across schools is visible as
 data for the *same grade number* showing up in the wrong account, rather than
 being masked by the grade filter. `river_kid` (Riverdale, grade 8) and `dummy8`
 (Hansel, grade 8) are the two ends of that test.
+
+## Sunrise Public School (real-user test plan, created 2026-10-22)
+
+| Username | Role | MPIN |
+|----------|------|------|
+| `sunrise_admin` | admin | `582914` |
+| `iyer_maths` | teacher (pending) | `246813` |
+| `aarav8`, `aarav8_parent`, `meera8`, `meera8_parent`, `kabir9`, `kabir9_parent`, `das_sci` | student / parent / teacher | `135792` (set directly in the local DB on 2026-10-23; original MPINs weren't recorded) |
+
+> 2026-10-24: after I-03 (Close Year) only `sunrise_admin`, a re-registered `aarav8` and `aarav8_parent` (MPIN `135792`) are live in Sunrise. The pre-close cast is in `.claude/backups/mindforge_local_pre_I03_20261024_1645.dump`.

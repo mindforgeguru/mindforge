@@ -27,10 +27,10 @@ There is also a rendered, filterable version of this register:
 
 | | Count |
 |---|---|
-| Verified | **61** |
+| Verified | **62** |
 | Stale | **8** |
 | Open | **22** |
-| **Total tracked** | **91** across 13 domains |
+| **Total tracked** | **92** across 13 domains |
 
 *Last verification sweep: 2026-10-10 (see [Verification log](#verification-log)).*
 
@@ -59,6 +59,7 @@ goes wrong.
 | Weak / guessable MPIN | VERIFIED | 32 tests (`test_weak_mpin.py`) pin the guessability rule (all-same, runs, half-repeats, keypad shapes) and — the part that matters — the **wiring**: weak PINs are rejected at every set site (register, change `new_mpin`, admin reset) and accepted at login and `current_mpin`, so a legacy weak-PIN user can still sign in and fix it. Falsified: making login strict or register lenient each fails the matching wiring test. |
 | Multi-factor authentication | VERIFIED | TOTP (RFC 6238, stdlib) for **admin and owner**, opt-in: enrolment screen (admin profile + owner console) with QR plus typed key, single-use recovery codes, screen-capture blocked while the secret shows; two-step enrolment so an abandoned setup can't lock the account; disable needs MPIN *and* a factor. **The 'marking your own homework' gap is now closed:** beyond the six official RFC vectors, `test_totp_interop.py` carries a from-scratch second implementation (anchored to the RFC vector) that agrees with the app both ways *and* on the secret parsed out of the actual `otpauth://` QR — which is spec-compliant SHA1/6-digit/30s. A real authenticator app is one more RFC-6238 implementation of that same URI, so a physical phone scan (checklist 06) is now a formality, not an open correctness risk. Falsified: a 60s step or a mangled QR secret breaks the interop tests. Other roles keep a single factor by design. **2026-10-17, first run with an enrolled account:** three bypass-adjacent gaps found and fixed — a code could be replayed within its window, one recovery code sent at once gave five sessions, and wrong codes never fed the lockout (the rate limit is per IP, so distributed guessing was unbounded). Now one sign-in per code step (atomic Redis claim), recovery codes spent under a row lock, wrong codes counted like wrong MPINs. `test_mfa_login.py` (3), red first. |
 | Account enumeration | VERIFIED | **Was exploitable.** Bodies always matched, but `login()` short-circuited past bcrypt for an unknown username: 238.7 ms vs 3.9 ms, a 61x tell. Closed with `verify_mpin_constant_time`, which always hashes; re-measured at 240.6 vs 239.7 ms (1.00x). 5 tests. |
+| Username uniqueness / confusable collision (case & Unicode) | VERIFIED | **Open gap — live-checked 2026-10-25, not yet fixed.** Usernames are stored and matched by exact code points, with no case-folding or Unicode normalisation, so two accounts can carry a human-identical name. *Case:* with `iyer_maths` present, `IYER_MATHS` registered and was approved as a separate account (id 12077); same for `AARAV8` vs `aarav8` — login resolves each to its own row (`AARAV8` + aarav8's MPIN opens its own account, not aarav8's). *Homoglyph:* `tеacher_das` with a Cyrillic е (U+0435) registered alongside ASCII `teacher_das` (ids 12078/12079); earlier `аarav8` (Cyrillic а) alongside `aarav8`. Exact-ASCII duplicates are still refused (409), so the uniqueness check is codepoint-exact only. **Impact:** a look-alike handle impersonates a real teacher/student; a parent or admin can't tell them apart in a user list, and the display name on a broadcast/homework is spoofable. School *names* are already case-folded (409 on `sunrise public school`), so the pattern exists to extend to usernames. **Fix direction:** NFKC-normalise + case-fold (ideally confusable-skeleton) the username for the uniqueness check and at login resolution. Found J-03 / K-21 in the 2026-10-24 real-user adversarial pass. **No test yet.** |
 | Forgot-MPIN / recovery flow abuse | VERIFIED | There is no self-service reset: "Forgot your MPIN?" only tells the user to ask their admin, so recovery means an admin reset or a self change. **Was exploitable:** neither ended an existing session. After an admin reset, the old access token still worked and the old refresh token kept rotating for its full 30 days, so the reset locked out nobody; a revoked token could still open a realtime socket too. Fixed with `users.tokens_valid_after` (migration 037): an admin reset or any of the four self-service changes stamps it, and `_get_current_user`, `/auth/refresh` and the `/ws` handshake reject tokens whose sub-second `iat` predates it. Self changes return a fresh pair and the client stores it (`_adoptReissuedSession`), so the user who changed their MPIN stays signed in. 9 integration tests (`test_session_revocation.py`): old access, refresh and socket all refused after a reset, other sessions killed by a self change, re-login with the new MPIN works, a non-MPIN edit revokes nothing, a cross-school reset 404s and revokes nothing, and a weak reset MPIN 422s. Plus 1 unit test on the socket gate and 4 Flutter tests on token adoption. Falsified: dropping the refresh check or the access check each fails 2 tests; without the client change all 4 Flutter tests fail. |
 | Session fixation | OPEN | Not assessed. |
 
@@ -830,6 +831,25 @@ obfuscation, pinning bypass. Those are real, and several are genuinely open abov
 But the risks that actually sink a product like this one are duller: a default
 credential left in a seed script, an unpublished privacy policy, a backup nobody has
 ever restored. The ordering above reflects consequence rather than visibility.
+
+### 2026-10-25 — username normalisation gap (real-user adversarial pass)
+
+During the scripted adversarial sweep in [`docs/real-user-test-plan.md`](docs/real-user-test-plan.md)
+§J/§K (local stack, Sunrise fixtures), every tenancy, authorization, JWT, WebSocket,
+injection, upload, header, CORS and log-redaction check held. One new risk surfaced and
+was added above: **Username uniqueness / confusable collision**. Usernames are compared
+by exact code points only — no case-fold, no NFKC. Live-checked today: `IYER_MATHS`
+registered next to `iyer_maths` (id 12077), and `tеacher_das` with a Cyrillic е next to
+ASCII `teacher_das` (ids 12078/12079); exact-ASCII duplicates still 409. Impact is
+impersonation by a look-alike handle. Status VERIFIED (evidence here), but the control
+is **not built** — no normalisation and no test. School names already case-fold, so the
+fix is to apply the same (plus Unicode) to usernames at registration and login
+resolution.
+
+> Note: this was a targeted check, not a full sweep — "Last verification sweep" above
+> stays 2026-10-10. The `IYER_MATHS` / `tеacher_das` / `aarav8`-family accounts created
+> while probing are left in the local DB; the pre-test state is in
+> `.claude/backups/` (see the test-plan run log).
 
 ---
 
