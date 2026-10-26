@@ -160,6 +160,10 @@ class BroadcastModel {
         message: json['message'] as String,
         targetType: json['target_type'] as String,
         targetGrade: json['target_grade'] as int?,
-        createdAt: DateTime.parse(json['created_at'] as String),
+        // created_at is a tz-aware UTC timestamp; .toLocal() so the screens
+        // show the viewer's wall-clock time (and date) rather than UTC.
+        // isAfter/difference comparisons are unaffected — they work on the
+        // absolute instant regardless of the UTC flag.
+        createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
       );
 }

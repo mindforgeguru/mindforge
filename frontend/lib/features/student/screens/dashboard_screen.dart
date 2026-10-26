@@ -61,11 +61,34 @@ class _StudentDashboardScreenState
 
   String get _todayString => _fmtYMD.format(DateTime.now());
 
+  // Fires just after the next local midnight so the dashboard rolls over to
+  // the new day while the app is left open (see _scheduleMidnightRollover).
+  Timer? _midnightTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _connectWs());
+    _scheduleMidnightRollover();
+  }
+
+  // Without this, _todayString and the "Today's Timetable" date stay on
+  // yesterday when the app is left foregrounded across midnight — nothing else
+  // rebuilds the screen. Arm a timer for just after midnight; on fire, re-key
+  // the day-scoped provider and repaint, then arm again for the next day.
+  void _scheduleMidnightRollover() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    // One minute past midnight — a small cushion so the clock is safely into
+    // the new day before we fetch its data.
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1, 0, 1);
+    _midnightTimer = Timer(nextMidnight.difference(now), () {
+      if (!mounted) return;
+      ref.invalidate(studentDashboardSummaryProvider(_todayString));
+      setState(() {}); // Re-key the watch and repaint today's date.
+      _scheduleMidnightRollover();
+    });
   }
 
   // When the app last entered the paused state. Used to debounce brief
@@ -166,6 +189,7 @@ class _StudentDashboardScreenState
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _wsSub?.cancel();
+    _midnightTimer?.cancel();
     super.dispose();
   }
 

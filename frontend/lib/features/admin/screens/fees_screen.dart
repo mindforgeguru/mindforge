@@ -1,3 +1,6 @@
+import 'dart:math';
+
+import 'package:dio/dio.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -534,6 +537,11 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
   bool _recording = false;
   DateTime _selectedDate = DateTime.now();
 
+  // A stable idempotency key for the payment currently being entered. Held
+  // across a failed attempt and the retry interceptor's re-POSTs so the same
+  // payment can't be recorded twice; rotated only once a payment succeeds.
+  String? _paymentKey;
+
   @override
   void dispose() {
     _amountCtrl.dispose();
@@ -794,34 +802,67 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
       return;
     }
     setState(() => _recording = true);
+    // Reuse the pending key if this is a retry of the same payment; mint a new
+    // one for a fresh payment. '${micros}-${rand}' is a unique opaque token —
+    // the backend treats it as a string, so it needs no uuid package.
+    final key = _paymentKey ??=
+        '${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(1 << 32)}';
     try {
       final api = ref.read(apiClientProvider);
-      await api.recordFeePayment({
-        'student_id': widget.summary['student_id'] as int,
-        'amount': amount,
-        'notes': _notesCtrl.text.trim().isEmpty
-            ? null
-            : _notesCtrl.text.trim(),
-        'paid_at': _selectedDate.toIso8601String(),
-      });
-      _amountCtrl.clear();
-      _notesCtrl.clear();
-      setState(() => _selectedDate = DateTime.now());
-      widget.onPaymentRecorded();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content:
-                Text('₹${amount.toStringAsFixed(0)} recorded for ${widget.summary['username']}'),
-            backgroundColor: AppColors.success));
-      }
-    } catch (e) {
-      if (mounted) {
+      await api.recordFeePayment(
+        {
+          'student_id': widget.summary['student_id'] as int,
+          'amount': amount,
+          'notes': _notesCtrl.text.trim().isEmpty
+              ? null
+              : _notesCtrl.text.trim(),
+          'paid_at': _selectedDate.toIso8601String(),
+        },
+        idempotencyKey: key,
+      );
+      _onPaymentDone(
+          '₹${amount.toStringAsFixed(0)} recorded for ${widget.summary['username']}');
+    } on DioException catch (e) {
+      // A 409 on our idempotency key means this exact payment already landed
+      // (a lost response or a double-submit) — not an error to alarm the admin
+      // with. Refresh so they see the payment that did go through.
+      if (e.response?.statusCode == 409) {
+        _onPaymentDone('That payment was already recorded.');
+      } else if (mounted) {
+        setState(() => _recording = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Error: ${apiErrorMessage(e)}'),
             backgroundColor: AppColors.error));
       }
-    } finally {
-      if (mounted) setState(() => _recording = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _recording = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error: ${apiErrorMessage(e)}'),
+            backgroundColor: AppColors.error));
+      }
+    }
+  }
+
+  /// Shared success path for a recorded (or already-recorded) payment: clear
+  /// the form, rotate the idempotency key so the next payment is distinct, and
+  /// refresh the list.
+  void _onPaymentDone(String message) {
+    _amountCtrl.clear();
+    _notesCtrl.clear();
+    if (mounted) {
+      setState(() {
+        _selectedDate = DateTime.now();
+        _paymentKey = null;
+        _recording = false;
+      });
+    } else {
+      _paymentKey = null;
+    }
+    widget.onPaymentRecorded();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(message), backgroundColor: AppColors.success));
     }
   }
 }

@@ -1112,8 +1112,22 @@ class ApiClient {
     await _dio.delete('/admin/fees/structure/$id');
   }
 
-  Future<Map<String, dynamic>> recordFeePayment(Map<String, dynamic> data) async {
-    final res = await _dio.post('/admin/fees/payments', data: data);
+  Future<Map<String, dynamic>> recordFeePayment(
+    Map<String, dynamic> data, {
+    String? idempotencyKey,
+  }) async {
+    // X-Idempotency-Key lets the backend reject a duplicate of the same
+    // payment. It matters because the connection-error retry interceptor
+    // above re-POSTs when a response is lost: without the key, a payment that
+    // was actually recorded (but whose response never arrived) would be
+    // recorded a second time by the retry.
+    final res = await _dio.post(
+      '/admin/fees/payments',
+      data: data,
+      options: idempotencyKey == null
+          ? null
+          : Options(headers: {'X-Idempotency-Key': idempotencyKey}),
+    );
     return res.data as Map<String, dynamic>;
   }
 

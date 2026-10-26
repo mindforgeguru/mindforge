@@ -363,3 +363,15 @@ Started fixing the most important findings. Backend, verified against the live l
 Targeted suites green: grading/submission 171, username/attempt 13, auth/account/token 29.
 
 **Still to fix (next batch, client-side — need a Flutter rebuild):** duplicate fee payment on double-tap (J-08 — backend already supports `X-Idempotency-Key`; wire the admin Pay button to send it + disable on tap), dashboard date roll-over after midnight (#1), broadcast times in UTC (#20, add `.toLocal()`), Class High/Low showing the student's own min/max (#19). Backend-side: no upper fee bound (J-11), 0-question test publishable (J-05), auto-publish of online tests (#12).
+
+### 2026-10-26 — fixes (second batch, client-side)
+
+Flutter frontend, built with `--dart-define=LOCAL_DEV=true` and driven against the live local stack in a browser pane (pre-boot `requestAnimationFrame` shim + a `resize`-event repaint to beat the hidden-pane canvas throttling).
+
+- **J-08 fixed — duplicate fee payment on double-tap / lost-response retry.** The admin Pay button already disabled while recording, but no idempotency key was sent, so the Dio connection-error **retry interceptor** (`api_client.dart`, re-POSTs on `connectionError`) could record a payment twice when a response was lost. `recordFeePayment` now sends `X-Idempotency-Key`; the admin fees screen (`features/admin/screens/fees_screen.dart`) holds a **stable key per payment entry** (survives the retries, rotated only on success) and treats the backend's 409 as "already recorded" (success, with a refresh) rather than a red error. Contract verified live against the real API: same key → **201 then 409** ("Duplicate request: this payment was already recorded"); no key → 201 (legacy path). Two test payments created during the check were deleted (204).
+- **#20 fixed — broadcast times/dates shown in UTC.** `BroadcastModel.fromJson` parsed `created_at` without `.toLocal()`. The column is `timestamp with time zone` and Pydantic serializes it as `...Z` (verified: `"2026-10-24T11:21:50Z"`), so Dart parsed it `isUtc` and every screen rendered UTC. Added `.toLocal()` at parse — fixes all five display sites at once. `isAfter`/`difference` comparisons are unaffected (they work on the absolute instant).
+- **#1 fixed — student dashboard date stuck on yesterday across midnight.** The "Today's Timetable" date and the day-scoped summary provider key (`_todayString`) only refreshed on a rebuild; a foregrounded app past midnight kept yesterday. Added a midnight `Timer` (`dashboard_screen.dart`) that re-keys the provider and repaints just after 00:00, re-arming for the next day; cancelled in `dispose`.
+
+`flutter analyze` clean on the four changed files (two pre-existing `prefer_const` infos on unrelated `SchoolLogo` lines left as-is). Release web build compiled. The uncommitted `login_screen.dart` redesign was built for the run but is **not** part of this commit.
+
+**Still to fix (next batch):** Class High/Low showing the student's own min/max (#19, client); backend-side — no upper fee bound (J-11), 0-question test publishable (J-05), auto-publish of online tests (#12).
