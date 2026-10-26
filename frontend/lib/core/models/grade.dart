@@ -10,6 +10,11 @@ class GradeModel {
   final double percentage;
   final String gradeType; // 'online' | 'offline' | 'manual'
   final DateTime createdAt;
+  // Real class high/low for the test this grade came from (online tests only).
+  // Null for offline/manual grades with no test cohort — the UI then hides the
+  // Class High/Low row rather than inventing it from the student's own scores.
+  final double? classHigh;
+  final double? classLow;
 
   const GradeModel({
     required this.id,
@@ -23,6 +28,8 @@ class GradeModel {
     required this.percentage,
     required this.gradeType,
     required this.createdAt,
+    this.classHigh,
+    this.classLow,
   });
 
   factory GradeModel.fromJson(Map<String, dynamic> json) => GradeModel(
@@ -37,5 +44,7 @@ class GradeModel {
         percentage: (json['percentage'] as num).toDouble(),
         gradeType: json['grade_type'] as String,
         createdAt: DateTime.parse(json['created_at'] as String),
+        classHigh: (json['class_high'] as num?)?.toDouble(),
+        classLow: (json['class_low'] as num?)?.toDouble(),
       );
 }

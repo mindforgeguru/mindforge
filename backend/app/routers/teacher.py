@@ -1041,11 +1041,12 @@ async def generate_test(
     await db.commit()
     await db.refresh(test)
 
-    # Explicitly publish online tests via a direct UPDATE (bypasses server default)
-    if test_type == "online":
-        await db.execute(update(Test).where(Test.id == test.id).values(is_published=True))
-        await db.commit()
-        await db.refresh(test)
+    # #12: online tests are NOT auto-published. A freshly generated AI test is
+    # unreviewed — publishing it here let students see and take it (and, with
+    # the lost-option-edit bug, could lock in uncorrected questions) before the
+    # teacher ever looked at it. It now starts unpublished (is_published default
+    # False) and becomes visible only when the teacher publishes it via
+    # POST /tests/{id}/publish, which is also where students are announced.
 
     # For offline tests, generate printable PDF + answer key and store them
     if test_type == "offline":
@@ -1563,6 +1564,15 @@ async def publish_test(
         raise HTTPException(status_code=404, detail="Test not found")
     if test.teacher_id != current_teacher.id and await _creator_is_active(test, db):
         raise HTTPException(status_code=403, detail="Only the teacher who created this test can publish/unpublish it")
+    # J-05: never publish a test with no questions — a student would open an
+    # empty paper that auto-submits for 0. Unpublishing an empty test is still
+    # allowed (so a mistakenly-emptied published test can be pulled).
+    going_live = not test.is_published
+    if going_live and not (test.questions or []):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This test has no questions. Add at least one question before publishing.",
+        )
     test.is_published = not test.is_published
     start_window_on_first_publish(test)
     await db.commit()

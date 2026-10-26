@@ -375,3 +375,16 @@ Flutter frontend, built with `--dart-define=LOCAL_DEV=true` and driven against t
 `flutter analyze` clean on the four changed files (two pre-existing `prefer_const` infos on unrelated `SchoolLogo` lines left as-is). Release web build compiled. The uncommitted `login_screen.dart` redesign was built for the run but is **not** part of this commit.
 
 **Still to fix (next batch):** Class High/Low showing the student's own min/max (#19, client); backend-side — no upper fee bound (J-11), 0-question test publishable (J-05), auto-publish of online tests (#12).
+
+### 2026-10-26 — fixes (third batch)
+
+Backend fixes verified live against the local stack; frontend (#19) built and its data path verified via the API.
+
+- **J-05 fixed — a 0-question test can no longer be published.** `POST /teacher/tests/{id}/publish` now refuses to go live when the test has no questions (400, "Add at least one question before publishing"); unpublishing an empty test is still allowed. Live: publishing an empty test 483 → 400; after adding one question → 200.
+- **#12 fixed — online tests no longer auto-publish on generation.** Removed the post-create `is_published=True` UPDATE in the test-creation handler (`teacher.py`). A freshly generated AI test is unreviewed, so it now starts unpublished and becomes visible only when the teacher publishes it (which is also where students are announced). Verified by code — AI generation left un-run to avoid live billing.
+- **J-11 fixed — fee payments can't exceed the outstanding balance.** `record_fee_payment` now computes the student's total fee (shared `app/core/fee_math.py`, reused by the fee summary so the two can't drift) and refuses a payment that would push total paid past it (400, showing the exact ₹ outstanding). Only guards when a fee structure exists — no structure means no known total, so pre-structure payments aren't blocked. Paise rounding tolerated so paying the exact balance is never refused. Live (student 28, ₹30,000 balance): ₹30,001 → 400; ₹30,000 → 201; +₹1 when fully paid → 400. 9 unit tests (`tests/test_fee_math.py`).
+- **#19 fixed — "Class High / Class Low" now show the real class figures, not the student's own min/max.** `/student/grades` and `/parent/child/grades` attach `class_high`/`class_low` per grade, computed across every grade for that test in the school (`app/core/grade_stats.py`); grades not tied to a test get null. `GradeModel` reads the two fields and both grade screens show the row only when present, instead of faking it from the viewer's own scores. Live: aarav8 scored 78.3% on test 17 but the API returns class_high 100.0 / class_low 0.0; a manual grade returns null. 5 unit tests (`tests/test_grade_stats.py`).
+
+Full backend unit suite: **634 passed, 2 skipped**. `flutter analyze` clean on the changed Dart files (grade model + both grade screens); release web build compiles. Local-only test setup: `hansal_sir` and `aarav8` (school 1) MPINs were set to `135792` for the live checks (recorded in local-test-accounts.md); all temporary payments and the throwaway test were deleted.
+
+**Remaining catalogued findings (not in scope this session):** #13 lost option-only edits on test questions (client), K-17 XSS-in-PDF unchecked, plus the smaller per-row notes.

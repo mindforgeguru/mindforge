@@ -232,10 +232,8 @@ class _OnlineGradesTabState extends ConsumerState<_OnlineGradesTab> {
       hasMore: _hasMore,
       isLoadingMore: _isLoadingMore,
       onLoadMore: _loadMore,
-      buildCard: (g, high, low) => _GradeCard(
+      buildCard: (g) => _GradeCard(
         grade: g,
-        classHigh: high,
-        classLow: low,
         onTap: g.testId != null
             ? () => context
                 .go('${RouteNames.studentDashboard}/tests/${g.testId}/review')
@@ -346,8 +344,7 @@ class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
       hasMore: _hasMore,
       isLoadingMore: _isLoadingMore,
       onLoadMore: _loadMore,
-      buildCard: (g, high, low) =>
-          _GradeCard(grade: g, classHigh: high, classLow: low),
+      buildCard: (g) => _GradeCard(grade: g),
     );
   }
 }
@@ -979,7 +976,7 @@ class _GradesTabBody extends StatelessWidget {
   final String? filterSubject;
   final ValueChanged<String?> onSubjectChanged;
   final Future<void> Function() onRefresh;
-  final Widget Function(GradeModel g, double high, double low) buildCard;
+  final Widget Function(GradeModel g) buildCard;
   final String emptyMessage;
   final String emptySubMessage;
   final bool hasMore;
@@ -1018,17 +1015,6 @@ class _GradesTabBody extends StatelessWidget {
       return Center(child: emptyContent);
     }
 
-    // Pre-compute per-subject min/max in a single O(n) pass so
-    // itemBuilder doesn't call reduce() for every visible row.
-    final Map<String, double> subjectMax = {};
-    final Map<String, double> subjectMin = {};
-    for (final g in grades) {
-      final s = g.subject;
-      final p = g.percentage;
-      if (!subjectMax.containsKey(s) || p > subjectMax[s]!) subjectMax[s] = p;
-      if (!subjectMin.containsKey(s) || p < subjectMin[s]!) subjectMin[s] = p;
-    }
-
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView.separated(
@@ -1045,7 +1031,7 @@ class _GradesTabBody extends StatelessWidget {
             );
           }
           final g = grades[i];
-          return buildCard(g, subjectMax[g.subject]!, subjectMin[g.subject]!);
+          return buildCard(g);
         },
       ),
     );
@@ -1089,14 +1075,10 @@ class _GradesTabBody extends StatelessWidget {
 
 class _GradeCard extends StatelessWidget {
   final GradeModel grade;
-  final double classHigh;
-  final double classLow;
   final VoidCallback? onTap;
 
   const _GradeCard({
     required this.grade,
-    required this.classHigh,
-    required this.classLow,
     this.onTap,
   });
 
@@ -1164,20 +1146,25 @@ class _GradeCard extends StatelessWidget {
                 minHeight: 6,
               ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Class High: ${classHigh.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                        fontSize: R.fs(context, 11, min: 9, max: 13),
-                        color: AppColors.success)),
-                Text('Class Low: ${classLow.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                        fontSize: R.fs(context, 11, min: 9, max: 13),
-                        color: AppColors.error)),
-              ],
-            ),
+            // Class High/Low come from the whole class that took this test;
+            // for grades not tied to a test there's no cohort, so the row is
+            // hidden rather than showing the student's own score (#19).
+            if (grade.classHigh != null && grade.classLow != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Class High: ${grade.classHigh!.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                          fontSize: R.fs(context, 11, min: 9, max: 13),
+                          color: AppColors.success)),
+                  Text('Class Low: ${grade.classLow!.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                          fontSize: R.fs(context, 11, min: 9, max: 13),
+                          color: AppColors.error)),
+                ],
+              ),
+            ],
             if (onTap != null) ...[
               const SizedBox(height: 8),
                     Row(

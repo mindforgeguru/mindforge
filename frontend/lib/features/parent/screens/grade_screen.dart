@@ -137,8 +137,7 @@ class _OnlineGradesTabState extends ConsumerState<_OnlineGradesTab> {
       hasMore: _hasMore,
       isLoadingMore: _isLoadingMore,
       onLoadMore: _loadMore,
-      buildCard: (g, high, low) =>
-          _GradeCard(grade: g, classHigh: high, classLow: low),
+      buildCard: (g) => _GradeCard(grade: g),
     );
   }
 }
@@ -217,8 +216,7 @@ class _OfflineGradesTabState extends ConsumerState<_OfflineGradesTab> {
       hasMore: _hasMore,
       isLoadingMore: _isLoadingMore,
       onLoadMore: _loadMore,
-      buildCard: (g, high, low) =>
-          _GradeCard(grade: g, classHigh: high, classLow: low),
+      buildCard: (g) => _GradeCard(grade: g),
     );
   }
 }
@@ -825,7 +823,7 @@ class _GradesTabBody extends StatelessWidget {
   final String? filterSubject;
   final ValueChanged<String?> onSubjectChanged;
   final Future<void> Function() onRefresh;
-  final Widget Function(GradeModel g, double high, double low) buildCard;
+  final Widget Function(GradeModel g) buildCard;
   final String emptyMessage;
   final String emptySubMessage;
   final bool hasMore;
@@ -901,11 +899,6 @@ class _GradesTabBody extends StatelessWidget {
                 );
               }
 
-              final Map<String, List<double>> subjectPcts = {};
-              for (final g in grades) {
-                subjectPcts.putIfAbsent(g.subject, () => []).add(g.percentage);
-              }
-
               return RefreshIndicator(
                 onRefresh: onRefresh,
                 child: ListView.separated(
@@ -925,12 +918,7 @@ class _GradesTabBody extends StatelessWidget {
                       );
                     }
                     final g = grades[i];
-                    final pcts = subjectPcts[g.subject]!;
-                    return buildCard(
-                      g,
-                      pcts.reduce((a, b) => a > b ? a : b),
-                      pcts.reduce((a, b) => a < b ? a : b),
-                    );
+                    return buildCard(g);
                   },
                 ),
               );
@@ -946,13 +934,9 @@ class _GradesTabBody extends StatelessWidget {
 
 class _GradeCard extends StatelessWidget {
   final GradeModel grade;
-  final double classHigh;
-  final double classLow;
 
   const _GradeCard({
     required this.grade,
-    required this.classHigh,
-    required this.classLow,
   });
 
   Color get _pctColor {
@@ -1013,20 +997,24 @@ class _GradeCard extends StatelessWidget {
               minHeight: 6,
             ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Class High: ${classHigh.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                      fontSize: R.fs(context, 11, min: 9, max: 13),
-                      color: AppColors.success)),
-              Text('Class Low: ${classLow.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                      fontSize: R.fs(context, 11, min: 9, max: 13),
-                      color: AppColors.error)),
-            ],
-          ),
+          // Real class figures come from the backend per test; hide the row
+          // for grades with no test cohort rather than faking it (#19).
+          if (grade.classHigh != null && grade.classLow != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Class High: ${grade.classHigh!.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                        fontSize: R.fs(context, 11, min: 9, max: 13),
+                        color: AppColors.success)),
+                Text('Class Low: ${grade.classLow!.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                        fontSize: R.fs(context, 11, min: 9, max: 13),
+                        color: AppColors.error)),
+              ],
+            ),
+          ],
         ],
       ),
     );

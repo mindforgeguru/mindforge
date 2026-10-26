@@ -239,7 +239,7 @@ async def get_child_grades(
     child_id: Optional[int] = _CHILD_ID,
 ):
     """Get the child's grades."""
-    from app.routers.student import _sweep_missed_tests_for_grade
+    from app.routers.student import _sweep_missed_tests_for_grade, _attach_class_stats
 
     profile = await _get_child_profile(current_parent, db, child_id)
     # Surface 0s for online tests the child missed within the 48h window.
@@ -250,7 +250,10 @@ async def get_child_grades(
     if grade_type:
         query = query.where(Grade.grade_type == grade_type)
     result = await db.execute(query.order_by(Grade.created_at.desc()).offset(skip).limit(limit))
-    return result.scalars().all()
+    grades = result.scalars().all()
+    # Class high/low is computed across the child's grade cohort in the school,
+    # so a parent sees the real class figures, not the child's own min/max (#19).
+    return await _attach_class_stats(db, grades, profile.school_id)
 
 
 # ─── Presentation progress (the chosen child's grade) ──────────────────────────

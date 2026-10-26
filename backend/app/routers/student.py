@@ -25,6 +25,7 @@ from app.models.user import StudentProfile, User
 from app.schemas.attendance import AttendanceResponse, AttendanceSummary
 from app.schemas.user import AdminMpinUpdate
 from app.schemas.grade import GradeResponse
+from app.core.grade_stats import class_extremes, percentage as _pct
 from app.schemas.test import (
     TestAnswersSave,
     TestAttemptResponse,
@@ -357,6 +358,31 @@ async def get_my_timetable(
 
 # ─── Grades ────────────────────────────────────────────────────────────────────
 
+async def _attach_class_stats(db, grades, school_id):
+    """Return GradeResponses with real class high/low for test-linked grades.
+
+    For every grade that came from a test, the high/low is taken across all of
+    that test's grades in the school; grades with no test_id get null (#19).
+    """
+    responses = [GradeResponse.model_validate(g) for g in grades]
+    test_ids = {g.test_id for g in grades if g.test_id is not None}
+    if not test_ids:
+        return responses
+    rows = await db.execute(
+        select(Grade.test_id, Grade.marks_obtained, Grade.max_marks).where(
+            Grade.test_id.in_(test_ids),
+            Grade.school_id == school_id,
+        )
+    )
+    extremes = class_extremes(
+        (tid, _pct(mo, mm)) for tid, mo, mm in rows.all()
+    )
+    for resp, g in zip(responses, grades):
+        if g.test_id in extremes:
+            resp.class_high, resp.class_low = extremes[g.test_id]
+    return responses
+
+
 @router.get("/grades", response_model=List[GradeResponse])
 async def get_my_grades(
     subject: Optional[str] = Query(None),
@@ -374,7 +400,8 @@ async def get_my_grades(
     if grade_type:
         query = query.where(Grade.grade_type == GT(grade_type))
     result = await db.execute(query.order_by(Grade.created_at.desc()).offset(skip).limit(limit))
-    return result.scalars().all()
+    grades = result.scalars().all()
+    return await _attach_class_stats(db, grades, current_student.school_id)
 
 
 # ─── Tests ─────────────────────────────────────────────────────────────────────

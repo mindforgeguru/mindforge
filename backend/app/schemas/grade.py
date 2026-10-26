@@ -45,6 +45,12 @@ class GradeResponse(BaseModel):
     percentage: float
     grade_type: GradeType
     created_at: datetime
+    # Class high/low for the test this grade came from (online tests only, where
+    # a cohort exists). Null for offline/manual grades that aren't tied to a
+    # test — the client hides the Class High/Low row rather than showing the
+    # student's own score as if it were the class's (#19).
+    class_high: Optional[float] = None
+    class_low: Optional[float] = None
 
     model_config = {"from_attributes": True}
 

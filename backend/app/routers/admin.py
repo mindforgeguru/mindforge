@@ -20,6 +20,7 @@ from app.core.security import get_current_admin
 from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.core.school_time import school_today
 from app.core.mpin_guard import mpin_matches
+from app.core.fee_math import total_fee_for, balance_due, would_overpay
 from app.models.academic_year import AcademicYear
 from app.models.audit_log import AuditLog
 from app.models.fees import FeePayment, FeeStructure, PaymentInfo
@@ -1018,14 +1019,13 @@ async def get_all_fee_summaries(
     for user, profile in rows:
         fs = fee_structures.get(profile.grade)
         if fs:
-            total_fee = float(fs.base_amount)
-            for subj in (profile.additional_subjects or []):
-                if subj == "economics":
-                    total_fee += float(fs.economics_fee)
-                elif subj == "computer":
-                    total_fee += float(fs.computer_fee)
-                elif subj == "ai":
-                    total_fee += float(fs.ai_fee)
+            total_fee = total_fee_for(
+                base_amount=fs.base_amount,
+                economics_fee=fs.economics_fee,
+                computer_fee=fs.computer_fee,
+                ai_fee=fs.ai_fee,
+                additional_subjects=profile.additional_subjects,
+            )
         else:
             total_fee = 0.0
 
@@ -1039,7 +1039,7 @@ async def get_all_fee_summaries(
             "academic_year": academic_year,
             "total_fee": total_fee,
             "total_paid": total_paid,
-            "balance_due": max(0.0, total_fee - total_paid),
+            "balance_due": balance_due(total_fee, total_paid),
             "payments": [
                 {
                     "id": p.id,
@@ -1235,13 +1235,60 @@ async def record_fee_payment(
             )
     # Cross-school guard: only record payments for this school's students.
     target = await db.execute(
-        select(StudentProfile.user_id).where(
+        select(StudentProfile).where(
             StudentProfile.user_id == payload.student_id,
             StudentProfile.school_id == current_admin.school_id,
         )
     )
-    if target.scalar_one_or_none() is None:
+    profile = target.scalar_one_or_none()
+    if profile is None:
         raise HTTPException(status_code=404, detail="Student not found.")
+
+    # J-11: refuse a payment that would take the student past their total fee.
+    # Overpayment used to be accepted silently (the balance just clamped to ₹0),
+    # hiding data-entry slips like an extra zero. We only guard when a fee
+    # structure exists for the student's grade in the current year — with no
+    # structure there is no known total to exceed.
+    cur_year = await db.execute(
+        select(AcademicYear.year_label).where(
+            AcademicYear.is_current == True,  # noqa: E712
+            AcademicYear.school_id == current_admin.school_id,
+        )
+    )
+    year_label = cur_year.scalar_one_or_none()
+    if year_label:
+        fs_res = await db.execute(
+            select(FeeStructure).where(
+                FeeStructure.academic_year == year_label,
+                FeeStructure.school_id == current_admin.school_id,
+                FeeStructure.grade == profile.grade,
+            )
+        )
+        fs = fs_res.scalar_one_or_none()
+        if fs is not None:
+            total_fee = total_fee_for(
+                base_amount=fs.base_amount,
+                economics_fee=fs.economics_fee,
+                computer_fee=fs.computer_fee,
+                ai_fee=fs.ai_fee,
+                additional_subjects=profile.additional_subjects,
+            )
+            paid_res = await db.execute(
+                select(sqlfunc.coalesce(sqlfunc.sum(FeePayment.amount), 0)).where(
+                    FeePayment.student_id == payload.student_id,
+                    FeePayment.school_id == current_admin.school_id,
+                )
+            )
+            total_paid = float(paid_res.scalar_one() or 0)
+            if would_overpay(total_fee, total_paid, payload.amount):
+                outstanding = balance_due(total_fee, total_paid)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"Payment exceeds the outstanding balance of "
+                        f"₹{outstanding:,.2f}. Enter ₹{outstanding:,.2f} or less."
+                    ),
+                )
 
     payment = FeePayment(
         student_id=payload.student_id,
