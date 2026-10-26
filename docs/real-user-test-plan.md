@@ -388,3 +388,10 @@ Backend fixes verified live against the local stack; frontend (#19) built and it
 Full backend unit suite: **634 passed, 2 skipped**. `flutter analyze` clean on the changed Dart files (grade model + both grade screens); release web build compiles. Local-only test setup: `hansal_sir` and `aarav8` (school 1) MPINs were set to `135792` for the live checks (recorded in local-test-accounts.md); all temporary payments and the throwaway test were deleted.
 
 **Remaining catalogued findings (not in scope this session):** #13 lost option-only edits on test questions (client), K-17 XSS-in-PDF unchecked, plus the smaller per-row notes.
+
+### 2026-10-26 — fixes (fourth batch)
+
+- **#13 fixed — option-only edits to a test question are no longer silently lost.** `_questionsEdited()` in `features/teacher/screens/test_detail_screen.dart` compared only `question`/`answer`/`marks`, so editing just an MCQ option left `hasEdits` false — no Save button appeared and the change was discarded on back. It now deep-compares the whole question map (new `_deepEquals` helper), so a change to any field — an option, a matching pair — is detected. `flutter analyze` clean.
+- **K-17 verified & locked — generated PDFs neutralise injection.** The finding was *unverified*, not broken: `pdf_service._safe` (xml escape) already wraps every user-supplied field (title, subject, question, options, match columns, answer, explanation), and source tags come from a fixed dict. Confirmed `_safe` turns `<img src=...>`, `<script>`, `<font>`, `</para>` and bare `&<>` into inert text, and that both generators produce a valid `%PDF-` with those payloads (without escaping, `</para>`/unbalanced `<img` would crash reportlab = DoS, and `<img src="http://169.254.169.254/...">` would attempt an SSRF fetch). 7 regression tests (`tests/test_pdf_injection.py`, container-only — reportlab is stubbed in the unit env). No feedback/other server-side HTML sink exists; feedback is canvas-rendered in the app (inert, as J-04 found for broadcasts/homework).
+
+Backend unit suite: 634 passed, 3 skipped (host); PDF/fee/grade integration tests pass in the backend container.

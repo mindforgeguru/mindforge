@@ -273,14 +273,36 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
   bool _questionsEdited() {
     final original = widget.test.questions ?? [];
     if (original.length != _questions.length) return true;
+    // Compare the whole question map, not just question/answer/marks: the edit
+    // dialog also changes `options` (and could change other fields), and
+    // ignoring those meant an option-only edit left no Save button and was
+    // silently discarded on back (#13).
     for (var i = 0; i < original.length; i++) {
-      final o = original[i];
-      final n = _questions[i];
-      if (o['question'] != n['question'] ||
-          o['answer'] != n['answer'] ||
-          o['marks'] != n['marks']) { return true; }
+      if (!_deepEquals(original[i], _questions[i])) return true;
     }
     return false;
+  }
+
+  /// Structural equality for the JSON-like question maps (Map/List/scalar),
+  /// so a change anywhere inside a question — an option, a matching pair — is
+  /// detected, not just the three top-level fields.
+  static bool _deepEquals(dynamic a, dynamic b) {
+    if (identical(a, b)) return true;
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      for (final k in a.keys) {
+        if (!b.containsKey(k) || !_deepEquals(a[k], b[k])) return false;
+      }
+      return true;
+    }
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!_deepEquals(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    return a == b;
   }
 }
 
