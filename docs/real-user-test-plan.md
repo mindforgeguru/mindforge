@@ -395,3 +395,13 @@ Full backend unit suite: **634 passed, 2 skipped**. `flutter analyze` clean on t
 - **K-17 verified & locked — generated PDFs neutralise injection.** The finding was *unverified*, not broken: `pdf_service._safe` (xml escape) already wraps every user-supplied field (title, subject, question, options, match columns, answer, explanation), and source tags come from a fixed dict. Confirmed `_safe` turns `<img src=...>`, `<script>`, `<font>`, `</para>` and bare `&<>` into inert text, and that both generators produce a valid `%PDF-` with those payloads (without escaping, `</para>`/unbalanced `<img` would crash reportlab = DoS, and `<img src="http://169.254.169.254/...">` would attempt an SSRF fetch). 7 regression tests (`tests/test_pdf_injection.py`, container-only — reportlab is stubbed in the unit env). No feedback/other server-side HTML sink exists; feedback is canvas-rendered in the app (inert, as J-04 found for broadcasts/homework).
 
 Backend unit suite: 634 passed, 3 skipped (host); PDF/fee/grade integration tests pass in the backend container.
+
+### 2026-10-26 — UI regression of the fixes (local web, IST pane)
+
+Re-ran the fixed cases in the real app (release web build, `--dart-define=LOCAL_DEV=true`, browser pane in Asia/Calcutta).
+
+- **#19 PASS (UI).** aarav8 (Hansel & Gretel, Grade 8) → Grades. Physics (test 17): own **78.3%**, card shows **Class High 100.0% / Class Low 0.0%** — the real class range, not the student's own score. Maths: own 84.0%, Class Low 55.0% (genuine class data). Pre-fix this showed the student's own min/max.
+- **#20 PASS (UI).** Student → Broadcasts. "QA leak check grade 8" stored 2026-10-09 **10:00:47 UTC** displays **"09 Oct, 03:30 PM"** (15:30 IST); "QA realtime" 09:59 UTC → 03:29 PM. Times now render in the viewer's local zone, not UTC.
+- **#13 PASS (UI).** hansal_sir → Tests → "current electricity (41-50)" (test 29). Clean detail: no Save banner. Edited **only Option D** (question count, text, answer C, marks all unchanged) → the **"Unsaved changes / Save" banner appeared** — pre-fix an option-only edit left no banner and was discarded. Backing out without saving left the DB Option D as "E = IR - Ir" (edit correctly not persisted; test intact). Also observed in passing: deleting a question showed the banner too (count change, already handled pre-fix).
+
+All three UI-observable fixes verified in the running app: #19, #20, #13. (J-08/J-05/J-11/#12/K-17 were verified live at the API level in earlier batches; #1 midnight rollover can't be exercised without advancing the wall clock.)
