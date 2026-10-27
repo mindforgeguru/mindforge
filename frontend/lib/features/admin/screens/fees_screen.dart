@@ -14,6 +14,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/confirm_dialog.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/currency.dart';
 import '../../../core/utils/image_pick.dart';
 import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
@@ -183,7 +184,6 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
   @override
   Widget build(BuildContext context) {
     final structuresAsync = ref.watch(feeStructuresProvider(widget.selectedYear));
-    final fmt = NumberFormat.currency(symbol: '₹', decimalDigits: 0);
 
     return RefreshIndicator(
       onRefresh: () async =>
@@ -245,7 +245,7 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
               }
               return Column(
                 children: structures
-                    .map((s) => _FeeStructureTile(structure: s, formatter: fmt))
+                    .map((s) => _FeeStructureTile(structure: s))
                     .toList(),
               );
             },
@@ -265,10 +265,10 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
       context,
       title: 'Confirm fee structure',
       message: 'Grade $_newGrade · ${widget.selectedYear}\n'
-          'Base fee: ₹${base.toStringAsFixed(0)}\n'
-          'Economics: ₹${econ.toStringAsFixed(0)}   '
-          'Computer: ₹${comp.toStringAsFixed(0)}   '
-          'AI: ₹${ai.toStringAsFixed(0)}\n\n'
+          'Base fee: ${formatInr(base)}\n'
+          'Economics: ${formatInr(econ)}   '
+          'Computer: ${formatInr(comp)}   '
+          'AI: ${formatInr(ai)}\n\n'
           'Is this correct?',
       confirmLabel: 'Save',
     );
@@ -314,7 +314,6 @@ class _PaymentsTab extends ConsumerStatefulWidget {
 }
 
 class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
-  final fmt = NumberFormat.currency(symbol: '₹', decimalDigits: 0);
   int? _filterGrade;
   int? _filterStudentId;
 
@@ -446,11 +445,11 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
               ),
               child: Row(
                 children: [
-                  _SummaryChip('Total Due', fmt.format(totalFeeAll),
+                  _SummaryChip('Total Due', formatInr(totalFeeAll),
                       Colors.white70, Colors.white),
-                  _SummaryChip('Collected', fmt.format(totalPaidAll),
+                  _SummaryChip('Collected', formatInr(totalPaidAll),
                       Colors.greenAccent.shade100, Colors.greenAccent),
-                  _SummaryChip('Balance', fmt.format(balanceAll),
+                  _SummaryChip('Balance', formatInr(balanceAll),
                       Colors.orange.shade100, Colors.orangeAccent),
                 ],
               ),
@@ -471,7 +470,6 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
             ...displayed.map((s) => _StudentPaymentCard(
                   summary: s,
                   academicYear: widget.selectedYear,
-                  formatter: fmt,
                   onPaymentRecorded: () {
                     ref.invalidate(feeSummariesProvider);
                   },
@@ -515,13 +513,11 @@ class _SummaryChip extends StatelessWidget {
 class _StudentPaymentCard extends ConsumerStatefulWidget {
   final Map<String, dynamic> summary;
   final String academicYear;
-  final NumberFormat formatter;
   final VoidCallback onPaymentRecorded;
 
   const _StudentPaymentCard({
     required this.summary,
     required this.academicYear,
-    required this.formatter,
     required this.onPaymentRecorded,
   });
 
@@ -627,7 +623,7 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
                           Text(
                             balance <= 0
                                 ? 'PAID'
-                                : widget.formatter.format(balance),
+                                : formatInr(balance),
                             style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: _statusColor,
@@ -666,12 +662,12 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                          'Paid: ${widget.formatter.format(totalPaid)}',
+                          'Paid: ${formatInr(totalPaid)}',
                           style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.textSecondary)),
                       Text(
-                          'Total: ${widget.formatter.format(totalFee)}',
+                          'Total: ${formatInr(totalFee)}',
                           style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.textSecondary)),
@@ -698,7 +694,6 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
                     const SizedBox(height: 8),
                     ...payments.map((p) => _PaymentLogTile(
                           payment: p,
-                          formatter: widget.formatter,
                           onChanged: widget.onPaymentRecorded,
                         )),
                     const Divider(),
@@ -821,7 +816,7 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
         idempotencyKey: key,
       );
       _onPaymentDone(
-          '₹${amount.toStringAsFixed(0)} recorded for ${widget.summary['username']}');
+          '${formatInr(amount)} recorded for ${widget.summary['username']}');
     } on DioException catch (e) {
       // A 409 on our idempotency key means this exact payment already landed
       // (a lost response or a double-submit) — not an error to alarm the admin
@@ -1245,9 +1240,7 @@ class _FeeField extends StatelessWidget {
 
 class _FeeStructureTile extends ConsumerStatefulWidget {
   final FeeStructureModel structure;
-  final NumberFormat formatter;
-  const _FeeStructureTile(
-      {required this.structure, required this.formatter});
+  const _FeeStructureTile({required this.structure});
 
   @override
   ConsumerState<_FeeStructureTile> createState() => _FeeStructureTileState();
@@ -1355,7 +1348,6 @@ class _FeeStructureTileState extends ConsumerState<_FeeStructureTile> {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = widget.formatter;
     final s = widget.structure;
 
     return Container(
@@ -1374,7 +1366,7 @@ class _FeeStructureTileState extends ConsumerState<_FeeStructureTile> {
                   children: [
                     Text('Grade ${s.grade}',
                         style: Theme.of(context).textTheme.titleMedium),
-                    Text(fmt.format(s.totalAmount),
+                    Text(formatInr(s.totalAmount),
                         style:       TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
@@ -1403,10 +1395,10 @@ class _FeeStructureTileState extends ConsumerState<_FeeStructureTile> {
           // ── Read-only breakdown ──────────────────────────────────────
           if (!_editing) ...[
             const SizedBox(height: 8),
-            if (s.baseAmount > 0) _AmountRow('Base', s.baseAmount, fmt),
-            if (s.economicsFee > 0) _AmountRow('Economics', s.economicsFee, fmt),
-            if (s.computerFee > 0) _AmountRow('Computer', s.computerFee, fmt),
-            if (s.aiFee > 0) _AmountRow('AI', s.aiFee, fmt),
+            if (s.baseAmount > 0) _AmountRow('Base', s.baseAmount),
+            if (s.economicsFee > 0) _AmountRow('Economics', s.economicsFee),
+            if (s.computerFee > 0) _AmountRow('Computer', s.computerFee),
+            if (s.aiFee > 0) _AmountRow('AI', s.aiFee),
           ],
 
           // ── Inline edit form ─────────────────────────────────────────
@@ -1441,8 +1433,7 @@ class _FeeStructureTileState extends ConsumerState<_FeeStructureTile> {
 class _AmountRow extends StatelessWidget {
   final String label;
   final double amount;
-  final NumberFormat fmt;
-  const _AmountRow(this.label, this.amount, this.fmt);
+  const _AmountRow(this.label, this.amount);
 
   @override
   Widget build(BuildContext context) {
@@ -1454,7 +1445,7 @@ class _AmountRow extends StatelessWidget {
           Text(label,
               style: const TextStyle(
                   color: AppColors.textSecondary, fontSize: 13)),
-          Text(fmt.format(amount),
+          Text(formatInr(amount),
               style: const TextStyle(fontSize: 13)),
         ],
       ),
@@ -1469,12 +1460,10 @@ class _AmountRow extends StatelessWidget {
 
 class _PaymentLogTile extends ConsumerStatefulWidget {
   final Map<String, dynamic> payment;
-  final NumberFormat formatter;
   final VoidCallback onChanged;
 
   const _PaymentLogTile({
     required this.payment,
-    required this.formatter,
     required this.onChanged,
   });
 
@@ -1536,7 +1525,7 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
       builder: (_) => AlertDialog(
         title: const Text('Delete Payment'),
         content: Text(
-            'Delete this payment of ${widget.formatter.format((widget.payment['amount'] as num).toDouble())}? This cannot be undone.'),
+            'Delete this payment of ${formatInr((widget.payment['amount'] as num).toDouble())}? This cannot be undone.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -1653,7 +1642,7 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.formatter.format(amount),
+                      Text(formatInr(amount),
                           style: const TextStyle(
                               fontWeight: FontWeight.w600, fontSize: 13)),
                       if (notes != null && notes.isNotEmpty)

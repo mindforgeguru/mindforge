@@ -12,6 +12,7 @@ import '../providers/admin_provider.dart';
 import '../widgets/admin_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
 import '../../../core/utils/api_error.dart';
+import '../../../core/utils/currency.dart';
 
 // Responsive scale: baseline 360 logical pixels wide
 double _sp(BuildContext context, double size) {
@@ -317,7 +318,7 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
                                         const SizedBox(width: 6),
                                         Text(
                                           (s['balance_due'] as num) > 0
-                                              ? 'Due: ₹${(s['balance_due'] as num).toStringAsFixed(0)}'
+                                              ? 'Due: ${formatInr(s['balance_due'] as num)}'
                                               : 'Paid',
                                           style: GoogleFonts.poppins(
                                             fontSize: _sp(context, 10),
@@ -469,14 +470,14 @@ class _BalanceCard extends StatelessWidget {
                 child: _StatCell(
                     context: context,
                     label: 'Total Fee',
-                    value: '₹${total.toStringAsFixed(0)}')),
+                    value: formatInr(total))),
             VerticalDivider(
                 color: Colors.grey.withValues(alpha: 0.3), width: 1),
             Expanded(
                 child: _StatCell(
                     context: context,
                     label: 'Paid',
-                    value: '₹${paid.toStringAsFixed(0)}',
+                    value: formatInr(paid),
                     color: AppColors.success)),
             VerticalDivider(
                 color: Colors.grey.withValues(alpha: 0.3), width: 1),
@@ -484,7 +485,7 @@ class _BalanceCard extends StatelessWidget {
                 child: _StatCell(
                     context: context,
                     label: 'Balance',
-                    value: '₹${balance.toStringAsFixed(0)}',
+                    value: formatInr(balance),
                     color:
                         balance > 0 ? AppColors.error : AppColors.success)),
           ],

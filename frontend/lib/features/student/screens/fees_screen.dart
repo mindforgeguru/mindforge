@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../core/models/fees.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/utils/currency.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../providers/student_provider.dart';
@@ -226,7 +227,7 @@ class _PayTab extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Balance Due: ${NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(fees.balanceDue)}',
+                      'Balance Due: ${formatInr(fees.balanceDue)}',
                       style: const TextStyle(
                           color: AppColors.error,
                           fontWeight: FontWeight.bold),
@@ -512,8 +513,6 @@ class _FeeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formatter =
-        NumberFormat.currency(symbol: '₹', decimalDigits: 0);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -524,7 +523,7 @@ class _FeeRow extends StatelessWidget {
                   color: AppColors.textSecondary,
                   fontSize: isSmall ? 13 : null,
                   fontWeight: isBold ? FontWeight.bold : null)),
-          Text(formatter.format(amount),
+          Text(formatInr(amount),
               style: TextStyle(
                   color: color,
                   fontWeight:
@@ -573,8 +572,6 @@ class _PaymentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formatter =
-        NumberFormat.currency(symbol: '₹', decimalDigits: 0);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: mindForgeCardDecoration(),
@@ -583,7 +580,7 @@ class _PaymentTile extends StatelessWidget {
           backgroundColor: AppColors.success.withValues(alpha: 0.15),
           child: const Icon(Icons.check, color: AppColors.success),
         ),
-        title: Text(formatter.format(payment.amount),
+        title: Text(formatInr(payment.amount),
             style: const TextStyle(
                 fontWeight: FontWeight.bold, fontSize: 16)),
         subtitle:

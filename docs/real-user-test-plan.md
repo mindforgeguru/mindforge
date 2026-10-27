@@ -405,3 +405,9 @@ Re-ran the fixed cases in the real app (release web build, `--dart-define=LOCAL_
 - **#13 PASS (UI).** hansal_sir → Tests → "current electricity (41-50)" (test 29). Clean detail: no Save banner. Edited **only Option D** (question count, text, answer C, marks all unchanged) → the **"Unsaved changes / Save" banner appeared** — pre-fix an option-only edit left no banner and was discarded. Backing out without saving left the DB Option D as "E = IR - Ir" (edit correctly not persisted; test intact). Also observed in passing: deleting a question showed the banner too (count change, already handled pre-fix).
 
 All three UI-observable fixes verified in the running app: #19, #20, #13. (J-08/J-05/J-11/#12/K-17 were verified live at the API level in earlier batches; #1 midnight rollover can't be exercised without advancing the wall clock.)
+
+### 2026-10-27 — fixes (fifth batch): J-11 currency display
+
+- **J-11 display fixed — paise kept and Indian digit grouping.** Fee amounts were formatted with `NumberFormat.currency(symbol: '₹', decimalDigits: 0)`: that dropped paise (₹0.50 rendered "₹1") and used Western grouping (₹99,99,999 → "₹9,999,999"). New shared helper `lib/core/utils/currency.dart` `formatInr` uses the `en_IN` locale (lakh/crore grouping) and shows paise only when present. Routed every ₹ display through it in the student, parent and admin fees screens plus admin reports, and removed the now-dead `NumberFormat` plumbing (3 widget classes). Unit test (`test/currency_test.dart`): ₹0.50→₹0.50, 9999999→₹99,99,999, 10052000→₹1,00,52,000, 40000→₹40,000. **UI PASS:** aarav8 Fees (release web build) with a ₹0.50 payment shows Amount Paid ₹0.50 (not ₹1) and Balance Due ₹29,999.50; test payment cleaned up afterward.
+
+This clears the J-11 display sub-item. The currency finding and the over-balance guard are both now resolved.
