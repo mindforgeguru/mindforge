@@ -395,7 +395,9 @@ class _PreviewEditTab extends StatelessWidget {
                   if (test.timeLimitMinutes != null)
                     _InfoChip(
                         icon: Icons.timer,
-                        label: '${questions.length} min'),
+                        // The actual stored limit students get, not the question
+                        // count — a 10-question online quiz is 5 min (#14).
+                        label: '${test.timeLimitMinutes} min'),
                   _InfoChip(
                       icon: test.testType == 'online'
                           ? Icons.wifi

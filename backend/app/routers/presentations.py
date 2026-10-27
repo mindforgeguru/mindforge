@@ -87,18 +87,10 @@ _UPLOADED_SLIDES_PER_PERIOD = 8
 # content to reliably yield a full 10, so 5 keeps generation succeeding.
 # (Manually-generated tests are unaffected and can be any length.)
 _AUTO_TEST_MCQ_COUNT = 5
-_AUTO_TEST_TIME_BUFFER_MIN = 2     # reading/settling time on top of 1 min/question
 from app.core.quiz_window import AUTO_TEST_WINDOW_HOURS as _AUTO_TEST_WINDOW_HOURS
+from app.core.test_timing import auto_quiz_time_limit_minutes as _auto_test_time_limit
 # Need at least this much slide text to bother asking the AI for a quiz.
 _AUTO_TEST_MIN_SOURCE_CHARS = 200
-
-
-def _auto_test_time_limit(num_questions: int) -> int:
-    """Per-attempt time for an auto-quiz: 1 minute per question plus a small
-    buffer, so the limit scales with however many questions actually got
-    generated (thin slides may yield fewer than the target). e.g. 5 → 7 min,
-    8 → 10, 10 → 12."""
-    return num_questions + _AUTO_TEST_TIME_BUFFER_MIN
 
 
 def _require_teacher_or_admin(user: User) -> None:

@@ -411,3 +411,13 @@ All three UI-observable fixes verified in the running app: #19, #20, #13. (J-08/
 - **J-11 display fixed — paise kept and Indian digit grouping.** Fee amounts were formatted with `NumberFormat.currency(symbol: '₹', decimalDigits: 0)`: that dropped paise (₹0.50 rendered "₹1") and used Western grouping (₹99,99,999 → "₹9,999,999"). New shared helper `lib/core/utils/currency.dart` `formatInr` uses the `en_IN` locale (lakh/crore grouping) and shows paise only when present. Routed every ₹ display through it in the student, parent and admin fees screens plus admin reports, and removed the now-dead `NumberFormat` plumbing (3 widget classes). Unit test (`test/currency_test.dart`): ₹0.50→₹0.50, 9999999→₹99,99,999, 10052000→₹1,00,52,000, 40000→₹40,000. **UI PASS:** aarav8 Fees (release web build) with a ₹0.50 payment shows Amount Paid ₹0.50 (not ₹1) and Balance Due ₹29,999.50; test payment cleaned up afterward.
 
 This clears the J-11 display sub-item. The currency finding and the over-balance guard are both now resolved.
+
+### 2026-10-27 — fixes (sixth batch): time-limit consistency (#14/#17)
+
+Online-test time limits were set by three disagreeing rules: generation used 30 sec/question (ceil(n/2)), editing the questions used 1 min/question (len), and the teacher's test-detail chip showed the question count instead of the stored limit — so a generated 10-question quiz said "5 min" on the form, became 10 min once edited, and the chip read "10 min".
+
+- **Backend:** new `app/core/test_timing.py` holds both intended rules — `online_time_limit_minutes` (30 sec/q, manual tests) and `auto_quiz_time_limit_minutes` (1 min/q + 2 buffer, presentation auto-quizzes). Generation (`teacher.py`) uses the manual rule; the question-edit recalc now branches on `test.auto_generated` so an auto-quiz keeps its pacing and a manual test keeps 30 sec/q; `presentations.py` delegates its `_auto_test_time_limit` to the shared helper (one source of truth). The student timer already reads `time_limit_minutes`, so it now agrees. 4 unit tests (`tests/test_test_timing.py`); full suite 638 passed, 3 skipped.
+- **Frontend (#14):** the test-detail chip now shows `test.timeLimitMinutes` (the real stored limit) instead of `questions.length`.
+- **Live:** editing an auto-quiz (test 23, 10 q) recalculated 7→12 min (= 10+2, auto rule). **UI PASS:** test 29 (auto, 10 q, stored 7 min) chip now reads "7 min", not "10 min".
+
+> Build note: `flutter build web` served a **stale** `main.dart.js` for the single-file chip edit (same bytes/mtime, incremental cache not invalidated); the chip showed the old "10 min" until a `flutter clean` + rebuild. Watch for this when a small Flutter change doesn't appear.

@@ -45,6 +45,10 @@ from app.models.homework import Homework, HomeworkCompletion, HomeworkType, Broa
 from app.models.xp import XPReason
 from app.services import ai_service, notification_service, pdf_service, storage_service, xp_service
 from app.core.quiz_window import start_window_on_first_publish
+from app.core.test_timing import (
+    online_time_limit_minutes,
+    auto_quiz_time_limit_minutes,
+)
 from app.core.mpin_guard import mpin_matches
 from app.services.realtime_service import (
     announce_test_to_students, publish_to_grade, publish_to_school,
@@ -1018,10 +1022,13 @@ async def generate_test(
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=3) if test_type == "online" else None
 
-    # For online tests: 30 seconds per question (stored as whole minutes, rounded up).
+    # For online tests: 30 seconds per question (see core/test_timing.py).
     # For offline: use the slider value the teacher chose.
-    import math
-    time_limit = math.ceil(len(questions) / 2) if test_type == "online" else (params.time_limit_minutes or 0)
+    time_limit = (
+        online_time_limit_minutes(len(questions))
+        if test_type == "online"
+        else (params.time_limit_minutes or 0)
+    )
 
     test = Test(
         title=title,
@@ -1194,9 +1201,15 @@ async def update_test_questions(
     total_marks = sum(q.get("marks", 1) for q in questions)
     test.questions = questions
     test.total_marks = total_marks
-    # Recalculate time for online tests (1 min/question)
+    # Recalculate time for online tests using the same rule the test was made
+    # with, so editing questions doesn't silently change the pacing (#17): an
+    # auto-quiz keeps 1 min/question + buffer, a manual test keeps 30 sec/question.
     if test.test_type == TestType.online:
-        test.time_limit_minutes = len(questions)
+        test.time_limit_minutes = (
+            auto_quiz_time_limit_minutes(len(questions))
+            if test.auto_generated
+            else online_time_limit_minutes(len(questions))
+        )
 
     await db.commit()
     await db.refresh(test)
