@@ -294,8 +294,14 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
       .toList();
 
   static dynamic _deepCopy(dynamic v) {
-    if (v is Map) return {for (final e in v.entries) e.key: _deepCopy(e.value)};
-    if (v is List) return [for (final e in v) _deepCopy(e)];
+    // Keep JSON's Map<String, dynamic> typing — the question cards cast
+    // `options` to it, and an untyped map copy fails that cast at render.
+    if (v is Map) {
+      return <String, dynamic>{
+        for (final e in v.entries) e.key as String: _deepCopy(e.value),
+      };
+    }
+    if (v is List) return <dynamic>[for (final e in v) _deepCopy(e)];
     return v;
   }
 

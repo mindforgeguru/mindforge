@@ -429,4 +429,12 @@ Online-test time limits were set by three disagreeing rules: generation used 30 
 - **#31 fixed — chapter-progress rings no longer carry over from last year or from removed teachers.** `in_progress_presentation_items` (`presentations.py`) now counts only progress rows updated since the current year's `started_at`, from a teacher who isn't soft-deleted. Progress rows have no year column and Close Year leaves them alone, so this works off timestamps. Live (school 1, rolled-back transaction): baseline 9 cards → backdating one in-progress row to before the year start → 8 → also soft-deleting a teacher → 6 → rollback → 9.
 - **#24 fixed — a grade with no fee structure reads "NO FEE · No fee set"** (grey) on admin Payments, not "PAID · Fully paid".
 
-Backend suite 638 passed / 3 skipped. `flutter analyze` shows infos only; `flutter test` 276 pass, with 3 failures in `login_screen_test.dart` that come from the **uncommitted login redesign** (the committed login screen passes all 16). **UI not re-run** for #18/#24 this batch.
+Backend suite 638 passed / 3 skipped. `flutter analyze` shows infos only; `flutter test` 276 pass, with 3 failures in `login_screen_test.dart` that come from the **uncommitted login redesign** (the committed login screen passes all 16).
+
+UI regression (release web build after `flutter clean`, LOCAL_DEV, browser pane):
+
+- **Regression caught and fixed:** the first #18 build rendered every test's question list as a grey box (release-mode error widget). The new deep copy built `Map<dynamic, dynamic>` for nested `options`, and the question cards cast it to `Map<String, dynamic>` (console: "type ... is not a subtype of type 'Map<String, dynamic>?'"). `_deepCopy` now builds typed `Map<String, dynamic>`; the list renders again.
+- **#18 PASS (UI).** hansal_sir → test 23 (own auto-quiz, no attempts). Clean page: no Save bar. Edited only Q1 Option D → "Unsaved changes · Save" appeared → Save → "Test saved!", **and both the bar and the app-bar Save icon disappeared** while the edit stayed on screen. DB held "Phycobilins QA18"; test 23's questions were then restored from a backup (time limit 12, 10 marks).
+- **#24 PASS (UI).** sunrise_admin → Fees → Payments: kabir9 (grade 9, no fee structure) reads grey **"NO FEE · No fee set"**, Total ₹0. Grade-8 rows unchanged ("₹40,000 · Balance due").
+
+40. **Teachers get edit controls on another teacher's test, and Save fails with "Test not found".** hansal_sir can open chinmay_sir's test 29, edit questions and press Save; `PUT /teacher/tests/{id}/questions` enforces `_require_test_owner` and answers 404, shown as "Save failed: Test not found". Either hide edit/delete for non-owners or return a 403 "Only the teacher who created this test can edit it".
