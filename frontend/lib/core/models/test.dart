@@ -21,6 +21,10 @@ class TestModel {
   final String? generationError;
   final DateTime createdAt;
   final DateTime? expiresAt;
+  /// Whether this teacher may edit, delete or publish the test — their own,
+  /// or a colleague's whose creator has left. Sent by the school-wide tests
+  /// listing; other teachers' tests are view-only (#40).
+  final bool canManage;
 
   const TestModel({
     required this.id,
@@ -41,6 +45,7 @@ class TestModel {
     this.generationError,
     required this.createdAt,
     this.expiresAt,
+    this.canManage = true,
   });
 
   bool get isExpired =>
@@ -77,6 +82,7 @@ class TestModel {
         expiresAt: json['expires_at'] != null
             ? DateTime.parse(json['expires_at'] as String)
             : null,
+        canManage: json['can_manage'] as bool? ?? true,
       );
 }
 

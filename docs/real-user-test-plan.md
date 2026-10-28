@@ -438,3 +438,11 @@ UI regression (release web build after `flutter clean`, LOCAL_DEV, browser pane)
 - **#24 PASS (UI).** sunrise_admin → Fees → Payments: kabir9 (grade 9, no fee structure) reads grey **"NO FEE · No fee set"**, Total ₹0. Grade-8 rows unchanged ("₹40,000 · Balance due").
 
 40. **Teachers get edit controls on another teacher's test, and Save fails with "Test not found".** hansal_sir can open chinmay_sir's test 29, edit questions and press Save; `PUT /teacher/tests/{id}/questions` enforces `_require_test_owner` and answers 404, shown as "Save failed: Test not found". Either hide edit/delete for non-owners or return a 403 "Only the teacher who created this test can edit it".
+
+### 2026-10-28 — fixes (eighth batch): #40
+
+- **#40 fixed — other teachers' tests are view-only, and a refused change says why.**
+  - *Server:* `_require_test_owner` (`teacher.py`) now returns **403 "Only the teacher who created this test can change it."** for a test in the teacher's own school. It used to return 404 "Test not found". The 404 was meant to hide which test IDs exist, but `/tests` already lists the whole school's tests. Another school's test still gets 404. The `/tests` listing now includes `can_manage` per test, using the same rule (own test, or the creator has left). 4 unit tests (`tests/test_test_ownership.py`); full suite passes.
+  - *App:* `TestModel.canManage`. The list card hides Publish, Retry and Delete when it's false. Publish and Retry used to check `userId == teacherId`, which missed the "creator has left" case, and Delete wasn't checked at all. The detail page goes read-only: a "View only — another teacher created this test" note; no question edit/delete icons, Delete-test button or (offline) PDF downloads; no Save Grades on offline grade entry. Viewing submissions and grades stays open, as the server allows.
+  - *Live API (hansal_sir):* listing shows chinmay_sir's 15 tests `can_manage:false` and his own `true`. PUT questions / DELETE on test 29 → 403 with the message; test 29 untouched. Unknown id → 404.
+  - **UI PASS** (release web build after `flutter clean`): list shows Delete only on hansal_sir's own quiz. Test 29 opens view-only with the note and no edit, delete or Delete-test controls. Its Grades tab still lists 5 submissions. His own test 23 still has every edit control.

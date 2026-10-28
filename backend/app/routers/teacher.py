@@ -59,10 +59,13 @@ logger = logging.getLogger(__name__)
 
 
 async def _require_test_owner(test: Test, teacher: User, db: AsyncSession) -> None:
-    # Defend against cross-teacher IDOR on owned-test endpoints. Return 404
-    # (not 403) so other teachers' test IDs are indistinguishable from
-    # non-existent ones. The /tests listing is intentionally school-wide,
-    # but operating on a specific test (read details, modify, delete,
+    # Defend against cross-teacher IDOR on owned-test endpoints. Every caller
+    # loads the test scoped to the teacher's school, so another school's test
+    # is already a 404 before this runs. Within the school the /tests listing
+    # is intentionally school-wide — the teacher can already see this test
+    # exists — so a refusal says why (403) rather than pretending it doesn't
+    # (#40: the app showed "Save failed: Test not found"). Operating on a
+    # specific test (read details, modify, delete,
     # download artifacts, post grades, publish) is for its creator —
     # unless the creator has left. A removed teacher's tests used to be
     # stranded: nobody could unpublish them, mark them or see submissions,
@@ -72,7 +75,12 @@ async def _require_test_owner(test: Test, teacher: User, db: AsyncSession) -> No
         return
     if test.school_id == teacher.school_id and not await _creator_is_active(test, db):
         return
-    raise HTTPException(status_code=404, detail="Test not found")
+    if test.school_id != teacher.school_id:
+        raise HTTPException(status_code=404, detail="Test not found")
+    raise HTTPException(
+        status_code=403,
+        detail="Only the teacher who created this test can change it.",
+    )
 
 
 async def _creator_is_active(test: Test, db: AsyncSession) -> bool:
@@ -834,7 +842,28 @@ async def get_tests(
     if grade:
         query = query.where(Test.grade == grade)
     result = await db.execute(query.order_by(Test.created_at.desc()).offset(skip).limit(limit))
-    return result.scalars().all()
+    tests = result.scalars().all()
+
+    # Tell the app which tests this teacher may change, by the same rule as
+    # _require_test_owner (own test, or its creator has left), so it can show
+    # other teachers' tests read-only instead of offering edits that fail (#40).
+    other_creators = {t.teacher_id for t in tests if t.teacher_id not in (None, current_teacher.id)}
+    active_creators: set[int] = set()
+    if other_creators:
+        active_creators = set((await db.execute(
+            select(User.id).where(
+                User.id.in_(other_creators),
+                User.deleted_at.is_(None),
+                User.is_active == True,  # noqa: E712
+            )
+        )).scalars().all())
+    return [
+        TestResponse.model_validate(t).model_copy(update={
+            "can_manage": t.teacher_id == current_teacher.id
+            or t.teacher_id not in active_creators,
+        })
+        for t in tests
+    ]
 
 
 @router.post("/tests/generate", response_model=TestResponse, status_code=status.HTTP_201_CREATED)

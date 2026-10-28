@@ -77,6 +77,10 @@ class TestResponse(BaseModel):
     generation_error: Optional[str] = None
     created_at: datetime
     expires_at: Optional[datetime] = None
+    # Whether the requesting teacher may edit/delete/publish this test (#40).
+    # Only the school-wide /tests listing computes it; responses about a test
+    # the teacher just created or changed are always theirs, hence the default.
+    can_manage: bool = True
 
     model_config = {"from_attributes": True}
 

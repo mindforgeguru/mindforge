@@ -13,7 +13,6 @@ import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
-import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
 import '../providers/database_provider.dart';
 import '../widgets/teacher_scaffold.dart';
@@ -1336,9 +1335,10 @@ class _TestTileState extends ConsumerState<_TestTile> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    // Publish / Unpublish — only for the creator, hidden once
-                    // completed and while an auto-quiz is generating/failed.
-                    if (ref.watch(authProvider).userId == test.teacherId &&
+                    // Publish / Unpublish — only for a teacher who may manage
+                    // the test, hidden once completed and while an auto-quiz
+                    // is generating/failed.
+                    if (test.canManage &&
                         !isLocked &&
                         !(test.isGraded || test.isExpired))
                       if (_publishing)
@@ -1374,9 +1374,8 @@ class _TestTileState extends ConsumerState<_TestTile> {
                           onPressed: _togglePublish,
                         ),
 
-                    // Retry — only the creator, only for a failed auto-quiz
-                    if (isFailed &&
-                        ref.watch(authProvider).userId == test.teacherId) ...[
+                    // Retry — only for a failed auto-quiz the teacher manages
+                    if (isFailed && test.canManage) ...[
                       if (_retrying)
                         const SizedBox(
                             width: 20, height: 20,
@@ -1398,8 +1397,11 @@ class _TestTileState extends ConsumerState<_TestTile> {
                         ),
                     ],
 
-                    // Delete button
-                    if (_deleting)
+                    // Delete — not offered on another teacher's test, which
+                    // the server refuses (#40)
+                    if (!test.canManage)
+                      const SizedBox.shrink()
+                    else if (_deleting)
                       const SizedBox(
                           width: 20, height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2))

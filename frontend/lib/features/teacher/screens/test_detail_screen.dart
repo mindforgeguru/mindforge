@@ -216,8 +216,9 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
                     tooltip: 'Save changes',
                     onPressed: _saveQuestions,
                   ),
-          // Delete test button
-          _deleting
+          // Delete test button — only for a teacher who may manage it (#40)
+          if (t.canManage)
+            _deleting
               ? const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Center(
@@ -260,8 +261,8 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
               downloadingKey: _downloadingKey,
               onDownloadPdf: () => _downloadPdf(testPaper: true),
               onDownloadKey: () => _downloadPdf(testPaper: false),
-              onEdit: _editQuestion,
-              onDelete: _deleteQuestion,
+              onEdit: t.canManage ? _editQuestion : null,
+              onDelete: t.canManage ? _deleteQuestion : null,
               onSave: hasEdits ? _saveQuestions : null,
               saving: _savingQuestions,
             ),
@@ -340,8 +341,9 @@ class _PreviewEditTab extends StatelessWidget {
   final bool saving;
   final VoidCallback onDownloadPdf;
   final VoidCallback onDownloadKey;
-  final Future<void> Function(int) onEdit;
-  final void Function(int) onDelete;
+  // Null on another teacher's test, which is view-only (#40).
+  final Future<void> Function(int)? onEdit;
+  final void Function(int)? onDelete;
   final VoidCallback? onSave;
 
   const _PreviewEditTab({
@@ -479,8 +481,36 @@ class _PreviewEditTab extends StatelessWidget {
           ),
         ],
 
+        // ── View-only note on another teacher's test (#40) ──────────────────
+        if (!test.canManage) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.textSecondary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.visibility_outlined,
+                    size: 18, color: AppColors.textSecondary),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'View only — another teacher created this test, so only '
+                    'they can change it.',
+                    style: TextStyle(
+                        color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
         // ── Offline PDF buttons ───────────────────────────────────────────────
-        if (test.testType == 'offline') ...[
+        // The PDF endpoints are owner-only, like editing.
+        if (test.testType == 'offline' && test.canManage) ...[
           const SizedBox(height: 12),
           Row(
             children: [
@@ -549,8 +579,8 @@ class _PreviewEditTab extends StatelessWidget {
                 (e) => _EditableQuestionCard(
                   index: e.key,
                   question: e.value,
-                  onEdit: () => onEdit(e.key),
-                  onDelete: () => onDelete(e.key),
+                  onEdit: onEdit == null ? null : () => onEdit!(e.key),
+                  onDelete: onDelete == null ? null : () => onDelete!(e.key),
                 ),
               ),
       ],
@@ -563,8 +593,8 @@ class _PreviewEditTab extends StatelessWidget {
 class _EditableQuestionCard extends StatelessWidget {
   final int index;
   final Map<String, dynamic> question;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   const _EditableQuestionCard({
     required this.index,
@@ -707,6 +737,7 @@ class _EditableQuestionCard extends StatelessWidget {
                       color: AppColors.textSecondary,
                       fontWeight: FontWeight.w600),
                 ),
+                if (onEdit != null) ...[
                 const SizedBox(width: 4),
                 // Edit button
                 IconButton(
@@ -727,6 +758,7 @@ class _EditableQuestionCard extends StatelessWidget {
                   constraints: const BoxConstraints(),
                   tooltip: 'Delete question',
                 ),
+                ],
               ],
             ),
 
@@ -1318,6 +1350,8 @@ class _OfflineGradeEntryTabState
                       maxMarks: widget.test.totalMarks,
                     )),
                 const SizedBox(height: 16),
+                // Posting grades is owner-only, like editing (#40).
+                if (widget.test.canManage)
                 ElevatedButton.icon(
                   icon: _saving
                       ? const SizedBox(
