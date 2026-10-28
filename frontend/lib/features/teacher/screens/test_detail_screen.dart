@@ -26,6 +26,10 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
 
   // Local mutable copy of questions (so edits are reflected immediately)
   late List<Map<String, dynamic>> _questions;
+  // The last-saved questions — what `_questionsEdited` compares against. Starts
+  // as the test as opened and moves to the server's copy on each save, so the
+  // "Unsaved changes" bar clears after Save (#18).
+  late List<Map<String, dynamic>> _savedQuestions;
   late double _totalMarks;
   bool _downloadingPdf = false;
   bool _downloadingKey = false;
@@ -36,9 +40,8 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _questions = List<Map<String, dynamic>>.from(
-      (widget.test.questions ?? []).map((q) => Map<String, dynamic>.from(q)),
-    );
+    _savedQuestions = _copyQuestions(widget.test.questions ?? []);
+    _questions = _copyQuestions(_savedQuestions);
     _totalMarks = widget.test.totalMarks;
   }
 
@@ -106,7 +109,8 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
           .map((q) => Map<String, dynamic>.from(q as Map))
           .toList();
       setState(() {
-        _questions = newQuestions;
+        _savedQuestions = newQuestions;
+        _questions = _copyQuestions(newQuestions);
         _totalMarks = (updated['total_marks'] as num).toDouble();
       });
       if (mounted) {
@@ -271,7 +275,7 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
   }
 
   bool _questionsEdited() {
-    final original = widget.test.questions ?? [];
+    final original = _savedQuestions;
     if (original.length != _questions.length) return true;
     // Compare the whole question map, not just question/answer/marks: the edit
     // dialog also changes `options` (and could change other fields), and
@@ -281,6 +285,18 @@ class _TestDetailScreenState extends ConsumerState<TestDetailScreen>
       if (!_deepEquals(original[i], _questions[i])) return true;
     }
     return false;
+  }
+
+  /// Deep copy, so edits to the working list (e.g. re-numbering `id` on delete)
+  /// can never leak into the saved baseline through shared nested maps.
+  static List<Map<String, dynamic>> _copyQuestions(List<dynamic> qs) => qs
+      .map((q) => Map<String, dynamic>.from(_deepCopy(q) as Map))
+      .toList();
+
+  static dynamic _deepCopy(dynamic v) {
+    if (v is Map) return {for (final e in v.entries) e.key: _deepCopy(e.value)};
+    if (v is List) return [for (final e in v) _deepCopy(e)];
+    return v;
   }
 
   /// Structural equality for the JSON-like question maps (Map/List/scalar),

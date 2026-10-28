@@ -421,3 +421,12 @@ Online-test time limits were set by three disagreeing rules: generation used 30 
 - **Live:** editing an auto-quiz (test 23, 10 q) recalculated 7→12 min (= 10+2, auto rule). **UI PASS:** test 29 (auto, 10 q, stored 7 min) chip now reads "7 min", not "10 min".
 
 > Build note: `flutter build web` served a **stale** `main.dart.js` for the single-file chip edit (same bytes/mtime, incremental cache not invalidated); the chip showed the old "10 min" until a `flutter clean` + rebuild. Watch for this when a small Flutter change doesn't appear.
+
+### 2026-10-28 — fixes (seventh batch): #18, #1, #31, #24
+
+- **#18 fixed — "Unsaved changes" bar no longer sticks after Save.** `_questionsEdited()` compared against `widget.test.questions`, which never changes after a save. `test_detail_screen.dart` now keeps a `_savedQuestions` baseline (deep-copied, so re-numbering on delete can't leak into it) that moves to the server's returned questions on each successful save.
+- **#1 fixed — registration refused when the school has no current academic year.** `register` (`auth.py`) used to fall back to `academic_year_id = NULL`. It now returns 409 "Registration isn't open yet — the school hasn't started an academic year", which matches what the admin's Academic Year screen promises. Live: school 2 / 3 (no year) → 409 with that message; Sunrise (has a year) passes the gate and reaches the next check (duplicate `aarav8` → "Username already taken"). **Prod note:** once this ships, any prod school with no current year can't take sign-ups until its admin starts a year.
+- **#31 fixed — chapter-progress rings no longer carry over from last year or from removed teachers.** `in_progress_presentation_items` (`presentations.py`) now counts only progress rows updated since the current year's `started_at`, from a teacher who isn't soft-deleted. Progress rows have no year column and Close Year leaves them alone, so this works off timestamps. Live (school 1, rolled-back transaction): baseline 9 cards → backdating one in-progress row to before the year start → 8 → also soft-deleting a teacher → 6 → rollback → 9.
+- **#24 fixed — a grade with no fee structure reads "NO FEE · No fee set"** (grey) on admin Payments, not "PAID · Fully paid".
+
+Backend suite 638 passed / 3 skipped. `flutter analyze` shows infos only; `flutter test` 276 pass, with 3 failures in `login_screen_test.dart` that come from the **uncommitted login redesign** (the committed login screen passes all 16). **UI not re-run** for #18/#24 this batch.

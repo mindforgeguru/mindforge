@@ -36,6 +36,7 @@ from app.core.upload_utils import (
     reject_if_zip_bomb,
     validate_document,
 )
+from app.models.academic_year import AcademicYear
 from app.models.database_models import ChapterDocument
 from app.models.presentation import (
     ChapterPresentation,
@@ -919,13 +920,28 @@ async def in_progress_presentation_items(
     if grade is not None:
         conditions.append(ChapterPresentation.grade == grade)
 
+    # Progress rows have no academic year and Close Year leaves them in place,
+    # so without this a new class saw last year's half-taught chapter — often
+    # credited to a teacher who has since been removed (#31). Count only
+    # progress touched since the current year started, by a teacher who still
+    # exists.
+    year_started = (await db.execute(
+        select(AcademicYear.started_at).where(
+            AcademicYear.school_id == school_id,
+            AcademicYear.is_current == True,
+        )
+    )).scalar_one_or_none()
+    if year_started is not None:
+        conditions.append(PresentationTeacherProgress.updated_at >= year_started)
+
     rows = (await db.execute(
         select(ChapterPresentation, PresentationTeacherProgress)
         .join(
             PresentationTeacherProgress,
             PresentationTeacherProgress.presentation_id == ChapterPresentation.id,
         )
-        .where(*conditions)
+        .join(User, User.id == PresentationTeacherProgress.teacher_id)
+        .where(*conditions, User.deleted_at.is_(None))
         .order_by(PresentationTeacherProgress.updated_at.desc())
     )).all()
 

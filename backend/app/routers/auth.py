@@ -170,6 +170,32 @@ async def register_user(
     # below — username/phone uniqueness, parent linking — is scoped to it.
     school = await _resolve_school(db, payload.school_id)
 
+    # Resolve the current academic year *for this school*. Without the
+    # school_id filter this matches every school's current year, and
+    # scalar_one_or_none() raises MultipleResultsFound (500) as soon as a
+    # second school has one — breaking all registration. Every other
+    # AcademicYear query (admin.py) is already school-scoped.
+    year_result = await db.execute(
+        select(AcademicYear).where(
+            AcademicYear.is_current == True,
+            AcademicYear.school_id == school.id,
+        )
+    )
+    current_year = year_result.scalar_one_or_none()
+
+    # No current year means the school hasn't been set up for a term yet — the
+    # admin's Academic Year screen says "Users cannot register until a year is
+    # started". Enforce that here: an account with academic_year_id NULL falls
+    # outside every year-scoped list (#1 in the real-user test log).
+    if current_year is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Registration isn't open yet — the school hasn't started an "
+                "academic year. Please contact the school admin."
+            ),
+        )
+
     # Check username uniqueness *within the school*. We keep this error specific
     # (the chosen username is not PII; users expect clear "already taken"
     # feedback at signup) — but pair it with the rate limit above so it can't be
@@ -234,19 +260,6 @@ async def register_user(
                 ),
             )
 
-    # Resolve the current academic year *for this school*. Without the
-    # school_id filter this matches every school's current year, and
-    # scalar_one_or_none() raises MultipleResultsFound (500) as soon as a
-    # second school has one — breaking all registration. Every other
-    # AcademicYear query (admin.py) is already school-scoped.
-    year_result = await db.execute(
-        select(AcademicYear).where(
-            AcademicYear.is_current == True,
-            AcademicYear.school_id == school.id,
-        )
-    )
-    current_year = year_result.scalar_one_or_none()
-
     user = User(
         username=payload.username,
         mpin_hash=await hash_mpin_async(payload.mpin),
@@ -254,7 +267,7 @@ async def register_user(
         school_id=school.id,
         is_active=True,
         is_approved=False,  # Pending admin approval
-        academic_year_id=current_year.id if current_year else None,
+        academic_year_id=current_year.id,
         phone=payload.phone or None,
         email=payload.email or None,
     )
@@ -338,7 +351,7 @@ async def register_user(
                     school_id=school.id,
                     is_active=True,
                     is_approved=False,
-                    academic_year_id=current_year.id if current_year else None,
+                    academic_year_id=current_year.id,
                 )
                 db.add(new_parent)
                 try:

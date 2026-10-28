@@ -555,8 +555,14 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
+  // A grade with no fee structure has a ₹0 total, so its ₹0 balance isn't
+  // "paid" — it's unset. Showing "PAID · Fully paid" hid that the admin still
+  // has to set the grade's fees (#24).
+  bool get _noFeeSet => (widget.summary['total_fee'] as num) <= 0;
+
   Color get _statusColor {
     final balance = (widget.summary['balance_due'] as num).toDouble();
+    if (_noFeeSet) return AppColors.textSecondary;
     if (balance <= 0) return AppColors.success;
     final paid = (widget.summary['total_paid'] as num).toDouble();
     final total = (widget.summary['total_fee'] as num).toDouble();
@@ -621,16 +627,22 @@ class _StudentPaymentCardState extends ConsumerState<_StudentPaymentCard> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            balance <= 0
-                                ? 'PAID'
-                                : formatInr(balance),
+                            _noFeeSet
+                                ? 'NO FEE'
+                                : balance <= 0
+                                    ? 'PAID'
+                                    : formatInr(balance),
                             style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: _statusColor,
                                 fontSize: 14),
                           ),
                           Text(
-                            balance <= 0 ? 'Fully paid' : 'Balance due',
+                            _noFeeSet
+                                ? 'No fee set'
+                                : balance <= 0
+                                    ? 'Fully paid'
+                                    : 'Balance due',
                             style: const TextStyle(
                                 fontSize: 10,
                                 color: AppColors.textSecondary),
