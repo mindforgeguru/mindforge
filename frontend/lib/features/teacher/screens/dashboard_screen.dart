@@ -234,15 +234,15 @@ class _TeacherDashboardScreenState
         async.maybeWhen(
           data: (summary) {
             final raw = (summary['broadcasts'] as List<dynamic>? ?? []);
-            if (raw.isEmpty) return false;
-            DateTime? latest;
-            for (final b in raw) {
-              final createdAt = DateTime.parse(
-                  (b as Map<String, dynamic>)['created_at'] as String);
-              if (latest == null || createdAt.isAfter(latest)) latest = createdAt;
-            }
-            return latest != null &&
-                (lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast));
+            return raw.any((b) {
+              final m = b as Map<String, dynamic>;
+              return isUnseenBroadcast(
+                createdAt: DateTime.parse(m['created_at'] as String),
+                senderId: m['sender_id'] as int,
+                viewerId: auth.userId,
+                lastSeen: lastSeenBroadcast,
+              );
+            });
           },
           orElse: () => false,
         )),
@@ -768,7 +768,7 @@ class _TeacherDashboardScreenState
                         ),
                       )
                     : Column(
-                        children: list.take(2).map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast)).toList(),
+                        children: list.take(2).map((b) => _DashBroadcastTile(broadcast: b, lastSeen: lastSeenBroadcast, viewerId: auth.userId)).toList(),
                       );
               },
             ),
@@ -935,7 +935,8 @@ class _DashHomeworkTile extends StatelessWidget {
 class _DashBroadcastTile extends StatelessWidget {
   final BroadcastModel broadcast;
   final DateTime? lastSeen;
-  const _DashBroadcastTile({required this.broadcast, this.lastSeen});
+  final int? viewerId;
+  const _DashBroadcastTile({required this.broadcast, this.lastSeen, this.viewerId});
 
   @override
   Widget build(BuildContext context) {
@@ -950,7 +951,12 @@ class _DashBroadcastTile extends StatelessWidget {
       final sw = constraints.maxWidth;
       final hPad = (sw * 0.05).clamp(14.0, 22.0);
       final vPad = (sw * 0.022).clamp(8.0, 12.0);
-      final isNew = lastSeen == null || broadcast.createdAt.isAfter(lastSeen!);
+      final isNew = isUnseenBroadcast(
+        createdAt: broadcast.createdAt,
+        senderId: broadcast.senderId,
+        viewerId: viewerId,
+        lastSeen: lastSeen,
+      );
       return Container(
         margin: EdgeInsets.fromLTRB(hPad, 0, hPad, (sw * 0.018).clamp(5.0, 8.0)),
         padding: EdgeInsets.symmetric(horizontal: (sw * 0.035).clamp(10.0, 14.0), vertical: vPad),

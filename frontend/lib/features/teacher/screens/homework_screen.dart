@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -427,7 +426,7 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
                 // Title
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Title'),
-                  inputFormatters: [LengthLimitingTextInputFormatter(300)],
+                  maxLength: 300,
                   onChanged: (v) => _title = v,
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? 'Required' : null,

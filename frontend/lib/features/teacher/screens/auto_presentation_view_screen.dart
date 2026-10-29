@@ -481,7 +481,7 @@ class _ReadyView extends ConsumerWidget {
                       if (slidesLeft > 0) ...[
                         const SizedBox(height: 2),
                         Text(
-                          '$periodsLeft periods left · aim for ~$perPeriodSuggested slides next period',
+                          '$periodsLeft ${periodsLeft == 1 ? 'period' : 'periods'} left · aim for ~$perPeriodSuggested ${perPeriodSuggested == 1 ? 'slide' : 'slides'} next period',
                           style: GoogleFonts.poppins(
                             fontSize: 11, color: AppColors.textMuted,
                           ),

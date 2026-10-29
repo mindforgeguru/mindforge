@@ -467,3 +467,21 @@ Backend 648 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.d
 - **#2 UI PASS:** trash → "Delete homework?" dialog; Cancel kept it; Delete removed it (homework 1004 gone from the DB).
 - **#26 UI PASS:** school 1 suspended while hansal_sir was signed in → the next screen's request signed him out to the login screen with "This school's access has been suspended. Please contact your administrator." School 1 restored straight after. (The first attempt lost the message; that's the in-flight-401 overwrite fixed above.)
 - Cleanup: removed the 2 grade-8 test slots and P1 attendance for 28 Oct, the 5 resulting +5 XP rows (totals reduced to match), and throwaway homework 1004.
+
+### 2026-10-29 — fixes (tenth batch): #9, #11, #29, #30 follow-up; #8 and #32 not reproduced
+
+- **#9 fixed — a teacher's own broadcast no longer lights their Announcements badge.** New `isUnseenBroadcast` (`core/providers/badge_provider.dart`) skips broadcasts the viewer sent. The dashboard badge, the side-nav badge (`teacher_scaffold.dart`) and the dashboard tile highlight all use it. Unit test `test/broadcast_badge_test.dart`.
+- **#11 fixed — copy.** The Pick-from-Database empty state points to the real tabs ("AI from PDF" / "Upload Slides"). "1 periods left" / "~1 slides" are now singular.
+- **#29 fixed — homework title shows a 0/300 counter.** The field already capped input at 300 characters (the finding's "only caught on submit" was stale); it now uses `maxLength` like the description field, which adds the counter.
+- **#30 follow-up — the dashboard's Close Year (setup road) also names the years.** Batch 9 fixed only the Academic Year screen's dialog. The road dialog now says "This ends 2028-29 and starts 2029-30", the snackbar names the new year, and the year list is refreshed too.
+- **#8 not reproduced (web).** hansal_sir, phone-width: dashboard → Announcements "See all" → bottom-nav Home returned to the dashboard. The route is a plain `context.go`; may have been an iOS tap issue. Re-check on iOS.
+- **#32 not reproduced (web).** QA CloseYear school (182): Close Year from the setup road switched the header 2027-28 → 2028-29 straight away, no refresh. The road stays all-green afterwards, which is correct: timetable config, fees, payment and logo are kept.
+- **Deferred:** #5 (grade 10 everywhere) needs a per-school "grades offered" setting, which doesn't exist yet. #27 (login school list loaded once) needs a change in `login_screen.dart`, which holds the uncommitted login redesign.
+
+Flutter: 3 failures, all in `login_screen_test.dart` (uncommitted login redesign). Analyzer: no errors/warnings.
+
+**UI (release web build after `flutter clean`):**
+- **#9 PASS.** hansal_sir posted broadcast 238 (local). With last-seen set to 20 Oct (after every other teacher's broadcast, before his own), the dashboard showed no badge dot and his tile was not highlighted. With last-seen empty, only chinmay_sir's broadcast was highlighted.
+- **#29 PASS.** Assign Homework → Title shows "0/300".
+- **#30 road PASS.** Dialog "This ends 2028-29 and starts 2029-30."; snackbar "Academic year closed — 2029-30 has started."; header 2029-30.
+- Setup/cleanup: `qa_cy_admin` (school 182) given local MPIN `246813` (see local-test-accounts.md). 182 un-suspended for the test, closed twice (now 2029-30, no non-admin users), then suspended again. Broadcast 238 deleted.

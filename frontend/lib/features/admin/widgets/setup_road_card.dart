@@ -56,10 +56,16 @@ class SetupRoadCard extends ConsumerWidget {
   }
 
   Future<void> _closeYear(BuildContext context, WidgetRef ref) async {
+    final year = ref.read(currentAcademicYearProvider).valueOrNull;
+    final currentLabel = year?['year_label'] as String?;
+    final nextLabel = year?['next_year_label'] as String?;
+    final lead = currentLabel != null && nextLabel != null
+        ? 'This ends $currentLabel and starts $nextLabel.'
+        : 'This ends the current academic year and starts a new one.';
     final ok = await showConfirmDialog(
       context,
       title: 'Close academic year?',
-      message: 'This ends the current academic year and starts a new one.\n\n'
+      message: '$lead\n\n'
           'All students, teachers and parents are removed and must register '
           'again, and the timetable schedule is cleared. Your fee structure, '
           'payment details and school logo are kept.\n\n'
@@ -68,14 +74,18 @@ class SetupRoadCard extends ConsumerWidget {
     );
     if (!ok) return;
     try {
-      await ref.read(apiClientProvider).startNewAcademicYear();
+      final started = await ref.read(apiClientProvider).startNewAcademicYear();
+      final startedLabel = started['year_label'] as String?;
+      ref.invalidate(academicYearsProvider);
       ref.invalidate(currentAcademicYearProvider);
       ref.invalidate(timetableConfigProvider);
       ref.invalidate(pendingUsersProvider);
       ref.invalidate(adminSetupStatusProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Academic year closed — a new year has started.'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(startedLabel != null
+              ? 'Academic year closed — $startedLabel has started.'
+              : 'Academic year closed — a new year has started.'),
           backgroundColor: AppColors.success,
         ));
       }

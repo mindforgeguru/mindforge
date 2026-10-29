@@ -376,8 +376,8 @@ class _EmptyChapterState extends StatelessWidget {
         Center(
           child: Text(
             hasAny
-                ? 'Try clearing the filter or upload a new PDF on the next tab.'
-                : 'Upload one on the "Upload New PDF" tab, or add it via the Database screen.',
+                ? 'Try clearing the filter, or make one on the "AI from PDF" or "Upload Slides" tab.'
+                : 'Make one on the "AI from PDF" or "Upload Slides" tab, or add it via the Database screen.',
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
                 fontSize: 11, color: AppColors.textMuted),

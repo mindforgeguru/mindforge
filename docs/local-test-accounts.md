@@ -90,3 +90,4 @@ being masked by the grade filter. `river_kid` (Riverdale, grade 8) and `dummy8`
 
 > 2026-10-26: `hansal_sir` (teacher, school 1 Hansel & Gretel) MPIN set to `135792` during J-05 verification (was unknown).
 > 2026-10-26: `aarav8` (student, school 1 Hansel & Gretel, id 28) MPIN set to `135792` during #19 verification (was unknown).
+> 2026-10-29: `qa_cy_admin` (admin, school 182 "QA CloseYear 97669", id 964) MPIN set to `246813` locally for the #32 check. School 182 is left suspended; un-suspend it to sign in.

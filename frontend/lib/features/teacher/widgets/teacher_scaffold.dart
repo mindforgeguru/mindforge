@@ -113,12 +113,12 @@ class TeacherSideNav extends ConsumerWidget {
     final lastSeenBroadcast = ref.watch(teacherBroadcastBadgeNotifier);
     final broadcastsAsync = ref.watch(teacherBroadcastsProvider);
     final hasBroadcastBadge = broadcastsAsync.maybeWhen(
-      data: (list) {
-        if (list.isEmpty) return false;
-        final latest = list.map((b) => b.createdAt)
-            .reduce((a, b) => a.isAfter(b) ? a : b);
-        return lastSeenBroadcast == null || latest.isAfter(lastSeenBroadcast);
-      },
+      data: (list) => list.any((b) => isUnseenBroadcast(
+            createdAt: b.createdAt,
+            senderId: b.senderId,
+            viewerId: auth.userId,
+            lastSeen: lastSeenBroadcast,
+          )),
       orElse: () => false,
     );
 

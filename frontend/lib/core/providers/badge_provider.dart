@@ -84,3 +84,13 @@ final teacherGradeBadgeNotifier =
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Whether a broadcast should count as new for [viewerId]. A sender has
+/// already read their own message, so it never lights their badge (#9).
+bool isUnseenBroadcast({
+  required DateTime createdAt,
+  required int senderId,
+  required int? viewerId,
+  required DateTime? lastSeen,
+}) =>
+    senderId != viewerId && (lastSeen == null || createdAt.isAfter(lastSeen));
