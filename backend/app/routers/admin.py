@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from sqlalchemy import func as sqlfunc
 
+from app.core.year_label import make_year_label, next_year_label
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
 from app.services.realtime_service import publish_to_school, publish_to_users
@@ -1496,11 +1497,6 @@ async def clear_all_timetable_slots(
 
 # ─── Academic Year ─────────────────────────────────────────────────────────────
 
-def _make_year_label(year: int) -> str:
-    """Generate label like '2025-26' from a start year."""
-    return f"{year}-{str(year + 1)[-2:]}"
-
-
 @router.get("/academic-years", response_model=List[dict])
 async def get_academic_years(
     db: AsyncSession = Depends(get_db),
@@ -1567,12 +1563,22 @@ async def get_current_academic_year(
     y = result.scalar_one_or_none()
     if not y:
         return None
+    used_labels = set((await db.execute(
+        select(AcademicYear.year_label).where(
+            AcademicYear.school_id == current_admin.school_id
+        )
+    )).scalars().all())
     return {
         "id": y.id,
         "year_label": y.year_label,
         "is_current": y.is_current,
         "started_at": y.started_at.isoformat(),
         "ended_at": y.ended_at.isoformat() if y.ended_at else None,
+        # What Close Year would name the next year, so the admin is told
+        # before confirming (#30).
+        "next_year_label": next_year_label(
+            y.year_label, datetime.now(timezone.utc).year, used_labels
+        ),
     }
 
 
@@ -1671,7 +1677,14 @@ async def start_new_academic_year(
         await db.delete(slot)
 
     # 4. Create new academic year
-    new_label = _make_year_label(now.year)
+    used_labels = set((await db.execute(
+        select(AcademicYear.year_label).where(
+            AcademicYear.school_id == current_admin.school_id
+        )
+    )).scalars().all())
+    new_label = next_year_label(
+        current_year.year_label if current_year else None, now.year, used_labels
+    )
     new_year = AcademicYear(
         year_label=new_label,
         is_current=True,
@@ -1719,7 +1732,7 @@ async def init_academic_year(
         raise HTTPException(status_code=409, detail="Academic year already exists.")
 
     now = datetime.now(timezone.utc)
-    label = _make_year_label(now.year)
+    label = make_year_label(now.year)
     year = AcademicYear(
         year_label=label,
         is_current=True,

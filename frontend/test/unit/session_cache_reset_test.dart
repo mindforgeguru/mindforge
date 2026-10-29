@@ -8,7 +8,7 @@ import 'package:mindforge/features/student/providers/student_provider.dart';
 
 class MockApiClient extends Mock implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 }
 
 Map<String, dynamic> _hw(int id, String title) => {

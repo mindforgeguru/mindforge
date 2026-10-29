@@ -7,7 +7,7 @@ import 'package:mindforge/features/student/providers/student_provider.dart';
 
 class MockApiClient extends Mock implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 }
 
 // The "Grade 8" chip on the student dashboard and profile. It used to be read

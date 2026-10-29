@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.core.test_ownership import decide_test_change
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.mask_utils import mask_phone, mask_email
@@ -71,16 +72,19 @@ async def _require_test_owner(test: Test, teacher: User, db: AsyncSession) -> No
     # stranded: nobody could unpublish them, mark them or see submissions,
     # and the admin has no test screens. A colleague in the same school may
     # look after those.
-    if test.teacher_id == teacher.id:
-        return
-    if test.school_id == teacher.school_id and not await _creator_is_active(test, db):
-        return
-    if test.school_id != teacher.school_id:
-        raise HTTPException(status_code=404, detail="Test not found")
-    raise HTTPException(
-        status_code=403,
-        detail="Only the teacher who created this test can change it.",
+    is_creator = test.teacher_id == teacher.id
+    decision = decide_test_change(
+        is_creator=is_creator,
+        same_school=test.school_id == teacher.school_id,
+        creator_active=is_creator or await _creator_is_active(test, db),
     )
+    if decision == "not_found":
+        raise HTTPException(status_code=404, detail="Test not found")
+    if decision == "forbidden":
+        raise HTTPException(
+            status_code=403,
+            detail="Only the teacher who created this test can change it.",
+        )
 
 
 async def _creator_is_active(test: Test, db: AsyncSession) -> bool:
@@ -859,8 +863,11 @@ async def get_tests(
         )).scalars().all())
     return [
         TestResponse.model_validate(t).model_copy(update={
-            "can_manage": t.teacher_id == current_teacher.id
-            or t.teacher_id not in active_creators,
+            "can_manage": decide_test_change(
+                is_creator=t.teacher_id == current_teacher.id,
+                same_school=True,  # the listing is school-scoped
+                creator_active=t.teacher_id in active_creators,
+            ) == "allow",
         })
         for t in tests
     ]

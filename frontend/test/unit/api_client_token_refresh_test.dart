@@ -65,12 +65,13 @@ class _ExpiredTokenServer implements HttpClientAdapter {
   client.dio.httpClientAdapter = server;
   client.setCachedTokens(token: 'at-old', refreshToken: 'rt-old');
   final loggedOut = <int>[];
-  client.onUnauthorized = () => loggedOut.add(1);
+  client.onUnauthorized = ([_]) => loggedOut.add(1);
   return (client: client, server: server, loggedOut: loggedOut);
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  _suspension();
 
   // An access token lasts an hour. When it runs out mid-session the app is
   // meant to swap it for a new one and carry on, without the user noticing.
@@ -131,5 +132,60 @@ void main() {
     final res = await rig.client.dio.get('/student/profile');
     expect(res.data, {'ok': true});
     expect(rig.loggedOut, isEmpty);
+  });
+}
+
+/// A server where the caller's school has been suspended: every request is a
+/// 403, marked session-ending when [marked].
+class _SuspendedSchoolServer implements HttpClientAdapter {
+  final bool marked;
+  _SuspendedSchoolServer({required this.marked});
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options,
+      Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    return ResponseBody.fromString(
+      jsonEncode({'detail': "This school's access has been suspended."}),
+      403,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+        if (marked) 'x-session-ended': ['school_suspended'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+void _suspension() {
+  // The school is suspended mid-session (#26): the app used to show its
+  // generic server-error view and keep the dead session.
+  test('a session-ending 403 signs out and passes the reason on', () async {
+    final client = ApiClient();
+    client.dio.httpClientAdapter = _SuspendedSchoolServer(marked: true);
+    client.setCachedTokens(token: 'at', refreshToken: 'rt');
+    final reasons = <String?>[];
+    client.onUnauthorized = ([reason]) => reasons.add(reason);
+
+    await expectLater(
+        client.dio.get('/student/profile'), throwsA(isA<DioException>()));
+
+    expect(reasons, ["This school's access has been suspended."]);
+    expect(client.cachedToken, isNull);
+  });
+
+  test('an ordinary 403 keeps the session', () async {
+    final client = ApiClient();
+    client.dio.httpClientAdapter = _SuspendedSchoolServer(marked: false);
+    client.setCachedTokens(token: 'at', refreshToken: 'rt');
+    final reasons = <String?>[];
+    client.onUnauthorized = ([reason]) => reasons.add(reason);
+
+    await expectLater(
+        client.dio.get('/student/profile'), throwsA(isA<DioException>()));
+
+    expect(reasons, isEmpty);
+    expect(client.cachedToken, 'at');
   });
 }

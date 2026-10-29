@@ -21,7 +21,7 @@ DioException _conflict(String detail) {
 
 class _FakeApiClient extends Fake implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 
   Object? createSchoolError;
   Object? createAdminError;

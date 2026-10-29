@@ -34,11 +34,17 @@ class TimetableSlotModel {
         subject: json['subject'] as String?,
         teacherId: json['teacher_id'] as int?,
         teacherUsername: json['teacher_username'] as String?,
-        startTime: json['start_time'] as String?,
-        endTime: json['end_time'] as String?,
+        startTime: _hhmm(json['start_time'] as String?),
+        endTime: _hhmm(json['end_time'] as String?),
         isHoliday: json['is_holiday'] as bool,
         comment: json['comment'] as String?,
       );
+
+  /// The API sends Postgres TIME values as "09:00:00"; every screen shows
+  /// them as-is, so the seconds read as noise and truncated the period
+  /// chips ("09:00:00…", #6). Keep "HH:MM".
+  static String? _hhmm(String? t) =>
+      t != null && t.length > 5 && t[2] == ':' ? t.substring(0, 5) : t;
 }
 
 class TimetableConfigModel {

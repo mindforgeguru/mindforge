@@ -201,11 +201,7 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
                   itemBuilder: (ctx, i) => _HomeworkCard(
                     hw: filtered[i],
                     screenWidth: sw,
-                    onDelete: () async {
-                      final api = ref.read(apiClientProvider);
-                      await api.deleteHomework(filtered[i].id);
-                      ref.invalidate(teacherHomeworkProvider(_selectedGrade));
-                    },
+                    onDelete: () => _confirmDelete(filtered[i]),
                   ),
                 ),
               );
@@ -214,6 +210,44 @@ class _HomeworkTabState extends ConsumerState<_HomeworkTab> {
         ),
       ],
     );
+  }
+
+  // Delete is permanent and removes the homework for every teacher and
+  // student, so it asks first — it used to go on a single tap (#2).
+  Future<void> _confirmDelete(HomeworkModel hw) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete homework?'),
+        content: Text(
+            '"${hw.title}" will be permanently deleted for every teacher and '
+            'student in Grade ${hw.grade}. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref.read(apiClientProvider).deleteHomework(hw.id);
+      ref.invalidate(teacherHomeworkProvider(_selectedGrade));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Delete failed: ${apiErrorMessage(e)}'),
+              backgroundColor: AppColors.error),
+        );
+      }
+    }
   }
 
   void _showCreateDialog(BuildContext context) {

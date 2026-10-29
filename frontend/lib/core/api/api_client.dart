@@ -48,7 +48,9 @@ class ApiClient {
   /// Called when the server returns 401 (token expired / revoked).
   /// AuthNotifier sets this to its logout callback so the router
   /// redirects to login without the user having to do anything.
-  void Function()? onUnauthorized;
+  /// Ends the signed-in session. [reason] is a message for the user when the
+  /// server said why (e.g. the school was suspended), else null.
+  void Function([String? reason])? onUnauthorized;
 
   /// Prime the in-memory cache after login or token refresh so that
   /// the first request after a phone unlock does not block on storage.
@@ -142,6 +144,21 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
+          // A 403 the server marks as session-ending (the school was
+          // suspended) signs out with the server's reason. Unmarked it fell
+          // through to the generic error view and left the user stuck in a
+          // session where every call failed (#26).
+          if (error.response?.statusCode == 403 &&
+              error.response?.headers.value('x-session-ended') != null) {
+            _cachedToken = null;
+            _cachedRefreshToken = null;
+            try { await _storage.deleteAll(); } catch (_) {}
+            final detail = error.response?.data is Map
+                ? (error.response!.data as Map)['detail']
+                : null;
+            onUnauthorized?.call(detail is String ? detail : null);
+            return handler.next(error);
+          }
           if (error.response?.statusCode == 401) {
             // `mfa_required` is a challenge, not a rejection: the password was
             // correct and the server is asking for the second factor. Passing

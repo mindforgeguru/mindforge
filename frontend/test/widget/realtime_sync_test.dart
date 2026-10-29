@@ -41,7 +41,7 @@ import 'package:mindforge/features/teacher/providers/teacher_provider.dart';
 
 class _FakeApiClient extends Fake implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 }
 
 class _FakeWebSocketClient extends WebSocketClient {

@@ -15,7 +15,7 @@ import 'package:mindforge/core/widgets/report_problem_dialog.dart';
 
 class _FakeApiClient extends Fake implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 
   final sent = <({String message, String? route})>[];
   Object? failWith;

@@ -14,7 +14,7 @@ import 'package:mindforge/features/auth/providers/auth_provider.dart';
 // does not try to route the setter through noSuchMethod.
 class MockApiClient extends Mock implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 }
 
 class MockWebSocketClient extends Mock implements WebSocketClient {}
@@ -538,6 +538,29 @@ void main() {
 
       expect(n.state.isLoggedIn, isFalse);
       expect(n.state.token, isNull);
+    });
+
+    testWidgets('a session ended with a reason shows that reason (#26)',
+        (tester) async {
+      when(() => api.login('alice', '123456'))
+          .thenAnswer((_) async => _loginResponse());
+
+      final n = _make();
+      await n.login('alice', '123456');
+
+      // Simulate the interceptor ending the session on a school suspension.
+      api.onUnauthorized?.call("This school's access has been suspended.");
+      expect(n.state.isLoggedIn, isFalse);
+
+      // Requests that were in flight come back 401 and end it again, with
+      // no reason; that must not wipe the reason.
+      api.onUnauthorized?.call();
+
+      // The reason lands once the login screen has had a frame to mount.
+      expect(n.state.error, isNull);
+      await tester.pump();
+      await tester.pump();
+      expect(n.state.error, "This school's access has been suspended.");
     });
   });
 

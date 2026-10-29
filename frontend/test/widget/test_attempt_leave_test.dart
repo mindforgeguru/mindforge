@@ -14,7 +14,7 @@ import 'package:mindforge/features/student/screens/test_attempt_screen.dart';
 /// autosave — the student reopened it to "0 of 3 questions answered".
 class _FakeApi extends Fake implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 
   /// (answers, autoSubmitted) of every submit, in order.
   final submits = <(Map<String, dynamic>, bool)>[];

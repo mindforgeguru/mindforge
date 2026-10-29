@@ -62,7 +62,7 @@ final _broadcasts = _broadcastJson.map(BroadcastModel.fromJson).toList();
 
 class _FakeApiClient extends Fake implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 }
 
 class _FakeWebSocketClient extends WebSocketClient {

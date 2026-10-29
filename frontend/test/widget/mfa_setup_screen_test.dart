@@ -10,7 +10,7 @@ import 'package:mindforge/features/auth/screens/mfa_setup_screen.dart';
 
 class MockApiClient extends Mock implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 }
 
 /// The enrolment screen is the only place a person ever sees the TOTP secret or

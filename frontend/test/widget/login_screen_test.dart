@@ -17,7 +17,7 @@ class _FakeApiClient extends Fake implements ApiClient {
   // Plain field, not routed through noSuchMethod: AuthNotifier assigns this in
   // its constructor, so the fake must accept the setter.
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 
   @override
   Future<List<Map<String, dynamic>>> getSchools() async => const [];

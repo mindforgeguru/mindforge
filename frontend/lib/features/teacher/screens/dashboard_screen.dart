@@ -1751,8 +1751,19 @@ class _GradeRoadRow extends StatelessWidget {
     final canAssignNew = grade['can_assign_new_homework'] == true;
     final tomorrowHwAssigned = grade['tomorrow_hw_assigned'] == true;
 
-    final reviewDone =
-        reviewApplicable && reviewComplete && attendanceSatisfied;
+    // The review is done when it's done. It used to also require every
+    // period's attendance, so the node stayed orange right after the teacher
+    // submitted the review (#3); `enabled` below still orders the steps.
+    final reviewDone = reviewApplicable && reviewComplete;
+    // "1/6" while attendance is partly taken, so a step done for P1 alone
+    // doesn't look untouched (#4).
+    final attendanceProgress = grade['attendance_progress'] as String?;
+    final attendanceLabel = !attendanceTaken &&
+            attendanceApplicable &&
+            attendanceProgress != null &&
+            !attendanceProgress.startsWith('0/')
+        ? 'Attendance $attendanceProgress'
+        : 'Attendance';
 
     // Every milestone is tappable regardless of workflow gating — the
     // gating only controls visual emphasis (active/dimmed). The
@@ -1767,7 +1778,7 @@ class _GradeRoadRow extends StatelessWidget {
             context.go('${RouteNames.teacherDashboard}/timetable'),
       ),
       _RoadStep(
-        label: 'Attendance',
+        label: attendanceLabel,
         done: attendanceTaken,
         na: !attendanceApplicable,
         enabled: timetableCreated && attendanceApplicable,

@@ -446,3 +446,24 @@ UI regression (release web build after `flutter clean`, LOCAL_DEV, browser pane)
   - *App:* `TestModel.canManage`. The list card hides Publish, Retry and Delete when it's false. Publish and Retry used to check `userId == teacherId`, which missed the "creator has left" case, and Delete wasn't checked at all. The detail page goes read-only: a "View only — another teacher created this test" note; no question edit/delete icons, Delete-test button or (offline) PDF downloads; no Save Grades on offline grade entry. Viewing submissions and grades stays open, as the server allows.
   - *Live API (hansal_sir):* listing shows chinmay_sir's 15 tests `can_manage:false` and his own `true`. PUT questions / DELETE on test 29 → 403 with the message; test 29 untouched. Unknown id → 404.
   - **UI PASS** (release web build after `flutter clean`): list shows Delete only on hansal_sir's own quiz. Test 29 opens view-only with the note and no edit, delete or Delete-test controls. Its Grades tab still lists 5 submissions. His own test 23 still has every edit control.
+
+### 2026-10-29 — fixes (ninth batch): #2, #3, #4, #6, #30, #26
+
+- **#2 fixed — deleting homework asks first.** The trash icon used to delete on one tap. It now confirms with a dialog naming the homework ("…permanently deleted for every teacher and student in Grade N"), and a failed delete shows an error instead of failing silently. Still a hard delete server-side.
+- **#3 fixed — HW Review turns green once the review is done.** `reviewDone` also required every period's attendance; that requirement is gone (the step's `enabled` flag still orders the road).
+- **#4 fixed — partial attendance shows on the road** as "Attendance 1/2", using the `attendance_progress` the backend already sent.
+- **#6 fixed — period times show HH:MM.** `TimetableSlotModel` trims the API's "09:00:00" at parse, which fixes all 8 display sites (teacher/student/parent dashboards and timetables). Unit test `test/timetable_model_test.dart`.
+- **#30 fixed — Close Year never reuses a label.** `app/core/year_label.py` `next_year_label` follows on from the closing year (2026-27 → 2027-28), never goes behind the calendar year, and skips labels the school already used. This matters because fee structures are keyed by the label. `/admin/academic-years/current` now returns `next_year_label`, and the Close Year dialog says "End 2026-27 and start 2027-28". 6 unit tests.
+- **#26 fixed — a suspended school signs its users out with the reason.** The suspension 403 now carries `X-Session-Ended: school_suspended` (exposed via CORS). The API client signs out on it and passes the server's message on; the auth notifier shows it on the login screen once that screen has mounted. A reasonless sign-out from requests still in flight no longer overwrites it. Tests: interceptor (marked 403 signs out with the reason; an unmarked 403 keeps the session) and notifier.
+- Also moved the #40 owner rule into `app/core/test_ownership.py` (`decide_test_change`). The router-importing unit test from batch 8 broke full-suite collection, because reportlab is stubbed in the unit env.
+
+Backend 648 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.dart` (the uncommitted login redesign); one run showed a 4th, unrelated failure that didn't repeat in 3 later runs.
+
+**Live / UI (release web build after `flutter clean`):**
+- #30 API: Sunrise `next_year_label` 2027-28. The QA CloseYear school (182), which already had two "2026-27" rows, closed into **2027-28** (year 762). That close soft-deleted its 5 users. 182 was un-suspended for the call and suspended again.
+- #26 API: suspended school → 403 with `x-session-ended: school_suspended` and `access-control-expose-headers: X-Session-Ended`.
+- **#3/#4 UI PASS:** grade 8 with 2 periods today, P1 attendance taken, review complete → Attendance reads "Attendance 1/2", HW Review is green.
+- **#6 UI PASS:** Today's Timetable chips read "09:00 – 09:45", "10:00 – 10:45".
+- **#2 UI PASS:** trash → "Delete homework?" dialog; Cancel kept it; Delete removed it (homework 1004 gone from the DB).
+- **#26 UI PASS:** school 1 suspended while hansal_sir was signed in → the next screen's request signed him out to the login screen with "This school's access has been suspended. Please contact your administrator." School 1 restored straight after. (The first attempt lost the message; that's the in-flight-401 overwrite fixed above.)
+- Cleanup: removed the 2 grade-8 test slots and P1 attendance for 28 Oct, the 5 resulting +5 XP rows (totals reduced to match), and throwaway homework 1004.

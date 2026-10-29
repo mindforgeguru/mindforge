@@ -77,7 +77,7 @@ const _feesJson = r'''{
 
 class _FakeApiClient extends Fake implements ApiClient {
   @override
-  void Function()? onUnauthorized;
+  void Function([String? reason])? onUnauthorized;
 }
 
 /// The real data, plus every optional fee and a payment history — the rows and

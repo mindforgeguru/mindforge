@@ -294,6 +294,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Browsers hide non-standard response headers from the page unless listed.
+    expose_headers=["X-Session-Ended"],
 )
 
 

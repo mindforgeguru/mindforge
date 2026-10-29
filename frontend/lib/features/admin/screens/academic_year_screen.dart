@@ -79,7 +79,9 @@ class AdminAcademicYearScreen extends ConsumerWidget {
                         fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   onPressed: () =>
-                      _confirmNewYear(context, ref, current == null),
+                      _confirmNewYear(context, ref, current == null,
+                          currentLabel: current?['year_label'] as String?,
+                          nextLabel: current?['next_year_label'] as String?),
                 ),
               ),
 
@@ -116,7 +118,8 @@ class AdminAcademicYearScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmNewYear(
-      BuildContext context, WidgetRef ref, bool isFirst) async {
+      BuildContext context, WidgetRef ref, bool isFirst,
+      {String? currentLabel, String? nextLabel}) async {
     final confirmed = await showDialog<bool>(
       context: context,
       useRootNavigator: false,
@@ -126,7 +129,10 @@ class AdminAcademicYearScreen extends ConsumerWidget {
           isFirst
               ? 'This will create the first academic year and allow users to register.'
               : 'This will:\n\n'
-                  '• End the current academic year\n'
+                  // Name both years so the admin sees what's being created
+                  // before confirming (#30).
+                  '• End ${currentLabel ?? 'the current academic year'}'
+                  '${nextLabel != null ? ' and start $nextLabel' : ''}\n'
                   '• Deactivate all students, teachers & parents\n'
                   '• Clear the timetable\n'
                   '• Everyone must register again\n\n'
@@ -152,11 +158,10 @@ class AdminAcademicYearScreen extends ConsumerWidget {
 
     try {
       final api = ref.read(apiClientProvider);
-      if (isFirst) {
-        await api.initAcademicYear();
-      } else {
-        await api.startNewAcademicYear();
-      }
+      final started = isFirst
+          ? await api.initAcademicYear()
+          : await api.startNewAcademicYear();
+      final startedLabel = started['year_label'] as String?;
       ref.invalidate(academicYearsProvider);
       ref.invalidate(currentAcademicYearProvider);
       if (context.mounted) {
@@ -164,7 +169,8 @@ class AdminAcademicYearScreen extends ConsumerWidget {
           SnackBar(
             content: Text(isFirst
                 ? 'Academic year started!'
-                : 'New academic year started! All users must re-register.'),
+                : 'Academic year ${startedLabel ?? ''} started! '
+                    'All users must re-register.'),
             backgroundColor: AppColors.success,
           ),
         );

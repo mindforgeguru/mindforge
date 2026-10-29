@@ -29,6 +29,11 @@ def require_school_id(user: User) -> int:
     return user.school_id
 
 
+# Response header marking a refusal that ends the client's session, valued
+# with the reason. Exposed through CORS (main.py) so the web app can read it.
+SESSION_ENDED_HEADER = "X-Session-Ended"
+
+
 async def assert_school_active(user: User, db) -> None:
     """403 if the caller's school has been suspended.
 
@@ -46,10 +51,14 @@ async def assert_school_active(user: User, db) -> None:
     if user.school_id is None:
         return
     if not await is_school_active_cached(user.school_id, db):
+        # The header tells the app this 403 ends the session: without it the
+        # app showed its generic "server error / no internet" view and kept
+        # the signed-in user stuck on a dead session (#26).
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This school's access has been suspended. "
                    "Please contact your administrator.",
+            headers={SESSION_ENDED_HEADER: "school_suspended"},
         )
 
 

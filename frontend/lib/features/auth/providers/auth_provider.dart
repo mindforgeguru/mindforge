@@ -2,6 +2,7 @@ import 'dart:async' show unawaited;
 
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -80,7 +81,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this._api, this._ws, this._storage) : super(const AuthState()) {
     // Wire 401 responses to immediately clear state → router redirects to login.
-    _api.onUnauthorized = () => state = const AuthState();
+    _api.onUnauthorized = _endSession;
     _restoreSession();
     // Keep the FCM token current across token rotations (e.g. new device SIM).
     // Wrapped in try-catch: Firebase may not be initialized in test environments;
@@ -88,6 +89,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       NotificationService.onTokenRefresh(_registerFcmToken);
     } catch (_) {}
+  }
+
+  /// Ends the session; with a [reason] (e.g. the school was suspended, #26)
+  /// the login screen shows it.
+  void _endSession([String? reason]) {
+    // Requests still in flight when the session ended come back 401 and end
+    // it again with no reason — that must not wipe the reason already given.
+    if (reason == null && !state.isLoggedIn) return;
+    state = const AuthState();
+    if (reason == null) return;
+    // The login screen shows auth errors when they *change* while it is up.
+    // Signing out is what sends the router there, so set the reason only
+    // once it has had a frame to mount and start listening.
+    WidgetsBinding.instance.endOfFrame
+        .then((_) => WidgetsBinding.instance.endOfFrame)
+        .then((_) {
+      if (mounted && !state.isLoggedIn) state = AuthState(error: reason);
+    });
   }
 
   /// Fire-and-forget: send the device's FCM token to the backend so it can
