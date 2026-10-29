@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/widgets/confirm_dialog.dart';
 import '../providers/admin_provider.dart';
+import 'close_year_warning.dart';
 import '../../../core/utils/api_error.dart';
 
 /// The admin's one-time school-setup workflow, drawn as a graphical "road" that
@@ -59,6 +60,7 @@ class SetupRoadCard extends ConsumerWidget {
     final year = ref.read(currentAcademicYearProvider).valueOrNull;
     final currentLabel = year?['year_label'] as String?;
     final nextLabel = year?['next_year_label'] as String?;
+    final warning = closeYearWarning(year);
     final lead = currentLabel != null && nextLabel != null
         ? 'This ends $currentLabel and starts $nextLabel.'
         : 'This ends the current academic year and starts a new one.';
@@ -69,6 +71,7 @@ class SetupRoadCard extends ConsumerWidget {
           'All students, teachers and parents are removed and must register '
           'again, and the timetable schedule is cleared. Your fee structure, '
           'payment details and school logo are kept.\n\n'
+          '${warning != null ? 'Before you close:\n$warning\n\n' : ''}'
           'This cannot be undone. Continue?',
       confirmLabel: 'Close Year',
     );

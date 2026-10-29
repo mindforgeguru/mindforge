@@ -485,3 +485,21 @@ Flutter: 3 failures, all in `login_screen_test.dart` (uncommitted login redesign
 - **#29 PASS.** Assign Homework → Title shows "0/300".
 - **#30 road PASS.** Dialog "This ends 2028-29 and starts 2029-30."; snackbar "Academic year closed — 2029-30 has started."; header 2029-30.
 - Setup/cleanup: `qa_cy_admin` (school 182) given local MPIN `246813` (see local-test-accounts.md). 182 un-suspended for the test, closed twice (now 2029-30, no non-admin users), then suspended again. Broadcast 238 deleted.
+
+### 2026-10-29 — fixes (eleventh batch): #7, #10, #15, #23, #38, J-25
+
+- **#7 fixed — the Assign Homework dialog shows its errors inside the dialog.** They used to be SnackBars on the page behind the dialog's scrim (the D-05 "review yesterday's homework first" message was hard to read). Other dialogs that use SnackBars weren't audited.
+- **#15 fixed — source tags only claim sources that were supplied.** New `app/core/question_sources.py`: `effective_source_mix` moves a missing source's share to [5] fully AI before the prompt is built (a chapter-only upload asks for 0/20/0/20/60, not 20 each), and `honest_source_category` downgrades any [P]/[~P]/[E]/[~E] the model claims anyway. The hard-coded "20%" lines in the Claude/Gemini file labels now point to the categories instead of contradicting the teacher's chosen mix. 6 unit tests (`tests/test_question_sources.py`).
+- **#10 fixed — the auto-quiz follows the slides, not the chapter name.** `generate_mcqs_from_text` now builds a "PRESENTATION SLIDES" prompt that tells the model the chapter name is only a label and every question must test what the slides say; all questions are [5]. Verified by rendering the prompt in the container; not re-run against a live model (to avoid AI billing).
+- **#23 fixed — the Fee Structures card shows a range.** "Grade 8 ₹40,000 – ₹48,000 · Base fee, plus any optional subjects taken" instead of the misleading ₹48,000 sum (each student pays base + only their own optional subjects).
+- **#38 fixed — a class can register together on one Wi-Fi.** Registration now allows 60/min per IP overall, while *refused* attempts (conflicts, wrong parent MPIN, validation — the phone-probing signal) keep the 5/min cap and, once hit, pause the IP for the rest of the minute.
+- **J-25 fixed — Close Year warns about what it leaves behind.** `/admin/academic-years/current` also returns `unpaid_students`, `unpaid_total` and `open_tests`; both Close Year dialogs (Academic Year screen and setup road) add "Before you close: 63 students still owe ₹25,00,000 … download the Pending Fees report first" and the open-test count. Helper `widgets/close_year_warning.dart`, 3 unit tests.
+
+Backend 654 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.dart` (uncommitted login redesign).
+
+**Live / UI (release web build after `flutter clean`):**
+- #38 API: 8 teacher sign-ups from one IP → all 201 (the old cap stopped at 5); 5 duplicate-username attempts → 409, the 6th → 429, and a fresh sign-up in the same minute → 429. Test users `qa38_t01..08` (Sunrise) deleted, Redis counters cleared.
+- J-25 API: Sunrise `unpaid_students 63 / unpaid_total 2500000.0 / open_tests 0`, matching `/admin/fees/summary` (63 with a balance, ₹25,00,000).
+- **#23 PASS:** sunrise_admin → Fees → Grade 8 card reads "₹40,000 – ₹48,000".
+- **J-25 PASS:** sunrise_admin → Academic Year → Start New Academic Year → dialog shows the unpaid-fees warning; cancelled.
+- **#7 PASS:** hansal_sir → Homework → Grade 9 (homework 76 unreviewed) → Assign → the "Mark yesterday's homework completion…" message appears inside the dialog, above the buttons. Nothing was created.

@@ -143,6 +143,23 @@ def _registration_conflict() -> HTTPException:
     )
 
 
+# A class signing up together shares the school Wi-Fi's one public IP, so a
+# flat 5/min cap turned most of them away (#38). Refused attempts — conflicts,
+# validation errors: the signal of someone probing for registered phone
+# numbers — keep the tight cap; registrations overall get room for a class.
+_REGISTER_WINDOW_SECONDS = 60
+_REGISTER_MAX_PER_IP = 60
+_REGISTER_MAX_REFUSED_PER_IP = 5
+
+
+def _too_many_registrations() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail="Too many registration attempts. Please wait 60 seconds.",
+        headers={"Retry-After": str(_REGISTER_WINDOW_SECONDS)},
+    )
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
     request: Request,
@@ -153,18 +170,32 @@ async def register_user(
     Register a new user. Account is created in pending state (is_approved=False).
     Admin must approve before the user can log in.
     """
-    # Per-IP rate limit (5 attempts per minute). Combined with the generic
-    # phone-conflict error below, this caps how fast someone can probe for
-    # registered phone numbers / PII.
     ip = _get_client_ip(request)
+    refused_key = f"rate_limit:register_refused:{ip}"
+    refused = await redis_manager.get_cache(refused_key)
+    if refused is not None and int(refused) >= _REGISTER_MAX_REFUSED_PER_IP:
+        raise _too_many_registrations()
     if await redis_manager.rate_limit(
-        f"rate_limit:register:{ip}", max_attempts=5, window_seconds=60
+        f"rate_limit:register:{ip}",
+        max_attempts=_REGISTER_MAX_PER_IP,
+        window_seconds=_REGISTER_WINDOW_SECONDS,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many registration attempts. Please wait 60 seconds.",
-            headers={"Retry-After": "60"},
-        )
+        raise _too_many_registrations()
+    try:
+        return await _register(request, payload, db)
+    except HTTPException as exc:
+        if 400 <= exc.status_code < 500:
+            await redis_manager.rate_limit(
+                refused_key,
+                max_attempts=_REGISTER_MAX_REFUSED_PER_IP,
+                window_seconds=_REGISTER_WINDOW_SECONDS,
+            )
+        raise
+
+
+async def _register(
+    request: Request, payload: UserRegisterRequest, db: AsyncSession,
+):
 
     # Resolve which school this account belongs to (from the picker). Everything
     # below — username/phone uniqueness, parent linking — is scoped to it.

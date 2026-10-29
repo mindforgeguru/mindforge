@@ -359,6 +359,10 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
   String _type = 'written';
   DateTime? _dueDate;
   bool _loading = false;
+  // Shown inside the dialog: a SnackBar would land on the page behind the
+  // dialog's scrim, where it can barely be read (#7).
+  String? _error;
+  bool _errorIsWarning = false;
 
   @override
   void initState() {
@@ -520,6 +524,25 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
                   ),
                 ),
                 SizedBox(height: _s(context, 4, min: 2, max: 8)),
+                if (_error != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 6),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: (_errorIsWarning
+                              ? AppColors.warning
+                              : AppColors.error)
+                          .withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: GoogleFonts.poppins(
+                        fontSize: _fs(context, 12, min: 11, max: 14),
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -554,7 +577,10 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final api = ref.read(apiClientProvider);
       await api.createHomework({
@@ -582,27 +608,21 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
             ? (e.response!.data as Map)['detail']
             : null;
         final code = detail is Map ? detail['code'] : null;
-        if (e.response?.statusCode == 409 &&
-            code == 'homework_review_pending') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: AppColors.warning,
-              content: Text(
-                "Mark yesterday's homework completion before assigning new homework.",
-              ),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed: ${apiErrorMessage(e)}')),
-          );
-        }
+        final pending = e.response?.statusCode == 409 &&
+            code == 'homework_review_pending';
+        setState(() {
+          _errorIsWarning = pending;
+          _error = pending
+              ? "Mark yesterday's homework completion before assigning new homework."
+              : 'Failed: ${apiErrorMessage(e)}';
+        });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: ${apiErrorMessage(e)}')),
-        );
+        setState(() {
+          _errorIsWarning = false;
+          _error = 'Failed: ${apiErrorMessage(e)}';
+        });
       }
     } finally {
       if (mounted) setState(() => _loading = false);

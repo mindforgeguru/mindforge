@@ -26,6 +26,7 @@ from app.models.academic_year import AcademicYear
 from app.models.audit_log import AuditLog
 from app.models.fees import FeePayment, FeeStructure, PaymentInfo
 from app.models.school import School
+from app.models.test import Test
 from app.models.timetable import TimetableConfig, TimetableSlot
 from app.models.user import User, UserRole, StudentProfile, TeacherProfile
 from app.schemas.fees import (
@@ -1568,6 +1569,9 @@ async def get_current_academic_year(
             AcademicYear.school_id == current_admin.school_id
         )
     )).scalars().all())
+    unpaid_students, unpaid_total = await _unpaid_fees(
+        db, current_admin.school_id, y.year_label
+    )
     return {
         "id": y.id,
         "year_label": y.year_label,
@@ -1579,7 +1583,67 @@ async def get_current_academic_year(
         "next_year_label": next_year_label(
             y.year_label, datetime.now(timezone.utc).year, used_labels
         ),
+        # What Close Year would leave behind (J-25): students who still owe
+        # fees drop off the Payments list once they're removed, and tests
+        # still open lose the students who would take them.
+        "unpaid_students": unpaid_students,
+        "unpaid_total": unpaid_total,
+        "open_tests": await _open_test_count(db, current_admin.school_id),
     }
+
+
+async def _unpaid_fees(db: AsyncSession, school_id: int, year_label: str):
+    """(students with a balance, total outstanding) for this year's fees."""
+    rows = (await db.execute(
+        select(User.id, StudentProfile.grade, StudentProfile.additional_subjects)
+        .join(StudentProfile, StudentProfile.user_id == User.id)
+        .where(User.role == UserRole.student, User.deleted_at.is_(None),
+               User.is_approved == True,
+               User.school_id == school_id)
+    )).all()
+    if not rows:
+        return 0, 0.0
+    structures = {fs.grade: fs for fs in (await db.execute(
+        select(FeeStructure).where(
+            FeeStructure.academic_year == year_label,
+            FeeStructure.school_id == school_id,
+        )
+    )).scalars().all()}
+    paid = dict((await db.execute(
+        select(FeePayment.student_id, sqlfunc.sum(FeePayment.amount))
+        .where(FeePayment.student_id.in_([r.id for r in rows]))
+        .group_by(FeePayment.student_id)
+    )).all())
+    count, total = 0, 0.0
+    for student_id, grade, subjects in rows:
+        fs = structures.get(grade)
+        if fs is None:
+            continue
+        owed = balance_due(
+            total_fee_for(
+                base_amount=fs.base_amount,
+                economics_fee=fs.economics_fee,
+                computer_fee=fs.computer_fee,
+                ai_fee=fs.ai_fee,
+                additional_subjects=subjects,
+            ),
+            float(paid.get(student_id) or 0),
+        )
+        if owed > 0:
+            count += 1
+            total += owed
+    return count, round(total, 2)
+
+
+async def _open_test_count(db: AsyncSession, school_id: int) -> int:
+    """Published tests in this school whose window hasn't closed."""
+    now = datetime.now(timezone.utc)
+    return (await db.execute(
+        select(sqlfunc.count(Test.id))
+        .where(Test.school_id == school_id,
+               Test.is_published == True,
+               (Test.expires_at.is_(None)) | (Test.expires_at > now))
+    )).scalar_one()
 
 
 @router.get("/academic-years/{year_id}/users", response_model=List[UserWithProfileResponse])

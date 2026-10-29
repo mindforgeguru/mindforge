@@ -1378,11 +1378,21 @@ class _FeeStructureTileState extends ConsumerState<_FeeStructureTile> {
                   children: [
                     Text('Grade ${s.grade}',
                         style: Theme.of(context).textTheme.titleMedium),
-                    Text(formatInr(s.totalAmount),
+                    // Optional-subject fees apply only to the students who
+                    // take them, so the sum of every line overstated what a
+                    // student owes (#23). Show the range instead.
+                    Text(
+                        s.totalAmount > s.baseAmount
+                            ? '${formatInr(s.baseAmount)} – ${formatInr(s.totalAmount)}'
+                            : formatInr(s.totalAmount),
                         style:       TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
                             color: AppColors.primary)),
+                    if (s.totalAmount > s.baseAmount)
+                      const Text('Base fee, plus any optional subjects taken',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.textSecondary)),
                   ],
                 ),
               ),

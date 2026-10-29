@@ -24,6 +24,7 @@ from google.genai import types as genai_types
 from groq import Groq
 
 from app.core.config import settings
+from app.core.question_sources import effective_source_mix, honest_source_category
 
 logger = logging.getLogger(__name__)
 
@@ -453,7 +454,23 @@ def _build_prompt(
     chapter_text: str = "",
     old_paper_text: str = "",
     syllabus_chapters: List[str] = [],
+    *,
+    has_chapter: Optional[bool] = None,
+    has_old_papers: Optional[bool] = None,
+    from_slides: bool = False,
 ) -> str:
+    # Files sent as attachments (Claude/Gemini) arrive with no text here, so
+    # those callers say which sources exist. A missing source's share of the
+    # mix goes to [5] rather than inviting the model to invent it (#15).
+    if has_chapter is None:
+        has_chapter = bool(chapter_text.strip()) and not from_slides
+    if has_old_papers is None:
+        has_old_papers = bool(old_paper_text.strip())
+    pct_p, pct_e, pct_np, pct_ne, pct_ai = effective_source_mix(
+        params.src_pct_p, params.src_pct_e, params.src_pct_np,
+        params.src_pct_ne, params.src_pct_ai,
+        has_old_papers=has_old_papers, has_chapter=has_chapter,
+    )
     question_spec_lines = []
     if params.mcq_count > 0:
         question_spec_lines.append(
@@ -514,7 +531,19 @@ def _build_prompt(
     source_sections = ""
     has_sources = chapter_text.strip() or old_paper_text.strip()
 
-    if chapter_text.strip():
+    if chapter_text.strip() and from_slides:
+        # The auto-quiz: the teacher's own slides are the only source. The
+        # chapter name used to win over them when the two didn't match (#10).
+        source_sections += (
+            f"\n\n━━━ PRESENTATION SLIDES ━━━\n"
+            f"The following text is from the slides the teacher just taught "
+            f"({params.subject}, Grade {params.grade}). The deck is filed under "
+            f"'{params.chapter}', but that name is only a label.\n"
+            f"Every question must test something these slides actually say — "
+            f"do not add material from the wider chapter or general knowledge.\n"
+            f"---\n{chapter_text[:25000]}\n---"
+        )
+    elif chapter_text.strip():
         source_sections += (
             f"\n\n━━━ CHAPTER PDF ━━━\n"
             f"The following text is from the chapter '{params.chapter}' ({params.subject}, Grade {params.grade}).\n\n"
@@ -524,8 +553,8 @@ def _build_prompt(
             f"      'Self Assessment', 'Think and Answer', 'Fill in the Blanks',\n"
             f"      'Give Reasons', 'Short Answer Questions', 'Long Answer Questions',\n"
             f"      or any numbered/lettered question list near the end of the chapter.\n"
-            f"      → 20% of questions must be EXACT copies from here (category [2]).\n"
-            f"      → 20% of questions must be AI-written in the same style (category [4]).\n\n"
+            f"      → Category [2] questions are EXACT copies from here.\n"
+            f"      → Category [4] questions are AI-written in the same style.\n\n"
             f"  [CHAPTER THEORY] — definitions, laws, concepts, worked examples.\n"
             f"      → Used for category [5] fully AI-generated questions.\n"
             f"---\n{chapter_text[:25000]}\n---"
@@ -539,8 +568,8 @@ def _build_prompt(
             f"    ONLY use questions that are SPECIFICALLY about '{params.chapter}'.\n"
             f"    IGNORE all questions about other chapters.\n\n"
             f"From these papers you will use TWO things:\n"
-            f"  → 20% of questions must be EXACT copies of old-paper questions about '{params.chapter}' (category [1]).\n"
-            f"  → 20% of questions must be AI-written in the same style as those old-paper questions (category [3]).\n"
+            f"  → Category [1] questions are EXACT copies of old-paper questions about '{params.chapter}'.\n"
+            f"  → Category [3] questions are AI-written in the same style as those old-paper questions.\n"
             f"---\n{old_paper_text[:15000]}\n---"
         )
 
@@ -553,7 +582,12 @@ def _build_prompt(
         )
 
     # ── Topic instruction ──────────────────────────────────────────────────────
-    if has_sources:
+    if from_slides:
+        topic_instruction = (
+            f"Generate ALL questions STRICTLY from the presentation slides above. "
+            f"If the slides and the label '{params.chapter}' disagree, follow the slides."
+        )
+    elif has_sources:
         topic_instruction = (
             f"Generate ALL questions STRICTLY about '{params.chapter}' in {params.subject} "
             f"(Grade {params.grade}, ICSE board) using the source material above.\n"
@@ -600,27 +634,27 @@ Board   : ICSE
 You MUST distribute the questions across exactly these 5 source categories.
 For each question, internally track which category it belongs to.
 
-  [1] EXACT from old test papers        — {params.src_pct_p}% of total questions
+  [1] EXACT from old test papers        — {pct_p}% of total questions
       Copy questions word-for-word from the old test papers above.
       Only use questions that are specifically about '{params.chapter}'.
 
-  [2] EXACT from back exercises          — {params.src_pct_e}% of total questions
+  [2] EXACT from back exercises          — {pct_e}% of total questions
       Copy questions word-for-word from the end-of-chapter exercise sections
       in the chapter PDF (sections labelled Exercises / Review Questions /
       Self Assessment / Think and Answer / Practice Questions / Q.1, Q.2 etc.
       at the END of the chapter).
 
-  [3] AI-generated similar to old tests — {params.src_pct_np}% of total questions
+  [3] AI-generated similar to old tests — {pct_np}% of total questions
       Create NEW questions that follow the same style, difficulty, and phrasing
       as the old test paper questions for '{params.chapter}'.
       Do NOT copy — write fresh questions inspired by the old paper style.
 
-  [4] AI-generated similar to back exercises — {params.src_pct_ne}% of total questions
+  [4] AI-generated similar to back exercises — {pct_ne}% of total questions
       Create NEW questions that follow the same style and format as the
       back-exercise questions from the chapter PDF.
       Do NOT copy — write fresh questions inspired by the exercise style.
 
-  [5] Fully AI-generated                 — {params.src_pct_ai}% of total questions
+  [5] Fully AI-generated                 — {pct_ai}% of total questions
       Create completely original questions about '{params.chapter}' based on
       the chapter theory, definitions, laws, and concepts.
 
@@ -629,7 +663,7 @@ distribute it across whichever categories have non-zero percentages.
 
 ━━━ CRITICAL RULES ━━━
 1. ALL questions must be about '{params.chapter}' ONLY — not any other chapter or topic.
-2. Follow the {params.src_pct_p}/{params.src_pct_e}/{params.src_pct_np}/{params.src_pct_ne}/{params.src_pct_ai} sourcing distribution above — this is mandatory.
+2. Follow the {pct_p}/{pct_e}/{pct_np}/{pct_ne}/{pct_ai} sourcing distribution above — this is mandatory.
 3. Categories [1] and [2] must use exact or near-exact wording from the source.
 4. Categories [3] and [4] must be freshly written, not copied.
 5. NEVER invent facts that are not supported by the source material.
@@ -696,7 +730,13 @@ _TYPE_MARKS: Dict[str, int] = {
 
 # ─── Response parsing ─────────────────────────────────────────────────────────
 
-def _parse_questions(raw: str, params: Any = None) -> List[Dict[str, Any]]:
+def _parse_questions(
+    raw: str,
+    params: Any = None,
+    *,
+    has_chapter: bool = True,
+    has_old_papers: bool = True,
+) -> List[Dict[str, Any]]:
     raw = raw.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
@@ -740,7 +780,9 @@ def _parse_questions(raw: str, params: Any = None) -> List[Dict[str, Any]]:
                 "options": None,
                 "answer": a_text,
                 "marks": marks,
-                "source_category": q.get("source_category"),
+                "source_category": honest_source_category(
+                    q.get("source_category"),
+                    has_old_papers=has_old_papers, has_chapter=has_chapter),
             })
             continue
 
@@ -757,7 +799,9 @@ def _parse_questions(raw: str, params: Any = None) -> List[Dict[str, Any]]:
             "answer": a_text,
             "marks": _TYPE_MARKS[q_type] if q_type in _TYPE_MARKS
                      else _coerce_marks(q.get("marks"), 1),
-            "source_category": q.get("source_category"),
+            "source_category": honest_source_category(
+                q.get("source_category"),
+                has_old_papers=has_old_papers, has_chapter=has_chapter),
         })
     return validated
 
@@ -792,10 +836,10 @@ async def _generate_with_claude(
                 f"  [BACK EXERCISES] Sections near the END labelled 'Exercises', "
                 f"'Questions', 'Review Questions', 'Self Assessment', "
                 f"'Think and Answer', 'Practice Questions', or any numbered "
-                f"Q.1, Q.2... list. 20% of test questions must be exact copies "
-                f"from here; another 20% must be AI-written in the same style.\n"
+                f"Q.1, Q.2... list — the source for categories [2] (exact) and "
+                f"[4] (same style).\n"
                 f"  [THEORY] Definitions, laws, concepts from the main chapter "
-                f"body — used for the fully AI-generated 20%."
+                f"body — used for category [5], fully AI-generated."
             )})
             for fb, ext in chapter_files:
                 if not fb:
@@ -813,9 +857,8 @@ async def _generate_with_claude(
                 f"⚠️  These contain questions from MULTIPLE chapters.\n"
                 f"    ONLY use questions specifically about '{params.chapter}' — "
                 f"ignore all others.\n"
-                f"20% of test questions must be exact copies of old-paper "
-                f"questions about '{params.chapter}'; another 20% must be "
-                f"AI-written in the same style as those old-paper questions."
+                f"The source for categories [1] (exact copies of old-paper "
+                f"questions about '{params.chapter}') and [3] (same style)."
             )})
             for fb, ext in old_paper_files:
                 if not fb:
@@ -834,15 +877,20 @@ async def _generate_with_claude(
                 f"The test is for: '{params.chapter}' ONLY."
             )})
 
+        has_chapter = any(fb for fb, _ in chapter_files)
+        has_old_papers = any(fb for fb, _ in old_paper_files)
         content.append({"type": "text",
-                        "text": _build_prompt(params, syllabus_chapters=syllabus_chapters)})
+                        "text": _build_prompt(params, syllabus_chapters=syllabus_chapters,
+                                              has_chapter=has_chapter,
+                                              has_old_papers=has_old_papers)})
 
         raw_text = await loop.run_in_executor(
             None, lambda: _claude_stream_text(content, 16000, True, timeout)
         )
         if not raw_text:
             raise ValueError("Claude returned an empty response.")
-        questions = _parse_questions(raw_text, params)
+        questions = _parse_questions(raw_text, params, has_chapter=has_chapter,
+                                     has_old_papers=has_old_papers)
         logger.info(
             f"Claude generated {len(questions)} questions "
             f"(chapter files: {sum(1 for fb, _ in chapter_files if fb)}, "
@@ -922,10 +970,10 @@ async def _generate_with_gemini(
                 f"Read the ENTIRE document. You need TWO things from it:\n"
                 f"  [BACK EXERCISES] Sections near the END labelled 'Exercises', 'Questions',\n"
                 f"    'Review Questions', 'Self Assessment', 'Think and Answer', 'Practice Questions',\n"
-                f"    or any numbered Q.1, Q.2... list. 20% of test questions must be exact copies\n"
-                f"    from here; another 20% must be AI-written in the same style.\n"
+                f"    or any numbered Q.1, Q.2... list — the source for categories [2] (exact)\n"
+                f"    and [4] (same style).\n"
                 f"  [THEORY] Definitions, laws, concepts from the main chapter body —\n"
-                f"    used for the fully AI-generated 20%."
+                f"    used for category [5], fully AI-generated."
             )
             content_parts.extend(chapter_uploaded)
 
@@ -935,8 +983,8 @@ async def _generate_with_gemini(
                 f"Old/past test papers for {params.subject} Grade {params.grade}.\n"
                 f"⚠️  These contain questions from MULTIPLE chapters.\n"
                 f"    ONLY use questions specifically about '{params.chapter}' — ignore all others.\n"
-                f"20% of test questions must be exact copies of old-paper questions about '{params.chapter}';\n"
-                f"another 20% must be AI-written in the same style as those old-paper questions."
+                f"The source for categories [1] (exact copies of old-paper questions about\n"
+                f"'{params.chapter}') and [3] (same style)."
             )
             content_parts.extend(old_paper_uploaded)
 
@@ -949,7 +997,9 @@ async def _generate_with_gemini(
             )
 
         # Append the generation prompt
-        prompt = _build_prompt(params, syllabus_chapters=syllabus_chapters)
+        prompt = _build_prompt(params, syllabus_chapters=syllabus_chapters,
+                               has_chapter=bool(chapter_uploaded),
+                               has_old_papers=bool(old_paper_uploaded))
         content_parts.append(prompt)
 
         client = _get_gemini_client()
@@ -973,7 +1023,9 @@ async def _generate_with_gemini(
             raise ValueError(f"Gemini response blocked (finish_reason={finish}): {ve}") from ve
         if not raw_text:
             raise ValueError("Gemini returned an empty response.")
-        questions = _parse_questions(raw_text, params)
+        questions = _parse_questions(raw_text, params,
+                                     has_chapter=bool(chapter_uploaded),
+                                     has_old_papers=bool(old_paper_uploaded))
         logger.info(
             f"Gemini generated {len(questions)} questions "
             f"(chapter files: {len(chapter_uploaded)}, old papers: {len(old_paper_uploaded)})"
@@ -1038,7 +1090,9 @@ async def _generate_with_groq(
         )
     )
     raw = response.choices[0].message.content
-    questions = _parse_questions(raw, params)
+    questions = _parse_questions(raw, params,
+                                 has_chapter=bool(chapter_text.strip()),
+                                 has_old_papers=bool(old_paper_text.strip()))
     logger.info(f"Groq generated {len(questions)} questions")
     return questions
 
@@ -1120,7 +1174,7 @@ async def generate_mcqs_from_text(
     taught this period, the covered slides' text is the only source. Tries
     Gemini first, then Groq; raises RuntimeError if both fail.
     """
-    prompt = _build_prompt(params, chapter_text=chapter_text)
+    prompt = _build_prompt(params, chapter_text=chapter_text, from_slides=True)
     errors: List[str] = []
     loop = asyncio.get_running_loop()
     clock = _ChainClock("quiz")
@@ -1131,7 +1185,7 @@ async def generate_mcqs_from_text(
                 "claude", lambda t: claude_generate(prompt, max_tokens=16000, timeout=t))
             if not raw_text:
                 raise ValueError("Claude returned an empty response.")
-            questions = _parse_questions(raw_text, params)
+            questions = _parse_questions(raw_text, params, has_chapter=False, has_old_papers=False)
             logger.info(f"Claude generated {len(questions)} questions from text")
             return _require_questions(questions)
         except Exception as e:
@@ -1164,7 +1218,7 @@ async def generate_mcqs_from_text(
                 ) from ve
             if not raw_text:
                 raise ValueError("Gemini returned an empty response.")
-            questions = _parse_questions(raw_text, params)
+            questions = _parse_questions(raw_text, params, has_chapter=False, has_old_papers=False)
             logger.info(f"Gemini generated {len(questions)} questions from text")
             return _require_questions(questions)
         except Exception as e:
@@ -1188,7 +1242,7 @@ async def generate_mcqs_from_text(
                 ),
             ))
             raw = response.choices[0].message.content
-            questions = _parse_questions(raw, params)
+            questions = _parse_questions(raw, params, has_chapter=False, has_old_papers=False)
             logger.info(f"Groq generated {len(questions)} questions from text")
             return _require_questions(questions)
         except Exception as e:

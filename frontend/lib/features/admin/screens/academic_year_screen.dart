@@ -6,6 +6,7 @@ import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
+import '../widgets/close_year_warning.dart';
 import '../widgets/admin_scaffold.dart';
 import '../../../core/widgets/school_logo.dart';
 import '../../../core/utils/api_error.dart';
@@ -81,7 +82,8 @@ class AdminAcademicYearScreen extends ConsumerWidget {
                   onPressed: () =>
                       _confirmNewYear(context, ref, current == null,
                           currentLabel: current?['year_label'] as String?,
-                          nextLabel: current?['next_year_label'] as String?),
+                          nextLabel: current?['next_year_label'] as String?,
+                          warning: closeYearWarning(current)),
                 ),
               ),
 
@@ -119,7 +121,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
 
   Future<void> _confirmNewYear(
       BuildContext context, WidgetRef ref, bool isFirst,
-      {String? currentLabel, String? nextLabel}) async {
+      {String? currentLabel, String? nextLabel, String? warning}) async {
     final confirmed = await showDialog<bool>(
       context: context,
       useRootNavigator: false,
@@ -137,6 +139,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
                   '• Clear the timetable\n'
                   '• Everyone must register again\n\n'
                   'Old data is preserved and viewable under Previous Years.\n\n'
+                  '${warning != null ? 'Before you close:\n$warning\n\n' : ''}'
                   'Are you sure?',
         ),
         actions: [
