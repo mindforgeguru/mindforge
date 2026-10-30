@@ -10,7 +10,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, func, literal_column, select, update
+from sqlalchemy import and_, delete, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.test_ownership import decide_test_change
@@ -629,13 +629,57 @@ async def create_timetable_slot(
     # One statement, so two saves of the same period at once cannot both insert
     # (uq_timetable_slot_period, migration 039). `xmax = 0` is true only for a
     # row this statement inserted.
-    fields = payload.model_dump()
+    #
+    # With `expected`, the write only lands if the period still looks the way
+    # the editor loaded it — checked inside the same statement, so two teachers
+    # saving the same period at once can't both pass. The loser gets 409 and
+    # the current slot instead of being silently overwritten (J-21 / #39).
+    fields = payload.model_dump(exclude={"expected"})
+    expected = payload.expected
     stmt = pg_insert(TimetableSlot).values(**fields, school_id=current_teacher.school_id)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["school_id", "grade", "slot_date", "period_number"],
-        set_={k: stmt.excluded[k] for k in fields},
-    ).returning(TimetableSlot.id, literal_column("xmax = 0").label("inserted"))
-    row = (await db.execute(stmt)).one()
+    conflict_target = ["school_id", "grade", "slot_date", "period_number"]
+    if expected is not None and not expected.exists:
+        stmt = stmt.on_conflict_do_nothing(index_elements=conflict_target)
+    else:
+        unchanged = None
+        if expected is not None:
+            unchanged = and_(
+                func.coalesce(TimetableSlot.subject, "") == (expected.subject or ""),
+                TimetableSlot.teacher_id.is_not_distinct_from(expected.teacher_id),
+                TimetableSlot.is_holiday == expected.is_holiday,
+                func.coalesce(TimetableSlot.comment, "") == (expected.comment or ""),
+            )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=conflict_target,
+            set_={k: stmt.excluded[k] for k in fields},
+            where=unchanged,
+        )
+    stmt = stmt.returning(TimetableSlot.id, literal_column("xmax = 0").label("inserted"))
+    row = (await db.execute(stmt)).one_or_none()
+    if row is None:
+        # Nothing was written; read what's there now to hand back.
+        current = (await db.execute(
+            select(TimetableSlot).where(
+                TimetableSlot.school_id == current_teacher.school_id,
+                TimetableSlot.grade == payload.grade,
+                TimetableSlot.slot_date == payload.slot_date,
+                TimetableSlot.period_number == payload.period_number,
+            )
+        )).scalar_one_or_none()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "timetable_slot_changed",
+                "message": (
+                    f"Period {payload.period_number} was changed by someone "
+                    f"else while you were editing."
+                ),
+                "current": (
+                    TimetableSlotResponse.model_validate(current).model_dump(mode="json")
+                    if current else None
+                ),
+            },
+        )
     is_new_slot = bool(row.inserted)
     await db.commit()
     slot = await db.get(TimetableSlot, row.id, populate_existing=True)

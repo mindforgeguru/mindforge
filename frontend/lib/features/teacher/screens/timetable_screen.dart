@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -364,6 +365,11 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
   final Map<int, int?> _teacherIds = {};
   final Map<int, String?> _subjects = {};
   final Map<int, String?> _comments = {};
+  // Each period as the server had it when the editor was filled — the
+  // baseline for "did I change this?" and for the stale-save check.
+  final Map<int, TimetableSlotModel> _loaded = {};
+  // What _populateFromSlots put in the editor for each period.
+  final Map<int, (int?, String?, String?)> _loadedEditor = {};
 
   int? _populatedGrade;
   String? _populatedDate;
@@ -389,6 +395,8 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
     _populatedGrade = _selectedGrade;
     _populatedDate = currentDate;
 
+    _loaded.clear();
+    _loadedEditor.clear();
     final validIds = teachers.map((t) => t.id).toSet();
     for (final slot in slots.where((s) => s.slotDate == currentDate)) {
       _teacherIds[slot.periodNumber] =
@@ -398,6 +406,12 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
       _subjects[slot.periodNumber] =
           slot.isHoliday ? null : slot.subject;
       _comments[slot.periodNumber] = slot.comment;
+      _loaded[slot.periodNumber] = slot;
+      _loadedEditor[slot.periodNumber] = (
+        _teacherIds[slot.periodNumber],
+        _subjects[slot.periodNumber],
+        _comments[slot.periodNumber],
+      );
     }
   }
 
@@ -825,6 +839,8 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
 
     setState(() => _saving = true);
     final api = ref.read(apiClientProvider);
+    // Periods someone else changed while this teacher was editing (#39).
+    final changedElsewhere = <int>[];
     try {
       for (final p in allPeriods) {
         final subject = _subjects[p];
@@ -835,15 +851,51 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
         final hasTeacher = teacherId != null;
         final hasComment = comment != null && comment.isNotEmpty;
         if (!hasSubject && !hasTeacher && !hasComment) continue;
-        await api.createTimetableSlot({
-          'grade': _selectedGrade,
-          'slot_date': _dateString,
-          'period_number': p,
-          'subject': hasSubject ? subject : '',
-          if (hasTeacher) 'teacher_id': teacherId,
-          'is_holiday': false,
-          if (hasComment) 'comment': comment,
-        });
+        // Untouched periods aren't re-sent, so two teachers editing
+        // different periods of the same day don't collide.
+        if (_loadedEditor[p] == (teacherId, subject, comment)) continue;
+        try {
+          final saved = await api.createTimetableSlot({
+            'grade': _selectedGrade,
+            'slot_date': _dateString,
+            'period_number': p,
+            'subject': hasSubject ? subject : '',
+            if (hasTeacher) 'teacher_id': teacherId,
+            'is_holiday': false,
+            if (hasComment) 'comment': comment,
+            'expected': TimetableSlotModel.snapshotOf(_loaded[p]),
+          });
+          // The saved row is the new baseline for this period.
+          _loaded[p] = TimetableSlotModel.fromJson(saved);
+          _loadedEditor[p] = (teacherId, subject, comment);
+        } on DioException catch (e) {
+          final detail = e.response?.data is Map
+              ? (e.response!.data as Map)['detail']
+              : null;
+          if (e.response?.statusCode == 409 &&
+              detail is Map &&
+              detail['code'] == 'timetable_slot_changed') {
+            changedElsewhere.add(p);
+            // Show their version of this period instead of ours.
+            final current = detail['current'] as Map<String, dynamic>?;
+            final slot =
+                current == null ? null : TimetableSlotModel.fromJson(current);
+            setState(() {
+              _teacherIds[p] = slot?.teacherId;
+              _subjects[p] = slot == null || slot.isHoliday ? null : slot.subject;
+              _comments[p] = slot?.comment;
+              if (slot == null) {
+                _loaded.remove(p);
+                _loadedEditor.remove(p);
+              } else {
+                _loaded[p] = slot;
+                _loadedEditor[p] = (_teacherIds[p], _subjects[p], _comments[p]);
+              }
+            });
+            continue;
+          }
+          rethrow;
+        }
       }
       ref.invalidate(teacherTimetableProvider((_selectedGrade, _dateString)));
       ref.invalidate(myTimetableProvider);
@@ -852,7 +904,22 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
       // (summary['my_timetable']), so it must be invalidated too — otherwise
       // the dashboard shows stale slots until a manual refresh.
       ref.invalidate(teacherDashboardSummaryProvider);
-      if (context.mounted) {
+      if (context.mounted && changedElsewhere.isNotEmpty) {
+        final which = changedElsewhere.length == 1
+            ? 'Period ${changedElsewhere.single} was'
+            : 'Periods ${changedElsewhere.join(', ')} were';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '$which changed by someone else while you were editing, so '
+              "your change wasn't saved. It now shows their version — "
+              'edit it again if needed.',
+            ),
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      } else if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

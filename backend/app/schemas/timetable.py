@@ -32,6 +32,16 @@ class TimetableConfigResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TimetableSlotSnapshot(BaseModel):
+    """The slot as the editor last loaded it (J-21 / #39). `exists=False`
+    means the period was empty."""
+    exists: bool
+    subject: Optional[str] = None
+    teacher_id: Optional[int] = None
+    is_holiday: bool = False
+    comment: Optional[str] = None
+
+
 class TimetableSlotCreate(BaseModel):
     grade: SchoolGrade
     slot_date: date          # specific calendar date
@@ -42,6 +52,9 @@ class TimetableSlotCreate(BaseModel):
     end_time: Optional[time] = None
     is_holiday: bool = False
     comment: Optional[Text(300)] = None
+    # Sent by editors so a save can't silently overwrite someone else's
+    # change; omitted by older app versions, which keep last-write-wins.
+    expected: Optional[TimetableSlotSnapshot] = None
 
 
 class TimetableSlotUpdate(BaseModel):

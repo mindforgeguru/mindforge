@@ -503,3 +503,16 @@ Backend 654 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.d
 - **#23 PASS:** sunrise_admin → Fees → Grade 8 card reads "₹40,000 – ₹48,000".
 - **J-25 PASS:** sunrise_admin → Academic Year → Start New Academic Year → dialog shows the unpaid-fees warning; cancelled.
 - **#7 PASS:** hansal_sir → Homework → Grade 9 (homework 76 unreviewed) → Assign → the "Mark yesterday's homework completion…" message appears inside the dialog, above the buttons. Nothing was created.
+
+### 2026-10-30 — fixes (twelfth batch): #39 / J-21 concurrent timetable edits
+
+- **#39 fixed — a timetable save can no longer silently overwrite someone else's change.**
+  - *Server:* `POST /teacher/timetable` takes an optional `expected` snapshot (`TimetableSlotSnapshot`: `exists`, subject, teacher_id, is_holiday, comment): the period as the editor loaded it. The check runs inside the upsert: `ON CONFLICT DO UPDATE … WHERE <row still matches>`, or `ON CONFLICT DO NOTHING` when the period was empty. So two saves at the same moment can't both pass. If no row comes back, the response is **409 `timetable_slot_changed`** with the current slot. Requests without `expected` (older app builds) keep last-write-wins.
+  - *App:* the editor remembers each period as loaded (`TimetableSlotModel.snapshotOf`) and sends it. Save All skips periods the teacher didn't change, so editing different periods of the same day never collides. On a 409 that period switches to the other teacher's version, a warning names the period, and the baseline is updated so the next save doesn't conflict again. After a successful save the baseline is the server's reply.
+  - Fixed along the way: the first version of the refusal path rolled back the session and then read the expired user object → 500. No rollback is needed, since nothing was written.
+
+Backend 642 passed / 15 skipped (12 git-ignore tests skipped while git was blocked by the unaccepted Xcode licence). Flutter: 3 failures, all in `login_screen_test.dart` (uncommitted login redesign); `test/timetable_model_test.dart` covers the snapshot.
+
+**Live (API, hansal_sir + chinmay_sir, school 1, grade 8):** empty period saved by A, then B's save from the stale empty view → 409 with A's slot. A's up-to-date edit → 200; B's edit from the old view → 409. Legacy save without `expected` → 200. **Three races** of two simultaneous saves from the same view → each time exactly one 200 and one 409 carrying the winner's slot.
+
+**UI (release web build after `flutter clean`):** hansal_sir typed a comment into today's grade-8 P2. chinmay_sir then saved P2 through the API, and hansal_sir pressed Update Timetable → POST **409**. P2 switched to "chinmay_sir · Physics · chinmay saved first", and the DB kept chinmay's row. hansal_sir then edited on top of that and saved → one POST, **200**, no false conflict. The warning SnackBar itself wasn't captured, because the hidden browser pane drops frames. Test slots removed afterwards.

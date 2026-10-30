@@ -24,4 +24,30 @@ void main() {
     expect(s.startTime, '09:00');
     expect(s.endTime, isNull);
   });
+
+  // #39: a save carries the period as the editor loaded it, so the server
+  // can refuse it if someone else changed the period in the meantime.
+  test('snapshot of a loaded slot carries what the editor saw', () {
+    final s = TimetableSlotModel.fromJson({
+      'id': 4,
+      'grade': 8,
+      'slot_date': '2026-11-09',
+      'period_number': 6,
+      'subject': 'Physics',
+      'teacher_id': 11,
+      'is_holiday': false,
+      'comment': 'THEORY',
+    });
+    expect(TimetableSlotModel.snapshotOf(s), {
+      'exists': true,
+      'subject': 'Physics',
+      'teacher_id': 11,
+      'is_holiday': false,
+      'comment': 'THEORY',
+    });
+  });
+
+  test('snapshot of an empty period says so', () {
+    expect(TimetableSlotModel.snapshotOf(null), {'exists': false});
+  });
 }

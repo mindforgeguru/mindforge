@@ -40,6 +40,20 @@ class TimetableSlotModel {
         comment: json['comment'] as String?,
       );
 
+  /// This slot as the editor loaded it, sent with a save so the server can
+  /// refuse it if someone else changed the period meanwhile (J-21 / #39).
+  /// Pass null for a period that was empty.
+  static Map<String, dynamic> snapshotOf(TimetableSlotModel? slot) =>
+      slot == null
+          ? const {'exists': false}
+          : {
+              'exists': true,
+              'subject': slot.subject,
+              'teacher_id': slot.teacherId,
+              'is_holiday': slot.isHoliday,
+              'comment': slot.comment,
+            };
+
   /// The API sends Postgres TIME values as "09:00:00"; every screen shows
   /// them as-is, so the seconds read as noise and truncated the period
   /// chips ("09:00:00…", #6). Keep "HH:MM".
