@@ -2,7 +2,7 @@
 
 import re
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -19,6 +19,8 @@ class SchoolPublic(BaseModel):
     name: str
     slug: str
     logo_url: Optional[str] = None
+    # Shown so registration only offers grades the school teaches (#5).
+    grades_offered: List[int] = [8, 9, 10]
 
     model_config = {"from_attributes": True}
 

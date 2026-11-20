@@ -9,7 +9,10 @@ scoped by ``school_id``. The platform owner (``UserRole.owner``) has
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Integer, String, func
+from typing import List
+
+from sqlalchemy import Boolean, DateTime, Integer, String, func, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -30,6 +33,11 @@ class School(Base):
     # Soft on/off switch — a suspended school's users can't log in and it drops
     # out of the public picker, without deleting any data.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Which of the platform's grades (8–10) this school teaches; drives every
+    # grade picker and registration (#5).
+    grades_offered: Mapped[List[int]] = mapped_column(
+        ARRAY(Integer), nullable=False, server_default=text("'{8,9,10}'")
+    )
     # Billing/subscription state for selling access. Free-form for now; a proper
     # billing model can replace these later.
     subscription_status: Mapped[str] = mapped_column(

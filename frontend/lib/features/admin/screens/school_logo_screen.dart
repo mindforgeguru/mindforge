@@ -46,7 +46,7 @@ class _AdminSchoolLogoScreenState extends ConsumerState<AdminSchoolLogoScreen> {
       await ref
           .read(apiClientProvider)
           .uploadSchoolLogo(picked.bytes, picked.name);
-      ref.invalidate(currentSchoolLogoProvider);
+      ref.invalidate(currentSchoolProvider);
       ref.invalidate(adminSetupStatusProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

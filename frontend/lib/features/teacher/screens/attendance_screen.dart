@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/attendance.dart';
 import '../../../core/models/user.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
-import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_scaffold.dart';
@@ -689,7 +689,7 @@ class _TeacherAttendanceScreenState
 
 // ── Filter bar ─────────────────────────────────────────────────────────────
 
-class _FilterBar extends StatelessWidget {
+class _FilterBar extends ConsumerWidget {
   final int selectedGrade;
   final DateTime selectedDate;
   final int selectedPeriod;
@@ -718,7 +718,7 @@ class _FilterBar extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return LayoutBuilder(builder: (context, constraints) {
       final sw = constraints.maxWidth;
       // Scale padding and gaps off the available width, not screen width,
@@ -762,7 +762,8 @@ class _FilterBar extends StatelessWidget {
                 isExpanded: true,
                 decoration: dropDecoration.copyWith(labelText: 'Grade'),
                 style: valueStyle,
-                items: AppConstants.grades
+                items: pickableGrades(ref.watch(schoolGradesProvider),
+                        keep: selectedGrade)
                     .map((g) => DropdownMenuItem(
                           value: g,
                           child: FittedBox(

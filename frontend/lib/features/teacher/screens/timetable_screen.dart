@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/models/user.dart';
@@ -418,7 +419,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
   /// Returns Map<period, Map<teacherId, busyGrade>>
   Map<int, Map<int, int>> _computeBusyTeachers() {
     final busy = <int, Map<int, int>>{};
-    for (final grade in AppConstants.grades) {
+    for (final grade in ref.read(schoolGradesProvider)) {
       if (grade == _selectedGrade) continue;
       ref.read(teacherTimetableProvider((grade, _dateString))).whenData((slots) {
         for (final slot in slots) {
@@ -437,7 +438,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
     final teachersAsync = ref.watch(teachersListProvider);
     final configAsync = ref.watch(teacherTimetableConfigProvider);
 
-    for (final grade in AppConstants.grades) {
+    for (final grade in ref.watch(schoolGradesProvider)) {
       if (grade != _selectedGrade) {
         ref.watch(teacherTimetableProvider((grade, _dateString)));
       }
@@ -589,7 +590,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
               isDense: true,
               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
-            items: AppConstants.grades
+            items: pickableGrades(ref.watch(schoolGradesProvider), keep: _selectedGrade)
                 .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))
                 .toList(),
             onChanged: (g) {
@@ -996,7 +997,7 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
     final gradeList = ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-      children: AppConstants.grades
+      children: ref.watch(schoolGradesProvider)
           .map((grade) => _GradeSection(
                 grade: grade,
                 dateString: _dateString,
@@ -1042,7 +1043,7 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
           child: RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(teacherTimetableConfigProvider);
-              for (final grade in AppConstants.grades) {
+              for (final grade in ref.watch(schoolGradesProvider)) {
                 ref.invalidate(
                     teacherTimetableProvider((grade, _dateString)));
               }

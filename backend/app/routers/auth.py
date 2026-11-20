@@ -200,6 +200,12 @@ async def _register(
     # Resolve which school this account belongs to (from the picker). Everything
     # below — username/phone uniqueness, parent linking — is scoped to it.
     school = await _resolve_school(db, payload.school_id)
+    if (payload.role == "student" and payload.grade is not None
+            and payload.grade not in school.grades_offered):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{school.name} doesn't have a Grade {payload.grade}.",
+        )
 
     # Resolve the current academic year *for this school*. Without the
     # school_id filter this matches every school's current year, and

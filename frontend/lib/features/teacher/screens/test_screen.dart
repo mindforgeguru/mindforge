@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/test.dart';
 import '../../../core/theme/app_theme.dart';
@@ -252,7 +253,7 @@ class _TestsTabState extends ConsumerState<_TestsTab> {
                 initialValue: _selectedGrade,
                 decoration: const InputDecoration(labelText: 'Grade'),
                 hint: const Text('Select Grade'),
-                items: AppConstants.grades
+                items: pickableGrades(ref.watch(schoolGradesProvider), keep: _selectedGrade)
                     .map((g) => DropdownMenuItem(
                           value: g,
                           child: Text('Grade $g'),

@@ -4,12 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
-import '../../../core/utils/constants.dart';
 import '../providers/teacher_provider.dart';
 import '../widgets/teacher_scaffold.dart';
 import '../../../core/utils/api_error.dart';
@@ -325,7 +325,7 @@ class _SendBroadcastDialogState extends ConsumerState<_SendBroadcastDialog> {
                     decoration:
                         const InputDecoration(labelText: 'Select Grade'),
                     isExpanded: true,
-                    items: AppConstants.grades
+                    items: pickableGrades(ref.watch(schoolGradesProvider), keep: _targetGrade)
                         .map((g) => DropdownMenuItem(
                               value: g,
                               child: Text('Grade $g'),

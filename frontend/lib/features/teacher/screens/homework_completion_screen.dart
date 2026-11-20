@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/shimmer_list.dart';
@@ -84,7 +84,7 @@ class _TeacherHomeworkCompletionScreenState
       // immediately once every student has a recorded status. The completions
       // response doesn't carry the grade, so invalidate every grade's list —
       // only the one the teacher is viewing actually refetches.
-      for (final g in AppConstants.grades) {
+      for (final g in ref.read(schoolGradesProvider)) {
         ref.invalidate(teacherHomeworkProvider(g));
       }
       if (mounted) {

@@ -1182,6 +1182,15 @@ class ApiClient {
     return res.data as List<dynamic>;
   }
 
+  /// Set which grades this school teaches (#5). 422 with a reason when a
+  /// grade still has students.
+  Future<List<int>> setSchoolGrades(List<int> grades) async {
+    final res = await _dio.put('/admin/school/grades', data: {'grades': grades});
+    return [
+      for (final g in (res.data as Map)['grades_offered'] as List) (g as num).toInt()
+    ];
+  }
+
   Future<Map<String, dynamic>?> getCurrentAcademicYear() async {
     final res = await _dio.get('/admin/academic-years/current');
     return res.data as Map<String, dynamic>?;

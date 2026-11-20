@@ -110,6 +110,7 @@ final List<ProviderOrFamily> sessionScopedProviders = <ProviderOrFamily>[
   presentationLibraryProvider,
 
   // ── Cross-role ─────────────────────────────────────────────────────────
+  currentSchoolProvider,
   currentSchoolLogoProvider,
 ];
 

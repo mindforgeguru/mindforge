@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
@@ -404,7 +405,7 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
                 DropdownButtonFormField<int>(
                   initialValue: _grade,
                   decoration: const InputDecoration(labelText: 'Grade'),
-                  items: AppConstants.grades
+                  items: pickableGrades(ref.watch(schoolGradesProvider), keep: _grade)
                       .map((g) => DropdownMenuItem(
                             value: g,
                             child: Text('Grade $g'),
@@ -793,14 +794,15 @@ class _HomeworkCard extends StatelessWidget {
 }
 
 // Full-width grade selector — equal-width pills, selected one filled navy.
-class _GradeSelector extends StatelessWidget {
+class _GradeSelector extends ConsumerWidget {
   final int selected;
   final ValueChanged<int> onChanged;
   const _GradeSelector({required this.selected, required this.onChanged});
 
   @override
-  Widget build(BuildContext context) {
-    final grades = AppConstants.grades;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final grades =
+        pickableGrades(ref.watch(schoolGradesProvider), keep: selected);
     return Row(
       children: [
         for (int i = 0; i < grades.length; i++) ...[

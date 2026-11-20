@@ -8,12 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/fees.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/confirm_dialog.dart';
-import '../../../core/utils/constants.dart';
 import '../../../core/utils/currency.dart';
 import '../../../core/utils/image_pick.dart';
 import '../providers/admin_provider.dart';
@@ -211,7 +211,7 @@ class _FeeStructuresTabState extends ConsumerState<_FeeStructuresTab> {
                   DropdownButtonFormField<int>(
                     initialValue: _newGrade,
                     decoration: const InputDecoration(labelText: 'Grade'),
-                    items: AppConstants.grades
+                    items: pickableGrades(ref.watch(schoolGradesProvider), keep: _newGrade)
                         .map((g) => DropdownMenuItem(
                             value: g, child: Text('Grade $g')))
                         .toList(),
@@ -396,7 +396,7 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
                     items: [
                       const DropdownMenuItem(
                           value: null, child: Text('All Grades')),
-                      ...AppConstants.grades.map((g) => DropdownMenuItem(
+                      ...pickableGrades(ref.watch(schoolGradesProvider), keep: _filterGrade).map((g) => DropdownMenuItem(
                             value: g,
                             child: Text('Grade $g'),
                           )),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/grade.dart';
 import '../../../core/models/test.dart';
@@ -170,7 +171,7 @@ class _AllGradesTabState extends ConsumerState<_AllGradesTab> {
                       items: [
                         const DropdownMenuItem(
                             value: null, child: Text('All Grades')),
-                        ...AppConstants.grades.map((g) =>
+                        ...pickableGrades(ref.watch(schoolGradesProvider), keep: _filterGrade).map((g) =>
                             DropdownMenuItem(
                                 value: g, child: Text('Grade $g'))),
                       ],
@@ -439,7 +440,7 @@ class _EnterOfflineMarksTabState extends ConsumerState<_EnterOfflineMarksTab> {
           child: DropdownButtonFormField<int>(
             initialValue: _selectedGrade,
             decoration: const InputDecoration(labelText: 'Grade', isDense: true),
-            items: [8, 9, 10]
+            items: pickableGrades(ref.watch(schoolGradesProvider), keep: _selectedGrade)
                 .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))
                 .toList(),
             onChanged: (v) {

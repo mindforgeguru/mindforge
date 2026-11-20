@@ -5,6 +5,8 @@ Admin router — all endpoints require admin role.
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from pydantic import BaseModel
+
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select
@@ -14,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func as sqlfunc
 
 from app.core.year_label import make_year_label, next_year_label
+from app.core.grades_offered import GradesOfferedError, checked_grades_offered
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
 from app.services.realtime_service import publish_to_school, publish_to_users
@@ -110,6 +113,38 @@ async def upload_admin_photo(
     await db.commit()
     await storage_service.delete_by_media_url(old_url)
     return {"profile_pic_url": public_url}
+
+
+class SchoolGradesUpdate(BaseModel):
+    grades: List[int]
+
+
+@router.put("/school/grades")
+async def update_school_grades(
+    payload: SchoolGradesUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Set which grades this school teaches (#5). A grade that still has
+    students can't be dropped."""
+    counts = dict((await db.execute(
+        select(StudentProfile.grade, sqlfunc.count(User.id))
+        .join(User, User.id == StudentProfile.user_id)
+        .where(User.school_id == current_admin.school_id,
+               User.role == UserRole.student,
+               User.deleted_at.is_(None))
+        .group_by(StudentProfile.grade)
+    )).all())
+    try:
+        grades = checked_grades_offered(payload.grades, counts)
+    except GradesOfferedError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    school = (await db.execute(
+        select(School).where(School.id == current_admin.school_id)
+    )).scalar_one()
+    school.grades_offered = grades
+    await db.commit()
+    return {"grades_offered": grades}
 
 
 @router.post("/school/logo", status_code=status.HTTP_200_OK)
@@ -320,6 +355,15 @@ async def edit_user(
         raise HTTPException(status_code=404, detail="User not found.")
     if user.role == UserRole.admin:
         raise HTTPException(status_code=403, detail="Cannot modify admin account.")
+    if payload.grade is not None:
+        offered = (await db.execute(
+            select(School.grades_offered).where(School.id == current_admin.school_id)
+        )).scalar_one()
+        if payload.grade not in offered:
+            raise HTTPException(
+                status_code=422,
+                detail=f"This school doesn't have a Grade {payload.grade}.",
+            )
 
     # Update phone
     if payload.phone is not None:

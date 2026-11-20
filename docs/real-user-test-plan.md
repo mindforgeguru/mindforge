@@ -516,3 +516,19 @@ Backend 642 passed / 15 skipped (12 git-ignore tests skipped while git was block
 **Live (API, hansal_sir + chinmay_sir, school 1, grade 8):** empty period saved by A, then B's save from the stale empty view → 409 with A's slot. A's up-to-date edit → 200; B's edit from the old view → 409. Legacy save without `expected` → 200. **Three races** of two simultaneous saves from the same view → each time exactly one 200 and one 409 carrying the winner's slot.
 
 **UI (release web build after `flutter clean`):** hansal_sir typed a comment into today's grade-8 P2. chinmay_sir then saved P2 through the API, and hansal_sir pressed Update Timetable → POST **409**. P2 switched to "chinmay_sir · Physics · chinmay saved first", and the DB kept chinmay's row. hansal_sir then edited on top of that and saved → one POST, **200**, no false conflict. The warning SnackBar itself wasn't captured, because the hidden browser pane drops frames. Test slots removed afterwards.
+
+### 2026-11-20 — fixes (thirteenth batch): #5 grades each school teaches
+
+- **#5 fixed — grade pickers only list the grades the school teaches.**
+  - *Server:* migration **041** adds `schools.grades_offered` (integer[], default `{8,9,10}`, so existing schools are unchanged). It's included in the public `/api/schools` list. `PUT /admin/school/grades` sets it via `app/core/grades_offered.py` `checked_grades_offered`: sorted and de-duplicated, at least one grade, only 8–10, and a grade that still has students can't be dropped (422 with the reason). Student registration and the admin's grade edit refuse an unoffered grade ("Sunrise Public School doesn't have a Grade 10."). 5 unit tests (`tests/test_grades_offered.py`).
+  - *App:* `currentSchoolProvider` (the signed-in school from the public list; the logo provider now derives from it, and it's reset on account switch) → `schoolGradesProvider`. Every grade picker uses it: fees, payments filter, tests, broadcast, attendance, homework form and grade pills, homework review refresh, grades (two pickers), timetable (editor, busy-teacher check, full view) and database (two pickers). `pickableGrades` keeps a selected grade the school no longer offers, so dropdowns can't assert on old data. The admin Timetable Configuration screen gets a **Grades Taught** card (chips, saved per tap). 3 unit tests (`test/school_grades_test.dart`).
+  - *Not changed:* the registration form's grade dropdown is in `login_screen.dart` (uncommitted login redesign), so it still lists 8/9/10. The server now refuses an unoffered grade there with a clear message. The old-paper tagging dialog keeps the full platform list.
+  - The session-reset coverage test caught the new provider missing from the account-switch reset list; added.
+
+Backend 659 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.dart` (uncommitted login redesign).
+
+**Live (API, sunrise_admin):** drop grade 9 → 422 "Grade 9 still has 1 student…"; `[]` → 422; `[8, 11]` → 422; `[9, 8]` → 200 `[8, 9]`; public list shows Sunrise `[8, 9]`; a grade-10 student registration at Sunrise → 422 "Sunrise Public School doesn't have a Grade 10."
+
+**UI (release web build after `flutter clean`):** Timetable Configuration shows Grades Taught with 8 and 9 on and 10 off. Tapping Grade 9 → red "Grade 9 still has 1 student; it can't be removed while they're enrolled." and the chip stays on. Adding then removing Grade 10 saved both ways (DB `{8,9,10}` → `{8,9}`). Fees → Payments grade filter lists All Grades / Grade 8 / Grade 9 only.
+
+**State left:** Sunrise (944) offers grades 8 and 9; every other school keeps 8, 9, 10.

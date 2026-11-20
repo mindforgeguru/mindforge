@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/providers/school_grades_provider.dart';
+import '../../../core/providers/school_logo_provider.dart';
+import '../../../core/utils/constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
@@ -233,6 +236,9 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const _GradesTaughtCard(),
+                const SizedBox(height: 16),
+
                 // ── Periods per day ────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -419,6 +425,74 @@ class _AdminTimetableScreenState extends ConsumerState<AdminTimetableScreen> {
           );
         },
       ),
+      ),
+    );
+  }
+}
+
+/// Which grades the school teaches (#5). Every grade picker in the app lists
+/// only these. Saves on each tap; the server refuses to drop a grade that
+/// still has students, and that reason is shown.
+class _GradesTaughtCard extends ConsumerStatefulWidget {
+  const _GradesTaughtCard();
+
+  @override
+  ConsumerState<_GradesTaughtCard> createState() => _GradesTaughtCardState();
+}
+
+class _GradesTaughtCardState extends ConsumerState<_GradesTaughtCard> {
+  bool _saving = false;
+
+  Future<void> _toggle(List<int> current, int grade) async {
+    final next = current.contains(grade)
+        ? (current.where((g) => g != grade).toList())
+        : ([...current, grade]..sort());
+    setState(() => _saving = true);
+    try {
+      await ref.read(apiClientProvider).setSchoolGrades(next);
+      ref.invalidate(currentSchoolProvider);
+      await ref.read(currentSchoolProvider.future);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(apiErrorMessage(e)),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final offered = ref.watch(schoolGradesProvider);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: mindForgeCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Grades Taught',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 4),
+          const Text(
+            'Only these grades appear in grade pickers and registration.',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final g in AppConstants.grades)
+                FilterChip(
+                  label: Text('Grade $g'),
+                  selected: offered.contains(g),
+                  onSelected: _saving ? null : (_) => _toggle(offered, g),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

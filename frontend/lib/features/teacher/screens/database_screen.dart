@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
@@ -516,7 +517,7 @@ class _ChaptersTabState extends ConsumerState<_ChaptersTab> {
                         initialValue: _selectedGrade,
                         decoration: const InputDecoration(labelText: 'Grade', isDense: true),
                         hint: const Text('Grade'),
-                        items: AppConstants.grades
+                        items: pickableGrades(ref.watch(schoolGradesProvider), keep: _selectedGrade)
                             .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))
                             .toList(),
                         onChanged: (v) => setState(() => _selectedGrade = v),
@@ -792,7 +793,7 @@ class _SyllabusTabState extends ConsumerState<_SyllabusTab> {
                         initialValue: _selectedGrade,
                         decoration: const InputDecoration(labelText: 'Grade', isDense: true),
                         hint: const Text('Grade'),
-                        items: AppConstants.grades
+                        items: pickableGrades(ref.watch(schoolGradesProvider), keep: _selectedGrade)
                             .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))
                             .toList(),
                         onChanged: (v) => setState(() => _selectedGrade = v),
