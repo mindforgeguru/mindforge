@@ -532,3 +532,10 @@ Backend 659 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.d
 **UI (release web build after `flutter clean`):** Timetable Configuration shows Grades Taught with 8 and 9 on and 10 off. Tapping Grade 9 → red "Grade 9 still has 1 student; it can't be removed while they're enrolled." and the chip stays on. Adding then removing Grade 10 saved both ways (DB `{8,9,10}` → `{8,9}`). Fees → Payments grade filter lists All Grades / Grade 8 / Grade 9 only.
 
 **State left:** Sunrise (944) offers grades 8 and 9; every other school keeps 8, 9, 10.
+
+### 2026-11-20 — #27 login school list refresh
+
+- **#27 fixed — the login school picker reloads when the app (or browser tab) comes back to the foreground.** The list used to load once in `initState`, so a school restored while the login screen was open only appeared after an app restart. `login_screen.dart` now observes the app lifecycle and reloads on `resumed`. It rebuilds the picker only when the list actually changed, and clears a picked school that has dropped out (suspended), since a dropdown left holding a missing item asserts. I didn't add a refresh on tapping the picker open: rebuilding the field under its open menu is fragile.
+- Two widget tests in `test/widget/login_screen_test.dart` ("school list refresh"): a school restored meanwhile appears after resume, and a picked school suspended meanwhile is cleared with no exception. Both pass; the file still has only the 3 known login-redesign failures.
+- **UI PASS (release web build):** Sunrise suspended locally → login picker without it. Sunrise restored, then switched to another browser tab and back → picker lists Sunrise Public School with no page reload; network shows a fresh `/api/schools` fetch. Sunrise left active.
+- Not committed: the change and its tests live alongside the uncommitted login redesign (`login_screen.dart`), so they ship with that work.
