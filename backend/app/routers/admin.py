@@ -2,6 +2,7 @@
 Admin router — all endpoints require admin role.
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -17,15 +18,18 @@ from sqlalchemy import func as sqlfunc
 
 from app.core.year_label import make_year_label, next_year_label
 from app.core.grades_offered import GradesOfferedError, checked_grades_offered
+from app.core.report_math import LOW_ATTENDANCE_PERCENT, attendance_rows, marks_rows
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
 from app.services.realtime_service import publish_to_school, publish_to_users
 from app.core.security import get_current_admin
 from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
-from app.core.school_time import school_today
+from app.core.school_time import parse_iso_date, school_today
 from app.core.mpin_guard import mpin_matches
 from app.core.fee_math import total_fee_for, balance_due, would_overpay
 from app.models.academic_year import AcademicYear
+from app.models.attendance import Attendance
+from app.models.grade import Grade
 from app.models.audit_log import AuditLog
 from app.models.fees import FeePayment, FeeStructure, PaymentInfo
 from app.models.school import School
@@ -48,6 +52,7 @@ from app.services import pdf_service
 from fastapi.responses import Response
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ─── Audit log helper ─────────────────────────────────────────────────────────
@@ -1928,7 +1933,8 @@ async def download_pending_fees_report(
             "balance_due": max(0.0, total_fee - total_paid),
         })
 
-    pdf_bytes = await pdf_service.generate_pending_fees_report(summaries, academic_year)
+    pdf_bytes = await pdf_service.generate_pending_fees_report(
+        summaries, academic_year, school=await _report_school(db, current_admin.school_id))
     filename = f"pending_fees_{academic_year.replace('-', '_')}.pdf"
     return Response(
         content=pdf_bytes,
@@ -2008,13 +2014,118 @@ async def download_student_ledger(
         ],
     }
 
-    pdf_bytes = await pdf_service.generate_student_ledger_report(student_data, academic_year)
+    pdf_bytes = await pdf_service.generate_student_ledger_report(
+        student_data, academic_year, school=await _report_school(db, current_admin.school_id))
     filename = f"ledger_{user.username}_{academic_year.replace('-', '_')}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+async def _report_school(db: AsyncSession, school_id: int) -> dict:
+    """The school's name and logo bytes for a report header (#28). A logo
+    that can't be fetched is left off rather than failing the report."""
+    school = (await db.execute(select(School).where(School.id == school_id))).scalar_one()
+    logo = None
+    located = storage_service.parse_media_url(school.logo_url)
+    if located:
+        try:
+            logo = await storage_service.download_file(*located)
+        except Exception:  # noqa: BLE001
+            logger.warning("School %s logo unavailable for a report", school_id)
+    return {"name": school.name, "logo": logo}
+
+
+async def _report_window(db: AsyncSession, school_id: int,
+                         from_date: Optional[str], to_date: Optional[str]):
+    """(start, end, label) — defaults to the current academic year so far."""
+    end = parse_iso_date(to_date) if to_date else school_today()
+    if from_date:
+        start = parse_iso_date(from_date)
+    else:
+        year = (await db.execute(
+            select(AcademicYear).where(AcademicYear.school_id == school_id,
+                                       AcademicYear.is_current == True)
+        )).scalar_one_or_none()
+        start = year.started_at.date() if year else end.replace(day=1)
+    if start > end:
+        raise HTTPException(status_code=422, detail="The start date is after the end date.")
+    label = f"{start.strftime('%d %b %Y')} – {end.strftime('%d %b %Y')}"
+    return start, end, label
+
+
+async def _grade_students(db: AsyncSession, school_id: int, grade: int):
+    """(id, username) of the grade's current students."""
+    return [tuple(r) for r in (await db.execute(
+        select(User.id, User.username)
+        .join(StudentProfile, StudentProfile.user_id == User.id)
+        .where(User.school_id == school_id,
+               User.role == UserRole.student,
+               User.deleted_at.is_(None),
+               User.is_approved == True,
+               StudentProfile.grade == grade)
+    )).all()]
+
+
+def _pdf_response(pdf_bytes: bytes, filename: str) -> Response:
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/reports/attendance")
+async def download_attendance_report(
+    grade: int = Query(..., ge=8, le=10),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Per-student attendance for a grade over a date range (#28)."""
+    start, end, label = await _report_window(db, current_admin.school_id, from_date, to_date)
+    students = await _grade_students(db, current_admin.school_id, grade)
+    marks = (await db.execute(
+        select(Attendance.student_id, Attendance.status)
+        .where(Attendance.school_id == current_admin.school_id,
+               Attendance.grade == grade,
+               Attendance.date >= start, Attendance.date <= end)
+    )).all()
+    rows = attendance_rows(students, [(sid, st.value if hasattr(st, "value") else st)
+                                      for sid, st in marks])
+    pdf = await pdf_service.generate_attendance_report(
+        rows, grade, label, school=await _report_school(db, current_admin.school_id),
+        low_percent=LOW_ATTENDANCE_PERCENT)
+    return _pdf_response(pdf, f"attendance_grade{grade}_{start}_{end}.pdf")
+
+
+@router.get("/reports/marks")
+async def download_marks_report(
+    grade: int = Query(..., ge=8, le=10),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Marks per subject and overall for a grade over a date range (#28)."""
+    start, end, label = await _report_window(db, current_admin.school_id, from_date, to_date)
+    students = await _grade_students(db, current_admin.school_id, grade)
+    ids = [sid for sid, _ in students]
+    grades = (await db.execute(
+        select(Grade.student_id, Grade.subject, Grade.marks_obtained, Grade.max_marks)
+        .where(Grade.school_id == current_admin.school_id,
+               Grade.student_id.in_(ids),
+               sqlfunc.date(Grade.created_at) >= start,
+               sqlfunc.date(Grade.created_at) <= end)
+    )).all() if ids else []
+    by_subject, overall = marks_rows(students, [tuple(g) for g in grades])
+    pdf = await pdf_service.generate_marks_report(
+        by_subject, overall, grade, label,
+        school=await _report_school(db, current_admin.school_id))
+    return _pdf_response(pdf, f"marks_grade{grade}_{start}_{end}.pdf")
 
 
 # ─── Feedback (in-app problem reports) ────────────────────────────────────────

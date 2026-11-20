@@ -6,15 +6,16 @@ Generates printable offline test papers with MIND FORGE branding.
 import io
 import logging
 from datetime import date
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, mm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
-    HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 )
 
 
@@ -567,19 +568,64 @@ async def generate_answer_key_pdf(
     return pdf_bytes
 
 # ─── Shared report header ─────────────────────────────────────────────────────
+# Reports go to parents, boards and auditors as the school's own documents, so
+# they carry the school's name and logo (#28). `school` is {"name", "logo"}
+# with the logo as image bytes or None; without it they fall back to MindForge.
 
-def _report_header(story: list, styles: dict, title: str, subtitle: str) -> None:
-    story.append(Paragraph("MIND FORGE", styles["brand_title"]))
-    story.append(Paragraph("AI Assisted Learning", styles["tagline"]))
+def _logo_flowable(logo: Optional[bytes]):
+    if not logo:
+        return None
+    try:
+        # Uploaded logos are often full-size photos; embedding one as-is made
+        # every report ~5 MB. 400 px is plenty for an 18 mm header.
+        from PIL import Image as PILImage
+        with PILImage.open(io.BytesIO(logo)) as img:
+            img = img.convert("RGBA") if img.mode in ("P", "LA") else img
+            img.thumbnail((400, 400))
+            small = io.BytesIO()
+            if img.mode == "RGBA":
+                img.save(small, format="PNG", optimize=True)
+            else:
+                img.convert("RGB").save(small, format="JPEG", quality=85)
+        reader = ImageReader(io.BytesIO(small.getvalue()))
+        w, h = reader.getSize()
+        height = 18 * mm
+        return Image(io.BytesIO(small.getvalue()), width=height * w / h, height=height)
+    except Exception:  # noqa: BLE001 — an unreadable logo must not sink the report
+        logger.warning("School logo could not be drawn on a report; skipped.")
+        return None
+
+
+def _report_header(story: list, styles: dict, title: str, subtitle: str,
+                   school: Optional[Dict[str, Any]] = None) -> None:
+    if school and school.get("name"):
+        logo = _logo_flowable(school.get("logo"))
+        if logo is not None:
+            story.append(logo)
+            story.append(Spacer(1, 2 * mm))
+        story.append(Paragraph(_safe(school["name"]), styles["brand_title"]))
+    else:
+        story.append(Paragraph("MIND FORGE", styles["brand_title"]))
+        story.append(Paragraph("AI Assisted Learning", styles["tagline"]))
     story.append(HRFlowable(width="100%", thickness=2, color=BRAND_PURPLE, spaceAfter=6))
     story.append(Paragraph(_safe(title), styles["test_title"]))
     story.append(Paragraph(_safe(subtitle), styles["meta"]))
     story.append(Spacer(1, 4 * mm))
 
 
+def _report_footer(story: list, school: Optional[Dict[str, Any]] = None) -> None:
+    text = (f"{_safe(school['name'])} — Confidential · Generated with MindForge"
+            if school and school.get("name")
+            else "MIND FORGE | AI Assisted Learning — Confidential")
+    story.append(HRFlowable(width="100%", thickness=1, color=BRAND_PURPLE, spaceBefore=10, spaceAfter=4))
+    story.append(Paragraph(text, ParagraphStyle("footer", parent=getSampleStyleSheet()["Normal"],
+                                                fontSize=8, textColor=colors.gray, alignment=1)))
+
+
 # ─── Report: Pending Fees (grade-wise) ────────────────────────────────────────
 
-async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic_year: str) -> bytes:
+async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic_year: str,
+                                       school: Optional[Dict[str, Any]] = None) -> bytes:
     from collections import defaultdict
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
@@ -590,7 +636,8 @@ async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic
 
     _report_header(story, styles,
                    title=f"PENDING FEES REPORT — {academic_year}",
-                   subtitle=f"Generated on {date.today().strftime('%d %B %Y')}")
+                   subtitle=f"Generated on {date.today().strftime('%d %B %Y')}",
+                   school=school)
 
     by_grade: Dict[int, list] = defaultdict(list)
     for s in summaries:
@@ -636,10 +683,7 @@ async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic
                            fontSize=12, fontName=_BOLD,
                            textColor=BRAND_PURPLE, alignment=2, spaceAfter=4)))
 
-    story.append(HRFlowable(width="100%", thickness=1, color=BRAND_PURPLE, spaceBefore=10, spaceAfter=4))
-    story.append(Paragraph("MIND FORGE | AI Assisted Learning — Confidential",
-                            ParagraphStyle("footer", parent=getSampleStyleSheet()["Normal"],
-                                           fontSize=8, textColor=colors.gray, alignment=1)))
+    _report_footer(story, school)
     doc.build(story)
     pdf_bytes = buffer.getvalue()
     buffer.close()
@@ -648,7 +692,8 @@ async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic
 
 # ─── Report: Student Ledger ────────────────────────────────────────────────────
 
-async def generate_student_ledger_report(student: Dict[str, Any], academic_year: str) -> bytes:
+async def generate_student_ledger_report(student: Dict[str, Any], academic_year: str,
+                                         school: Optional[Dict[str, Any]] = None) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             rightMargin=2*cm, leftMargin=2*cm,
@@ -658,7 +703,8 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
 
     _report_header(story, styles,
                    title=f"STUDENT FEE LEDGER — {academic_year}",
-                   subtitle=f"Student: {student['username']}  |  Grade: {student['grade']}  |  Generated: {date.today().strftime('%d %B %Y')}")
+                   subtitle=f"Student: {student['username']}  |  Grade: {student['grade']}  |  Generated: {date.today().strftime('%d %B %Y')}",
+                   school=school)
 
     # ── Fee Breakdown ─────────────────────────────────────────────────────────
     fee_breakdown = student.get("fee_breakdown", [])
@@ -742,11 +788,102 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
     story.append(Paragraph(status_text, ParagraphStyle("status", parent=getSampleStyleSheet()["Normal"],
                                                         fontSize=13, fontName=_BOLD,
                                                         textColor=status_color, alignment=1, spaceAfter=4)))
-    story.append(HRFlowable(width="100%", thickness=1, color=BRAND_PURPLE, spaceBefore=10, spaceAfter=4))
-    story.append(Paragraph("MIND FORGE | AI Assisted Learning — Confidential",
-                            ParagraphStyle("footer", parent=getSampleStyleSheet()["Normal"],
-                                           fontSize=8, textColor=colors.gray, alignment=1)))
+    _report_footer(story, school)
     doc.build(story)
     pdf_bytes = buffer.getvalue()
     buffer.close()
     return pdf_bytes
+
+
+# ─── Reports: attendance and marks (#28) ──────────────────────────────────────
+
+def _report_table(rows: list, col_widths: list, highlight_rows=()) -> Table:
+    t = Table(rows, colWidths=col_widths, repeatRows=1)
+    style = [
+        ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), _BOLD),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F7FA")]),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]
+    for r in highlight_rows:
+        style.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#FFEBEE")))
+    t.setStyle(TableStyle(style))
+    return t
+
+
+def _pct(value: Optional[float]) -> str:
+    return "—" if value is None else f"{value:.1f}%"
+
+
+def _build(story: list) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            rightMargin=2*cm, leftMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
+
+async def generate_attendance_report(rows: List[Dict[str, Any]], grade: int, period: str,
+                                     school: Optional[Dict[str, Any]] = None,
+                                     low_percent: float = 75.0) -> bytes:
+    """Per-student attendance for one grade; rows from report_math.attendance_rows."""
+    styles = _get_styles()
+    story: list = []
+    _report_header(story, styles,
+                   title=f"ATTENDANCE REPORT — GRADE {grade}",
+                   subtitle=f"{period}  |  Generated on {date.today().strftime('%d %B %Y')}",
+                   school=school)
+    if not rows:
+        story.append(Paragraph("No students in this grade.", styles["meta"]))
+    else:
+        table = [["Student", "Periods present", "Periods absent", "Attendance"]]
+        low = []
+        for i, r in enumerate(rows, 1):
+            table.append([_safe(r["student"]), str(r["present"]), str(r["absent"]), _pct(r["percent"])])
+            if r["low"]:
+                low.append(i)
+        story.append(_report_table(table, [7*cm, 3.5*cm, 3.5*cm, 3.5*cm], low))
+        story.append(Spacer(1, 4*mm))
+        story.append(Paragraph(
+            f"{len(low)} of {len(rows)} student(s) below {low_percent:.0f}% attendance (shaded).",
+            styles["meta"]))
+    _report_footer(story, school)
+    return _build(story)
+
+
+async def generate_marks_report(by_subject: Dict[str, List[Dict[str, Any]]],
+                                overall: List[Dict[str, Any]], grade: int, period: str,
+                                school: Optional[Dict[str, Any]] = None) -> bytes:
+    """Marks per subject and overall for one grade; from report_math.marks_rows."""
+    styles = _get_styles()
+    story: list = []
+    _report_header(story, styles,
+                   title=f"MARKS REPORT — GRADE {grade}",
+                   subtitle=f"{period}  |  Generated on {date.today().strftime('%d %B %Y')}",
+                   school=school)
+    if not by_subject:
+        story.append(Paragraph("No marks recorded for this grade in this period.", styles["meta"]))
+    else:
+        story.append(Paragraph("Overall", styles["section_header"]))
+        table = [["Student", "Marks", "Out of", "Percentage"]]
+        for r in overall:
+            table.append([_safe(r["student"]), f"{r['obtained']:g}", f"{r['max']:g}", _pct(r["percent"])])
+        story.append(_report_table(table, [7*cm, 3.5*cm, 3.5*cm, 3.5*cm]))
+        for subject, rows in by_subject.items():
+            story.append(Spacer(1, 6*mm))
+            story.append(Paragraph(_safe(subject), styles["section_header"]))
+            table = [["Student", "Tests", "Marks", "Out of", "Percentage"]]
+            for r in rows:
+                table.append([_safe(r["student"]), str(r["tests"]), f"{r['obtained']:g}",
+                              f"{r['max']:g}", _pct(r["percent"])])
+            story.append(_report_table(table, [6*cm, 2*cm, 3*cm, 3*cm, 3.5*cm]))
+    _report_footer(story, school)
+    return _build(story)

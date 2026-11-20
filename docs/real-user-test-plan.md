@@ -539,3 +539,17 @@ Backend 659 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.d
 - Two widget tests in `test/widget/login_screen_test.dart` ("school list refresh"): a school restored meanwhile appears after resume, and a picked school suspended meanwhile is cleared with no exception. Both pass; the file still has only the 3 known login-redesign failures.
 - **UI PASS (release web build):** Sunrise suspended locally → login picker without it. Sunrise restored, then switched to another browser tab and back → picker lists Sunrise Public School with no page reload; network shows a fresh `/api/schools` fetch. Sunrise left active.
 - Not committed: the change and its tests live alongside the uncommitted login redesign (`login_screen.dart`), so they ship with that work.
+
+### 2026-11-20 — #28 attendance and marks reports, school-branded PDFs
+
+- **#28 fixed — Reports now has attendance and marks reports, and report PDFs carry the school's branding.**
+  - *Server:* `GET /admin/reports/attendance?grade=&from_date=&to_date=` and `GET /admin/reports/marks?…` stream PDFs for one grade. Without dates they cover the current academic year so far; a start after the end is a 422. The figures come from the new `app/core/report_math.py`:
+    - attendance: periods present/absent and % per student, flagged below 75%; students with no attendance yet are still listed;
+    - marks: per subject and overall, as total marks over total max, so a 50-mark test weighs more than a 10-mark quiz.
+    - 3 unit tests (`tests/test_report_math.py`).
+  - *Branding:* every report PDF, including the existing pending-fees and ledger PDFs, now has the school's logo and name in the header and "<school> — Confidential · Generated with MindForge" in the footer, instead of the MindForge masthead. The logo is downscaled before embedding (a full-size upload made each report ~5 MB; now ~100 KB). An unreadable logo is skipped, never failing the report.
+  - *App:* Reports → **Class Reports**: grade picker (the school's grades), date range (default "This academic year", or pick dates), Download Attendance PDF / Download Marks PDF.
+
+Backend 662 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.dart` (uncommitted login redesign).
+
+**Live:** Hansel & Gretel admin, grade 8 from 1 May. The attendance PDF has the school's logo and name and 6 students (aarav8 53 present / 8 absent, 86.9%; isha8 51/10 — both match the `attendance` table). The marks PDF has Overall plus Chemistry, English 1, Mathematics and Physics sections over 2 pages. Inverted dates → 422. **UI PASS:** sunrise_admin → Reports → Class Reports (Grade 8, This academic year) → both downloads 200, no error.

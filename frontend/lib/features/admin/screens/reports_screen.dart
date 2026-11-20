@@ -3,9 +3,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../providers/admin_provider.dart';
@@ -38,6 +40,12 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
 
   bool _downloadingFees = false;
   bool _downloadingLedger = false;
+
+  // Class reports (#28): attendance and marks for one grade.
+  int? _classGrade;
+  DateTimeRange? _classRange; // null → this academic year so far
+  bool _downloadingAttendance = false;
+  bool _downloadingMarks = false;
 
   @override
   void initState() {
@@ -116,6 +124,121 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
     } finally {
       if (mounted) setState(() => _downloadingLedger = false);
     }
+  }
+
+  Future<void> _downloadClassReport(String kind, int grade) async {
+    setState(() => kind == 'attendance'
+        ? _downloadingAttendance = true
+        : _downloadingMarks = true);
+    String? day(DateTime? d) => d == null ? null : DateFormat('yyyy-MM-dd').format(d);
+    try {
+      final bytes = Uint8List.fromList(await ref
+          .read(apiClientProvider)
+          .downloadClassReport(kind, grade,
+              fromDate: day(_classRange?.start), toDate: day(_classRange?.end)));
+      await Printing.sharePdf(bytes: bytes, filename: '${kind}_grade$grade.pdf');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed: ${apiErrorMessage(e)}'),
+              backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => kind == 'attendance'
+            ? _downloadingAttendance = false
+            : _downloadingMarks = false);
+      }
+    }
+  }
+
+  Future<void> _pickClassRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 2),
+      lastDate: now,
+      initialDateRange: _classRange,
+    );
+    if (picked != null) setState(() => _classRange = picked);
+  }
+
+  Widget _classReports(BuildContext context) {
+    final grades = ref.watch(schoolGradesProvider);
+    final grade = grades.contains(_classGrade) ? _classGrade! : grades.first;
+    final fmt = DateFormat('d MMM yyyy');
+    final rangeLabel = _classRange == null
+        ? 'This academic year'
+        : '${fmt.format(_classRange!.start)} – ${fmt.format(_classRange!.end)}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionLabel(label: 'Class Reports', context: context),
+        SizedBox(height: _sp(context, 4)),
+        Text(
+          'Attendance and marks for a grade, with your school\'s name and logo',
+          style: GoogleFonts.poppins(
+              fontSize: _sp(context, 11), color: AppColors.textSecondary),
+        ),
+        SizedBox(height: _sp(context, 12)),
+        _SectionLabel(label: 'Grade', context: context, small: true),
+        SizedBox(height: _sp(context, 6)),
+        _DropdownCard(
+          context: context,
+          child: DropdownButton<int>(
+            value: grade,
+            isExpanded: true,
+            underline: const SizedBox(),
+            style: GoogleFonts.poppins(
+                fontSize: _sp(context, 13), color: AppColors.textPrimary),
+            items: grades
+                .map((g) => DropdownMenuItem(value: g, child: Text('Grade $g')))
+                .toList(),
+            onChanged: (v) => setState(() => _classGrade = v),
+          ),
+        ),
+        SizedBox(height: _sp(context, 8)),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickClassRange,
+                icon: const Icon(Icons.date_range_outlined, size: 18),
+                label: Text(rangeLabel, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+            if (_classRange != null)
+              IconButton(
+                tooltip: 'Back to this academic year',
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() => _classRange = null),
+              ),
+          ],
+        ),
+        SizedBox(height: _sp(context, 10)),
+        _ReportCard(
+          context: context,
+          icon: Icons.how_to_reg_outlined,
+          title: 'Download Attendance PDF',
+          color: AppColors.success,
+          loading: _downloadingAttendance,
+          enabled: true,
+          onDownload: () => _downloadClassReport('attendance', grade),
+        ),
+        SizedBox(height: _sp(context, 10)),
+        _ReportCard(
+          context: context,
+          icon: Icons.grade_outlined,
+          title: 'Download Marks PDF',
+          color: AppColors.primary,
+          loading: _downloadingMarks,
+          enabled: true,
+          onDownload: () => _downloadClassReport('marks', grade),
+        ),
+      ],
+    );
   }
 
   @override
@@ -386,6 +509,11 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
                 );
               },
             ),
+
+            SizedBox(height: _sp(context, 28)),
+
+            // ── Class reports: attendance and marks ───────────────────
+            _classReports(context),
           ],
         ),
       ),

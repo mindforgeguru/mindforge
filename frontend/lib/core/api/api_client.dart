@@ -1352,6 +1352,22 @@ class ApiClient {
     return res.data as List<int>;
   }
 
+  /// A grade's attendance or marks PDF (#28); [kind] is 'attendance' or
+  /// 'marks'. Without dates the server covers the current academic year.
+  Future<List<int>> downloadClassReport(String kind, int grade,
+      {String? fromDate, String? toDate}) async {
+    final res = await _dio.get(
+      '/admin/reports/$kind',
+      queryParameters: {
+        'grade': grade,
+        if (fromDate != null) 'from_date': fromDate,
+        if (toDate != null) 'to_date': toDate,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data as List<int>;
+  }
+
   // ── Dashboard summary endpoints ──────────────────────────────────────────────
 
   Future<Map<String, dynamic>> getStudentDashboardSummary({String? date}) async {
