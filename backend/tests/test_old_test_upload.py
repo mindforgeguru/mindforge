@@ -18,7 +18,19 @@ from starlette.datastructures import Headers, UploadFile
 
 from app.routers import database_router
 
-PDF = b"%PDF-1.4\n%fake\n"
+def _one_page_pdf() -> bytes:
+    # Uploads are opened to refuse locked or empty PDFs, so a header alone
+    # no longer passes.
+    import fitz
+
+    doc = fitz.open()
+    doc.new_page()
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+PDF = _one_page_pdf()
 META = {"grade": 8, "subject": "Physics", "chapter": "Force",
         "title": "Unit test on force", "summary": "Ten questions."}
 

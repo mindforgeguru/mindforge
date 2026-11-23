@@ -566,3 +566,12 @@ Backend 662 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.d
 **Run-log #4 fixed (2026-11-23, in the uncommitted login redesign):** the web login brand panel no longer shows Hansel & Gretel's fixed "H" tile or its "25+ years of excellence · since 1997" trust mark for every school. It shows the picked school's logo and name, or the MindForge mark and name before a school is picked. **UI PASS:** no school → MindForge only; Workflow Test School (no logo) → MindForge mark + its name; Sunrise → its sun logo + name. Ships with the login redesign. Still open there: the iPhone login layout notes (run-log #3).
 
 **Splash screen fixed (2026-11-23):** it showed Hansel & Gretel's logo and the same "25+ years of excellence · since 1997" capsule to every school before the login screen. It now shows the MindForge logo, with the school's logo above it only when a signed-in school is remembered. The capsule step is gone, so the splash is ~1 s shorter (`splash_screen.dart`). **UI PASS (signed out):** MindForge logo only. Not checked: the signed-in variant with a school logo. `assets/images/hansal_logo.png` (3.6 MB) is now unused by code but still bundled.
+
+### 2026-11-23 — J-19 large and locked uploads; K-23 status
+
+- **J-19 — 200-slide deck: PASS.** A generated 200-slide .pptx uploaded as hansal_sir → 201 READY in 0.35 s. All 200 slides were stored in order (`slide_index` 0–199) and paced at 8 per period → 25 periods. Deck deleted afterwards.
+- **J-19 — password-protected PDF: fixed.** Uploads only checked that a file starts like a PDF, so a locked chapter was stored and failed later inside the AI job ("may be password-protected"), after spending one of the teacher's 20 hourly generations. `validate_document` (`app/core/upload_utils.py`), shared by all four PDF upload routes, now opens PDFs with PyMuPDF and refuses locked ("That PDF is password-protected. Remove the password…"), page-less and unopenable files with 422. The chapter-PDF route also charges the hourly AI quota only after the file passes. Tests: real one-page PDF fixtures replace the header-only fakes, plus locked and broken-PDF cases.
+  - **Live:** AES-256 locked PDF → 422 with the message; no presentation row created; the AI quota counter didn't move.
+- **K-23 — already fixed in `812fc31`;** the row now says so. The ignored-`frame-ancestors` console message comes from the meta-tag copy, which is kept on purpose (see `web_csp_test.dart`).
+
+Backend 664 passed / 3 skipped.

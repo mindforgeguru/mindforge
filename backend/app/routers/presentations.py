@@ -409,7 +409,6 @@ async def upload_chapter(
     can poll GET /{id} or listen for the `presentation_ready` WebSocket
     event."""
     _require_teacher_or_admin(current_user)
-    await _enforce_ai_generation_quota(current_user)
 
     if grade not in _VALID_GRADES:
         raise HTTPException(status_code=422, detail="Grade must be 8, 9, or 10.")
@@ -435,6 +434,9 @@ async def upload_chapter(
     # could be stored as a .pdf and handed to the AI pipeline. Also covers the
     # empty-body case (422).
     validate_document(data, file.filename or "", {"pdf"})
+    # Charged only once the file is usable: a refused upload (locked, empty,
+    # not a PDF) used to spend one of the teacher's hourly generations.
+    await _enforce_ai_generation_quota(current_user)
 
     # Store the PDF in object storage. Key includes a uuid so re-uploads of
     # the same chapter never collide.

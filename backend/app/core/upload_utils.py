@@ -173,7 +173,37 @@ def validate_document(
             detail=f"That file isn't a valid {wanted}. Check the file and try again.",
         )
 
+    if detected == "pdf":
+        _reject_unreadable_pdf(raw)
     return detected
+
+
+def _reject_unreadable_pdf(raw: bytes) -> None:
+    """Refuse a PDF the AI can't read — password-protected, empty or broken.
+
+    The bytes only had to start like a PDF, so a locked chapter was accepted,
+    stored, and failed later inside the AI job, after spending one of the
+    teacher's hourly generations (J-19). PyMuPDF opens it without decrypting.
+    """
+    import fitz  # PyMuPDF; imported here so the module loads without it
+
+    try:
+        doc = fitz.open(stream=raw, filetype="pdf")
+    except Exception:
+        raise HTTPException(
+            status_code=422,
+            detail="That PDF couldn't be opened — it may be damaged. "
+                   "Try saving it again and re-uploading.",
+        )
+    with doc:
+        if doc.needs_pass:
+            raise HTTPException(
+                status_code=422,
+                detail="That PDF is password-protected. Remove the password "
+                       "(or print it to a new PDF) and upload it again.",
+            )
+        if doc.page_count == 0:
+            raise HTTPException(status_code=422, detail="That PDF has no pages.")
 
 
 # ─── Zip / OOXML decompression-bomb guard ─────────────────────────────────────

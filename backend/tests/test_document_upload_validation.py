@@ -17,9 +17,25 @@ from fastapi import HTTPException
 from app.core.upload_utils import validate_document
 
 
-# Minimal but genuine headers. A real PDF starts "%PDF-" and a real OOXML deck
-# is a ZIP, so its first four bytes are the local-file-header signature.
-PDF_BYTES = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< >>\nendobj\n"
+def _pdf(password: str = "") -> bytes:
+    """A real one-page PDF; a header alone no longer passes, since the PDF is
+    opened to refuse locked or empty files (J-19)."""
+    import fitz
+
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 72), "Chapter 4: Linear Equations")
+    kwargs = {}
+    if password:
+        kwargs = dict(encryption=fitz.PDF_ENCRYPT_AES_256,
+                      user_pw=password, owner_pw=password + "-owner")
+    data = doc.tobytes(**kwargs)
+    doc.close()
+    return data
+
+
+# A real OOXML deck is a ZIP, so its first four bytes are the local-file-header
+# signature.
+PDF_BYTES = _pdf()
 ZIP_BYTES = b"PK\x03\x04" + b"\x00" * 26
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
 JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"\x00" * 24
@@ -92,3 +108,18 @@ class TestErrorsAreActionable:
         with pytest.raises(HTTPException) as exc:
             validate_document(b"garbage-not-a-pdf-at-all", nasty, {"pdf"})
         assert "<script>" not in exc.value.detail
+
+
+class TestRefusesUnreadablePdfs:
+    """J-19: a locked chapter used to be stored and fail later in the AI job."""
+
+    def test_password_protected_pdf_is_refused(self):
+        with pytest.raises(HTTPException) as exc:
+            validate_document(_pdf(password="s3cret"), "locked.pdf", {"pdf"})
+        assert exc.value.status_code == 422
+        assert "password-protected" in exc.value.detail
+
+    def test_pdf_header_with_no_document_is_refused(self):
+        with pytest.raises(HTTPException) as exc:
+            validate_document(b"%PDF-1.7\n%garbage\n", "broken.pdf", {"pdf"})
+        assert exc.value.status_code == 422
