@@ -107,13 +107,23 @@ class SetupRoadCard extends ConsumerWidget {
     final current = status.currentStep;
     final complete = status.allComplete;
 
+    // A locked step used to ignore taps with no hint (B-03); say what's next.
+    void locked(String message) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    }
+
     final steps = <_SetupStep>[
       for (var i = 0; i < _labels.length; i++)
         _SetupStep(
           label: _labels[i],
           done: status.steps[i],
           enabled: i <= current,
-          onTap: i <= current ? () => _goto(context, i) : null,
+          onTap: i <= current
+              ? () => _goto(context, i)
+              : () => locked('Finish "${_labels[current]}" first — setup goes '
+                  'in order.'),
         ),
     ];
 
@@ -122,7 +132,9 @@ class SetupRoadCard extends ConsumerWidget {
       label: 'Close Year',
       done: false,
       enabled: complete,
-      onTap: complete ? () => _closeYear(context, ref) : null,
+      onTap: complete
+          ? () => _closeYear(context, ref)
+          : () => locked('Close Year unlocks once all five setup steps are done.'),
     );
 
     return Padding(

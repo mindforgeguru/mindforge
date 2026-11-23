@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/confirm_dialog.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/screens/mfa_setup_screen.dart';
@@ -233,6 +234,18 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
   }
 
   Future<void> _toggleActive(Map<String, dynamic> s) async {
+    // Suspending signs out everyone in the school, so it asks first (H-04).
+    // Re-activating is harmless and stays one tap.
+    if (s['is_active'] == true) {
+      final ok = await showConfirmDialog(
+        context,
+        title: 'Suspend ${s['name']}?',
+        message: 'Everyone at this school is signed out straight away and '
+            "can't sign in until you activate it again. No data is deleted.",
+        confirmLabel: 'Suspend',
+      );
+      if (!ok || !mounted) return;
+    }
     try {
       await ref.read(apiClientProvider)
           .updateSchool(s['id'] as int, isActive: !(s['is_active'] == true));

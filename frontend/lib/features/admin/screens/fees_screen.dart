@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -14,6 +15,7 @@ import '../../../core/models/fees.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/confirm_dialog.dart';
+import '../../../core/utils/constants.dart';
 import '../../../core/utils/currency.dart';
 import '../../../core/utils/image_pick.dart';
 import '../providers/admin_provider.dart';
@@ -142,8 +144,9 @@ class _AdminFeesScreenState extends ConsumerState<AdminFeesScreen>
         child: TabBarView(
           controller: _tabController,
           children: [
-            _FeeStructuresTab(selectedYear: _selectedYear),
-            _PaymentsTab(selectedYear: _selectedYear),
+            _NeedsAcademicYear(
+                child: _FeeStructuresTab(selectedYear: _selectedYear)),
+            _NeedsAcademicYear(child: _PaymentsTab(selectedYear: _selectedYear)),
             const _PaymentInfoTab(),
           ],
         ),
@@ -1702,3 +1705,44 @@ class _PaymentLogTileState extends ConsumerState<_PaymentLogTile> {
   }
 }
 
+
+/// Fee structures and payments belong to an academic year. Before the school
+/// has started one, the screen used to offer a guessed year (B-03); point the
+/// admin at starting the year instead.
+class _NeedsAcademicYear extends ConsumerWidget {
+  final Widget child;
+  const _NeedsAcademicYear({required this.child});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final year = ref.watch(currentAcademicYearProvider);
+    if (year.isLoading || year.hasError || year.valueOrNull != null) return child;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.event_note_outlined,
+                size: 48, color: AppColors.textMuted),
+            const SizedBox(height: 12),
+            const Text('Start the academic year first',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            const Text(
+              'Fees are set and collected per academic year.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () =>
+                  context.go('${RouteNames.adminDashboard}/academic-year'),
+              child: const Text('Go to Academic Year'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
