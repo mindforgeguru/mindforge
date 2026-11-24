@@ -587,3 +587,8 @@ Backend 664 passed / 3 skipped.
   2. Third-party pods' Swift deprecation warnings failed their compile ("failed with exit code 0") → warnings suppressed for pods only.
   3. Flutter 3.44 misreads Xcode 27's `lipo` output for the two-architecture simulator engine → simulator builds exclude x86_64 (Apple-silicon simulators only; device and App Store builds unaffected).
 - **Disk was full** (123 MB free), which also broke builds mid-way. With your OK I cleared Xcode DerivedData; free space is now ~6.9 GB. Docker Desktop hung on start because a backend process from 23 Nov stayed stuck "stopping" after the disk filled; ending it let Docker start in 6 s. Postgres recovered cleanly (redo done; 281 users, 15 schools). Docker build cache and unused images pruned (~17 GB inside Docker's disk).
+
+### 2026-11-24 — login redesign committed (be86bdb)
+
+The login redesign is committed together with the fixes made inside it: #5 registration grades, #27 school-list refresh, the brand panel without the Hansel & Gretel tile and claim (with the unused logo removed), and the iPhone layout (run-log #3). The three two-factor prompt tests that had been failing against the redesign only expected the old ALL-CAPS labels ("TWO-FACTOR AUTHENTICATION", "CANCEL", "VERIFY"). They now use the redesign's wording; the behaviour checks (Cancel doesn't retry, Verify sends the code, the recovery toggle sends a recovery code) are unchanged. **Flutter: 296 passed, 0 failed** (first fully green run since the redesign began). Analyzer: no errors or warnings.
+
