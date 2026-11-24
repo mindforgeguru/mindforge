@@ -575,3 +575,15 @@ Backend 662 passed / 3 skipped. Flutter: 3 failures, all in `login_screen_test.d
 - **K-23 — already fixed in `812fc31`;** the row now says so. The ignored-`frame-ancestors` console message comes from the meta-tag copy, which is kept on purpose (see `web_csp_test.dart`).
 
 Backend 664 passed / 3 skipped.
+
+### 2026-11-24 — run-log #3 iPhone login layout; iOS build fixed for Xcode 27
+
+- **Run-log #3 fixed (in the uncommitted login redesign, `login_screen.dart`):**
+  - *Status bar:* the phone layout sat in a top safe area, so the strip behind the white status-bar icons was the light page background. The navy header now runs up behind the status bar, and the screen sets light icons explicitly.
+  - *Sign in below the fold:* compact mode now applies below 900 pt height (every iPhone except Max/Plus; the 17 Pro is 874 pt) instead of below 700. Compact mode now also uses 48 pt keypad keys (the design's minimum tap target) and slightly tighter header and card spacing.
+  - **Simulator (iPhone 17 Pro, iOS 26.2):** before, Sign in was cut off at the bottom; after, it ends at about 790 pt with the school list still loading. The backend was down (see below), so the school picker never appeared. It adds about 40 pt, which should put Sign in at about 830 pt, just above the home indicator (~840 pt). **Re-check with the picker showing.**
+- **iOS builds fixed for Xcode 27.1** (updated automatically; it also triggered the licence prompt). Every iOS build failed:
+  1. Xcode 27 builds for iOS 15+ only, and the app targeted iOS 13 (pods 9–13) → deployment target raised to 15.0 (Runner, and a Podfile `post_install` for the pods).
+  2. Third-party pods' Swift deprecation warnings failed their compile ("failed with exit code 0") → warnings suppressed for pods only.
+  3. Flutter 3.44 misreads Xcode 27's `lipo` output for the two-architecture simulator engine → simulator builds exclude x86_64 (Apple-silicon simulators only; device and App Store builds unaffected).
+- **Disk was full** (123 MB free), which also broke builds mid-way. With your OK I cleared Xcode DerivedData; free space is now ~6.9 GB. Docker Desktop had stopped and now hangs on start, so the Docker build-cache and image prunes haven't run yet and the local backend is down until Docker is restarted.

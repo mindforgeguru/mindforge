@@ -1,5 +1,5 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# Xcode 27 builds for iOS 15 and later only; anything lower fails the build.
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -39,5 +39,17 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    # Some pods still declare iOS 9-13, which Xcode 27 refuses to build.
+    target.build_configurations.each do |config|
+      if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      end
+      # Xcode 27 fails a third-party pod's compile on its deprecation
+      # warnings ("failed with exit code 0"); they aren't ours to fix.
+      config.build_settings['SWIFT_SUPPRESS_WARNINGS'] = 'YES'
+      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+      config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+      config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+    end
   end
 end

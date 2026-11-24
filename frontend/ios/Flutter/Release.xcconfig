@@ -1,2 +1,6 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "Generated.xcconfig"
+
+// Simulator builds are Apple-silicon only: Flutter 3.44 misreads Xcode 27's
+// lipo output for a two-architecture simulator engine and stops the build.
+EXCLUDED_ARCHS[sdk=iphonesimulator*]=x86_64
