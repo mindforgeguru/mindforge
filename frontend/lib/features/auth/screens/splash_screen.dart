@@ -79,7 +79,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       animation: _exitCtrl,
       builder: (_, child) =>
           Opacity(opacity: _exitOpacity.value, child: child),
-      child: Scaffold(
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        // White splash: dark status-bar icons (the app default is white).
+        value: SystemUiOverlayStyle.dark
+            .copyWith(statusBarColor: Colors.transparent),
+        child: Scaffold(
         backgroundColor: Colors.white,
         body: Center(
           child: Column(
@@ -125,6 +129,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
             ],
           ),
         ),
+      ),
       ),
     );
   }

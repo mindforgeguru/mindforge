@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/school_logo_provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
@@ -48,10 +50,18 @@ class ParentScaffold extends ConsumerWidget {
     // the top of the screen, so it takes the status-bar inset and the body
     // below it (whose header would add the inset again) loses it.
     final multiChild = showChildSwitcher && showsChildSwitcher(ref);
+    // Stretch so the switcher's light strip spans the screen; without an app
+    // bar it also fills the status-bar inset, so the icons over it go dark.
     final content = multiChild
-        ? Column(children: [
+        ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             appBar == null
-                ? const SafeArea(bottom: false, child: ChildSwitcher())
+                ? const AnnotatedRegion<SystemUiOverlayStyle>(
+                    value: SystemUiOverlayStyle.dark,
+                    child: ColoredBox(
+                      color: AppColors.surface,
+                      child: SafeArea(bottom: false, child: ChildSwitcher()),
+                    ),
+                  )
                 : const ChildSwitcher(),
             Expanded(
               child: appBar == null

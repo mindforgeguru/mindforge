@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -135,9 +136,17 @@ class _MindForgeAppState extends ConsumerState<MindForgeApp> {
               maxScaleFactor: 1.1,
             ),
           ),
-          // Above the router, so live updates reach every screen instead of
-          // only whichever dashboard happens to be mounted.
-          child: RealtimeSync(child: child!),
+          // Every screen opens on a navy header or app bar, so the status
+          // bar's clock and icons are white by default. Without this, a
+          // session restored straight into a dashboard drew them dark on navy.
+          // The splash (white) sets its own dark style.
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle.light
+                .copyWith(statusBarColor: Colors.transparent),
+            // Above the router, so live updates reach every screen instead
+            // of only whichever dashboard happens to be mounted.
+            child: RealtimeSync(child: child!),
+          ),
         );
       },
     );

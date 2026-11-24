@@ -18,6 +18,7 @@ import '../../../core/providers/badge_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
+import '../../../core/widgets/school_title_block.dart';
 import '../../../core/widgets/badge_dot.dart';
 import '../../../core/widgets/chapter_rings_box.dart';
 import '../../../core/widgets/holiday_banner.dart';
@@ -316,36 +317,12 @@ class _ParentDashboardScreenState
                             ),
                             SizedBox(width: _s(context, 10, min: 6, max: 14)),
                             Flexible(
-                              child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  auth.schoolName ?? 'MIND FORGE',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: titleFs,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                    letterSpacing: 1.2,
-                                    height: 1,
-                                  ),
-                                ),
-                                SizedBox(height: _s(context, 3, min: 2, max: 5)),
-                                Text(
-                                  'AI Assisted Learning',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: _fs(context, 14, min: 13, max: 16),
-                                    fontWeight: FontWeight.w400,
-                                    color: Colors.white.withValues(alpha: 0.72),
-                                    letterSpacing: 0.4,
-                                  ),
-                                ),
-                              ],
-                            ),
+                              child: SchoolTitleBlock(
+                                name: auth.schoolName ?? 'MIND FORGE',
+                                titleFs: titleFs,
+                                taglineFs: _fs(context, 14, min: 13, max: 16),
+                                gap: _s(context, 3, min: 2, max: 5),
+                              ),
                             ),
                           ],
                         ),

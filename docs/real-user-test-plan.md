@@ -612,3 +612,21 @@ The Sunrise cast (sunrise_admin, das_sci, aarav8, aarav8_parent), each role's da
 - **Student:** dashboard at desktop, tablet and phone; Grades (real class high/low) and Fees at phone; Fees at tablet — **PASS after one fix**: at phone width "Today's Timetable" was cut to "Today's Timetab…" because the title and date split the free space evenly. The title now takes the free space and the date its own width, as on the parent dashboard (`student/screens/dashboard_screen.dart`). Re-checked: full title shows.
 - **Parent:** dashboard at desktop and phone; child switcher (aarav8 ↔ anya8) carries through to Fees; Fees at phone and tablet — **PASS**.
 - Console: no app errors (only the known, deliberate `frame-ancestors` meta note, K-23).
+
+### 2026-11-24 — iPhone app pass (iPhone 17 Pro simulator, iOS debug build, local stack)
+
+The Sunrise cast in the native app, signing in each time through the redesigned login (school picker, username, MPIN keypad) and signing out from the dashboard:
+
+- **Teacher (das_sci):** dashboard and road; created a P1 Physics timetable slot for grade 8 today ("Timetable saved"); submitted P1 attendance for 64 students, with anya8 absent ("Attendance submitted successfully!"; the update-mode banner shows on reopening); the road moved to Timetable / Attendance / HW Review done — **PASS after two fixes** (below).
+- **Student (aarav8):** dashboard (XP card, class progress, today's P1 Physics · das_sci); Attendance shows 24 Nov present, 1/1, 100%; Fees ₹40,000 / ₹20,000 paid / one payment; Grades: Ch 4 quiz 9/10 with Class Low 0.0% (a real zero: bulk8_22 answered all five questions, all wrong) — **PASS**.
+- **Parent (aarav8_parent):** dashboard; switching to anya8 carries through to Fees (₹0 paid, "No payments recorded yet.") and Attendance (24 Nov absent, 0.0%) — **PASS after one fix** (below). Note: the parent attendance calendar starts weeks on Sunday ("Sun Mon …") and the student's on Monday ("M T …"). This is cosmetic and was left alone.
+- **Admin (sunrise_admin):** dashboard (setup road complete, 15 awaiting approval); Fee Structures (₹40,000–₹48,000 range card); Payments (the summary shows a negative balance only because of bulk8_03's October test overpayment, as on web); Reports → Pending Fees PDF opens the iOS share sheet (pending_fees_2026-27, 55 KB, school logo on page); Users (pending list with Devanagari, Gujarati, emoji and 60-character names wrapping cleanly) — **PASS**.
+
+Fixes found on the phone:
+1. **Header name ran into the avatar.** "Sunrise Public School" wraps to two lines, which pushed the "AI Assisted Learning" tagline down into the overlapping avatar (teacher, student and parent dashboards). New shared `core/widgets/school_title_block.dart`: a name that fits keeps the tagline; one that wraps is set at 0.82× on two lines and drops the tagline, so the block keeps its height. Widget test `test/school_title_block_test.dart`.
+2. **Dark status-bar icons on the navy headers after a cold start** (session restored straight into a dashboard). `main.dart` now sets light status-bar icons app-wide; the white splash sets dark icons.
+3. **Parent child switcher (several children):** after fix 2 its light strip had white status-bar icons, almost invisible, and the strip only spanned the chips' width, sitting centred. `parent_scaffold.dart` stretches it full-width, paints the safe area behind it, and sets dark icons there.
+
+Re-checked on the simulator after each rebuild. `flutter test` 298/298 pass, and `dart analyze` shows no errors or warnings.
+
+Test data left on the local stack: Sunrise grade 8 timetable slot P1 Physics (das_sci) on 2026-11-24, and that period's attendance for 64 students (anya8 absent).
