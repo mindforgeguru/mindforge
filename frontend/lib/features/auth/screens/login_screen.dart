@@ -4,138 +4,107 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/school_logo.dart';
 import '../providers/auth_provider.dart';
 
-// ─── Whiteprint tokens ─────────────────────────────────────────────────────────
+// ─── Sign-in palette & type ─────────────────────────────────────────────────────
 //
-// The sign-in screen is the detail sheet of the Whiteprint drawing set the
-// marketing front door opens with: a near-white drafting ground carrying a
-// construction grid, every structure drawn with a 1.5px hairline, square
-// corners, no shadow anywhere, and one warm accent that does annotation work.
+// The COLOURS here are unchanged from the screen's prior build — the drafting
+// blue ground, the logo navy, the one warm heat accent. Only the LAYOUT and the
+// TYPE voices are new: the construction-grid drawing set is replaced by a solid
+// navy brand panel beside a soft, rounded form card, and the three condensed /
+// mono voices are replaced by two — a warm Fraunces serif for display and a
+// humanist Instrument Sans for everything that is read or tapped.
 //
-// These are deliberately PRIVATE to this screen rather than added to
-// `AppColors`. Sign-in happens before authentication, so it always runs on the
-// default palette — but `AppColors` is swapped at runtime by the student XP
-// theme-unlock system, and pushing this world in there would repaint the whole
-// app. Nothing outside this file reads `_Wp`.
+// These tokens stay PRIVATE to this screen. Sign-in runs before authentication,
+// so it always draws on the default palette — but `AppColors` is swapped at
+// runtime by the student XP theme-unlock system, and pushing this world in
+// there would repaint the whole app. Nothing outside this file reads `_Wp`.
 class _Wp {
   _Wp._();
 
-  // Ground and sheet
-  static const print_ = Color(0xFFE4EBF3); // drafting blue ground
+  // Ground and sheet (unchanged)
+  static const print_ = Color(0xFFE4EBF3); // page ground
   static const printDeep = Color(0xFFD6E0EB); // recessed field
-  static const sheet = Color(0xFFF2F6FA); // the lifted drawing sheet
-  static const white = Color(0xFFFBFDFF); // innermost plate
+  static const sheet = Color(0xFFF2F6FA); // lifted card on mobile
+  static const white = Color(0xFFFBFDFF); // card / field fill
 
-  // Line work
-  static const navy = Color(0xFF112A4A); // logo navy — display, structure
+  // Navy — now a filled brand field, not only line work (unchanged values)
+  static const navy = Color(0xFF112A4A);
   static const navyMid = Color(0xFF22436B);
-  static const line = Color(0x4D112A4A); // .30 — structure hairline
+  static const line = Color(0x4D112A4A); // .30 — field hairline
   static const lineSoft = Color(0x26112A4A); // .15 — list hairline
-  static const onPlate = Color(0xFFBFD2E6); // mono label on the navy plate
+  static const onPlate = Color(0xFFBFD2E6); // text on the navy panel
 
-  // Heat — the one accent, used as annotation ink
-  static const heat = Color(0xFFF55C1E); // marks, active cell, arrows
-  static const heatRead = Color(0xFFAE3607); // the cut that reads as text
-  static const heatWash = Color(0xFFFDF3EC); // the lightest heat tint
-  static const scale = Color(0xFFF7D9A6); // heat label on the navy plate
+  // Heat — the one accent (unchanged)
+  static const heat = Color(0xFFF55C1E); // active cell, focus, caret
+  static const heatRead = Color(0xFFAE3607); // heat that reads as text
+  static const heatWash = Color(0xFFFDF3EC); // lightest heat tint
+  static const scale = Color(0xFFF7D9A6); // heat label on the navy panel
 
-  // Text
+  // Text (unchanged)
   static const body = Color(0xFF1B3355);
   static const mute = Color(0xFF4A5F7E);
   static const ok = Color(0xFF146B3F);
   static const alarm = Color(0xFFA32014);
 
-  static const rule = 1.5; // the one hairline weight
-  static const ctrlRadius = Radius.circular(3); // the single softening
+  static const rule = 1.5; // hairline weight
 
-  // ── Three voices: Rajdhani states, Karla explains, Spline Sans Mono labels ──
+  // New soft geometry — the layout's depth system (colours unchanged).
+  static const rField = 11.0;
+  static const rCard = 20.0;
+  static const rKey = 14.0;
+  static const rPill = 100.0;
 
-  /// Display — very large condensed caps.
+  /// A real shadow: offset + soft blur, tinted from the navy, never a flat halo.
+  static const List<BoxShadow> lift = [
+    BoxShadow(color: Color(0x1A112A4A), blurRadius: 30, offset: Offset(0, 16)),
+    BoxShadow(color: Color(0x0F112A4A), blurRadius: 4, offset: Offset(0, 2)),
+  ];
+  static const List<BoxShadow> liftKey = [
+    BoxShadow(color: Color(0x26112A4A), blurRadius: 14, offset: Offset(0, 7)),
+  ];
+
+  // ── Two voices: Fraunces carries the display, Instrument Sans everything read ──
+
+  /// Display — warm serif, mixed case, tight.
   static TextStyle disp(double size,
-          {Color color = navy, FontWeight weight = FontWeight.w700}) =>
-      GoogleFonts.rajdhani(
-        fontSize: size,
-        fontWeight: weight,
-        color: color,
-        height: 0.96,
-        letterSpacing: -0.012 * size,
-      );
-
-  /// Title — Rajdhani at a readable size, still caps.
-  static TextStyle title(double size,
           {Color color = navy, FontWeight weight = FontWeight.w600}) =>
-      GoogleFonts.rajdhani(
+      GoogleFonts.fraunces(
         fontSize: size,
         fontWeight: weight,
         color: color,
-        height: 1.06,
-        letterSpacing: 0.02 * size,
+        height: 1.0,
+        letterSpacing: -0.02 * size,
       );
 
-  /// Running copy.
+  /// Running copy and field values.
   static TextStyle text(double size, {Color color = body, FontWeight? weight}) =>
-      GoogleFonts.karla(
+      GoogleFonts.instrumentSans(
         fontSize: size,
         fontWeight: weight ?? FontWeight.w400,
         color: color,
         height: 1.5,
       );
 
-  /// Mono field key / dimension label. Never sets running prose.
+  /// A small tracked label naming the group of controls it sits over. Uppercase
+  /// comes from the call site; the tracking and weight come from here.
   static TextStyle dim(double size,
-          {Color color = navyMid, FontWeight weight = FontWeight.w500}) =>
-      GoogleFonts.splineSansMono(
+          {Color color = navyMid, FontWeight weight = FontWeight.w600}) =>
+      GoogleFonts.instrumentSans(
         fontSize: size,
         fontWeight: weight,
         color: color,
-        letterSpacing: size * 0.075,
-        height: 1.35,
+        letterSpacing: size * 0.09,
+        height: 1.4,
       );
 }
 
-/// The construction grid. A committed material in its own right, not a
-/// backdrop: the form's cells are laid out on the same 16px module the fine
-/// lines draw, so the armature the ground shows is the armature in use.
-class _GridPainter extends CustomPainter {
-  const _GridPainter();
-
-  static const double fine = 16;
-  static const double coarse = 96;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final finePaint = Paint()
-      ..color = const Color(0x0E112A4A)
-      ..strokeWidth = 1;
-    final coarsePaint = Paint()
-      ..color = const Color(0x1D112A4A)
-      ..strokeWidth = 1;
-
-    for (double x = 0; x <= size.width; x += fine) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), finePaint);
-    }
-    for (double y = 0; y <= size.height; y += fine) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), finePaint);
-    }
-    for (double x = 0; x <= size.width; x += coarse) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), coarsePaint);
-    }
-    for (double y = 0; y <= size.height; y += coarse) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), coarsePaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _GridPainter oldDelegate) => false;
-}
-
 /// Stable handles for tests. The visible copy on this screen is restyled
-/// freely (labels are uppercased, the delete key is an icon), so tests find
-/// controls by these keys rather than by their text.
+/// freely, so tests find controls by these keys rather than by their text.
 abstract final class LoginKeys {
   static const loginTab = ValueKey('login.tab.login');
   static const registerTab = ValueKey('login.tab.register');
@@ -157,7 +126,8 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with WidgetsBindingObserver {
   final _usernameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
@@ -180,6 +150,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   List<Map<String, dynamic>> _schools = [];
   bool _schoolsLoading = true;
   int? _selectedSchoolId;
+  // Bumped when a refresh changes the list, so the picker is rebuilt rather
+  // than left holding a school that's gone.
+  int _schoolsVersion = 0;
 
   // The platform owner has school_id NULL and is only found by the backend when
   // `school_id` is omitted entirely (see auth.py `_resolve_school`). The picker
@@ -207,8 +180,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return null;
   }
 
-  /// The picked school's name, shown in place of the "MIND FORGE" wordmark on
-  /// the login header once a school is chosen. Null → "MIND FORGE".
+  /// The picked school's name, shown in place of the "MindForge" wordmark on
+  /// the header once a school is chosen. Null → "MindForge".
   String? get _pickedSchoolName {
     final id = _selectedSchoolId;
     if (id == null || id == _ownerSchoolSentinel) return null;
@@ -219,6 +192,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     }
     return null;
+  }
+
+  /// The grades the picked school teaches (#5); every supported grade until a
+  /// school is picked.
+  List<int> get _pickedSchoolGrades {
+    final id = _selectedSchoolId;
+    for (final s in _schools) {
+      if (s['id'] == id) return gradesOffered(s);
+    }
+    return gradesOffered(null);
+  }
+
+  /// The student's grade, moved to the picked school's first grade when the
+  /// school doesn't teach the one chosen earlier.
+  int get _effectiveGrade {
+    final grades = _pickedSchoolGrades;
+    return grades.contains(_selectedGrade) ? _selectedGrade : grades.first;
   }
 
   // Register mode drops the owner entry, so a lingering sentinel would leave
@@ -236,15 +226,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSchools();
+  }
+
+  // The list was loaded once, so a school suspended or restored while this
+  // screen sat open only showed up after an app restart (#27). Reload it each
+  // time the app (or browser tab) comes back to the foreground.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_schoolsLoading) _loadSchools();
   }
 
   Future<void> _loadSchools() async {
     try {
       final schools = await ref.read(apiClientProvider).getSchools();
       if (!mounted) return;
+      String ids(List<Map<String, dynamic>> l) =>
+          l.map((s) => '${s['id']}:${s['grades_offered']}').join(',');
+      if (!_schoolsLoading && ids(schools) == ids(_schools)) return;
       setState(() {
+        _schoolsVersion++;
         _schools = schools;
+        final picked = _selectedSchoolId;
+        if (picked != null &&
+            picked != _ownerSchoolSentinel &&
+            !schools.any((s) => s['id'] == picked)) {
+          _selectedSchoolId = null;
+        }
         // Auto-select when there's only one school so the field is pre-filled.
         if (schools.length == 1) {
           _selectedSchoolId = schools.first['id'] as int;
@@ -261,6 +270,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _usernameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
@@ -387,7 +397,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         email: email.isNotEmpty ? email : null,
         parentUsername: isStudent ? parentUsernameTrimmed : null,
         parentMpin: isStudent ? parentMpinTrimmed : null,
-        grade: isStudent ? _selectedGrade : null,
+        grade: isStudent ? _effectiveGrade : null,
         additionalSubjects: isStudent ? _selectedSubjects.toList() : null,
         teachableSubjects: isTeacher ? _selectedTeacherSubjects.toList() : null,
       );
@@ -447,10 +457,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         content: Text(msg, style: _Wp.text(14.5, color: Colors.white)),
         backgroundColor: ground,
         behavior: SnackBarBehavior.floating,
-        elevation: 0,
+        elevation: 6,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(color: ground, width: _Wp.rule),
+          borderRadius: BorderRadius.circular(_Wp.rField),
         ),
       ),
     );
@@ -464,22 +473,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context: context,
       barrierColor: _Wp.navy.withValues(alpha: 0.42),
       builder: (_) => AlertDialog(
-        backgroundColor: _Wp.sheet,
+        backgroundColor: _Wp.white,
         surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(color: _Wp.navy, width: _Wp.rule),
+        elevation: 10,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_Wp.rCard),
         ),
-        titlePadding: EdgeInsets.zero,
+        titlePadding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
         title: _plateHeader('Forgot your MPIN?', 'Recovery'),
+        contentPadding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
         content: Text(
           "For your security, your MPIN can't be recovered on your own.\n\n"
           "Ask your school's admin to reset it — they can set a new MPIN for "
           "you from their dashboard. A student can also ask their parent.",
           style: _Wp.text(14.5),
         ),
-        actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
         actions: [
           _FilledKey(
             label: 'Got it',
@@ -490,42 +499,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  // ─── Shared Whiteprint parts ────────────────────────────────────────────────
+  // ─── Shared parts ───────────────────────────────────────────────────────────
 
-  /// The navy plate header that caps a sheet or a dialog. The one place
-  /// Plate Navy carries a filled area.
+  /// A card / dialog header: a serif title with a small tracked label beneath,
+  /// closed by a hairline. Replaces the old filled navy plate bar.
   static Widget _plateHeader(String label, String right) {
-    return Container(
-      width: double.infinity,
-      color: _Wp.navy,
-      padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label.toUpperCase(),
-              style: _Wp.dim(12.5, color: _Wp.onPlate, weight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(right.toUpperCase(),
-              style: _Wp.dim(12.5, color: _Wp.scale, weight: FontWeight.w600)),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(right.toUpperCase(),
+            style: _Wp.dim(11.5, color: _Wp.heatRead, weight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(label, style: _Wp.disp(26)),
+        const SizedBox(height: 14),
+        Container(height: _Wp.rule, color: _Wp.lineSoft),
+      ],
     );
   }
 
   static final ButtonStyle _linkStyle = TextButton.styleFrom(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_Wp.rField)),
     minimumSize: const Size(0, 48),
     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
   );
 
-  /// One field decoration for every input on the screen: square, hairline,
-  /// white plate, heat focus. Mono label so the field reads as a title-block
-  /// cell key rather than a floating placeholder.
+  /// One field decoration for every input on the screen: a soft rounded white
+  /// field with a hairline border and a heat focus ring.
   static InputDecoration _dec(
     String label, {
     IconData? icon,
@@ -534,19 +535,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     Widget? suffix,
   }) {
     OutlineInputBorder b(Color c, double w) => OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
+          borderRadius: BorderRadius.circular(_Wp.rField),
           borderSide: BorderSide(color: c, width: w),
         );
     return InputDecoration(
-      labelText: label.toUpperCase(),
+      labelText: label,
       hintText: hint,
       helperText: helper,
       helperMaxLines: 3,
       helperStyle: _Wp.text(12.5, color: _Wp.mute),
       hintStyle: _Wp.text(15, color: _Wp.mute),
-      labelStyle: _Wp.dim(12.5, color: _Wp.navyMid, weight: FontWeight.w600),
+      labelStyle: _Wp.text(15, color: _Wp.navyMid),
       floatingLabelStyle:
-          _Wp.dim(12.5, color: _Wp.heatRead, weight: FontWeight.w600),
+          _Wp.dim(12.5, color: _Wp.heatRead, weight: FontWeight.w700),
       prefixIcon: icon == null
           ? null
           : Icon(icon, size: 19, color: _Wp.navyMid),
@@ -554,7 +555,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       filled: true,
       fillColor: _Wp.white,
       isDense: true,
-      contentPadding: const EdgeInsets.fromLTRB(14, 15, 14, 15),
+      contentPadding: const EdgeInsets.fromLTRB(16, 17, 16, 17),
       border: b(_Wp.line, _Wp.rule),
       enabledBorder: b(_Wp.line, _Wp.rule),
       focusedBorder: b(_Wp.heat, 2),
@@ -562,7 +563,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  /// A selectable chip — square, hairline, filled navy when on. Used for
+  /// A selectable pill — hairline when off, filled navy when on. Used for
   /// teachable subjects and a student's additional subjects.
   Widget _chip({
     required String label,
@@ -570,43 +571,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        constraints: const BoxConstraints(minHeight: 40),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected ? _Wp.navy : _Wp.white,
-          border: Border.all(
-              color: selected ? _Wp.navy : _Wp.line, width: _Wp.rule),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon,
-                  size: 15, color: selected ? _Wp.scale : _Wp.navyMid),
-              const SizedBox(width: 6),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(_Wp.rPill),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          constraints: const BoxConstraints(minHeight: 42),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected ? _Wp.navy : _Wp.white,
+            borderRadius: BorderRadius.circular(_Wp.rPill),
+            border: Border.all(
+                color: selected ? _Wp.navy : _Wp.line, width: _Wp.rule),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon,
+                    size: 16, color: selected ? _Wp.scale : _Wp.navyMid),
+                const SizedBox(width: 7),
+              ],
+              Text(
+                label,
+                style: _Wp.text(13.5,
+                    color: selected ? Colors.white : _Wp.body,
+                    weight: selected ? FontWeight.w600 : FontWeight.w500),
+              ),
             ],
-            Text(
-              label,
-              style: _Wp.text(13.5,
-                  color: selected ? Colors.white : _Wp.body,
-                  weight: selected ? FontWeight.w700 : FontWeight.w500),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  /// A mono caption naming the group of controls beneath it. This is a field
-  /// label over a value, not a kicker over a heading.
+  /// A small tracked caption naming the group of controls beneath it.
   Widget _groupLabel(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.only(bottom: 9),
         child: Text(text.toUpperCase(),
-            style: _Wp.dim(12.5, weight: FontWeight.w600)),
+            style: _Wp.dim(12, weight: FontWeight.w700)),
       );
 
   // ─── Build ──────────────────────────────────────────────────────────────────
@@ -632,9 +637,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
       scrollbarTheme: ScrollbarThemeData(
         thumbColor: WidgetStateProperty.all(_Wp.line),
-        trackColor: WidgetStateProperty.all(_Wp.printDeep),
-        radius: Radius.zero,
-        thickness: WidgetStateProperty.all(9),
+        trackColor: WidgetStateProperty.all(Colors.transparent),
+        radius: const Radius.circular(8),
+        thickness: WidgetStateProperty.all(8),
       ),
       iconTheme: const IconThemeData(color: _Wp.navyMid),
       splashColor: const Color(0x14F55C1E),
@@ -648,89 +653,84 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Theme(data: themed, child: _buildMobileScaffold(context, auth));
   }
 
-  // ─── Mobile layout — Sheet 2 alone ──────────────────────────────────────────
+  // ─── Mobile layout — navy header band over the form card ─────────────────────
 
   Widget _buildMobileScaffold(BuildContext context, AuthState auth) {
     final sh = MediaQuery.of(context).size.height;
-    final compact = sh < 700;
+    // Every iPhone below the Max/Plus sizes (874 pt on a 17 Pro) needs the
+    // tighter layout, or Sign in sits below the fold (run-log #3).
+    final compact = sh < 900;
     // viewPadding.bottom covers BOTH 3-button nav (48dp) and gesture nav (30dp).
     // Clamp to a minimum of 32 so the Login button always clears the nav bar.
     final safeBottom =
         MediaQuery.of(context).viewPadding.bottom.clamp(32.0, 80.0);
     final hzPad = R.sp(context, 16);
 
-    return Scaffold(
+    // The navy header runs up behind the status bar, whose icons are white:
+    // before, the strip behind them was the light page background, so the
+    // clock and battery were white on near-white (run-log #3).
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+          statusBarColor: Colors.transparent),
+      child: Scaffold(
       backgroundColor: _Wp.print_,
       resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          // The construction ground, behind everything.
-          const Positioned.fill(
-            child: CustomPaint(painter: _GridPainter()),
-          ),
-          SafeArea(
-            bottom: false, // sheet extends beneath the home indicator
-            child: Column(
-              children: [
-                _mobileRail(context),
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: EdgeInsets.fromLTRB(
-                        hzPad, compact ? 12 : 16, hzPad, safeBottom),
-                    child: _formSheet(context, auth, compact: compact),
-                  ),
-                ),
-              ],
+      body: SafeArea(
+        top: false,
+        bottom: false, // card extends beneath the home indicator
+        child: Column(
+          children: [
+            ColoredBox(
+              color: _Wp.navy,
+              child: SafeArea(
+                bottom: false,
+                child: _mobileHeader(context, compact: compact),
+              ),
             ),
-          ),
-        ],
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                    hzPad, compact ? 14 : 18, hzPad, safeBottom),
+                child: _Entrance(
+                  child: _formCard(context, auth, compact: compact),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
       ),
     );
   }
 
-  /// The hairline rail: school (or MindForge) mark, wordmark, tagline.
-  Widget _mobileRail(BuildContext context) {
+  /// The navy header band: school (or MindForge) mark, wordmark, tagline.
+  Widget _mobileHeader(BuildContext context, {required bool compact}) {
+    final hz = R.sp(context, 16);
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: _Wp.navy, width: _Wp.rule)),
-      ),
-      padding: EdgeInsets.fromLTRB(R.sp(context, 16), 10, R.sp(context, 16), 10),
+      width: double.infinity,
+      decoration: const BoxDecoration(color: _Wp.navy),
+      padding: EdgeInsets.fromLTRB(hz, compact ? 10 : 22, hz, compact ? 12 : 24),
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: _Wp.white,
-              border: Border.all(color: _Wp.line, width: _Wp.rule),
-            ),
-            padding: const EdgeInsets.all(3),
-            child: SchoolLogo(
-                fit: BoxFit.contain, logoUrl: _pickedSchoolLogoUrl),
-          ),
-          const SizedBox(width: 12),
+          _logoTile(compact ? 40 : 44, logoUrl: _pickedSchoolLogoUrl),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  _pickedSchoolName ?? 'MIND FORGE',
+                  _pickedSchoolName ?? 'MindForge',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.rajdhani(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: _Wp.navy,
-                    letterSpacing: 2.6,
-                    height: 1.1,
-                  ),
+                  style: _Wp.disp(24, color: Colors.white),
                 ),
+                const SizedBox(height: 2),
                 Text('AI assisted learning',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _Wp.text(12.5, color: _Wp.mute)),
+                    style: _Wp.text(12.5, color: _Wp.onPlate)),
               ],
             ),
           ),
@@ -739,7 +739,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  // ─── Web layout — a two-sheet drawing set ───────────────────────────────────
+  // ─── Web layout — navy brand panel beside the form card ──────────────────────
 
   Widget _buildWebScaffold(BuildContext context, AuthState auth) {
     return Scaffold(
@@ -747,604 +747,484 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Sheet 1: the general arrangement ──────────────────────────
-          Expanded(flex: 48, child: _buildWebLeftPanel(context)),
-          // ── Sheet 2: the detail — the form ────────────────────────────
-          Expanded(flex: 52, child: _buildWebRightPanel(context, auth)),
+          Expanded(flex: 50, child: _buildWebBrandPanel(context)),
+          Expanded(flex: 50, child: _buildWebFormPanel(context, auth)),
         ],
       ),
     );
   }
 
-  Widget _buildWebLeftPanel(BuildContext context) {
+  Widget _buildWebBrandPanel(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: _Wp.print_,
-        border: Border(right: BorderSide(color: _Wp.navy, width: _Wp.rule)),
-      ),
-      child: Stack(
-        children: [
-          const Positioned.fill(child: CustomPaint(painter: _GridPainter())),
-          // The sheet's drawn matter sits at the head; the approval stamp is
-          // anchored at the foot the way a drawing's title block is, rather
-          // than floating wherever the content happens to end.
-          LayoutBuilder(
-            builder: (context, viewport) => SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: viewport.maxHeight),
-                child: IntrinsicHeight(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(48, 40, 44, 36),
-                    child: Column(
+      color: _Wp.navy,
+      child: LayoutBuilder(
+        builder: (context, viewport) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: viewport.maxHeight),
+            child: IntrinsicHeight(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(56, 52, 52, 44),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
+                        // ── Brand marks ──────────────────────────────────
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                  // ── Brand plates ────────────────────────────────────
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _plate(
-                        // 3.6MB source decoded down to the box it is drawn in.
-                        child: Image.asset(
-                          'assets/images/hansal_logo.png',
-                          fit: BoxFit.contain,
-                          cacheWidth: 160,
-                          filterQuality: FilterQuality.medium,
-                        ),
-                      ),
-                      Container(
-                          width: _Wp.rule,
-                          height: 54,
-                          margin: const EdgeInsets.symmetric(horizontal: 16),
-                          color: _Wp.line),
-                      _plate(
-                        child: SchoolLogo(
-                            fit: BoxFit.contain,
-                            logoUrl: _pickedSchoolLogoUrl),
-                      ),
-                      const SizedBox(width: 14),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _pickedSchoolName ?? 'MIND FORGE',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.rajdhani(
-                                fontSize: 21,
-                                fontWeight: FontWeight.w700,
-                                color: _Wp.navy,
-                                letterSpacing: 2.8,
-                                height: 1.15,
+                            // The picked school's logo, or the MindForge mark
+                            // before one is picked. A fixed Hansel & Gretel
+                            // tile used to show here for every school.
+                            _logoTile(56, logoUrl: _pickedSchoolLogoUrl),
+                            const SizedBox(width: 16),
+                            Flexible(
+                              child: Text(
+                                _pickedSchoolName ?? 'MindForge',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: _Wp.disp(24, color: Colors.white),
                               ),
                             ),
-                            Text('AI assisted learning',
-                                style: _Wp.text(13, color: _Wp.mute)),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
 
-                  const SizedBox(height: 44),
+                        const SizedBox(height: 56),
 
-                  // ── Headline ────────────────────────────────────────
-                  Text('Smart Learning\nStarts Here.'.toUpperCase(),
-                      style: _Wp.disp(58)),
-                  const SizedBox(height: 14),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 380),
-                    child: Text(
-                        'A complete platform for teachers, students, and '
-                        'parents.',
-                        style: _Wp.text(16)),
-                  ),
+                        // ── Headline ─────────────────────────────────────
+                        Text('Smart learning\nstarts here.',
+                            style: _Wp.disp(60, color: Colors.white)),
+                        const SizedBox(height: 18),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          child: Text(
+                            'A complete platform for teachers, students, and '
+                            'parents.',
+                            style: _Wp.text(16.5, color: _Wp.onPlate),
+                          ),
+                        ),
 
-                  const SizedBox(height: 34),
+                        const SizedBox(height: 40),
 
-                  // ── Capability schedule ─────────────────────────────
-                  Container(
-                    decoration: const BoxDecoration(
-                      border:
-                          Border(top: BorderSide(color: _Wp.navy, width: _Wp.rule)),
-                    ),
-                    child: Column(
-                      children: [
+                        // ── Capability list ──────────────────────────────
                         for (final f in const [
-                          ('01', 'AI-Generated Tests & Answer Keys'),
-                          ('02', 'Real-Time Attendance Tracking'),
-                          ('03', 'Smart Grade Analytics'),
-                          ('04', 'Fee Management & Receipts'),
+                          (Icons.auto_awesome_outlined,
+                              'AI-generated tests & answer keys'),
+                          (Icons.how_to_reg_outlined,
+                              'Real-time attendance tracking'),
+                          (Icons.insights_outlined, 'Smart grade analytics'),
+                          (Icons.receipt_long_outlined,
+                              'Fee management & receipts'),
                         ])
-                          Container(
-                            decoration: const BoxDecoration(
-                              border: Border(
-                                  bottom: BorderSide(
-                                      color: _Wp.lineSoft, width: 1)),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 18),
                             child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                SizedBox(
-                                  width: 42,
-                                  child: Text(f.$1,
-                                      style: _Wp.dim(12.5,
-                                          color: _Wp.heatRead,
-                                          weight: FontWeight.w600)),
-                                ),
+                                Icon(f.$1, size: 21, color: _Wp.heat),
+                                const SizedBox(width: 15),
                                 Expanded(
                                   child: Text(f.$2,
-                                      style: _Wp.title(21)),
+                                      style: _Wp.text(16,
+                                          color: Colors.white,
+                                          weight: FontWeight.w500)),
                                 ),
                               ],
                             ),
                           ),
                       ],
                     ),
-                  ),
-                          ],
-                        ),
 
-                        // ── Approval stamp. Pre-existing owner claim,
-                        //    restyled, not re-authored. See the surface
-                        //    brief. ─────────────────────────────────────
-                        Padding(
-                          padding: const EdgeInsets.only(top: 40),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: _Wp.white,
-                              border:
-                                  Border.all(color: _Wp.line, width: _Wp.rule),
-                            ),
-                            padding: const EdgeInsets.fromLTRB(16, 12, 18, 13),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 3,
-                                  height: 38,
-                                  color: _Wp.heat,
-                                  margin: const EdgeInsets.only(right: 14),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text('25+ YEARS OF EXCELLENCE',
-                                        style: _Wp.dim(12.5,
-                                            color: _Wp.heatRead,
-                                            weight: FontWeight.w600)),
-                                    const SizedBox(height: 3),
-                                    Text('Trusted education since 1997',
-                                        style: _Wp.text(14)),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                    // The "25+ years · since 1997" trust mark was Hansel &
+                    // Gretel's claim, shown on every school's login; removed.
+                  ],
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  /// A square white plate holding a logo. Depth is plate overlap, never shadow.
-  Widget _plate({required Widget child}) => Container(
-        width: 74,
-        height: 74,
-        decoration: BoxDecoration(
-          color: _Wp.white,
-          border: Border.all(color: _Wp.line, width: _Wp.rule),
-        ),
-        padding: const EdgeInsets.all(8),
-        child: child,
-      );
-
-  Widget _buildWebRightPanel(BuildContext context, AuthState auth) {
+  Widget _buildWebFormPanel(BuildContext context, AuthState auth) {
     return Container(
       color: _Wp.print_,
-      child: Stack(
-        children: [
-          const Positioned.fill(child: CustomPaint(painter: _GridPainter())),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 40),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 452),
-                child: _formSheet(context, auth, compact: false),
-              ),
-            ),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 44),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 452),
+            child: _Entrance(child: _formCard(context, auth, compact: false)),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  // ─── Sheet 2: the form, built as a title block ──────────────────────────────
+  /// A square-cornered white tile holding a logo, with a soft lift. Used in the
+  /// navy header / panel where the logos need a light ground to read on.
+  Widget _logoTile(double size, {String? logoUrl, Widget? child}) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: _Wp.white,
+          borderRadius: BorderRadius.circular(size * 0.26),
+          boxShadow: _Wp.liftKey,
+        ),
+        padding: EdgeInsets.all(size * 0.16),
+        child: child ??
+            SchoolLogo(fit: BoxFit.contain, logoUrl: logoUrl),
+      );
 
-  Widget _formSheet(BuildContext context, AuthState auth,
+  // ─── The form card ───────────────────────────────────────────────────────────
+
+  Widget _formCard(BuildContext context, AuthState auth,
       {required bool compact}) {
     final gap = compact ? 12.0 : 14.0;
 
     return Container(
       decoration: BoxDecoration(
-        color: _Wp.sheet,
-        border: Border.all(color: _Wp.navy, width: _Wp.rule),
+        color: _Wp.white,
+        borderRadius: BorderRadius.circular(_Wp.rCard),
+        boxShadow: _Wp.lift,
       ),
+      padding: EdgeInsets.fromLTRB(
+          compact ? 18 : 26, compact ? 16 : 28, compact ? 18 : 26, compact ? 20 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _plateHeader(
-            _isRegister ? 'Request access' : 'Sign in',
-            _isRegister ? 'Await approval' : 'Your school',
+          // ── Header ──────────────────────────────────────────
+          Text(
+            _isRegister ? 'Request access' : 'Welcome back',
+            style: _Wp.disp(compact ? 28 : 32),
           ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, compact ? 14 : 18, 16, compact ? 16 : 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
+          const SizedBox(height: 5),
+          Text(
+            _isRegister
+                ? 'Create your account — an admin approves it before you sign in.'
+                : 'Sign in to your school account.',
+            style: _Wp.text(14.5, color: _Wp.mute),
+          ),
+          SizedBox(height: compact ? 14 : 22),
+
+          // ── Segmented toggle ────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: _Wp.printDeep,
+              borderRadius: BorderRadius.circular(_Wp.rPill),
+            ),
+            child: Row(
               children: [
-                // ── Tabs ────────────────────────────────────────────
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: _Wp.line, width: _Wp.rule),
-                  ),
-                  child: Row(
-                    children: [
-                      _Tab(
-                        key: LoginKeys.loginTab,
-                        label: 'Login',
-                        active: !_isRegister,
-                        onTap: () => setState(() {
-                          _isRegister = false;
-                          _clearPin();
-                          _parentUsernameController.clear();
-                          _parentMpinController.clear();
-                        }),
-                      ),
-                      Container(width: _Wp.rule, height: 46, color: _Wp.line),
-                      _Tab(
-                        key: LoginKeys.registerTab,
-                        label: 'Request Access',
-                        active: _isRegister,
-                        onTap: () => setState(() {
-                          _isRegister = true;
-                          _clearPin();
-                          _clearOwnerSelection();
-                        }),
-                      ),
-                    ],
-                  ),
+                _Tab(
+                  key: LoginKeys.loginTab,
+                  label: 'Login',
+                  active: !_isRegister,
+                  onTap: () => setState(() {
+                    _isRegister = false;
+                    _clearPin();
+                    _parentUsernameController.clear();
+                    _parentMpinController.clear();
+                  }),
                 ),
-
-                SizedBox(height: gap + 4),
-
-                // ── School ──────────────────────────────────────────
-                _schoolField(),
-                if (!_schoolsLoading && _schools.isNotEmpty)
-                  SizedBox(height: gap),
-
-                // ── Username ────────────────────────────────────────
-                TextField(
-                  key: LoginKeys.username,
-                  controller: _usernameController,
-                  style: _Wp.text(16, color: _Wp.navy),
-                  decoration: _dec('Username', icon: Icons.person_outline),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                  ],
-                  textInputAction: TextInputAction.done,
-                ),
-
-                // ── Register-only fields ────────────────────────────
-                if (_isRegister) ...[
-                  SizedBox(height: gap),
-                  DropdownButtonFormField<String>(
-                    key: LoginKeys.role,
-                    initialValue: _selectedRole,
-                    isExpanded: true,
-                    style: _Wp.text(16, color: _Wp.navy),
-                    decoration:
-                        _dec('Register as', icon: Icons.badge_outlined),
-                    dropdownColor: _Wp.white,
-                    borderRadius: BorderRadius.zero,
-                    items: ['student', 'teacher', 'parent']
-                        .map((r) => DropdownMenuItem(
-                              value: r,
-                              child: Text(r[0].toUpperCase() + r.substring(1),
-                                  style: _Wp.text(15.5, color: _Wp.navy)),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setState(() {
-                      _selectedRole = v ?? 'student';
-                      _parentUsernameController.clear();
-                      _parentMpinController.clear();
-                      _selectedSubjects.clear();
-                      _selectedTeacherSubjects.clear();
-                      _selectedGrade = 8;
-                    }),
-                  ),
-
-                  // ── Phone & Email ─────────────────────────────────
-                  // Required for teacher/student (validated on submit),
-                  // optional for parent.
-                  SizedBox(height: gap),
-                  TextField(
-                    key: LoginKeys.phone,
-                    controller: _phoneController,
-                    style: _Wp.text(16, color: _Wp.navy),
-                    keyboardType: TextInputType.phone,
-                    textInputAction: TextInputAction.next,
-                    decoration: _dec(
-                      _selectedRole == 'parent'
-                          ? 'Phone number (optional)'
-                          : 'Phone number',
-                      icon: Icons.phone_outlined,
-                      helper: _selectedRole == 'student'
-                          ? "You can use your parent's number."
-                          : null,
-                    ),
-                  ),
-                  SizedBox(height: gap),
-                  TextField(
-                    key: LoginKeys.email,
-                    controller: _emailController,
-                    style: _Wp.text(16, color: _Wp.navy),
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: _dec(
-                      'Email (optional)',
-                      icon: Icons.email_outlined,
-                      helper: _selectedRole == 'student'
-                          ? "You can use your parent's email."
-                          : null,
-                    ),
-                  ),
-
-                  // ── Teacher-only ──────────────────────────────────
-                  if (_selectedRole == 'teacher') ...[
-                    SizedBox(height: gap + 2),
-                    _groupLabel('Subjects you can teach'),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: AppConstants.subjects
-                          .map((s) => _chip(
-                                label: s,
-                                selected: _selectedTeacherSubjects.contains(s),
-                                onTap: () => setState(() =>
-                                    _selectedTeacherSubjects.contains(s)
-                                        ? _selectedTeacherSubjects.remove(s)
-                                        : _selectedTeacherSubjects.add(s)),
-                              ))
-                          .toList(),
-                    ),
-                  ],
-
-                  // ── Student-only ──────────────────────────────────
-                  if (_selectedRole == 'student') ...[
-                    SizedBox(height: gap),
-                    DropdownButtonFormField<int>(
-                      initialValue: _selectedGrade,
-                      isExpanded: true,
-                      style: _Wp.text(16, color: _Wp.navy),
-                      decoration: _dec('Grade', icon: Icons.school_outlined),
-                      dropdownColor: _Wp.white,
-                      borderRadius: BorderRadius.zero,
-                      items: [8, 9, 10]
-                          .map((g) => DropdownMenuItem(
-                                value: g,
-                                child: Text('Grade $g',
-                                    style: _Wp.text(15.5, color: _Wp.navy)),
-                              ))
-                          .toList(),
-                      onChanged: (v) =>
-                          setState(() => _selectedGrade = v ?? 8),
-                    ),
-                    SizedBox(height: gap + 2),
-                    _groupLabel('Additional subjects'),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _subjectOptions
-                          .map((s) => _chip(
-                                label: s.label,
-                                icon: s.icon,
-                                selected: _selectedSubjects.contains(s.key),
-                                onTap: () => setState(() =>
-                                    _selectedSubjects.contains(s.key)
-                                        ? _selectedSubjects.remove(s.key)
-                                        : _selectedSubjects.add(s.key)),
-                              ))
-                          .toList(),
-                    ),
-                    SizedBox(height: gap + 2),
-                    TextField(
-                      controller: _parentUsernameController,
-                      style: _Wp.text(16, color: _Wp.navy),
-                      decoration: _dec(
-                        "Parent's username *",
-                        icon: Icons.family_restroom,
-                        helper: 'Required. If the parent does not have an '
-                            'account yet, one will be created with the '
-                            "Parent's MPIN you enter below.",
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                      ],
-                      textInputAction: TextInputAction.next,
-                    ),
-                    SizedBox(height: gap),
-                    TextField(
-                      controller: _parentMpinController,
-                      obscureText: _obscureParentMpin,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      style: _Wp.text(16, color: _Wp.navy),
-                      decoration: _dec(
-                        "Parent's 6-digit MPIN *",
-                        icon: Icons.lock_outline,
-                        helper: 'If the parent already has an account this '
-                            "must match their MPIN. Don't reuse the "
-                            "student's MPIN.",
-                        suffix: IconButton(
-                          tooltip: _obscureParentMpin ? 'Show' : 'Hide',
-                          icon: Icon(
-                              _obscureParentMpin
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              size: 19,
-                              color: _Wp.navyMid),
-                          onPressed: () => setState(
-                              () => _obscureParentMpin = !_obscureParentMpin),
-                        ),
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
-                      textInputAction: TextInputAction.done,
-                    ),
-                  ],
-                ],
-
-                SizedBox(height: compact ? 16 : 20),
-
-                // ── MPIN cells ──────────────────────────────────────
-                Container(
-                  decoration: const BoxDecoration(
-                    border: Border(
-                        top: BorderSide(color: _Wp.navy, width: _Wp.rule)),
-                  ),
-                  padding: EdgeInsets.only(top: compact ? 12 : 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              (_isRegister
-                                      ? 'Set a 6-digit MPIN'
-                                      : 'Enter your 6-digit MPIN')
-                                  .toUpperCase(),
-                              style: _Wp.dim(12.5, weight: FontWeight.w600),
-                            ),
-                          ),
-                          Text('$_pinIndex / 6',
-                              style: _Wp.dim(12.5,
-                                  color: _pinIndex == 6
-                                      ? _Wp.ok
-                                      : _Wp.heatRead,
-                                  weight: FontWeight.w600)),
-                        ],
-                      ),
-                      SizedBox(height: compact ? 9 : 11),
-                      Focus(
-                        focusNode: _pinFocus,
-                        onKeyEvent: _onPinKey,
-                        onFocusChange: (_) => setState(() {}),
-                        child: Semantics(
-                          label: 'MPIN, $_pinIndex of 6 digits entered',
-                          child: GestureDetector(
-                            onTap: _pinFocus.requestFocus,
-                            // A ring while focused from a keyboard (not after
-                            // a tap); always padded, so focus does not move
-                            // the cells.
-                            child: Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: _pinFocus.hasFocus &&
-                                          FocusManager.instance.highlightMode ==
-                                              FocusHighlightMode.traditional
-                                      ? _Wp.heat
-                                      : Colors.transparent,
-                                  width: 2,
-                                ),
-                              ),
-                              child: _pinCells(context, compact: compact),
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: compact ? 12 : 14),
-                      _buildPad(context),
-                    ],
-                  ),
-                ),
-
-                SizedBox(height: compact ? 14 : 16),
-
-                // ── Submit ──────────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  height: R.fluid(context, 52, min: 50, max: 58),
-                  child: _FilledKey(
-                    key: LoginKeys.submit,
-                    label: _isRegister ? 'Submit registration' : 'Sign in',
-                    loading: auth.isLoading,
-                    expand: true,
-                    onTap: auth.isLoading ? null : _submit,
-                  ),
-                ),
-
-                // No self-service MPIN reset — point users to their admin
-                // rather than leave them stuck at login.
-                if (!_isRegister)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: TextButton(
-                      style: _linkStyle,
-                      onPressed: _showForgotMpinHelp,
-                      child: Text('Forgot your MPIN?',
-                          style: _Wp.text(14.5,
-                              color: _Wp.heatRead, weight: FontWeight.w700)),
-                    ),
-                  ),
-
-                // ── Mode toggle ─────────────────────────────────────
-                Padding(
-                  padding: EdgeInsets.only(top: _isRegister ? 8 : 0),
-                  child: TextButton(
-                    key: LoginKeys.modeToggle,
-                    style: _linkStyle,
-                    onPressed: () => setState(() {
-                      _isRegister = !_isRegister;
-                      _clearPin();
-                      _clearOwnerSelection();
-                      _usernameController.clear();
-                      _parentUsernameController.clear();
-                      _parentMpinController.clear();
-                      _selectedGrade = 8;
-                      _selectedSubjects.clear();
-                      _selectedTeacherSubjects.clear();
-                    }),
-                    child: Text(
-                      _isRegister
-                          ? 'Already have an account? Sign in'
-                          : "Don't have an account? Request access",
-                      textAlign: TextAlign.center,
-                      style: _Wp.text(14, color: _Wp.navyMid,
-                          weight: FontWeight.w700),
-                    ),
-                  ),
+                _Tab(
+                  key: LoginKeys.registerTab,
+                  label: 'Request Access',
+                  active: _isRegister,
+                  onTap: () => setState(() {
+                    _isRegister = true;
+                    _clearPin();
+                    _clearOwnerSelection();
+                  }),
                 ),
               ],
+            ),
+          ),
+
+          SizedBox(height: gap + 6),
+
+          // ── School ──────────────────────────────────────────
+          _schoolField(),
+          if (!_schoolsLoading && _schools.isNotEmpty) SizedBox(height: gap),
+
+          // ── Username ────────────────────────────────────────
+          TextField(
+            key: LoginKeys.username,
+            controller: _usernameController,
+            style: _Wp.text(16, color: _Wp.navy),
+            decoration: _dec('Username', icon: Icons.person_outline),
+            inputFormatters: [
+              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+            ],
+            textInputAction: TextInputAction.done,
+          ),
+
+          // ── Register-only fields ────────────────────────────
+          if (_isRegister) ...[
+            SizedBox(height: gap),
+            DropdownButtonFormField<String>(
+              key: LoginKeys.role,
+              initialValue: _selectedRole,
+              isExpanded: true,
+              style: _Wp.text(16, color: _Wp.navy),
+              decoration: _dec('Register as', icon: Icons.badge_outlined),
+              dropdownColor: _Wp.white,
+              borderRadius: BorderRadius.circular(_Wp.rField),
+              items: ['student', 'teacher', 'parent']
+                  .map((r) => DropdownMenuItem(
+                        value: r,
+                        child: Text(r[0].toUpperCase() + r.substring(1),
+                            style: _Wp.text(15.5, color: _Wp.navy)),
+                      ))
+                  .toList(),
+              onChanged: (v) => setState(() {
+                _selectedRole = v ?? 'student';
+                _parentUsernameController.clear();
+                _parentMpinController.clear();
+                _selectedSubjects.clear();
+                _selectedTeacherSubjects.clear();
+                _selectedGrade = 8;
+              }),
+            ),
+
+            // ── Phone & Email ─────────────────────────────────
+            // Required for teacher/student (validated on submit),
+            // optional for parent.
+            SizedBox(height: gap),
+            TextField(
+              key: LoginKeys.phone,
+              controller: _phoneController,
+              style: _Wp.text(16, color: _Wp.navy),
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
+              decoration: _dec(
+                _selectedRole == 'parent'
+                    ? 'Phone number (optional)'
+                    : 'Phone number',
+                icon: Icons.phone_outlined,
+                helper: _selectedRole == 'student'
+                    ? "You can use your parent's number."
+                    : null,
+              ),
+            ),
+            SizedBox(height: gap),
+            TextField(
+              key: LoginKeys.email,
+              controller: _emailController,
+              style: _Wp.text(16, color: _Wp.navy),
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              decoration: _dec(
+                'Email (optional)',
+                icon: Icons.email_outlined,
+                helper: _selectedRole == 'student'
+                    ? "You can use your parent's email."
+                    : null,
+              ),
+            ),
+
+            // ── Teacher-only ──────────────────────────────────
+            if (_selectedRole == 'teacher') ...[
+              SizedBox(height: gap + 2),
+              _groupLabel('Subjects you can teach'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: AppConstants.subjects
+                    .map((s) => _chip(
+                          label: s,
+                          selected: _selectedTeacherSubjects.contains(s),
+                          onTap: () => setState(() =>
+                              _selectedTeacherSubjects.contains(s)
+                                  ? _selectedTeacherSubjects.remove(s)
+                                  : _selectedTeacherSubjects.add(s)),
+                        ))
+                    .toList(),
+              ),
+            ],
+
+            // ── Student-only ──────────────────────────────────
+            if (_selectedRole == 'student') ...[
+              SizedBox(height: gap),
+              DropdownButtonFormField<int>(
+                // Rebuilt per school: its grade list can differ.
+                key: ValueKey(_selectedSchoolId),
+                initialValue: _effectiveGrade,
+                isExpanded: true,
+                style: _Wp.text(16, color: _Wp.navy),
+                decoration: _dec('Grade', icon: Icons.school_outlined),
+                dropdownColor: _Wp.white,
+                borderRadius: BorderRadius.circular(_Wp.rField),
+                items: _pickedSchoolGrades
+                    .map((g) => DropdownMenuItem(
+                          value: g,
+                          child: Text('Grade $g',
+                              style: _Wp.text(15.5, color: _Wp.navy)),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedGrade = v ?? 8),
+              ),
+              SizedBox(height: gap + 2),
+              _groupLabel('Additional subjects'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _subjectOptions
+                    .map((s) => _chip(
+                          label: s.label,
+                          icon: s.icon,
+                          selected: _selectedSubjects.contains(s.key),
+                          onTap: () => setState(() =>
+                              _selectedSubjects.contains(s.key)
+                                  ? _selectedSubjects.remove(s.key)
+                                  : _selectedSubjects.add(s.key)),
+                        ))
+                    .toList(),
+              ),
+              SizedBox(height: gap + 2),
+              TextField(
+                controller: _parentUsernameController,
+                style: _Wp.text(16, color: _Wp.navy),
+                decoration: _dec(
+                  "Parent's username *",
+                  icon: Icons.family_restroom,
+                  helper: 'Required. If the parent does not have an '
+                      'account yet, one will be created with the '
+                      "Parent's MPIN you enter below.",
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                ],
+                textInputAction: TextInputAction.next,
+              ),
+              SizedBox(height: gap),
+              TextField(
+                controller: _parentMpinController,
+                obscureText: _obscureParentMpin,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                style: _Wp.text(16, color: _Wp.navy),
+                decoration: _dec(
+                  "Parent's 6-digit MPIN *",
+                  icon: Icons.lock_outline,
+                  helper: 'If the parent already has an account this '
+                      "must match their MPIN. Don't reuse the "
+                      "student's MPIN.",
+                  suffix: IconButton(
+                    tooltip: _obscureParentMpin ? 'Show' : 'Hide',
+                    icon: Icon(
+                        _obscureParentMpin
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        size: 19,
+                        color: _Wp.navyMid),
+                    onPressed: () => setState(
+                        () => _obscureParentMpin = !_obscureParentMpin),
+                  ),
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                textInputAction: TextInputAction.done,
+              ),
+            ],
+          ],
+
+          SizedBox(height: compact ? 18 : 22),
+
+          // ── MPIN ────────────────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  (_isRegister
+                          ? 'Set a 6-digit MPIN'
+                          : 'Enter your 6-digit MPIN')
+                      .toUpperCase(),
+                  style: _Wp.dim(12, weight: FontWeight.w700),
+                ),
+              ),
+              Text('$_pinIndex / 6',
+                  style: _Wp.dim(12,
+                      color: _pinIndex == 6 ? _Wp.ok : _Wp.heatRead,
+                      weight: FontWeight.w700)),
+            ],
+          ),
+          SizedBox(height: compact ? 10 : 12),
+          Focus(
+            focusNode: _pinFocus,
+            onKeyEvent: _onPinKey,
+            onFocusChange: (_) => setState(() {}),
+            child: Semantics(
+              label: 'MPIN, $_pinIndex of 6 digits entered',
+              child: GestureDetector(
+                onTap: _pinFocus.requestFocus,
+                child: _pinCells(context, compact: compact),
+              ),
+            ),
+          ),
+          SizedBox(height: compact ? 14 : 16),
+          _buildPad(context, compact: compact),
+
+          SizedBox(height: compact ? 16 : 20),
+
+          // ── Submit ──────────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            height: R.fluid(context, 54, min: 52, max: 60),
+            child: _FilledKey(
+              key: LoginKeys.submit,
+              label: _isRegister ? 'Submit registration' : 'Sign in',
+              loading: auth.isLoading,
+              expand: true,
+              onTap: auth.isLoading ? null : _submit,
+            ),
+          ),
+
+          // No self-service MPIN reset — point users to their admin
+          // rather than leave them stuck at login.
+          if (!_isRegister)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: TextButton(
+                style: _linkStyle,
+                onPressed: _showForgotMpinHelp,
+                child: Text('Forgot your MPIN?',
+                    style: _Wp.text(14.5,
+                        color: _Wp.heatRead, weight: FontWeight.w600)),
+              ),
+            ),
+
+          // ── Mode toggle ─────────────────────────────────────
+          Padding(
+            padding: EdgeInsets.only(top: _isRegister ? 10 : 2),
+            child: TextButton(
+              key: LoginKeys.modeToggle,
+              style: _linkStyle,
+              onPressed: () => setState(() {
+                _isRegister = !_isRegister;
+                _clearPin();
+                _clearOwnerSelection();
+                _usernameController.clear();
+                _parentUsernameController.clear();
+                _parentMpinController.clear();
+                _selectedGrade = 8;
+                _selectedSubjects.clear();
+                _selectedTeacherSubjects.clear();
+              }),
+              child: Text(
+                _isRegister
+                    ? 'Already have an account? Sign in'
+                    : "Don't have an account? Request access",
+                textAlign: TextAlign.center,
+                style:
+                    _Wp.text(14, color: _Wp.navyMid, weight: FontWeight.w600),
+              ),
             ),
           ),
         ],
@@ -1352,59 +1232,52 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  /// Six square cells with their position number set in mono beneath — a
-  /// dimensioned row rather than a string of dots. The cell being filled
-  /// carries the heat border; filled cells carry a solid navy mark.
+  /// Six rounded cells: the one being filled carries the heat ring, filled
+  /// cells carry a solid navy dot. A clean indicator row, no dimension numbers.
   Widget _pinCells(BuildContext context, {required bool compact}) {
     return LayoutBuilder(
       builder: (context, c) {
-        // No minimum width: a floor (it was 34) forced the row wider than the
-        // card on narrow phones and pushed the sixth cell past the edge. The
-        // gap tightens instead so the cells keep as much width as possible.
-        final gap = c.maxWidth < 260 ? 4.0 : 7.0;
-        final cellW = ((c.maxWidth - gap * 5) / 6).clamp(0.0, 60.0);
+        // No minimum width: a floor forced the row wider than the card on
+        // narrow phones. The gap tightens instead so the cells keep width.
+        final gap = c.maxWidth < 260 ? 6.0 : 9.0;
+        final cellW = ((c.maxWidth - gap * 5) / 6).clamp(0.0, 62.0);
         final cellH = compact ? 50.0 : 54.0;
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(6, (i) {
             final filled = _pin[i].isNotEmpty;
-            final active = i == _pinIndex;
+            final active = i == _pinIndex && _pinFocus.hasFocus;
+            final markFilling = i == _pinIndex && !_pinFocus.hasFocus;
             return Padding(
               padding: EdgeInsets.only(right: i == 5 ? 0 : gap),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 140),
-                    width: cellW,
-                    height: cellH,
-                    decoration: BoxDecoration(
-                      color: filled ? _Wp.heatWash : _Wp.white,
-                      border: Border.all(
-                        color: active
-                            ? _Wp.heat
-                            : filled
-                                ? _Wp.navy
-                                : _Wp.line,
-                        width: active ? 2 : _Wp.rule,
-                      ),
-                    ),
-                    child: Center(
-                      child: filled
-                          ? Container(
-                              width: 11,
-                              height: 11,
-                              color: _Wp.navy,
-                            )
-                          : null,
-                    ),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                width: cellW,
+                height: cellH,
+                decoration: BoxDecoration(
+                  color: filled ? _Wp.heatWash : _Wp.sheet,
+                  borderRadius: BorderRadius.circular(_Wp.rField),
+                  border: Border.all(
+                    color: active || markFilling
+                        ? _Wp.heat
+                        : filled
+                            ? _Wp.navy
+                            : _Wp.line,
+                    width: active || markFilling ? 2 : _Wp.rule,
                   ),
-                  const SizedBox(height: 5),
-                  Text('${i + 1}',
-                      style: _Wp.dim(11.5,
-                          color: active ? _Wp.heatRead : _Wp.mute,
-                          weight: FontWeight.w600)),
-                ],
+                ),
+                child: Center(
+                  child: filled
+                      ? Container(
+                          width: 12,
+                          height: 12,
+                          decoration: const BoxDecoration(
+                            color: _Wp.navy,
+                            shape: BoxShape.circle,
+                          ),
+                        )
+                      : null,
+                ),
               ),
             );
           }),
@@ -1427,24 +1300,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             const SizedBox(
               width: 15,
               height: 15,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: _Wp.heat),
+              child:
+                  CircularProgressIndicator(strokeWidth: 2, color: _Wp.heat),
             ),
             const SizedBox(width: 10),
-            Text('LOADING SCHOOLS…', style: _Wp.dim(12.5)),
+            Text('LOADING SCHOOLS…', style: _Wp.dim(12)),
           ],
         ),
       );
     }
     if (_schools.isEmpty) return const SizedBox.shrink();
 
-    return DropdownButtonFormField<int>(
+    return KeyedSubtree(
+      key: ValueKey(_schoolsVersion),
+      child: DropdownButtonFormField<int>(
       key: LoginKeys.school,
       initialValue: _selectedSchoolId,
       isExpanded: true,
       style: _Wp.text(16, color: _Wp.navy),
       dropdownColor: _Wp.white,
-      borderRadius: BorderRadius.zero,
+      borderRadius: BorderRadius.circular(_Wp.rField),
       decoration: _dec('School', icon: Icons.account_balance_outlined),
       hint: Text('Select your school', style: _Wp.text(15.5, color: _Wp.mute)),
       items: [
@@ -1461,26 +1336,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             value: _ownerSchoolSentinel,
             child: Text('Platform owner (no school)',
                 overflow: TextOverflow.ellipsis,
-                style: _Wp.text(15.5,
-                    color: _Wp.mute)
+                style: _Wp.text(15.5, color: _Wp.mute)
                     .copyWith(fontStyle: FontStyle.italic)),
           ),
       ],
       onChanged: (v) => setState(() => _selectedSchoolId = v),
+      ),
     );
   }
 
-  /// The keypad — a square hairline key grid. Keys fill the available width
-  /// (flex: 1) and never fall below a 48 logical-px tap target.
-  Widget _buildPad(BuildContext context) {
+  /// The keypad — rounded keys. Keys fill the available width (flex: 1) and
+  /// never fall below a 48 logical-px tap target. The ground inverts to navy
+  /// while pressed.
+  Widget _buildPad(BuildContext context, {bool compact = false}) {
     const rows = [
       ['1', '2', '3'],
       ['4', '5', '6'],
       ['7', '8', '9'],
       ['', '0', '⌫'],
     ];
-    final keyH = R.fluid(context, 50, min: 48, max: 58);
-    const gap = 7.0;
+    final keyH = compact ? 48.0 : R.fluid(context, 52, min: 48, max: 60);
+    const gap = 9.0;
 
     return Column(
       children: rows.map((row) {
@@ -1518,8 +1394,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
 // ─── Controls ──────────────────────────────────────────────────────────────────
 
-/// A single keypad key. Square, hairline, Rajdhani numeral; the ground inverts
-/// to navy while pressed rather than glowing.
+/// A gentle entrance for the form card: fade and rise from an already-visible
+/// default. The screen's one authored moment.
+class _Entrance extends StatefulWidget {
+  final Widget child;
+  const _Entrance({required this.child});
+
+  @override
+  State<_Entrance> createState() => _EntranceState();
+}
+
+class _EntranceState extends State<_Entrance> {
+  double _t = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _t = 1);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: _t,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOut,
+      child: AnimatedSlide(
+        offset: Offset(0, (1 - _t) * 0.04),
+        duration: const Duration(milliseconds: 460),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// A single keypad key. Rounded, hairline, Instrument Sans numeral; the ground
+/// inverts to navy while pressed rather than glowing.
 class _PadKey extends StatefulWidget {
   final String label;
   final double height;
@@ -1560,25 +1473,18 @@ class _PadKeyState extends State<_PadKey> {
           duration: const Duration(milliseconds: 90),
           height: widget.height,
           decoration: BoxDecoration(
-            color: _down
-                ? (widget.isDelete ? _Wp.heatRead : _Wp.navy)
-                : _Wp.white,
+            color: _down ? _Wp.navy : _Wp.white,
+            borderRadius: BorderRadius.circular(_Wp.rKey),
             border: Border.all(
-                color: _down
-                    ? (widget.isDelete ? _Wp.heatRead : _Wp.navy)
-                    : _Wp.line,
-                width: _Wp.rule),
+                color: _down ? _Wp.navy : _Wp.line, width: _Wp.rule),
+            boxShadow: _down ? null : _Wp.liftKey,
           ),
           child: Center(
             child: widget.isDelete
-                ? Icon(Icons.backspace_outlined, size: 19, color: fg)
+                ? Icon(Icons.backspace_outlined, size: 21, color: fg)
                 : Text(widget.label,
-                    style: GoogleFonts.rajdhani(
-                      fontSize: 25,
-                      fontWeight: FontWeight.w600,
-                      color: fg,
-                      height: 1,
-                    )),
+                    style: _Wp.text(24, color: fg, weight: FontWeight.w600)
+                        .copyWith(height: 1)),
           ),
         ),
       ),
@@ -1586,7 +1492,8 @@ class _PadKeyState extends State<_PadKey> {
   }
 }
 
-/// The page's one filled control: ink ground, paper text, heat on hover.
+/// The page's primary control: navy ground, white text, heat on hover, a soft
+/// lift for depth.
 class _FilledKey extends StatefulWidget {
   final String label;
   final VoidCallback? onTap;
@@ -1625,18 +1532,18 @@ class _FilledKeyState extends State<_FilledKey> {
         onHover: (h) => setState(() => _hover = h),
         onFocusChange: (f) => setState(() => _focused = f),
         focusColor: const Color(0x33F55C1E),
-        borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
+        borderRadius: BorderRadius.circular(_Wp.rField),
         mouseCursor:
             disabled ? SystemMouseCursors.basic : SystemMouseCursors.click,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          constraints: const BoxConstraints(minHeight: 48),
+          constraints: const BoxConstraints(minHeight: 50),
           width: widget.expand ? double.infinity : null,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           decoration: BoxDecoration(
             color: ground,
-            border: Border.all(color: ground, width: _Wp.rule),
-            borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
+            borderRadius: BorderRadius.circular(_Wp.rField),
+            boxShadow: disabled ? null : _Wp.liftKey,
           ),
           child: Center(
             child: widget.loading
@@ -1647,15 +1554,11 @@ class _FilledKeyState extends State<_FilledKey> {
                         strokeWidth: 2.4, color: Colors.white),
                   )
                 : Text(
-                    widget.label.toUpperCase(),
+                    widget.label,
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.rajdhani(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 1.6,
-                      height: 1.1,
-                    ),
+                    style: _Wp.text(16.5,
+                            color: Colors.white, weight: FontWeight.w600)
+                        .copyWith(height: 1.1),
                   ),
           ),
         ),
@@ -1688,27 +1591,24 @@ class _OutlineKeyState extends State<_OutlineKey> {
         onHover: (h) => setState(() => _hover = h),
         onFocusChange: (f) => setState(() => _focused = f),
         focusColor: const Color(0x33F55C1E),
-        borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
+        borderRadius: BorderRadius.circular(_Wp.rField),
         mouseCursor: SystemMouseCursors.click,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          constraints: const BoxConstraints(minHeight: 48),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+          constraints: const BoxConstraints(minHeight: 50),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           decoration: BoxDecoration(
             color: _hover || _focused ? _Wp.navy : Colors.transparent,
+            borderRadius: BorderRadius.circular(_Wp.rField),
             border: Border.all(color: _Wp.navy, width: _Wp.rule),
-            borderRadius: const BorderRadius.all(_Wp.ctrlRadius),
           ),
           child: Center(
             child: Text(
-              widget.label.toUpperCase(),
-              style: GoogleFonts.rajdhani(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: _hover || _focused ? Colors.white : _Wp.navy,
-                letterSpacing: 1.6,
-                height: 1.1,
-              ),
+              widget.label,
+              style: _Wp.text(16.5,
+                      color: _hover || _focused ? Colors.white : _Wp.navy,
+                      weight: FontWeight.w600)
+                  .copyWith(height: 1.1),
             ),
           ),
         ),
@@ -1749,16 +1649,16 @@ class _SecondFactorDialogState extends State<_SecondFactorDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: _Wp.sheet,
+      backgroundColor: _Wp.white,
       surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
-        side: BorderSide(color: _Wp.navy, width: _Wp.rule),
+      elevation: 10,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_Wp.rCard),
       ),
-      titlePadding: EdgeInsets.zero,
+      titlePadding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
       title: _LoginScreenState._plateHeader(
           'Two-factor authentication', 'Step 2 of 2'),
+      contentPadding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1797,13 +1697,13 @@ class _SecondFactorDialogState extends State<_SecondFactorDialog> {
               _useRecovery
                   ? 'Use my authenticator app instead'
                   : "I don't have my phone",
-              style: _Wp.text(14, color: _Wp.heatRead,
-                  weight: FontWeight.w700),
+              style: _Wp.text(14,
+                  color: _Wp.heatRead, weight: FontWeight.w600),
             ),
           ),
         ],
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+      actionsPadding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
       actions: [
         _OutlineKey(
           label: 'Cancel',
@@ -1830,6 +1730,8 @@ class _Subject {
 
 // ─── Tab ───────────────────────────────────────────────────────────────────────
 
+/// A segment of the Login / Request Access control. The active segment is a
+/// filled navy pill; the inactive one is quiet on the recessed track.
 class _Tab extends StatelessWidget {
   final String label;
   final bool active;
@@ -1850,24 +1752,25 @@ class _Tab extends StatelessWidget {
           onTap: onTap,
           behavior: HitTestBehavior.opaque,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            // Vertical padding keeps the tap target >= 48 logical px.
-            constraints: const BoxConstraints(minHeight: 46),
-            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
-            color: active ? _Wp.navy : Colors.transparent,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            // Vertical padding keeps the tap target >= 44 logical px.
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
+            decoration: BoxDecoration(
+              color: active ? _Wp.navy : Colors.transparent,
+              borderRadius: BorderRadius.circular(_Wp.rPill),
+              boxShadow: active ? _Wp.liftKey : null,
+            ),
             child: Center(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  label.toUpperCase(),
+                  label,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.rajdhani(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: active ? Colors.white : _Wp.navyMid,
-                    letterSpacing: 1.3,
-                    height: 1.1,
-                  ),
+                  style: _Wp.text(14.5,
+                      color: active ? Colors.white : _Wp.navyMid,
+                      weight: FontWeight.w600),
                 ),
               ),
             ),

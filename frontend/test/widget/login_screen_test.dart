@@ -65,6 +65,15 @@ class _RecordingApiClient extends _MfaRequiredApiClient {
   }
 }
 
+/// A school list the test can change while the screen is open (#27).
+class _ChangingSchoolsApiClient extends _FakeApiClient {
+  List<Map<String, dynamic>> schools;
+  _ChangingSchoolsApiClient(this.schools);
+
+  @override
+  Future<List<Map<String, dynamic>>> getSchools() async => schools;
+}
+
 /// Pump the login screen inside a ProviderScope with the network stubbed out.
 Widget _buildLoginScreen({ApiClient? api}) => ProviderScope(
       overrides: [
@@ -248,7 +257,7 @@ void main() {
       await tester.tap(find.byKey(LoginKeys.submit));
       await tester.pumpAndSettle();
 
-      expect(find.text('TWO-FACTOR AUTHENTICATION'), findsOneWidget);
+      expect(find.text('Two-factor authentication'), findsOneWidget);
       return api;
     }
 
@@ -256,11 +265,11 @@ void main() {
         (tester) async {
       final api = await openPrompt(tester);
 
-      await tester.tap(find.text('CANCEL'));
+      await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('TWO-FACTOR AUTHENTICATION'), findsNothing);
+      expect(find.text('Two-factor authentication'), findsNothing);
       expect(find.byType(LoginScreen), findsOneWidget);
       expect(api.attempts, [(null, null)], reason: 'Cancel must not retry');
     });
@@ -270,7 +279,7 @@ void main() {
       final api = await openPrompt(tester);
 
       await tester.enterText(find.byType(TextField).last, ' 654321 ');
-      await tester.tap(find.text('VERIFY'));
+      await tester.tap(find.text('Verify'));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -286,7 +295,7 @@ void main() {
       expect(find.text('Use my authenticator app instead'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField).last, 'ABCD-EFGH-JKMN');
-      await tester.tap(find.text('VERIFY'));
+      await tester.tap(find.text('Verify'));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -370,6 +379,50 @@ void main() {
       await press(tester, LogicalKeyboardKey.tab); // MPIN → Sign in
       await tester.pumpAndSettle();
       expect(ground(), isNot(idle));
+    });
+  });
+
+  // #27: the list loaded once, so a school restored while the login screen
+  // sat open only reappeared after an app restart.
+  group('LoginScreen — school list refresh', () {
+    Map<String, dynamic> school(int id, String name) =>
+        {'id': id, 'name': name, 'slug': 's$id', 'logo_url': null};
+
+    testWidgets('a school restored meanwhile appears when the app resumes',
+        (tester) async {
+      final api = _ChangingSchoolsApiClient([school(1, 'Hansel & Gretel')]);
+      await tester.pumpWidget(_buildLoginScreen(api: api));
+      await tester.pumpAndSettle();
+      expect(find.text('Sunrise Public School'), findsNothing);
+
+      api.schools = [
+        school(1, 'Hansel & Gretel'),
+        school(944, 'Sunrise Public School'),
+      ];
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(LoginKeys.school));
+      await tester.pumpAndSettle();
+      expect(find.text('Sunrise Public School'), findsWidgets);
+    });
+
+    testWidgets('a picked school that is suspended meanwhile is cleared',
+        (tester) async {
+      // A single school is picked automatically.
+      final api = _ChangingSchoolsApiClient([school(944, 'Sunrise Public School')]);
+      await tester.pumpWidget(_buildLoginScreen(api: api));
+      await tester.pumpAndSettle();
+      expect(find.text('Sunrise Public School'), findsWidgets);
+
+      api.schools = [school(1, 'Hansel & Gretel'), school(2, 'Riverdale High')];
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Select your school'), findsOneWidget);
     });
   });
 }
