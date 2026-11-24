@@ -592,3 +592,13 @@ Backend 664 passed / 3 skipped.
 
 The login redesign is committed together with the fixes made inside it: #5 registration grades, #27 school-list refresh, the brand panel without the Hansel & Gretel tile and claim (with the unused logo removed), and the iPhone layout (run-log #3). The three two-factor prompt tests that had been failing against the redesign only expected the old ALL-CAPS labels ("TWO-FACTOR AUTHENTICATION", "CANCEL", "VERIFY"). They now use the redesign's wording; the behaviour checks (Cancel doesn't retry, Verify sends the code, the recovery toggle sends a recovery code) are unchanged. **Flutter: 296 passed, 0 failed** (first fully green run since the redesign began). Analyzer: no errors or warnings.
 
+
+### 2026-11-24 — regression round (API walk-through on a fresh school)
+
+Ran `docs/qa/regression_walkthrough.py` against the local stack on a new school, "QA Regression 11241318" (id 970). It follows the plan's story end to end through the real endpoints, with real MPIN logins: owner → admin setup → registrations and approvals → a school day → student and parent views → fees → reports → suspension → Close Year. **53 of 54 checks passed.**
+
+- Passed, covering earlier fixes: duplicate school refused (A-03); registration refused before a year exists (#1); grades taught and the grade-10 refusal (#5); negative fee refused (B-09); unapproved login refused (C-02); case-variant username refused (J-03); stale timetable save refused (#39); road shows "1/2" attendance (#4); 301-char homework title refused (H-05); student dashboard, broadcast and fee 48,000 = base + computer (E-01/E-02/E-07/#23); idempotent payment (J-08); over-balance refused (J-11); parent balance 28,000 (F-02); attendance, marks and pending-fees PDFs (#28/I-01); close-year warning data, 2 unpaid / ₹68,000 (J-25); suspended user gets 403 + `X-Session-Ended` (#26); Close Year moves to the next label, 2027-28 (#30), and removes everyone but the admin (I-03).
+- **1 expectation wrong, not a bug:** hand-entered marks (no test attached) carry no Class High/Low. That's by design since #19, and the student screen hides the row when they're absent. Possible future enhancement: class figures for hand-entered marks grouped by subject and chapter.
+- No AI generation was exercised (to avoid billing); the online-test flow was covered in earlier batches.
+
+State left: school 970 suspended; its users were removed by the Close Year step.
