@@ -602,3 +602,13 @@ Ran `docs/qa/regression_walkthrough.py` against the local stack on a new school,
 - No AI generation was exercised (to avoid billing); the online-test flow was covered in earlier batches.
 
 State left: school 970 suspended; its users were removed by the Close Year step.
+
+### 2026-11-24 — UI regression pass (H-07), release web build
+
+The Sunrise cast (sunrise_admin, das_sci, aarav8, aarav8_parent), each role's dashboard plus its busiest screens, at phone (375 px), tablet (768 px) and desktop (1280 px):
+
+- **Admin:** dashboard (setup road, approval banner, tiles) at all three sizes; Fees (Fee Structures range card, Payments list and summary) and Reports (incl. Class Reports) at phone width — **PASS**. Notes: the dashboard's square tiles are very roomy at tablet and desktop width (design choice, not broken). The Payments summary shows a negative overall balance only because of bulk8_03's ₹1,00,51,999.50 test overpayment from October, made before over-balance payments were refused.
+- **Teacher:** dashboard at all three sizes; Timetable (My / Create-Edit / Full, the full view listing only grades 8 and 9 per #5) and Tests at phone width — **PASS**.
+- **Student:** dashboard at desktop, tablet and phone; Grades (real class high/low) and Fees at phone; Fees at tablet — **PASS after one fix**: at phone width "Today's Timetable" was cut to "Today's Timetab…" because the title and date split the free space evenly. The title now takes the free space and the date its own width, as on the parent dashboard (`student/screens/dashboard_screen.dart`). Re-checked: full title shows.
+- **Parent:** dashboard at desktop and phone; child switcher (aarav8 ↔ anya8) carries through to Fees; Fees at phone and tablet — **PASS**.
+- Console: no app errors (only the known, deliberate `frame-ancestors` meta note, K-23).

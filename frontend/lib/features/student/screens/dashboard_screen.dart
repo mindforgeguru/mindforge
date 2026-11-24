@@ -518,7 +518,10 @@ class _StudentDashboardScreenState
                       size: _s(context, 15, min: 13, max: 17),
                       color: AppColors.primary),
                   SizedBox(width: _s(context, 8, min: 6, max: 10)),
-                  Flexible(
+                  // The title takes the free space and the date its own
+                  // width; splitting the space evenly cut the title to
+                  // "Today's Timetab…" on phones.
+                  Expanded(
                     child: Text(
                       "Today's Timetable",
                       maxLines: 1,
@@ -530,18 +533,11 @@ class _StudentDashboardScreenState
                       ),
                     ),
                   ),
-                  Expanded(
-                    child: Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          _fmtEDMon.format(DateTime.now()),
-                          style: GoogleFonts.poppins(
-                              fontSize: _fs(context, 12, min: 10, max: 14),
-                              color: AppColors.textMuted),
-                        ),
-                      ),
-                    ),
+                  Text(
+                    _fmtEDMon.format(DateTime.now()),
+                    style: GoogleFonts.poppins(
+                        fontSize: _fs(context, 12, min: 10, max: 14),
+                        color: AppColors.textMuted),
                   ),
                   TextButton(
                     onPressed: () => context
