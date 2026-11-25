@@ -2,9 +2,11 @@ import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +16,7 @@ import 'core/services/crash_reporter.dart';
 import 'core/services/notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/constants.dart';
+import 'core/utils/fresh_install.dart';
 import 'core/providers/badge_provider.dart';
 import 'core/widgets/realtime_sync.dart';
 import 'features/student/providers/xp_provider.dart';
@@ -68,6 +71,12 @@ void main() async {
   };
 
   final prefs = await SharedPreferences.getInstance();
+  // iOS keeps the Keychain (tokens) across app deletion; clear it on the
+  // first launch of a fresh install so a reinstall starts signed out.
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    await clearSecureStorageOnFreshInstall(
+        prefs, () => const FlutterSecureStorage().deleteAll());
+  }
   runApp(
     ProviderScope(
       overrides: [

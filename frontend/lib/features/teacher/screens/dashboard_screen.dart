@@ -344,8 +344,10 @@ class _TeacherDashboardScreenState
           slivers: [
           // ── Header ───────────────────────────────────────────────────
           SliverToBoxAdapter(
-            child: SizedBox(
-              height: headerH,
+            // Grows with the card (long names, many chips, larger text) so the
+            // card never covers the section below; headerH is the usual height.
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: headerH),
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -430,10 +432,9 @@ class _TeacherDashboardScreenState
                   ),
 
                   // White profile card
-                  Positioned(
-                    top: navyH - cardIntoNavy,
-                    left: cardHMargin,
-                    right: cardHMargin,
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        cardHMargin, navyH - cardIntoNavy, cardHMargin, 12),
                     child: Stack(
                       clipBehavior: Clip.none,
                       alignment: Alignment.topCenter,
