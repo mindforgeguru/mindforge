@@ -18,6 +18,7 @@ from sqlalchemy import func as sqlfunc
 
 from app.core.year_label import make_year_label, next_year_label
 from app.core.grades_offered import GradesOfferedError, checked_grades_offered
+from app.core.username_guard import username_taken
 from app.core.report_math import LOW_ATTENDANCE_PERCENT, attendance_rows, marks_rows
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
@@ -187,15 +188,8 @@ async def change_admin_username(
 ):
     """Change the admin's own username."""
     new_username = payload.username
-    conflict = await db.execute(
-        select(User).where(
-            User.username == new_username,
-            User.school_id == current_admin.school_id,
-            User.id != current_admin.id,
-            User.deleted_at.is_(None),
-        )
-    )
-    if conflict.scalar_one_or_none():
+    if await username_taken(db, current_admin.school_id, new_username,
+                            exclude_user_id=current_admin.id):
         raise HTTPException(status_code=409, detail="Username already taken.")
     result = await db.execute(select(User).where(User.id == current_admin.id))
     admin_user = result.scalar_one()
@@ -392,15 +386,8 @@ async def edit_user(
 
     # Update username
     if payload.username and payload.username != user.username:
-        conflict = await db.execute(
-            select(User).where(
-                User.username == payload.username,
-                User.school_id == current_admin.school_id,
-                User.deleted_at.is_(None),
-                User.id != user_id,
-            )
-        )
-        if conflict.scalar_one_or_none():
+        if await username_taken(db, current_admin.school_id, payload.username,
+                                exclude_user_id=user_id):
             raise HTTPException(status_code=409, detail="Username already taken.")
         user.username = payload.username
 
@@ -490,7 +477,7 @@ async def edit_user(
                             # No parent with that username — but the admin may be
                             # backfilling a parent for a legacy student account.
                             # If a non-parent user already has that username, refuse.
-                            if await find_by_username(db, current_admin.school_id, parent_username_clean):
+                            if await username_taken(db, current_admin.school_id, parent_username_clean):
                                 raise HTTPException(
                                     status_code=409,
                                     detail=f"The username '{parent_username_clean}' is already in use by another account.",

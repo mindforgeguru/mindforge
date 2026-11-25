@@ -708,3 +708,10 @@ Backend 674 passed (4 reportlab-dependent skipped) · `flutter test` 301/301.
 - **Attendance:** future date, a date over 14 days old, period 99 and a grade 9 student in a grade 8 period are all refused. A student listed twice in one submission was already rejected by the database with nothing saved and no XP awarded, but the message, "That already exists — it may have just been saved", read like a double tap. The schema now says "A student is listed twice. Mark each student once." (`tests/test_attendance_bulk_schema.py`).
 
 Backend unit tests pass (see commit).
+
+### 2026-11-25 — username renames; fees edge cases (partial)
+
+- **Fixed — look-alike usernames via rename/admin paths (J-03/K-21 follow-up):** registration refused case and cross-script look-alikes, but the admin's own rename, the admin editing a user, the inline parent the admin edit can create, and the owner creating a school admin all checked only an exact match. Live: QA Isolation's admin renamed itself to the uppercase and to a Cyrillic look-alike of its teacher's name (200). New `app/core/username_guard.username_taken` (built on `confusable_skeleton`) is used at all four sites; both renames now get 409, and renaming yourself to a case variant is still allowed. Tests: `tests/test_username_guard.py`.
+- **OPEN — payment edit bypasses the over-balance limit:** creating a payment refuses more than the balance (J-11), but `PUT /admin/fees/payments/{id}` accepted ₹45,000 against bulk8_32's ₹40,000 balance (200). Test payment deleted.
+- **OPEN — fee structure for a grade the school doesn't teach:** `POST /admin/fees/structure` accepted grade 10 at Sunrise (201). It should use `require_grade_offered` like the teacher routes. Test structure #248 deleted.
+- Not yet probed: lowering a fee below what's been paid, timetable (grade 10, teacher double-booking), feedback reports.

@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.username_guard import username_taken
 from app.core.database import get_db
 from app.core.security import get_current_owner, hash_mpin_async
 from app.models.school import School
@@ -172,14 +173,7 @@ async def create_school_admin(
     Usernames are unique per school."""
     school = await _get_school_or_404(db, school_id)
 
-    conflict = await db.execute(
-        select(User).where(
-            User.username == payload.username,
-            User.school_id == school.id,
-            User.deleted_at.is_(None),
-        )
-    )
-    if conflict.scalar_one_or_none():
+    if await username_taken(db, school.id, payload.username):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A user with this username already exists in this school.",
