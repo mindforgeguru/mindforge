@@ -1246,6 +1246,12 @@ async def submit_test(
     if not test:
         raise HTTPException(status_code=404, detail="Test not found.")
     await _ensure_test_in_student_grade(test, current_student.id, db)
+    # /start refuses these; /submit didn't, so a direct submit filed a score
+    # for an offline (written) test — shown in marks reports as if the teacher
+    # had entered it — or for an unpublished draft, which then locked the
+    # student out ("already submitted") once the teacher published it.
+    if test.test_type != TestType.online:
+        raise HTTPException(status_code=400, detail="Only online tests can be submitted here.")
 
     now = datetime.now(timezone.utc)
     window_expired = bool(test.expires_at and test.expires_at < now)
@@ -1271,6 +1277,10 @@ async def submit_test(
     if action == "expired":
         raise HTTPException(status_code=410, detail="Test submission window has expired.")
 
+    if action == "create" and not test.is_published:
+        # An attempt already under way may still be finished if the teacher
+        # unpublishes mid-test; a new one can't start on a draft.
+        raise HTTPException(status_code=400, detail="Test is not published.")
     if action == "create":
         # Legacy / no-start path: create a one-shot finalized row.
         submission = TestSubmission(

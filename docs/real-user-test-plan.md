@@ -773,3 +773,13 @@ The app refreshes one request at a time (`_refreshFuture` mutex), so normal use 
 - **Registration:** phone, email and username length were already validated, and a student's optional subjects already checked. **Bug (fixed):** a teacher's subjects weren't checked at all ("Astrology", none, or Mathematics ×40 were saved). The validator was a pass-through. Sign-up now normalises known subjects ("maths" → "Mathematics"), drops duplicates, refuses unknown ones, and requires at least one; the app checks that before sending. The app's subject list matches the server's exactly. The admin user editor is left permissive because existing data has legacy free-text subjects ("Maths", "English Literature", "science"). Usernames with spaces or emoji are allowed (seems deliberate, alongside Hindi and Gujarati names). Tests: `tests/test_teacher_subjects_schema.py`. Test sign-ups were rejected afterwards.
 
 Backend 701 passed (4 skipped) · `flutter test` 301/301.
+
+### 2026-11-25 — answer-key leaks and test visibility
+
+- **Answer key: no leaks.** For an open online test, the student's pending list, the `/start` payload and the parent's child-tests view all omit the answer key. Review is refused mid-attempt (409). After submitting, review shows only the student's own answers until the test closes, and says when the key appears (`answers_available_at`).
+- **Visibility:** a grade 9 student can't see or start a grade 8 test (404); unpublished tests are hidden and `/start` refuses them; "starting" a closed test only returns the student's own finished attempt.
+- **Bug (fixed) — `/submit` skipped `/start`'s checks.**
+  - A direct submit to an **offline (written) test** filed a 0 score for bulk8_32 on test #481. That would appear in marks reports as if the teacher had entered it.
+  - A submit to an **unpublished draft** created a finished attempt, which would lock the student out ("already submitted") once the teacher published it.
+
+  `submit_test` now refuses non-online tests and new submissions to unpublished tests. An attempt already under way can still be finished if a teacher unpublishes mid-test. A normal start → submit still works. The stray records were removed (test #481 back to meera8 3.00 / aarav8 6.00), the QA tests deleted, and bulk8_31/bulk8_32 XP is back to 15.
