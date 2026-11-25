@@ -1349,7 +1349,11 @@ async def get_test_review(
     test = test_result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found.")
-    await _ensure_test_in_student_grade(test, current_student.id, db)
+    # Ownership is the student's own submission (checked below), not their
+    # current grade: after an admin moved a student up a grade, their past
+    # tests were still listed as completed but opened as "Test not found".
+    if test.school_id != current_student.school_id:
+        raise HTTPException(status_code=404, detail="Test not found.")
 
     sub_result = await db.execute(
         select(TestSubmission).where(

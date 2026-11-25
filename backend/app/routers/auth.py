@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from jwt import PyJWTError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import update as sa_update, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.database import get_db
@@ -757,8 +757,20 @@ async def update_fcm_token(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Store or update the FCM device token for the authenticated user."""
-    current_user.fcm_token = payload.fcm_token.strip()
+    """Store or update the FCM device token for the authenticated user.
+
+    A device token belongs to one account at a time. When a session ends
+    without a logout (expiry, or a reinstall that clears the sign-in) the old
+    account kept the token, so on a shared phone or school tablet the next
+    person received the previous user's notifications too.
+    """
+    token = payload.fcm_token.strip()
+    await db.execute(
+        sa_update(User)
+        .where(User.fcm_token == token, User.id != current_user.id)
+        .values(fcm_token=None)
+    )
+    current_user.fcm_token = token
     await db.commit()
 
 
