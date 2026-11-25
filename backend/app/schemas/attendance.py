@@ -40,6 +40,19 @@ class AttendanceBulkCreate(BaseModel):
             raise ValueError(reason)
         return v
 
+    @field_validator("records")
+    @classmethod
+    def _each_student_once(cls, records: List[AttendanceCreate]) -> List[AttendanceCreate]:
+        # A student listed twice hit the unique constraint and came back as
+        # "That already exists — it may have just been saved", which reads as
+        # a double tap. Say what's actually wrong.
+        seen = set()
+        for r in records:
+            if r.student_id in seen:
+                raise ValueError("A student is listed twice. Mark each student once.")
+            seen.add(r.student_id)
+        return records
+
 
 class AttendanceUpdate(BaseModel):
     status: AttendanceStatus

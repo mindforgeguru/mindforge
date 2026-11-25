@@ -698,3 +698,13 @@ Beyond the plan's rows: teacher-side create paths probed with bad inputs as das_
 - **Cleanup:** the QA homework was deleted, and the stray marks on test #481 were removed (back to meera8 3.00, aarav8 6.00). Three QA broadcasts remain (#240 "QA grade 8 note", #241 grade 10 sent before the fix, #242 "QA2 all"); there's no delete route, so I left them rather than delete from the database.
 
 Backend 674 passed (4 reportlab-dependent skipped) · `flutter test` 301/301.
+
+### 2026-11-25 — exploratory: cross-school and cross-family access, attendance edges
+
+- **Admin isolation (Greenwood `demo_admin` → Sunrise IDs):** edit, deactivate, approve or revoke a Sunrise user, edit a teacher's bio, edit or delete a fee structure or payment, record a payment, and download a student ledger: all 404. Academic-year users returned an empty list (Sunrise's own admin sees 145). **No leaks.**
+- **Teacher isolation:** a throwaway school was created through the owner API (**"QA Isolation …", school 971**, with an admin and an approved teacher; local test data). Its teacher hitting Sunrise test #481 (view, grades, submissions, answer key, PDF links, offline grades, publish), editing #484, deleting #485 and deleting homework #995: all 404. Its test, homework and broadcast lists contain nothing from Sunrise.
+- **Parent and student isolation:** aarav8_parent with `child_id` set to a classmate (meera8) or another school's student on all nine child routes: 0 of 18 leaked (own child 200). meera8 asking for the review of a test only aarav8 took gets 404.
+- **Media proxy:** serves files without a login by design. Every stored key ends in a 22-character random token (~128 bits), so links can't be guessed; folder prefixes give 404 and other buckets 403. **Bug:** an empty key (`/api/media/mindforge-profiles/`) raised an unhandled `ValueError` → **500**. It now returns 404 (`main.py serve_media`).
+- **Attendance:** future date, a date over 14 days old, period 99 and a grade 9 student in a grade 8 period are all refused. A student listed twice in one submission was already rejected by the database with nothing saved and no XP awarded, but the message, "That already exists — it may have just been saved", read like a double tap. The schema now says "A student is listed twice. Mark each student once." (`tests/test_attendance_bulk_schema.py`).
+
+Backend unit tests pass (see commit).

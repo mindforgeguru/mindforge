@@ -447,11 +447,15 @@ async def serve_media(bucket: str, key: str):
     ALLOWED_BUCKETS = {settings.MINIO_BUCKET_PROFILES}
     if bucket not in ALLOWED_BUCKETS:
         raise HTTPException(status_code=403, detail="Access denied")
+    # An empty or folder-like key isn't a file; the MinIO client raised
+    # ValueError on "" (an unhandled 500) instead of a not-found.
+    if not key or key.endswith("/"):
+        raise HTTPException(status_code=404, detail="File not found")
 
     try:
         client = storage_service._get_client()
         response = client.get_object(bucket, key)
         content_type = response.headers.get("content-type", "image/jpeg")
         return StreamingResponse(response, media_type=content_type)
-    except S3Error:
+    except (S3Error, ValueError):
         raise HTTPException(status_code=404, detail="File not found")
