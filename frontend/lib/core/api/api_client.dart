@@ -754,8 +754,10 @@ class ApiClient {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> publishTest(int testId) async {
-    final res = await _dio.post('/teacher/tests/$testId/publish');
+  /// [publish] is the state wanted, so a double tap can't flip it back.
+  Future<Map<String, dynamic>> publishTest(int testId, {bool? publish}) async {
+    final res = await _dio.post('/teacher/tests/$testId/publish',
+        queryParameters: {if (publish != null) 'publish': publish});
     return res.data as Map<String, dynamic>;
   }
 

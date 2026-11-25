@@ -798,3 +798,12 @@ Backend 701 passed (4 skipped) · `flutter test` 301/301.
   - Live: a double tap on a year older than a minute → one 201 and one 409, and the year advanced by exactly one (2028-29 → 2029-30). A stale ID → 409. The right ID a minute later → 201.
   - Initialising a year twice was already refused (409).
   - Throwaway schools "QA Year …" (#972, #973) were left suspended.
+
+### 2026-11-25 — double taps and retries (race sweep)
+
+Two identical requests sent at once, or back to back, on Sunrise. The app's API client also re-POSTs after connection errors, so this matters beyond double taps.
+
+- **Bug (fixed) — Publish was a toggle.** A sequential double tap published the test and then unpublished it. `POST /teacher/tests/{id}/publish` now takes `publish=true|false` (the app sends the state the teacher picked), so repeating it is harmless. It locks the test row so two at once can't both announce it to students. Without the parameter it still toggles, for older apps.
+- **Bug (fixed) — duplicate homework and broadcasts.** A double tap created two identical homework items and two identical broadcasts. An identical second request from the same teacher within 60 s now gets 409 ("That homework was just assigned." / "That message was just sent."), via a Redis `SET NX` on the content. For homework the check runs after the other validations, so a refused attempt (review pending, past due date) can be retried straight away.
+- **Already safe:** fee payments use the app's `X-Idempotency-Key` (same key twice → 201 + 409; without a key they double up, which the app never does); approving the same sign-up twice leaves one teacher profile; attendance duplicates are blocked by a unique constraint (earlier).
+- Cleanup: QA tests, homework, payments and sign-ups removed; QA broadcasts "QA race BC/BC2" remain (no delete route).

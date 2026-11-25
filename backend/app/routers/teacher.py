@@ -61,6 +61,13 @@ from app.services.realtime_service import (
 MAX_PER_TYPE = 50
 MAX_QUESTIONS_PER_TEST = 100
 
+
+
+def _content_key(*parts) -> str:
+    """Stable short key for 'the same request again' (double tap / retry)."""
+    import hashlib
+    return hashlib.sha256(repr(parts).encode()).hexdigest()[:32]
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -1708,12 +1715,20 @@ async def save_offline_grades(
 @router.post("/tests/{test_id}/publish", status_code=status.HTTP_200_OK)
 async def publish_test(
     test_id: int,
+    publish: Optional[bool] = Query(
+        None, description="The state wanted. Omitted: toggle (older apps)."),
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
 ):
-    """Toggle publish state of a test. Only the creator can publish/unpublish."""
+    """Publish or unpublish a test. Only the creator can publish/unpublish.
+
+    With `publish` the call is idempotent: a double tap on "Publish" used to
+    toggle twice and leave the test unpublished. The row is locked so two
+    requests at once can't both announce it to students.
+    """
     result = await db.execute(
         select(Test).where(Test.id == test_id, Test.school_id == current_teacher.school_id)
+        .with_for_update()
     )
     test = result.scalar_one_or_none()
     if not test:
@@ -1723,13 +1738,16 @@ async def publish_test(
     # J-05: never publish a test with no questions — a student would open an
     # empty paper that auto-submits for 0. Unpublishing an empty test is still
     # allowed (so a mistakenly-emptied published test can be pulled).
-    going_live = not test.is_published
+    target = (not test.is_published) if publish is None else publish
+    if target == test.is_published:
+        return {"is_published": test.is_published}
+    going_live = target
     if going_live and not (test.questions or []):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This test has no questions. Add at least one question before publishing.",
         )
-    test.is_published = not test.is_published
+    test.is_published = target
     start_window_on_first_publish(test)
     await db.commit()
     await db.refresh(test)
@@ -1905,6 +1923,15 @@ async def create_homework(
         )).scalar_one_or_none()
         if linked is None:
             raise HTTPException(status_code=404, detail="Test not found.")
+    # A double tap (or the app's retry after a lost response) assigned the
+    # same homework twice. Identical homework from the same teacher within a
+    # minute is refused instead of duplicated.
+    if not await redis_manager.consume_idempotency_key(
+        "hw:" + _content_key(current_teacher.id, payload.grade, payload.subject,
+                             payload.title, payload.description, payload.due_date),
+        ttl_seconds=60,
+    ):
+        raise HTTPException(status_code=409, detail="That homework was just assigned.")
 
     hw = Homework(
         teacher_id=current_teacher.id,
@@ -2590,6 +2617,12 @@ async def send_broadcast(
     """Broadcast a message to all users or a specific grade."""
     if payload.target_type == "grade" and payload.target_grade is not None:
         await require_grade_offered(db, current_teacher.school_id, payload.target_grade)
+    if not await redis_manager.consume_idempotency_key(
+        "bc:" + _content_key(current_teacher.id, payload.target_type,
+                             payload.target_grade, payload.title, payload.message),
+        ttl_seconds=60,
+    ):
+        raise HTTPException(status_code=409, detail="That message was just sent.")
     bc = Broadcast(
         sender_id=current_teacher.id,
         title=payload.title,

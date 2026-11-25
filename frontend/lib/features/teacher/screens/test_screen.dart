@@ -1152,7 +1152,7 @@ class _TestTileState extends ConsumerState<_TestTile> {
     setState(() => _publishing = true);
     try {
       final api = ref.read(apiClientProvider);
-      await api.publishTest(widget.test.id);
+      await api.publishTest(widget.test.id, publish: !widget.test.isPublished);
       ref.invalidate(teacherTestsProvider);
     } catch (e) {
       if (mounted) {
