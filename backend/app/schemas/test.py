@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.test import TestType
-from app.schemas.bounds import Answers
+from app.schemas.bounds import Answers, Marks
 
 
 class TestGenerationParams(BaseModel):
@@ -87,11 +87,25 @@ class TestResponse(BaseModel):
 
 class OfflineGradeEntry(BaseModel):
     student_id: int
-    marks_obtained: float
+    # Bounded and finite: a bare float let NaN reach the database (a generic
+    # "out of range" 422) instead of a readable refusal.
+    marks_obtained: Marks
 
 
 class OfflineGradesBulk(BaseModel):
     grades: List[OfflineGradeEntry]
+
+    @field_validator("grades")
+    @classmethod
+    def _each_student_once(cls, grades: List[OfflineGradeEntry]):
+        # Listing a student twice saved two marks for one test, both counted
+        # in averages. Ask for one mark per student instead of guessing.
+        seen = set()
+        for g in grades:
+            if g.student_id in seen:
+                raise ValueError("A student is listed twice. Enter one mark per student.")
+            seen.add(g.student_id)
+        return grades
 
 
 class TestSubmissionCreate(BaseModel):

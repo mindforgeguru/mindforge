@@ -20,6 +20,7 @@ from app.core.mask_utils import mask_phone, mask_email
 from app.core.redis_client import redis_manager
 from app.core.academic_year import since, year_started_at
 from app.core.school_time import parse_iso_date, school_day_start, school_today
+from app.core.grade_guard import require_grade_offered
 from app.core.security import get_current_teacher
 from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
 from app.models.attendance import Attendance, AttendanceStatus
@@ -956,6 +957,8 @@ async def generate_test(
     from sqlalchemy import select as _select
     from app.models.database_models import OldTestPaper, ChapterDocument
 
+    await require_grade_offered(db, current_teacher.school_id, grade)
+
     # Per-teacher quota on this expensive endpoint (AI generation + uploads +
     # OCR + PDF build). Throttles low-rate resource-exhaustion abuse that the
     # generic per-IP nginx limit is too coarse to catch. Mirrors the
@@ -1821,7 +1824,13 @@ async def create_homework(
     _pending_hw_review_ids). The teacher must close out yesterday's review
     before assigning the next day's work.
     """
+    await require_grade_offered(db, current_teacher.school_id, payload.grade)
     today = school_today()
+    if payload.due_date is not None and payload.due_date < today:
+        raise HTTPException(
+            status_code=422,
+            detail="That due date has already passed. Pick today or a later date.",
+        )
     pending = await _pending_hw_review_ids(
         payload.grade, current_teacher.school_id, today, db
     )
@@ -2533,6 +2542,8 @@ async def send_broadcast(
     current_teacher: User = Depends(get_current_teacher),
 ):
     """Broadcast a message to all users or a specific grade."""
+    if payload.target_type == "grade" and payload.target_grade is not None:
+        await require_grade_offered(db, current_teacher.school_id, payload.target_grade)
     bc = Broadcast(
         sender_id=current_teacher.id,
         title=payload.title,

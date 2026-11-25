@@ -39,3 +39,16 @@ def checked_grades_offered(
             f"it can't be removed while they're enrolled."
         )
     return grades
+
+
+def grade_not_offered_message(grade: int, offered: Iterable[int],
+                              school_name: str) -> "str | None":
+    """Why `grade` can't be used at this school, or None if it can.
+
+    Registration already refused grades a school doesn't teach (#5); homework,
+    broadcasts, tests and presentations did not, so a teacher could assign
+    work to a grade with no students and it reached nobody.
+    """
+    if grade in set(offered or []):
+        return None
+    return f"{school_name} doesn't have a Grade {grade}."

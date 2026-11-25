@@ -31,6 +31,7 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.redis_client import redis_manager
 from app.core.security import get_current_user
+from app.core.grade_guard import require_grade_offered
 from app.core.upload_utils import (
     reject_if_oversize,
     reject_if_zip_bomb,
@@ -409,6 +410,8 @@ async def upload_chapter(
     can poll GET /{id} or listen for the `presentation_ready` WebSocket
     event."""
     _require_teacher_or_admin(current_user)
+    if current_user.school_id is not None:
+        await require_grade_offered(db, current_user.school_id, grade)
 
     if grade not in _VALID_GRADES:
         raise HTTPException(status_code=422, detail="Grade must be 8, 9, or 10.")
@@ -494,6 +497,8 @@ async def upload_deck(
     PowerPoint (.pptx) first.
     """
     _require_teacher_or_admin(current_user)
+    if current_user.school_id is not None:
+        await require_grade_offered(db, current_user.school_id, grade)
 
     if grade not in _VALID_GRADES:
         raise HTTPException(status_code=422, detail="Grade must be 8, 9, or 10.")
