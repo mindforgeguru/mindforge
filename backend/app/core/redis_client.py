@@ -4,6 +4,7 @@ Uses redis-py async client for both regular commands and pub/sub messaging.
 """
 
 import asyncio
+import time
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -143,10 +144,37 @@ class RedisManager:
 
     # ── Refresh-token JTI blacklist ─────────────────────────────────────────
 
-    async def revoke_jti(self, jti: str, ttl_seconds: int) -> None:
-        """Mark a refresh-token JTI as used. TTL should match the token's remaining lifetime."""
+    async def revoke_jti(self, jti: str, ttl_seconds: int,
+                         rotated_at: "float | None" = None) -> None:
+        """Mark a refresh-token JTI as used. TTL should match the token's remaining lifetime.
+
+        `rotated_at` (epoch seconds) marks a token consumed by rotation, so a
+        later replay can be told apart from a logged-out token's stale retry.
+        """
         if self._client:
-            await self._client.set(f"revoked_jti:{jti}", "1", ex=ttl_seconds)
+            value = f"rotated:{rotated_at}" if rotated_at is not None else "1"
+            await self._client.set(f"revoked_jti:{jti}", value, ex=ttl_seconds)
+
+    async def rotated_jti_age(self, jti: str) -> "float | None":
+        """Seconds since this refresh JTI was consumed by rotation, or None if it
+        wasn't rotated (logout, account change) or Redis can't say. Fails open."""
+        if self._client is None:
+            return None
+        try:
+            raw = await self._client.get(f"revoked_jti:{jti}")
+        except Exception as e:
+            logger.warning("Redis rotated_jti_age failed, failing open: %s", e)
+            return None
+        if raw is None:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        if not str(raw).startswith("rotated:"):
+            return None
+        try:
+            return max(0.0, time.time() - float(str(raw).split(":", 1)[1]))
+        except ValueError:
+            return None
 
     async def is_jti_revoked(self, jti: str) -> bool:
         """Return True if this JTI has been blacklisted.

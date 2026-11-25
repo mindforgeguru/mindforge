@@ -754,4 +754,15 @@ All checked on throwaway accounts (bulk8_31, bulk8_32, QA Isolation school 971);
 - **Deactivation (bulk8_32):** the live access token → 401 at once, refresh → 401, fresh sign-in → 403; works again after reactivation.
 - **School suspension (QA school 971, now left suspended):** the teacher's live token → 403 "This school's access has been suspended…", refresh → 401, sign-in → 400.
 - **Forgot MPIN:** the login screen tells the user to ask their school's admin. The admin reset refuses weak (`111111`, `123456`) and malformed MPINs and ends the user's existing sessions. The owner creating a school admin also refuses weak MPINs (one test admin, `qaweak_470381`, was added to the suspended QA school).
-- **Notes:** a refresh-token reuse doesn't end the session family; optional hardening, noted in the risk register. The local platform-owner account still uses `123456`, the known seeded default (see the default-admin note).
+- **Notes:** a refresh-token reuse didn't end the session family — **hardened** (next section). The local platform-owner account still uses `123456`, the known seeded default (see the default-admin note).
+
+### 2026-11-25 — refresh-token replay ends every session
+
+A refresh token consumed by rotation and replayed **more than 30 seconds later** means two parties held it. `POST /auth/refresh` now ends every session for that user, so whoever rotated first, possibly an attacker, is signed out too. It logs `Refresh token replayed …; all sessions ended.` A replay within 30 seconds (a lost response or a double refresh) is just refused, as before. A logged-out token's stale retry isn't treated as theft. Rotation marks the Redis key `rotated:<epoch>`; logout keeps `1`.
+
+Live on bulk8_31:
+- Replay at once → 401, while the rotated session and another device stay signed in.
+- Replay after 32 s → 401, and the rotated session, its refresh and the other device are all 401.
+- Logged-out token retried after 32 s → 401, and another device stays signed in.
+
+The app refreshes one request at a time (`_refreshFuture` mutex), so normal use doesn't trip it. Unit tests: `tests/test_refresh_reuse.py`.

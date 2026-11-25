@@ -21,7 +21,8 @@ from app.core.config import settings
 from app.core.security import (
     hash_mpin_async, verify_mpin_constant_time_async,
     create_access_token, create_refresh_token,
-    decode_access_token, get_current_user, token_predates_revocation,
+    decode_access_token, get_current_user, revoke_all_sessions,
+    token_predates_revocation,
 )
 from app.models.academic_year import AcademicYear
 from app.models.school import School
@@ -48,6 +49,11 @@ from app.core.totp import (
 from app.core.mfa import generate_recovery_codes
 from app.core.cache import is_school_active_cached
 from app.services import storage_service
+
+
+# A refresh token replayed within this many seconds of its rotation is a
+# retry (lost response, double refresh), not theft.
+REFRESH_REUSE_GRACE_SECONDS = 30
 
 router = APIRouter()
 
@@ -636,8 +642,24 @@ async def refresh_access_token(
     except (PyJWTError, ValueError):
         raise credentials_exception
 
-    # Reject already-used (blacklisted) tokens
+    # Reject already-used (blacklisted) tokens.
     if jti and await redis_manager.is_jti_revoked(jti):
+        # A token consumed by rotation and replayed later means two parties
+        # hold it: whoever rotated first may be an attacker with a stolen
+        # token. End every session so both must sign in again. A replay within
+        # the grace window is a lost response or a double refresh, so it's only
+        # refused; a logged-out token's stale retry isn't marked as rotated.
+        age = await redis_manager.rotated_jti_age(jti)
+        if age is not None and age > REFRESH_REUSE_GRACE_SECONDS:
+            reused_by = (await db.execute(
+                select(User).where(User.id == user_id, User.deleted_at.is_(None))
+            )).scalar_one_or_none()
+            if reused_by is not None:
+                revoke_all_sessions(reused_by)
+                await db.commit()
+                logger.warning(
+                    "Refresh token replayed %.0fs after rotation for user %s; "
+                    "all sessions ended.", age, user_id)
         raise credentials_exception
 
     result = await db.execute(
@@ -661,7 +683,9 @@ async def refresh_access_token(
     # Blacklist the consumed JTI (TTL = remaining lifetime of the old token)
     if jti and exp:
         remaining = max(int(exp - datetime.now(timezone.utc).timestamp()), 1)
-        await redis_manager.revoke_jti(jti, remaining)
+        await redis_manager.revoke_jti(
+            jti, remaining,
+            rotated_at=datetime.now(timezone.utc).timestamp())
 
     token_data = {"sub": str(user.id), "role": user.role, "school_id": user.school_id}
     new_access_token = create_access_token(data=token_data)
