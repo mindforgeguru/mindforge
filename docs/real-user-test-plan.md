@@ -745,3 +745,13 @@ Backend 688 passed (4 reportlab-dependent skipped).
 - **Presentations and teacher database:** deleting a presentation needs its creator or an admin (403 otherwise); period logs can only be edited by the teacher who logged them; old papers, chapter documents and syllabus entries can only be deleted by their uploader. Any teacher may edit any slide in their school; this is documented and records `last_edited_by`. Slide text is shown as plain text and links are never opened, so Markdown in a slide can't run anything. **No issues.**
 
 Backend 696 passed (4 reportlab-dependent skipped).
+
+### 2026-11-25 — sessions, deactivation, suspension, MPIN recovery
+
+All checked on throwaway accounts (bulk8_31, bulk8_32, QA Isolation school 971); **no bugs found**.
+
+- **Sessions (bulk8_31, three sign-ins):** reusing a rotated refresh token → 401 (the new pair keeps working); logout → that access and refresh token both 401; a student MPIN change → every other session's access and refresh 401, including the one that made the change, and the response carries a fresh session; the old MPIN is refused.
+- **Deactivation (bulk8_32):** the live access token → 401 at once, refresh → 401, fresh sign-in → 403; works again after reactivation.
+- **School suspension (QA school 971, now left suspended):** the teacher's live token → 403 "This school's access has been suspended…", refresh → 401, sign-in → 400.
+- **Forgot MPIN:** the login screen tells the user to ask their school's admin. The admin reset refuses weak (`111111`, `123456`) and malformed MPINs and ends the user's existing sessions. The owner creating a school admin also refuses weak MPINs (one test admin, `qaweak_470381`, was added to the suspended QA school).
+- **Notes:** a refresh-token reuse doesn't end the session family; optional hardening, noted in the risk register. The local platform-owner account still uses `123456`, the known seeded default (see the default-admin note).
