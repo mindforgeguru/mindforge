@@ -1196,8 +1196,13 @@ class ApiClient {
     return res.data as Map<String, dynamic>?;
   }
 
-  Future<Map<String, dynamic>> startNewAcademicYear() async {
-    final res = await _dio.post('/admin/academic-years/new');
+  /// [expectedYearId] is the year the admin saw and is closing; the server
+  /// refuses (409) if that year was already closed, e.g. by a double tap.
+  Future<Map<String, dynamic>> startNewAcademicYear({int? expectedYearId}) async {
+    final res = await _dio.post('/admin/academic-years/new',
+        queryParameters: {
+          if (expectedYearId != null) 'expected_year_id': expectedYearId,
+        });
     return res.data as Map<String, dynamic>;
   }
 

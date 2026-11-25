@@ -81,6 +81,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
                   ),
                   onPressed: () =>
                       _confirmNewYear(context, ref, current == null,
+                          currentId: current?['id'] as int?,
                           currentLabel: current?['year_label'] as String?,
                           nextLabel: current?['next_year_label'] as String?,
                           warning: closeYearWarning(current)),
@@ -121,7 +122,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
 
   Future<void> _confirmNewYear(
       BuildContext context, WidgetRef ref, bool isFirst,
-      {String? currentLabel, String? nextLabel, String? warning}) async {
+      {int? currentId, String? currentLabel, String? nextLabel, String? warning}) async {
     final confirmed = await showDialog<bool>(
       context: context,
       useRootNavigator: false,
@@ -163,7 +164,7 @@ class AdminAcademicYearScreen extends ConsumerWidget {
       final api = ref.read(apiClientProvider);
       final started = isFirst
           ? await api.initAcademicYear()
-          : await api.startNewAcademicYear();
+          : await api.startNewAcademicYear(expectedYearId: currentId);
       final startedLabel = started['year_label'] as String?;
       ref.invalidate(academicYearsProvider);
       ref.invalidate(currentAcademicYearProvider);

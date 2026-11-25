@@ -788,3 +788,13 @@ Backend 701 passed (4 skipped) · `flutter test` 301/301.
 
 - **Bug (fixed) — generation counts were unbounded.** `POST /teacher/tests/generate` took any integers for the eight question-type counts, the time limit and the source percentages. 100,000 MCQs would have gone straight into the AI prompt and its retries across providers, and negative counts were accepted too. The app's steppers had no upper limit either. Now each type is 0–50, the whole paper 1–100 questions ("Choose at least one question." / "A test can have at most 100 questions."), the time limit 0–180 min (the app's slider range) and each source percentage 0–100. These are form-field limits and checked before the hourly quota and any AI call. Verified with requests that are all refused, so no AI was called. The app's + button now stops at 50.
 - **Changing tests:** editing questions is refused once any student has started ("…its questions can no longer be changed."). Deleting a test removes its submissions and grades by design, and both delete screens warn "This cannot be undone and will remove all student submissions." Note: XP students earned from a deleted test isn't taken back. Unpublishing mid-test lets students already in an attempt finish (see the submit fix).
+
+### 2026-11-25 — uploads; academic-year double tap
+
+- **Image uploads (no bugs):** every image upload strips EXIF (location data) and checks the bytes: student, teacher and admin photos, the teacher photo set by an admin, the school logo and the payment QR. A 200 MB fake photo is refused with 413 "File too large. Maximum allowed size is 5 MB." in about 1.2 s, with backend memory flat and nothing left in `/tmp`. Starlette spools the upload while parsing, and the declared-size check runs before reading.
+- **Bug (fixed) — a double-tapped "Start New Year" skipped a year.** Two simultaneous `POST /admin/academic-years/new` both returned 201 and took a throwaway school from 2026-27 to **2028-29**. The school lock only made them run one after the other, so the second closed the year the first had just opened, and each run removes every non-admin user. Now:
+  - The app sends the year it showed (`expected_year_id`), and the server answers 409 "That academic year has already been closed…" if it's no longer current.
+  - For older apps that don't send it, a year less than 60 s old can't be closed (409 "A new academic year was just started…").
+  - Live: a double tap on a year older than a minute → one 201 and one 409, and the year advanced by exactly one (2028-29 → 2029-30). A stale ID → 409. The right ID a minute later → 201.
+  - Initialising a year twice was already refused (409).
+  - Throwaway schools "QA Year …" (#972, #973) were left suspended.

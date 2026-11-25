@@ -53,6 +53,10 @@ from app.services import storage_service
 from app.services import pdf_service
 from fastapi.responses import Response
 
+
+# A year this new can't be closed: guards a double-tapped "start new year".
+NEW_YEAR_MIN_AGE_SECONDS = 60
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -1753,6 +1757,8 @@ async def _lock_school_years(db: AsyncSession, school_id: int) -> None:
 
 @router.post("/academic-years/new", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def start_new_academic_year(
+    expected_year_id: Optional[int] = Query(
+        None, description="The current year the admin is closing (from the screen)."),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
@@ -1774,6 +1780,25 @@ async def start_new_academic_year(
         )
     )
     current_year = current_result.scalar_one_or_none()
+    # A double tap ran this twice back to back (the lock only serialises it):
+    # the second call closed the year the first had just opened, skipping a
+    # year (2026-27 -> 2028-29). Refuse when the caller named a different year,
+    # or — for older apps that don't send one — when the current year is
+    # seconds old.
+    if current_year is not None:
+        if expected_year_id is not None and expected_year_id != current_year.id:
+            raise HTTPException(
+                status_code=409,
+                detail="That academic year has already been closed. Refresh to see the new one.",
+            )
+        started = current_year.started_at
+        if started is not None and started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if started is not None and (now - started).total_seconds() < NEW_YEAR_MIN_AGE_SECONDS:
+            raise HTTPException(
+                status_code=409,
+                detail="A new academic year was just started. Refresh to see it.",
+            )
     if current_year:
         current_year.is_current = False
         current_year.ended_at = now

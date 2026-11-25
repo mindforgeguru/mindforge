@@ -77,7 +77,8 @@ class SetupRoadCard extends ConsumerWidget {
     );
     if (!ok) return;
     try {
-      final started = await ref.read(apiClientProvider).startNewAcademicYear();
+      final started = await ref.read(apiClientProvider)
+          .startNewAcademicYear(expectedYearId: year?['id'] as int?);
       final startedLabel = started['year_label'] as String?;
       ref.invalidate(academicYearsProvider);
       ref.invalidate(currentAcademicYearProvider);
