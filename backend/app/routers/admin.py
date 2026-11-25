@@ -19,6 +19,7 @@ from sqlalchemy import func as sqlfunc
 from app.core.year_label import make_year_label, next_year_label
 from app.core.grades_offered import GradesOfferedError, checked_grades_offered
 from app.core.username_guard import username_taken
+from app.core.grade_guard import require_grade_offered
 from app.core.report_math import LOW_ATTENDANCE_PERCENT, attendance_rows, marks_rows
 from app.core.database import get_db
 from app.core.redis_client import redis_manager
@@ -1117,6 +1118,7 @@ async def create_fee_structure(
     current_admin: User = Depends(get_current_admin),
 ):
     """Create a fee structure for a grade and academic year."""
+    await require_grade_offered(db, current_admin.school_id, payload.grade)
     # Check for duplicate
     existing = await db.execute(
         select(FeeStructure).where(
@@ -1219,6 +1221,15 @@ async def update_fee_payment(
     payment = result.scalar_one_or_none()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found.")
+    profile = (await db.execute(
+        select(StudentProfile).where(
+            StudentProfile.user_id == payment.student_id,
+            StudentProfile.school_id == current_admin.school_id,
+        )
+    )).scalar_one_or_none()
+    if profile is not None:
+        await _refuse_overpayment(db, current_admin.school_id, profile,
+                                  payload.amount, exclude_payment_id=payment.id)
     payment.amount = payload.amount
     payment.notes = payload.notes
     payment.updated_by_admin_id = current_admin.id
@@ -1251,6 +1262,57 @@ async def delete_fee_payment(
     await db.delete(payment)
     await db.commit()
     await _announce_fee_change(db, student_id, action="deleted", amount=amount)
+
+
+async def _refuse_overpayment(db: AsyncSession, school_id: int, profile,
+                              amount: float, exclude_payment_id=None) -> None:
+    """400 when `amount` would take the student past their total fee (J-11).
+
+    Only guards when a fee structure exists for the student's grade in the
+    current year; with no structure there is no known total to exceed.
+    `exclude_payment_id` leaves out the payment being edited, so changing a
+    payment is checked like recording it (editing used to bypass this).
+    """
+    year_label = (await db.execute(
+        select(AcademicYear.year_label).where(
+            AcademicYear.is_current == True,  # noqa: E712
+            AcademicYear.school_id == school_id,
+        )
+    )).scalar_one_or_none()
+    if not year_label:
+        return
+    fs = (await db.execute(
+        select(FeeStructure).where(
+            FeeStructure.academic_year == year_label,
+            FeeStructure.school_id == school_id,
+            FeeStructure.grade == profile.grade,
+        )
+    )).scalar_one_or_none()
+    if fs is None:
+        return
+    total_fee = total_fee_for(
+        base_amount=fs.base_amount,
+        economics_fee=fs.economics_fee,
+        computer_fee=fs.computer_fee,
+        ai_fee=fs.ai_fee,
+        additional_subjects=profile.additional_subjects,
+    )
+    paid_q = select(sqlfunc.coalesce(sqlfunc.sum(FeePayment.amount), 0)).where(
+        FeePayment.student_id == profile.user_id,
+        FeePayment.school_id == school_id,
+    )
+    if exclude_payment_id is not None:
+        paid_q = paid_q.where(FeePayment.id != exclude_payment_id)
+    total_paid = float((await db.execute(paid_q)).scalar_one() or 0)
+    if would_overpay(total_fee, total_paid, amount):
+        outstanding = balance_due(total_fee, total_paid)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Payment exceeds the outstanding balance of "
+                f"₹{outstanding:,.2f}. Enter ₹{outstanding:,.2f} or less."
+            ),
+        )
 
 
 @router.post("/fees/payments", response_model=FeePaymentResponse, status_code=status.HTTP_201_CREATED)
@@ -1287,46 +1349,8 @@ async def record_fee_payment(
     # hiding data-entry slips like an extra zero. We only guard when a fee
     # structure exists for the student's grade in the current year — with no
     # structure there is no known total to exceed.
-    cur_year = await db.execute(
-        select(AcademicYear.year_label).where(
-            AcademicYear.is_current == True,  # noqa: E712
-            AcademicYear.school_id == current_admin.school_id,
-        )
-    )
-    year_label = cur_year.scalar_one_or_none()
-    if year_label:
-        fs_res = await db.execute(
-            select(FeeStructure).where(
-                FeeStructure.academic_year == year_label,
-                FeeStructure.school_id == current_admin.school_id,
-                FeeStructure.grade == profile.grade,
-            )
-        )
-        fs = fs_res.scalar_one_or_none()
-        if fs is not None:
-            total_fee = total_fee_for(
-                base_amount=fs.base_amount,
-                economics_fee=fs.economics_fee,
-                computer_fee=fs.computer_fee,
-                ai_fee=fs.ai_fee,
-                additional_subjects=profile.additional_subjects,
-            )
-            paid_res = await db.execute(
-                select(sqlfunc.coalesce(sqlfunc.sum(FeePayment.amount), 0)).where(
-                    FeePayment.student_id == payload.student_id,
-                    FeePayment.school_id == current_admin.school_id,
-                )
-            )
-            total_paid = float(paid_res.scalar_one() or 0)
-            if would_overpay(total_fee, total_paid, payload.amount):
-                outstanding = balance_due(total_fee, total_paid)
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"Payment exceeds the outstanding balance of "
-                        f"₹{outstanding:,.2f}. Enter ₹{outstanding:,.2f} or less."
-                    ),
-                )
+    await _refuse_overpayment(db, current_admin.school_id, profile,
+                              payload.amount)
 
     payment = FeePayment(
         student_id=payload.student_id,

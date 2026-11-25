@@ -2,7 +2,7 @@
 Pydantic schemas for Fee structures and payments.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from pydantic import BaseModel, field_validator
@@ -44,6 +44,18 @@ class FeePaymentCreate(BaseModel):
     amount: PositiveMoney
     notes: Optional[Text(1000)] = None
     paid_at: Optional[datetime] = None  # defaults to now() if not provided
+
+    @field_validator("paid_at")
+    @classmethod
+    def _not_in_the_future(cls, v: Optional[datetime]) -> Optional[datetime]:
+        # A payment dated next month was accepted, putting money that hasn't
+        # been received into the ledger. Half a day of slack covers time zones.
+        if v is None:
+            return v
+        aware = v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+        if aware > datetime.now(timezone.utc) + timedelta(hours=12):
+            raise ValueError("The payment date is in the future. Use the date it was received.")
+        return v
 
 
 class FeePaymentUpdate(BaseModel):

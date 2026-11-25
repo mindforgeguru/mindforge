@@ -712,6 +712,27 @@ Backend unit tests pass (see commit).
 ### 2026-11-25 — username renames; fees edge cases (partial)
 
 - **Fixed — look-alike usernames via rename/admin paths (J-03/K-21 follow-up):** registration refused case and cross-script look-alikes, but the admin's own rename, the admin editing a user, the inline parent the admin edit can create, and the owner creating a school admin all checked only an exact match. Live: QA Isolation's admin renamed itself to the uppercase and to a Cyrillic look-alike of its teacher's name (200). New `app/core/username_guard.username_taken` (built on `confusable_skeleton`) is used at all four sites; both renames now get 409, and renaming yourself to a case variant is still allowed. Tests: `tests/test_username_guard.py`.
-- **OPEN — payment edit bypasses the over-balance limit:** creating a payment refuses more than the balance (J-11), but `PUT /admin/fees/payments/{id}` accepted ₹45,000 against bulk8_32's ₹40,000 balance (200). Test payment deleted.
-- **OPEN — fee structure for a grade the school doesn't teach:** `POST /admin/fees/structure` accepted grade 10 at Sunrise (201). It should use `require_grade_offered` like the teacher routes. Test structure #248 deleted.
-- Not yet probed: lowering a fee below what's been paid, timetable (grade 10, teacher double-booking), feedback reports.
+- **FIXED (below) — payment edit bypasses the over-balance limit:** creating a payment refuses more than the balance (J-11), but `PUT /admin/fees/payments/{id}` accepted ₹45,000 against bulk8_32's ₹40,000 balance (200). Test payment deleted.
+- **FIXED (below) — fee structure for a grade the school doesn't teach:** `POST /admin/fees/structure` accepted grade 10 at Sunrise (201). It should use `require_grade_offered` like the teacher routes. Test structure #248 deleted.
+- Probed in the next section: lowering a fee below what's been paid, timetable, feedback reports.
+
+### 2026-11-25 — fees, timetable and feedback edge cases
+
+- **Fees:**
+  - **Payment edit over the balance (fixed):** creating and editing now share `_refuse_overpayment` (`admin.py`). Editing counts everything paid except the payment being edited, so ₹40,000 (the full fee) is fine and ₹45,000 is refused.
+  - **Grade 10 fee structure (fixed):** now 422 via `require_grade_offered`.
+  - **Future-dated payment (fixed):** a payment dated 30 days ahead was accepted. `FeePaymentCreate` now refuses dates more than 12 hours ahead (slack for the app's time-zone-less local timestamps). The app's date picker already stopped at today. Tests: `tests/test_fee_payment_schema.py`.
+  - **By design:** lowering a grade's fee below what students have already paid is allowed, since it covers discounts. The grade 8 fee was restored afterwards.
+- **Timetable (`POST /teacher/timetable`), all previously accepted, now refused:**
+  - **Teacher double-booking:** das_sci in grade 8 and grade 9 in the same period → 409 "That teacher already has Grade 8 in period 3 that day." Holiday markers are exempt.
+  - **Grade 10** → 422.
+  - **Period 12 on a 6-period day** → 422 "The school day has 6 periods." (attendance already did this).
+  - **An end time before the start time** → 422.
+
+  The existing data has no double-bookings, so no current week becomes uneditable. The editor shows these messages through its general error path; only the structured "changed elsewhere" 409 is handled specially. Probe slots were on 15 Dec and deleted.
+- **Feedback (bug icon):**
+  - **Already correct:** the length limits; markup is stored as plain text; another school's admin sees nothing.
+  - **By design:** beyond 10 reports a minute, reports are dropped silently ("keeps the UI honest") and exactly 10 were stored.
+  - **Fixed:** whitespace-only reports passed the 3-character minimum and were then stored empty, because the handler stripped them after validation. The schema now trims first (`tests/test_feedback_schema.py`). The 10 QA reports were deleted.
+
+Backend 688 passed (4 reportlab-dependent skipped).

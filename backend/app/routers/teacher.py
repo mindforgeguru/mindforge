@@ -627,6 +627,34 @@ async def create_timetable_slot(
                 detail="teacher_id does not match a teacher in your school.",
             )
 
+    # Rules the editor's pickers follow but the API didn't: the slot was saved
+    # for a grade the school doesn't teach, past the day's last period, ending
+    # before it started, or with a teacher already in another class then.
+    await require_grade_offered(db, current_teacher.school_id, payload.grade)
+    from app.core.cache import get_timetable_config_cached
+    config = await get_timetable_config_cached(db, current_teacher.school_id)
+    per_day = config.periods_per_day if config else 8
+    if payload.period_number > per_day:
+        raise HTTPException(status_code=422, detail=f"The school day has {per_day} periods.")
+    if payload.start_time and payload.end_time and payload.end_time <= payload.start_time:
+        raise HTTPException(status_code=422, detail="The period ends before it starts.")
+    if payload.teacher_id is not None and not payload.is_holiday:
+        clash_grade = (await db.execute(
+            select(TimetableSlot.grade).where(
+                TimetableSlot.school_id == current_teacher.school_id,
+                TimetableSlot.slot_date == payload.slot_date,
+                TimetableSlot.period_number == payload.period_number,
+                TimetableSlot.teacher_id == payload.teacher_id,
+                TimetableSlot.grade != payload.grade,
+            ).limit(1)
+        )).scalar_one_or_none()
+        if clash_grade is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(f"That teacher already has Grade {clash_grade} in period "
+                        f"{payload.period_number} that day."),
+            )
+
     # One statement, so two saves of the same period at once cannot both insert
     # (uq_timetable_slot_period, migration 039). `xmax = 0` is true only for a
     # row this statement inserted.
