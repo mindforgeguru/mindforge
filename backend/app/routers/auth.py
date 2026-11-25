@@ -261,6 +261,12 @@ async def _register(
             detail="Username already taken.",
         )
 
+    if payload.role == "teacher" and not payload.teachable_subjects:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Choose at least one subject you teach.",
+        )
+
     # Phone is required for student and teacher
     if payload.role in ("student", "teacher") and not payload.phone:
         raise HTTPException(

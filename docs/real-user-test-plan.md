@@ -766,3 +766,10 @@ Live on bulk8_31:
 - Logged-out token retried after 32 s → 401, and another device stays signed in.
 
 The app refreshes one request at a time (`_refreshFuture` mutex), so normal use doesn't trip it. Unit tests: `tests/test_refresh_reuse.py`.
+
+### 2026-11-25 — online test time limit; registration fields
+
+- **Bug (fixed) — answers sent after the time limit were scored.** `POST /student/tests/{id}/submit` past the attempt deadline marked the submission auto-submitted and stamped it at the deadline, but still scored the request's answers. Live: a 1-minute copy of the grade 8 quiz, started with nothing answered, submitted with every correct answer 100 s later → **10/10**. The time limit was only enforced by the app's own timer. Now a submit arriving more than `SUBMIT_GRACE_SECONDS` (30 s) past the deadline is scored on the answers saved in time. Within the grace window (the app's auto-submit at 0:00 on a slow connection) the sent answers still count. Live: 100 s → 0.00 (nothing saved in time); 70 s (10 s late) → 10.00. Autosave was already sound: past the deadline it finalises with the saved answers and refuses new ones. QA tests #486–489 were deleted, and bulk8_31's XP from them removed (back to 15, level 1).
+- **Registration:** phone, email and username length were already validated, and a student's optional subjects already checked. **Bug (fixed):** a teacher's subjects weren't checked at all ("Astrology", none, or Mathematics ×40 were saved). The validator was a pass-through. Sign-up now normalises known subjects ("maths" → "Mathematics"), drops duplicates, refuses unknown ones, and requires at least one; the app checks that before sending. The app's subject list matches the server's exactly. The admin user editor is left permissive because existing data has legacy free-text subjects ("Maths", "English Literature", "science"). Usernames with spaces or emoji are allowed (seems deliberate, alongside Hindi and Gujarati names). Tests: `tests/test_teacher_subjects_schema.py`. Test sign-ups were rejected afterwards.
+
+Backend 701 passed (4 skipped) · `flutter test` 301/301.

@@ -56,6 +56,11 @@ from app.core.school_time import parse_iso_date, school_today
 from app.core.mpin_guard import mpin_matches
 from app.core.attempt_policy import resolve_attempt_action
 
+
+# How late a submit may arrive after the attempt's deadline and still have
+# its answers scored (network delay on the app's auto-submit at 0:00).
+SUBMIT_GRACE_SECONDS = 30
+
 router = APIRouter()
 
 # Maps the short code stored in StudentProfile.additional_subjects
@@ -1298,13 +1303,22 @@ async def submit_test(
         if deadline_passed and submission.attempt_expires_at
         else now
     )
+    # Answers sent after the deadline don't count: a client that ignored its
+    # timer could answer for as long as it liked and still be scored (40 s
+    # past a 1-minute limit scored 10/10). Past the grace window — which
+    # covers the app's own auto-submit arriving a little late — score what
+    # was saved in time instead.
+    late = bool(
+        deadline_passed and submission.attempt_expires_at
+        and now > submission.attempt_expires_at + timedelta(seconds=SUBMIT_GRACE_SECONDS)
+    )
     if not await _finalize_submission(
         submission,
         test,
         db,
         auto_submitted=auto_submitted,
         finalized_at=finalized_at,
-        answers=payload.answers,
+        answers=None if late else payload.answers,
     ):
         raise HTTPException(status_code=409, detail="You have already submitted this test.")
 

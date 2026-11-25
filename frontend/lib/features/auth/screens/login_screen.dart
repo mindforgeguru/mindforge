@@ -387,6 +387,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         _showSnack("Parent's 6-digit MPIN is required to register a student.");
         return;
       }
+      // The server now requires it too; say so here instead of after a round trip.
+      if (isTeacher && _selectedTeacherSubjects.isEmpty) {
+        _showSnack('Choose at least one subject you teach.');
+        return;
+      }
 
       final ok = await notifier.register(
         username,

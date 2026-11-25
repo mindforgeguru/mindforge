@@ -8,6 +8,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.subjects import normalize_subject
 from app.models.user import UserRole
 
 VALID_SUBJECTS = {"economics", "computer", "ai"}
@@ -161,7 +162,18 @@ class UserRegisterRequest(BaseModel):
     @field_validator("teachable_subjects")
     @classmethod
     def validate_teachable_subjects(cls, v: Optional[List[str]]) -> Optional[List[str]]:
-        return v
+        # Was a pass-through: "Astrology" or the same subject 40 times was saved.
+        # Known subjects are normalised ("maths" -> "Mathematics") and de-duplicated.
+        if v is None:
+            return v
+        out: List[str] = []
+        for raw in v:
+            canon = normalize_subject(raw)
+            if canon is None:
+                raise ValueError(f"Unknown subject: {raw}.")
+            if canon not in out:
+                out.append(canon)
+        return out
 
 
 class UserLoginRequest(BaseModel):
