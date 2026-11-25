@@ -3,6 +3,7 @@ Redis connection and pub/sub helpers.
 Uses redis-py async client for both regular commands and pub/sub messaging.
 """
 
+import asyncio
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -50,40 +51,69 @@ class RedisManager:
             return
         await self._client.publish(REDIS_CHANNEL, json.dumps(event))
 
-    async def start_subscriber(self, ws_manager: "WebSocketManager"):
+    async def _dispatch(self, ws_manager: "WebSocketManager", message: dict) -> None:
+        """Fan one pub/sub message out to the matching WebSocket clients."""
+        if message.get("type") != "message":
+            return
+        try:
+            event = json.loads(message["data"])
+            # "user" | "users" | "grade" | "broadcast"
+            target_type = event.get("target_type")
+            payload = event.get("payload", {})
+
+            if target_type == "user":
+                user_id = event.get("user_id")
+                if user_id is not None:
+                    await ws_manager.broadcast_to_user(user_id, payload)
+            elif target_type == "users":
+                user_ids = event.get("user_ids") or []
+                if user_ids:
+                    await ws_manager.broadcast_to_users(user_ids, payload)
+            elif target_type == "grade":
+                grade = event.get("grade")
+                if grade is not None:
+                    await ws_manager.broadcast_to_grade(grade, payload)
+            elif target_type == "broadcast":
+                await ws_manager.broadcast_all(payload)
+        except Exception as e:
+            logger.error(f"Redis subscriber error: {e}")
+
+    async def start_subscriber(self, ws_manager: "WebSocketManager",
+                               max_backoff: float = 30.0):
         """
         Subscribe to Redis channel and fan out messages to WebSocket clients.
         This coroutine runs as a background task for the lifetime of the server.
+
+        If the connection drops (Redis restarted, network blip) it subscribes
+        again with backoff. It used to end on the first ConnectionError, which
+        silently stopped every live update until the backend was restarted.
+        Cancel the task to stop it (shutdown does).
         """
-        self._pubsub = self._client.pubsub()
-        await self._pubsub.subscribe(REDIS_CHANNEL)
-        logger.info(f"Redis subscriber listening on channel: {REDIS_CHANNEL}")
-
-        async for message in self._pubsub.listen():
-            if message["type"] != "message":
-                continue
+        delay = 1.0
+        while True:
+            pubsub = None
             try:
-                event = json.loads(message["data"])
-                # "user" | "users" | "grade" | "broadcast"
-                target_type = event.get("target_type")
-                payload = event.get("payload", {})
-
-                if target_type == "user":
-                    user_id = event.get("user_id")
-                    if user_id is not None:
-                        await ws_manager.broadcast_to_user(user_id, payload)
-                elif target_type == "users":
-                    user_ids = event.get("user_ids") or []
-                    if user_ids:
-                        await ws_manager.broadcast_to_users(user_ids, payload)
-                elif target_type == "grade":
-                    grade = event.get("grade")
-                    if grade is not None:
-                        await ws_manager.broadcast_to_grade(grade, payload)
-                elif target_type == "broadcast":
-                    await ws_manager.broadcast_all(payload)
+                pubsub = self._client.pubsub()
+                self._pubsub = pubsub
+                await pubsub.subscribe(REDIS_CHANNEL)
+                logger.info(f"Redis subscriber listening on channel: {REDIS_CHANNEL}")
+                delay = 1.0
+                async for message in pubsub.listen():
+                    await self._dispatch(ws_manager, message)
+                # listen() ending without an error is still a lost subscription.
+                raise ConnectionError("pub/sub stream ended")
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                logger.error(f"Redis subscriber error: {e}")
+                logger.warning("Redis subscriber lost its connection (%s); "
+                               "re-subscribing in %.0fs", e, delay)
+                if pubsub is not None:
+                    try:
+                        await pubsub.aclose()
+                    except Exception:
+                        pass
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, max_backoff)
 
     async def set_cache(self, key: str, value: str, expire_seconds: int = 3600):
         """Set a cache value with optional TTL."""

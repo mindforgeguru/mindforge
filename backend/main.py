@@ -188,10 +188,17 @@ async def lifespan(app: FastAPI):
     await redis_manager.connect()
     # Start Redis subscriber in background
     import asyncio
-    asyncio.create_task(redis_manager.start_subscriber(ws_manager))
+    subscriber = asyncio.create_task(redis_manager.start_subscriber(ws_manager))
     logger.info("MIND FORGE backend is ready.")
     yield
     logger.info("Shutting down MIND FORGE backend...")
+    # Stop the subscriber before closing Redis; it would otherwise treat the
+    # closed connection as a drop and try to re-subscribe.
+    subscriber.cancel()
+    try:
+        await subscriber
+    except asyncio.CancelledError:
+        pass
     await redis_manager.disconnect()
 
 

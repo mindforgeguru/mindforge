@@ -249,10 +249,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
         _leaveTest();
         return;
       }
-      _autosaveTimer = Timer.periodic(
-        const Duration(seconds: 20),
-        (_) => _autosaveNow(silent: true),
-      );
+      _startAutosave();
       // Web only: warn (native browser prompt) if they try to close the tab,
       // refresh, or navigate the browser away mid-test. The in-app back button
       // is handled separately by the PopScope dialog below.
@@ -436,6 +433,17 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
     }
   }
 
+  /// Saves answers every 20 s. Submitting cancels it; a submit that fails
+  /// (no connection) restarts it, so answers given after the failure are
+  /// still saved (J-07).
+  void _startAutosave() {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _autosaveNow(silent: true),
+    );
+  }
+
   Future<void> _submitTest({
     bool autoSubmitted = false,
     bool leftTest = false,
@@ -481,6 +489,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
               backgroundColor: AppColors.error),
         );
         setState(() => _submitted = false);
+        _startAutosave();
       }
     } catch (e) {
       if (mounted) {
@@ -490,6 +499,7 @@ class _TestAttemptScreenState extends ConsumerState<TestAttemptScreen>
               backgroundColor: AppColors.error),
         );
         setState(() => _submitted = false);
+        _startAutosave();
       }
     }
   }
