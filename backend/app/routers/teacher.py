@@ -56,6 +56,11 @@ from app.services.realtime_service import (
     announce_test_to_students, publish_to_grade, publish_to_school,
 )
 
+
+# Test generation limits (the app's steppers stop at MAX_PER_TYPE too).
+MAX_PER_TYPE = 50
+MAX_QUESTIONS_PER_TEST = 100
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -953,22 +958,22 @@ async def generate_test(
     subject: str = Form(...),
     chapter: str = Form(""),
     test_type: str = Form("online"),
-    mcq_count: int = Form(5),
-    fill_blank_count: int = Form(3),
-    true_false_count: int = Form(2),
-    match_following_count: int = Form(0),
-    vsa_count: int = Form(2),
-    short_answer_count: int = Form(0),
-    long_answer_count: int = Form(0),
-    diagram_count: int = Form(0),
+    mcq_count: int = Form(5, ge=0, le=MAX_PER_TYPE),
+    fill_blank_count: int = Form(3, ge=0, le=MAX_PER_TYPE),
+    true_false_count: int = Form(2, ge=0, le=MAX_PER_TYPE),
+    match_following_count: int = Form(0, ge=0, le=MAX_PER_TYPE),
+    vsa_count: int = Form(2, ge=0, le=MAX_PER_TYPE),
+    short_answer_count: int = Form(0, ge=0, le=MAX_PER_TYPE),
+    long_answer_count: int = Form(0, ge=0, le=MAX_PER_TYPE),
+    diagram_count: int = Form(0, ge=0, le=MAX_PER_TYPE),
     include_numericals: bool = Form(False),
-    time_limit_minutes: Optional[int] = Form(None),
+    time_limit_minutes: Optional[int] = Form(None, ge=0, le=180),
     use_database: bool = Form(False),
-    src_pct_p: int = Form(20),
-    src_pct_e: int = Form(20),
-    src_pct_np: int = Form(20),
-    src_pct_ne: int = Form(20),
-    src_pct_ai: int = Form(20),
+    src_pct_p: int = Form(20, ge=0, le=100),
+    src_pct_e: int = Form(20, ge=0, le=100),
+    src_pct_np: int = Form(20, ge=0, le=100),
+    src_pct_ne: int = Form(20, ge=0, le=100),
+    src_pct_ai: int = Form(20, ge=0, le=100),
     source_files: List[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     current_teacher: User = Depends(get_current_teacher),
@@ -986,6 +991,19 @@ async def generate_test(
     from app.models.database_models import OldTestPaper, ChapterDocument
 
     await require_grade_offered(db, current_teacher.school_id, grade)
+    # Counts were unbounded: 100,000 MCQs went straight into the AI prompt
+    # (and its retries across providers). Per-type limits are on the form
+    # fields; this caps the whole paper.
+    total_questions = (mcq_count + fill_blank_count + true_false_count
+                       + match_following_count + vsa_count + short_answer_count
+                       + long_answer_count + diagram_count)
+    if total_questions < 1:
+        raise HTTPException(status_code=422, detail="Choose at least one question.")
+    if total_questions > MAX_QUESTIONS_PER_TEST:
+        raise HTTPException(
+            status_code=422,
+            detail=f"A test can have at most {MAX_QUESTIONS_PER_TEST} questions.",
+        )
 
     # Per-teacher quota on this expensive endpoint (AI generation + uploads +
     # OCR + PDF build). Throttles low-rate resource-exhaustion abuse that the

@@ -920,7 +920,8 @@ class _CountRow extends StatelessWidget {
           IconButton(
             tooltip: 'More',
             icon: const Icon(Icons.add_circle_outline, size: 20),
-            onPressed: () => onChanged(value + 1),
+            // The server allows at most 50 of one question type per test.
+            onPressed: value < 50 ? () => onChanged(value + 1) : null,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
