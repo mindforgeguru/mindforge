@@ -8,7 +8,11 @@ minio==7.2.7
 pymupdf==1.24.3
 python-pptx==1.0.2
 pytesseract==0.3.10
-reportlab==4.2.0
+# reportlab >= 4.4 shapes complex scripts through HarfBuzz (uharfbuzz), which
+# Hindi/Gujarati names in report PDFs need for correct conjuncts and matras
+# (K-17); without uharfbuzz pdf_service leaves them unsupported (boxes).
+reportlab==4.5.1
+uharfbuzz==0.53.7
 python-multipart==0.0.32
 PyJWT==2.15.1
 bcrypt==4.1.3

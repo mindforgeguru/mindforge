@@ -6,6 +6,7 @@ Generates printable offline test papers with MIND FORGE branding.
 import io
 import logging
 from datetime import date
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from xml.sax.saxutils import escape as _xml_escape
 
@@ -15,7 +16,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, mm
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
-    HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    HRFlowable, Image, Paragraph as _RLParagraph, SimpleDocTemplate, Spacer, Table, TableStyle
 )
 
 
@@ -40,6 +41,120 @@ except Exception:  # noqa: BLE001 — fonts are a nicety; never fail the import
 logger = logging.getLogger(__name__)
 
 
+# ── Indic scripts (K-17) ──────────────────────────────────────────────────────
+# Usernames and school names may be Hindi (Devanagari) or Gujarati, and DejaVu
+# has neither script, so names printed as black boxes. Noto Sans Devanagari /
+# Gujarati (OFL, vendored in app/assets/fonts) carry the glyphs, and ReportLab
+# >= 4.4 shapes them through HarfBuzz (uharfbuzz) so conjuncts and matras
+# (क्ष, र्म, ि) come out right — a plain glyph map draws them broken.
+#
+# Neither Noto face has Latin letters, so text is split into runs: Indic runs
+# (plus the digits, spaces and punctuation between them) use Noto; everything
+# else keeps DejaVu and its current look. Shaping is switched on only for a
+# Paragraph that actually holds an Indic run, so Latin-only output is unchanged.
+_FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+# script -> (first codepoint, last codepoint, regular face, bold face)
+_INDIC = {
+    "deva": (0x0900, 0x097F, "NotoSansDevanagari", "NotoSansDevanagari-Bold"),
+    "gujr": (0x0A80, 0x0AFF, "NotoSansGujarati", "NotoSansGujarati-Bold"),
+}
+_INDIC_OK = False
+try:
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    for _lo, _hi, _reg, _bold in _INDIC.values():
+        pdfmetrics.registerFont(TTFont(_reg, str(_FONT_DIR / f"{_reg}-Regular.ttf")))
+        pdfmetrics.registerFont(TTFont(_bold, str(_FONT_DIR / f"{_bold}.ttf")))
+    # Shaping needs uharfbuzz; without it Noto would still draw broken
+    # conjuncts, so treat the scripts as unsupported rather than half-working.
+    _INDIC_OK = bool(pdfmetrics.getFont("NotoSansDevanagari").shapable)
+    if not _INDIC_OK:
+        logger.warning("uharfbuzz unavailable; Hindi/Gujarati text in PDFs will not be shaped")
+except Exception:  # noqa: BLE001 — fonts are a nicety; never fail the import
+    logger.warning("Noto Indic fonts not registered; Hindi/Gujarati text in PDFs will show as boxes")
+
+
+def _install_per_font_shaping() -> None:
+    """ReportLab shapes a whole word with its *first* fragment's font, so a
+    word mixing scripts with no space ("aarav_शर्मा") got DejaVu glyph ids for
+    its Devanagari and printed boxes. Split such a word into same-font pieces,
+    shape each with ReportLab's own function, and join them back. Words in a
+    single font (all text before K-17) take the original path untouched."""
+    from reportlab.platypus import paragraph as _rl_para
+    from reportlab.pdfbase.ttfonts import ShapedFragWord, makeShapedFragWord
+
+    original = _rl_para.shapeFragWord
+    if getattr(original, "_mindforge_per_font", False):
+        return
+
+    def shape(w, *args, **kwargs):
+        if isinstance(w, ShapedFragWord):
+            return w
+        items = w[1:]
+        if (len({getattr(f, "fontName", None) for f, _ in items}) <= 1
+                or any(hasattr(f, "cbDefn") for f, _ in items)):
+            return original(w, *args, **kwargs)
+        pieces, cur = [], []
+        for item in items:
+            if cur and cur[-1][0].fontName != item[0].fontName:
+                pieces.append(cur)
+                cur = []
+            cur.append(item)
+        pieces.append(cur)
+        out = []
+        for piece in pieces:
+            width = sum(pdfmetrics.stringWidth(s, f.fontName, f.fontSize) for f, s in piece)
+            out.append(original(w.__class__([width] + piece), *args, **kwargs))
+        return makeShapedFragWord(w)([sum(p[0] for p in out)] + [it for p in out for it in p[1:]])
+
+    shape._mindforge_per_font = True
+    _rl_para.shapeFragWord = shape
+
+
+if _INDIC_OK:
+    _install_per_font_shaping()
+
+# Characters both DejaVu and the Noto faces draw: they stay inside an Indic
+# run instead of breaking it (a run boundary mid-word splits HarfBuzz's view
+# of the cluster). Danda (। ॥) is in the Devanagari block but used by both.
+_NEUTRAL = set("0123456789 _-.,:;!?'\"()[]{}/\\|+*=%#~^") | {"\u0964", "\u0965"}
+
+
+def _script_of(ch: str) -> Optional[str]:
+    if ch in _NEUTRAL:
+        return None                       # joins whichever run it sits in
+    cp = ord(ch)
+    for name, (lo, hi, _r, _b) in _INDIC.items():
+        if lo <= cp <= hi:
+            return name
+    return "latn"
+
+
+def _has_indic(text: str) -> bool:
+    return _INDIC_OK and any(_script_of(c) in _INDIC for c in text)
+
+
+def _script_runs(text: str) -> List[tuple]:
+    """Split text into (script, chunk) runs; neutral characters join the run
+    they follow (or, at the start, the run they precede)."""
+    runs: List[list] = []
+    for ch in text:
+        sc = _script_of(ch)
+        if sc is None or (runs and runs[-1][0] == sc):
+            if runs:
+                runs[-1][1] += ch
+            else:
+                runs.append([None, ch])
+            continue
+        if runs and runs[-1][0] is None:  # leading neutrals: adopt this script
+            runs[-1][0] = sc
+            runs[-1][1] += ch
+        else:
+            runs.append([sc, ch])
+    return [(sc or "latn", chunk) for sc, chunk in runs]
+
+
 def _safe(value: Any) -> str:
     """Escape user/AI-supplied text before it goes into a ReportLab Paragraph.
 
@@ -49,8 +164,56 @@ def _safe(value: Any) -> str:
     break PDF rendering and a tag such as ``<img src=...>`` could be injected.
     Escaping neutralises that while leaving the intentional literal markup
     elsewhere in this module untouched.
+
+    After escaping, Hindi/Gujarati runs are wrapped in a ``<font face>`` tag of
+    our own (never user text, which is already inert) so they draw in Noto.
     """
-    return _xml_escape("" if value is None else str(value))
+    text = "" if value is None else str(value)
+    if not _has_indic(text):
+        return _xml_escape(text)
+    out = []
+    for sc, chunk in _script_runs(text):
+        if sc in _INDIC:
+            out.append(f'<font face="{_INDIC[sc][2]}">{_xml_escape(chunk)}</font>')
+        else:
+            out.append(_xml_escape(chunk))
+    return "".join(out)
+
+
+def Paragraph(text: str, style, *args, **kwargs):  # noqa: N802 — drop-in for ReportLab's
+    """ReportLab Paragraph that shapes Indic runs tagged by `_safe`.
+
+    A ``<font face>`` tag resets bold, so on a bold style the Noto faces are
+    swapped for their bold cuts. Shaping is turned on only when such a run is
+    present; Latin-only paragraphs are built exactly as before.
+    """
+    if _INDIC_OK and '<font face="Noto' in text:
+        bold = "bold" in (style.fontName or "").lower()
+        if bold:
+            for _lo, _hi, reg, bold_face in _INDIC.values():
+                text = text.replace(f'<font face="{reg}">', f'<font face="{bold_face}">')
+        # ReportLab only shapes when the style's own font is a shapable TTF;
+        # a Helvetica-based style (the footer) would leave matras misplaced.
+        overrides = {"shaping": 1}
+        if not getattr(pdfmetrics.getFont(style.fontName), "shapable", False):
+            overrides["fontName"] = _BOLD if bold else _FONT
+        style = ParagraphStyle(f"{style.name}-shaped", parent=style, **overrides)
+    return _RLParagraph(text, style, *args, **kwargs)
+
+
+def _cell(value: Any, size: float = 9):
+    """A Table cell for user text. Plain strings are drawn as-is (not parsed as
+    markup), so a Latin name stays a raw, unescaped string — escaping it
+    printed "Ab & Cd" as "Ab &amp; Cd". Table cells can't switch fonts or
+    shape, so a name with Hindi/Gujarati becomes a Paragraph over `_safe`
+    text, which still prints "&" and "<b>" literally. Its Latin runs use
+    Helvetica, the font ReportLab draws the other (plain) body cells in."""
+    text = "" if value is None else str(value)
+    if not _has_indic(text):
+        return text
+    return Paragraph(f'<font face="Helvetica">{_safe(text)}</font>', ParagraphStyle(
+        "cell", fontName=_FONT, fontSize=size, leading=size * 1.3))
+
 
 # ─── Brand colors ─────────────────────────────────────────────────────────────
 NAVY = colors.HexColor("#1D3557")
@@ -654,7 +817,7 @@ async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic
             rows = [["Student", "Total Fee (Rs.)", "Paid (Rs.)", "Balance Due (Rs.)"]]
             grade_total = 0.0
             for s in students:
-                rows.append([s["username"], f"{s['total_fee']:,.2f}",
+                rows.append([_cell(s["username"]), f"{s['total_fee']:,.2f}",
                               f"{s['total_paid']:,.2f}", f"{s['balance_due']:,.2f}"])
                 grade_total += s["balance_due"]
             grand_total += grade_total
@@ -712,7 +875,7 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
         story.append(Paragraph("Fee Breakdown", styles["section_header"]))
         bd_rows = [["Description", "Amount (Rs.)"]]
         for item in fee_breakdown:
-            bd_rows.append([item["label"], f"{item['amount']:,.2f}"])
+            bd_rows.append([_cell(item["label"], 10), f"{item['amount']:,.2f}"])
         bd_rows.append(["Total Fee", f"{student['total_fee']:,.2f}"])
         bd_table = Table(bd_rows, colWidths=[12*cm, 5.5*cm])
         bd_table.setStyle(TableStyle([
@@ -767,7 +930,7 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
                     paid_at = _dt.fromisoformat(paid_at).strftime("%d %b %Y")
                 except Exception:
                     pass
-            pay_rows.append([str(i), paid_at, f"{float(p['amount']):,.2f}", p.get("notes") or "—"])
+            pay_rows.append([str(i), paid_at, f"{float(p['amount']):,.2f}", _cell(p.get("notes") or "—")])
         pt = Table(pay_rows, colWidths=[1*cm, 4*cm, 4*cm, 8.5*cm])
         pt.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
@@ -798,8 +961,8 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
 # ─── Reports: attendance and marks (#28) ──────────────────────────────────────
 
 def _report_table(rows: list, col_widths: list, highlight_rows=()) -> Table:
-    # Cells are plain strings, drawn as-is (not parsed as Paragraph markup),
-    # so pass names raw: escaping here printed "Ab & Cd" as "Ab &amp; Cd".
+    # User text arrives via _cell: a raw string (drawn as-is, never escaped)
+    # or, for a Hindi/Gujarati name, a shaped Paragraph.
     t = Table(rows, colWidths=col_widths, repeatRows=1)
     style = [
         ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
@@ -849,7 +1012,7 @@ async def generate_attendance_report(rows: List[Dict[str, Any]], grade: int, per
         table = [["Student", "Periods present", "Periods absent", "Attendance"]]
         low = []
         for i, r in enumerate(rows, 1):
-            table.append([str(r["student"]), str(r["present"]), str(r["absent"]), _pct(r["percent"])])
+            table.append([_cell(r["student"]), str(r["present"]), str(r["absent"]), _pct(r["percent"])])
             if r["low"]:
                 low.append(i)
         story.append(_report_table(table, [7*cm, 3.5*cm, 3.5*cm, 3.5*cm], low))
@@ -877,14 +1040,14 @@ async def generate_marks_report(by_subject: Dict[str, List[Dict[str, Any]]],
         story.append(Paragraph("Overall", styles["section_header"]))
         table = [["Student", "Marks", "Out of", "Percentage"]]
         for r in overall:
-            table.append([str(r["student"]), f"{r['obtained']:g}", f"{r['max']:g}", _pct(r["percent"])])
+            table.append([_cell(r["student"]), f"{r['obtained']:g}", f"{r['max']:g}", _pct(r["percent"])])
         story.append(_report_table(table, [7*cm, 3.5*cm, 3.5*cm, 3.5*cm]))
         for subject, rows in by_subject.items():
             story.append(Spacer(1, 6*mm))
             story.append(Paragraph(_safe(subject), styles["section_header"]))
             table = [["Student", "Tests", "Marks", "Out of", "Percentage"]]
             for r in rows:
-                table.append([str(r["student"]), str(r["tests"]), f"{r['obtained']:g}",
+                table.append([_cell(r["student"]), str(r["tests"]), f"{r['obtained']:g}",
                               f"{r['max']:g}", _pct(r["percent"])])
             story.append(_report_table(table, [6*cm, 2*cm, 3*cm, 3*cm, 3.5*cm]))
     _report_footer(story, school)
