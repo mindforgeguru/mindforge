@@ -469,7 +469,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                     : const Icon(Icons.check_circle_outline),
                 label: Text(
                   _changingMpin ? 'Saving…' : 'Submit',
-                  style: GoogleFonts.specialElite(
+                  style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.2,
@@ -535,7 +535,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                   child: Center(
                     child: Text(
                       key,
-                      style: GoogleFonts.specialElite(
+                      style: GoogleFonts.poppins(
                         fontSize: isDel ? 16 : 20,
                         fontWeight: FontWeight.w700,
                         color: isDel ? AppColors.error : AppColors.textPrimary,
@@ -575,7 +575,7 @@ class _PinRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
-              style: GoogleFonts.specialElite(
+              style: GoogleFonts.poppins(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: active ? AppColors.primary : AppColors.textSecondary)),
