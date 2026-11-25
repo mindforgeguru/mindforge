@@ -736,3 +736,12 @@ Backend unit tests pass (see commit).
   - **Fixed:** whitespace-only reports passed the 3-character minimum and were then stored empty, because the handler stripped them after validation. The schema now trims first (`tests/test_feedback_schema.py`). The 10 QA reports were deleted.
 
 Backend 688 passed (4 reportlab-dependent skipped).
+
+### 2026-11-25 — role escalation, XP, presentation and document ownership
+
+- **Admin user management:** promoting a student to admin or owner → 403; editing or deactivating an admin account (including the caller's own) → 403; the platform owner's ID → 404 from a school admin; parent linking is school-scoped. **No issues.**
+- **XP:** the leaderboard's "school" scope is the viewer's own school (`xp_service` filters by `school_id`; the router docstring saying "global" was corrected). Another student's XP → 403, another school's student → 404.
+  - **Bug (fixed):** manual adjustments (`POST /xp/admin/adjust`) took any integer. 2,000,000 jumped bulk8_32 to level 50; 10¹² reached the database as a generic "out of range". Normal awards are at most 120 XP, and earlier QA runs had left manual entries up to 2,000,000,000. `XPAdjustmentRequest` now allows at most ±10,000 per adjustment ("Adjust by at most 10,000 XP at a time."). Tests: `tests/test_xp_adjust_schema.py`. bulk8_32's XP was reversed to 15 (level 1).
+- **Presentations and teacher database:** deleting a presentation needs its creator or an admin (403 otherwise); period logs can only be edited by the teacher who logged them; old papers, chapter documents and syllabus entries can only be deleted by their uploader. Any teacher may edit any slide in their school; this is documented and records `last_edited_by`. Slide text is shown as plain text and links are never opened, so Markdown in a slide can't run anything. **No issues.**
+
+Backend 696 passed (4 reportlab-dependent skipped).

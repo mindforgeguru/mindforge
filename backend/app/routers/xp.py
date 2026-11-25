@@ -57,7 +57,8 @@ async def get_leaderboard(
     """Leaderboard scoped to class/grade/school.
 
     `class` and `grade` are equivalent right now (no class/section model);
-    both filter to the viewer's own grade. School scope is global.
+    both filter to the viewer's own grade. School scope is the viewer's whole
+    school (never other schools).
     """
     rows = await xp_service.get_leaderboard(
         db, scope=scope, viewer=current_user, limit=limit

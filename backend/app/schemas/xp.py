@@ -85,6 +85,9 @@ class LeaderboardResponse(BaseModel):
     entries: List[LeaderboardEntry]
 
 
+MAX_MANUAL_XP = 10_000
+
+
 class XPAdjustmentRequest(BaseModel):
     """Admin-only manual award/deduction."""
     student_id: int
@@ -96,6 +99,11 @@ class XPAdjustmentRequest(BaseModel):
     def validate_amount(cls, v: int) -> int:
         if v == 0:
             raise ValueError("Amount must be non-zero.")
+        # Normal awards are at most 120 XP; an unbounded amount let a typo
+        # (2,000,000) jump a student to level 50, and a huge one reached the
+        # database as a generic "out of range" error.
+        if abs(v) > MAX_MANUAL_XP:
+            raise ValueError(f"Adjust by at most {MAX_MANUAL_XP:,} XP at a time.")
         return v
 
     @field_validator("reason")
