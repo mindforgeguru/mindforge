@@ -798,6 +798,8 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
 # ─── Reports: attendance and marks (#28) ──────────────────────────────────────
 
 def _report_table(rows: list, col_widths: list, highlight_rows=()) -> Table:
+    # Cells are plain strings, drawn as-is (not parsed as Paragraph markup),
+    # so pass names raw: escaping here printed "Ab & Cd" as "Ab &amp; Cd".
     t = Table(rows, colWidths=col_widths, repeatRows=1)
     style = [
         ("BACKGROUND", (0, 0), (-1, 0), BRAND_BLUE),
@@ -847,7 +849,7 @@ async def generate_attendance_report(rows: List[Dict[str, Any]], grade: int, per
         table = [["Student", "Periods present", "Periods absent", "Attendance"]]
         low = []
         for i, r in enumerate(rows, 1):
-            table.append([_safe(r["student"]), str(r["present"]), str(r["absent"]), _pct(r["percent"])])
+            table.append([str(r["student"]), str(r["present"]), str(r["absent"]), _pct(r["percent"])])
             if r["low"]:
                 low.append(i)
         story.append(_report_table(table, [7*cm, 3.5*cm, 3.5*cm, 3.5*cm], low))
@@ -875,14 +877,14 @@ async def generate_marks_report(by_subject: Dict[str, List[Dict[str, Any]]],
         story.append(Paragraph("Overall", styles["section_header"]))
         table = [["Student", "Marks", "Out of", "Percentage"]]
         for r in overall:
-            table.append([_safe(r["student"]), f"{r['obtained']:g}", f"{r['max']:g}", _pct(r["percent"])])
+            table.append([str(r["student"]), f"{r['obtained']:g}", f"{r['max']:g}", _pct(r["percent"])])
         story.append(_report_table(table, [7*cm, 3.5*cm, 3.5*cm, 3.5*cm]))
         for subject, rows in by_subject.items():
             story.append(Spacer(1, 6*mm))
             story.append(Paragraph(_safe(subject), styles["section_header"]))
             table = [["Student", "Tests", "Marks", "Out of", "Percentage"]]
             for r in rows:
-                table.append([_safe(r["student"]), str(r["tests"]), f"{r['obtained']:g}",
+                table.append([str(r["student"]), str(r["tests"]), f"{r['obtained']:g}",
                               f"{r['max']:g}", _pct(r["percent"])])
             story.append(_report_table(table, [6*cm, 2*cm, 3*cm, 3*cm, 3.5*cm]))
     _report_footer(story, school)

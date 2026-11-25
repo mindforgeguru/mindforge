@@ -1077,9 +1077,23 @@ async def generate_test(
         chapter_files.append((file_bytes, ext))
 
     # ── Generate questions ─────────────────────────────────────────────────────
-    questions = await ai_service.generate_test_questions(
-        chapter_files, old_paper_files, syllabus_chapters, params
-    )
+    # Every provider failing (no keys, billing, outage) raised a bare
+    # RuntimeError → 500 "Internal server error." (J-20). Tell the teacher
+    # it's the AI service, not their input; the log keeps each provider's
+    # reason (see ai_service).
+    try:
+        questions = await ai_service.generate_test_questions(
+            chapter_files, old_paper_files, syllabus_chapters, params
+        )
+    except RuntimeError as e:
+        logger.error("Test generation failed for teacher=%s: %s",
+                     current_teacher.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=("AI question generation is unavailable right now. "
+                    "Please try again in a few minutes; if it keeps "
+                    "failing, let your school admin know."),
+        )
 
     # ── Total marks calculation ────────────────────────────────────────────────
     if test_type == "offline":

@@ -72,3 +72,32 @@ async def test_generators_do_not_crash_on_injection():
     # Valid PDFs, not a reportlab traceback — the escaped payload was inert.
     assert paper[:5] == b"%PDF-" and len(paper) > 1000
     assert key[:5] == b"%PDF-" and len(key) > 1000
+
+
+# ── plain table cells ────────────────────────────────────────────────────────
+
+def test_report_table_cells_keep_names_as_typed():
+    """Table cells given as plain strings are drawn as-is, not parsed as
+    markup, so they must not be escaped: the attendance and marks reports
+    printed "Ab & Cd" as "Ab &amp; Cd" and tags as "&lt;b&gt;"."""
+    import asyncio
+    import inspect
+    from app.services import pdf_service as p
+
+    names = ["Ab & Cd", "<b>bold", "d'souza"]
+    seen = []
+    real = p._report_table
+
+    def spy(rows, *a, **k):
+        seen.extend(r[0] for r in rows[1:])
+        return real(rows, *a, **k)
+
+    p._report_table = spy
+    try:
+        rows = [{"student": n, "present": 1, "absent": 0, "percent": 100.0, "low": False}
+                for n in names]
+        coro = p.generate_attendance_report(rows, 8, "Nov 2026", school={"name": "S", "logo": None})
+        asyncio.run(coro) if inspect.iscoroutine(coro) else coro
+    finally:
+        p._report_table = real
+    assert seen == names

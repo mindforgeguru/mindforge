@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/side_nav.dart';
+import '../../../core/widgets/navy_status_inset.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/teacher_provider.dart';
 import 'teacher_bottom_nav.dart';
@@ -75,10 +76,12 @@ class TeacherScaffold extends ConsumerWidget {
         children: [
           TeacherSideNav(auth: auth),
           Expanded(
-            child: Scaffold(
-              appBar: appBar,
-              body: innerBody,
-              backgroundColor: backgroundColor ?? AppColors.background,
+            child: NavyStatusInset(
+              child: Scaffold(
+                appBar: appBar,
+                body: innerBody,
+                backgroundColor: backgroundColor ?? AppColors.background,
+              ),
             ),
           ),
         ],

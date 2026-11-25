@@ -7,6 +7,7 @@ import '../../../core/utils/constants.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
 import '../../../core/widgets/side_nav.dart';
+import '../../../core/widgets/navy_status_inset.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/xp_provider.dart';
 import 'student_bottom_nav.dart';
@@ -89,9 +90,11 @@ class StudentScaffold extends ConsumerWidget {
         children: [
           StudentSideNav(auth: auth),
           Expanded(
-            child: Scaffold(
-              body: innerBody,
-              backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
+            child: NavyStatusInset(
+              child: Scaffold(
+                body: innerBody,
+                backgroundColor: backgroundColor ?? const Color(0xFFF0F4F8),
+              ),
             ),
           ),
         ],
