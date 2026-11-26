@@ -92,9 +92,11 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
         );
       }
     } catch (e) {
-      final msg = e.toString().contains('400')
-          ? 'Current MPIN is incorrect.'
-          : 'Failed to change MPIN. Try again.';
+      // The server's own reason: wrong current MPIN (400), a too-easy new
+      // MPIN (422), or a lockout after repeated wrong tries (429). Anything
+      // but a 400 used to read "Failed to change MPIN. Try again.", so the
+      // user retried the same weak MPIN.
+      final msg = apiErrorMessage(e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: AppColors.error),

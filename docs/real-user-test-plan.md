@@ -914,3 +914,15 @@ The server and database run in UTC while every school is on IST (UTC+5:30), so b
   - Verified: server back → Retry restores the logo, year badge, setup road and the 16-pending banner.
 - **Teacher:** shows "Could not load dashboard" with Try Again. After the server is back, one Try Again restores the logo, workflow and presentation progress (last round's `reloadFailed`).
 - With the student run last round, every role is now covered for a cold start with the server down. `flutter test`: 301 passed. The backend is back up.
+
+### 2026-11-26 — error messages users see (validation, lockout)
+
+- **The shared formatter is good.** `apiErrorMessage()` turns FastAPI's 422 list into a sentence and strips Pydantic's "Value error," prefix. No screen puts a raw exception in front of users.
+- **Bug fixed: the change-MPIN screens dropped the server's reason** (student, teacher, parent, admin). They showed "Current MPIN is incorrect" for any 400 and "Failed to change MPIN. Try again." for everything else.
+  - That swallowed the 422 "MPIN is too easy to guess…", so the user retried the same weak MPIN.
+  - It also swallowed the 429 lockout ("Account temporarily locked … Try again in 15 minutes."), which invited more tries. Probe on bulk8_32: five wrong current MPINs, then 429.
+  - All four screens now show `apiErrorMessage(e)`. Verified on the SE as das_sci with new MPIN 123456: the snackbar gives the server's sentence. The MPIN is unchanged.
+- **Noted:** the server accepts a "new" MPIN equal to the current one, and the change ends all sessions. The app's form already blocks it, so this was left as is.
+- **Small-screen usability:** the iOS number pad has no Next or Done key, but the profile page scrolls, so the lower fields are reachable.
+- **Test hygiene:** bulk8_32's lockout keys were cleared in Redis; login works. A stray tap during the run set a photo on das_sci. Its `profile_pic_url` was reset to NULL; the uploaded file stays in local MinIO as an orphan.
+- `flutter test`: 301 passed.

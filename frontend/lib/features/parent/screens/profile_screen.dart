@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/api_error.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
@@ -53,9 +54,11 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
         );
       }
     } catch (e) {
-      final msg = e.toString().contains('400')
-          ? 'Current MPIN is incorrect.'
-          : 'Failed to change MPIN. Try again.';
+      // The server's own reason: wrong current MPIN (400), a too-easy new
+      // MPIN (422), or a lockout after repeated wrong tries (429). Anything
+      // but a 400 used to read "Failed to change MPIN. Try again.", so the
+      // user retried the same weak MPIN.
+      final msg = apiErrorMessage(e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: AppColors.error),
