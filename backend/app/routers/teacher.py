@@ -856,6 +856,22 @@ async def create_grade(
                 status_code=409, detail="Online tests are marked automatically.",
             )
         grade_type = GradeType.offline
+        # A second mark for the same test is a correction, as in
+        # save_offline_grades: replace the earlier mark and take back its XP.
+        # Both used to stay, so the test counted twice in averages and a
+        # 95% then 100% entry paid 80 + 120 XP (the reason differs by band,
+        # so the idempotency key didn't catch it).
+        await db.execute(
+            delete(Grade).where(
+                Grade.test_id == payload.test_id,
+                Grade.student_id == payload.student_id,
+            )
+        )
+        await xp_service.revoke_xp(
+            db, payload.student_id,
+            [XPReason.TEST_SCORE, XPReason.TEST_PERFECT],
+            f"test:{payload.test_id}",
+        )
 
     grade_obj = Grade(
         **payload.model_dump(exclude={"grade_type"}),

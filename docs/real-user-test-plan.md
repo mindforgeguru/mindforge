@@ -961,3 +961,19 @@ The server and database run in UTC while every school is on IST (UTC+5:30), so b
   - Belt and braces: deactivating a user, the automatic parent deactivation when their last child is deactivated, and the new-year reset now also clear `fcm_token`.
   - `tests/test_push_recipients.py` (falsified by removing the `is_active` term → fails). Backend: 705 passed.
   - The test token was removed afterwards. Pushes are disabled locally (no Firebase credentials), so the send itself wasn't observed; the recipient query is what changed.
+
+### 2026-11-26 — inactive accounts in lists; XP for corrected test marks
+
+- **Sweep: grade-scoped user queries without an active-account filter.**
+  - Both leaderboards (XP and attendance), every roster and every push recipient query (last round) filter on active, non-deleted users.
+  - Single-user lookups are the caller's own records, which is fine.
+  - **Noted, not changed:** a teacher can still save a mark for a deactivated student by calling the API directly. The app's screens don't list such students.
+- **Usernames:** the look-alike guard (`username_guard`) is in place. "Aarav8" and "IYER_MATHS" in Sunrise are October test accounts created before the guard. Left alone (other rounds' data); login matches the exact username.
+- **Bug fixed: re-entering a test mark duplicated the mark and double-paid XP** (`POST /teacher/grades` with a `test_id`).
+  - XP is idempotent on (student, reason, `test:<id>`), but the reason depends on the score band.
+  - Probe as iyer_maths on offline test 481 for bulk8_31: entering 9.5/10 then 10/10 left **two** marks for the test and paid **80 + 120 = 200 XP**.
+  - Fix: a mark tied to a test now replaces the earlier mark and revokes that test's XP first, the same as `save_offline_grades`.
+  - Re-run: one mark (10.00), one award (`TEST_PERFECT` 120). Probe rows were removed both times; bulk8_31 is back to 15 XP, level 1, no marks for test 481.
+  - Reach: the app doesn't call this endpoint (`createGrade` has no caller), so this was only reachable by a teacher calling the API directly.
+  - **Noted:** offline marks saved through the app's bulk path award no XP, while this endpoint does. That's a product inconsistency, left as is.
+- Backend: 705 passed.
