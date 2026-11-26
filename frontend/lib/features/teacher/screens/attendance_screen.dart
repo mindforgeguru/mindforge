@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/school_time.dart';
 import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/attendance.dart';
@@ -76,7 +77,7 @@ class _AttendanceCalendarDialogState
       _displayMonth = DateTime(_displayMonth.year, _displayMonth.month - 1));
 
   void _nextMonth() {
-    final now = DateTime.now();
+    final now = schoolNow();
     final next = DateTime(_displayMonth.year, _displayMonth.month + 1);
     if (!next.isAfter(DateTime(now.year, now.month))) {
       setState(() => _displayMonth = next);
@@ -89,7 +90,7 @@ class _AttendanceCalendarDialogState
       teacherAttendanceDatesProvider((widget.grade, _monthKey)),
     );
     final markedDates = datesAsync.valueOrNull?.toSet() ?? {};
-    final today = DateTime.now();
+    final today = schoolNow();
     final isCurrentMonth = _displayMonth.year == today.year &&
         _displayMonth.month == today.month;
 
@@ -389,7 +390,7 @@ class TeacherAttendanceScreen extends ConsumerStatefulWidget {
 class _TeacherAttendanceScreenState
     extends ConsumerState<TeacherAttendanceScreen> {
   int _selectedGrade = 8;
-  DateTime _selectedDate = DateTime.now();
+  DateTime _selectedDate = schoolNow();
   int _selectedPeriod = 1;
 
   // student_id → present (true) / absent (false)

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/school_time.dart';
 import '../../../core/models/attendance.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/shimmer_list.dart';
@@ -41,7 +42,7 @@ class _ParentAttendanceScreenState
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
+    final now = schoolNow();
     _displayMonth = DateTime(now.year, now.month);
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) ref.invalidate(parentChildAttendanceProvider);
@@ -58,7 +59,7 @@ class _ParentAttendanceScreenState
       _displayMonth = DateTime(_displayMonth.year, _displayMonth.month - 1));
 
   void _nextMonth() {
-    final now = DateTime.now();
+    final now = schoolNow();
     final next = DateTime(_displayMonth.year, _displayMonth.month + 1);
     if (next.isBefore(DateTime(now.year, now.month + 1))) {
       setState(() => _displayMonth = next);
@@ -68,7 +69,7 @@ class _ParentAttendanceScreenState
   @override
   Widget build(BuildContext context) {
     final recordsAsync = ref.watch(parentChildAttendanceProvider);
-    final now = DateTime.now();
+    final now = schoolNow();
     final isCurrentMonth =
         _displayMonth.year == now.year && _displayMonth.month == now.month;
 
@@ -410,7 +411,7 @@ class _CalendarGrid extends StatelessWidget {
       final firstDay = DateTime(month.year, month.month, 1);
       final startOffset = firstDay.weekday % 7;
       final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-      final today = DateTime.now();
+      final today = schoolNow();
       final totalCells = (startOffset + daysInMonth + 6) ~/ 7 * 7;
 
       final rows = <Widget>[];

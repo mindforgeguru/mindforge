@@ -926,3 +926,21 @@ The server and database run in UTC while every school is on IST (UTC+5:30), so b
 - **Small-screen usability:** the iOS number pad has no Next or Done key, but the profile page scrolls, so the lower fields are reachable.
 - **Test hygiene:** bulk8_32's lockout keys were cleared in Redis; login works. A stray tap during the run set a photo on das_sci. Its `profile_pic_url` was reset to NULL; the uploaded file stays in local MinIO as an orphan.
 - `flutter test`: 301 passed.
+
+### 2026-11-26 — paging limits, HTTP headers, and "today" on phones outside IST
+
+- **Paging:** every `limit` has an upper bound. A `skip` or ID beyond 64-bit range gets a 422, and the maximum valid `skip` returns an empty page. No 500s.
+- **Headers and CORS:** the API sends HSTS, `nosniff`, `X-Frame-Options: DENY` and `CSP: default-src 'none'`. A preflight from an untrusted origin is refused (400). Media files carry `nosniff`. There are no CSV or Excel exports, so formula injection doesn't apply.
+- **Bug fixed: the app's "today" came from the phone's timezone, not the school's.** The dashboards send "today" to the server, which answers for whatever date it's given.
+  - A parent abroad would see yesterday's timetable and homework labelled as today. In New York at 8 PM it's already the next morning in India.
+  - The same applied to the attendance date, the timetables' "today", the "happening now" period highlight and the homework due-date picker.
+  - Fix: a new `lib/core/utils/school_time.dart` provides `schoolNow()` (IST wall clock) and `untilNextSchoolDay()` (computed in UTC, so the phone's DST can't skew it). They're used in:
+    - the student, parent and teacher dashboards: today, header date, period highlight and midnight rollover;
+    - the three timetable and three attendance screens;
+    - the homework due-date picker.
+  - **Verified:** launched with `SIMCTL_CHILD_TZ=Pacific/Honolulu` (25 Nov, 20:38 there; 26 Nov in India).
+    - Before the attendance change, teacher Attendance opened on **25 Nov**, which proves the override reached the app, and the Timetable already showed 26 Nov.
+    - After the change, Attendance opens on **26 Nov**.
+  - `test/school_time_test.dart` passes under both the local timezone and `TZ=America/New_York`.
+- **Left on the phone clock:** admin report and fee-date defaults, and badge timestamps. Admins are on site.
+- `flutter test`: 303 passed.

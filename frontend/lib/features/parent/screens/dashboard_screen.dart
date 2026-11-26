@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/school_time.dart';
 import '../../../core/api/websocket_client.dart';
 import '../../../core/models/attendance.dart';
 import '../../../core/models/grade.dart';
@@ -157,7 +158,7 @@ class _ParentDashboardScreenState
     super.dispose();
   }
 
-  String get _todayString => _fmtYMD.format(DateTime.now());
+  String get _todayString => _fmtYMD.format(schoolNow());
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +169,7 @@ class _ParentDashboardScreenState
     final topPadding = showsChildSwitcher(ref) ? 0.0 : mq.padding.top;
     final sw = mq.size.width;
     final sh = mq.size.height;
-    final now = DateTime.now();
+    final now = schoolNow();
 
     // Full-screen error state with retry button.
     if (summaryAsync.hasError && !summaryAsync.hasValue) {
@@ -1066,7 +1067,7 @@ class _TimetableCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sw = MediaQuery.of(context).size.width;
-    final now = DateTime.now();
+    final now = schoolNow();
     bool isNow = false;
     if (!slot.isHoliday && slot.startTime != null && slot.endTime != null) {
       try {

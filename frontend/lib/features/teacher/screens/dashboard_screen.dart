@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/school_time.dart';
 import '../../../core/models/grade.dart';
 
 import '../../../core/api/websocket_client.dart';
@@ -159,7 +160,7 @@ class _TeacherDashboardScreenState
     super.dispose();
   }
 
-  String get _todayString => _fmtYMD.format(DateTime.now());
+  String get _todayString => _fmtYMD.format(schoolNow());
 
   @override
   Widget build(BuildContext context) {
@@ -631,7 +632,7 @@ class _TeacherDashboardScreenState
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      _fmtEDMon.format(DateTime.now()),
+                      _fmtEDMon.format(schoolNow()),
                       style: GoogleFonts.poppins(
                           fontSize: _fs(context, 12, min: 10, max: 14),
                           color: AppColors.textMuted),

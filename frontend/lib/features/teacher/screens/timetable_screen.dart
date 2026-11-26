@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/school_time.dart';
 import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/timetable.dart';
@@ -125,7 +126,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
+    final now = schoolNow();
     // Saturday is a working day at our school; only Sunday (weekday 7) jumps
     // forward to Monday.
     _selectedDate = now.weekday == DateTime.sunday
@@ -138,7 +139,7 @@ class _ViewTabState extends ConsumerState<_ViewTab> {
   Widget build(BuildContext context) {
     final myTimetableAsync = ref.watch(myTimetableProvider);
     final configAsync = ref.watch(teacherTimetableConfigProvider);
-    final today = DateTime.now();
+    final today = schoolNow();
 
     return myTimetableAsync.when(
       loading: () => const ShimmerCards(count: 5, cardHeight: 72),
@@ -380,7 +381,7 @@ class _CreateTabState extends ConsumerState<_CreateTab> {
   void initState() {
     super.initState();
     _selectedGrade = widget.initialGrade;
-    final initial = widget.initialDate ?? DateTime.now();
+    final initial = widget.initialDate ?? schoolNow();
     _selectedDate = initial;
     // Monday of the week containing the initial date
     _weekStart = initial.subtract(Duration(days: initial.weekday - 1));
@@ -967,7 +968,7 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
+    final now = schoolNow();
     // Saturday is a working day at our school; only Sunday (weekday 7) jumps
     // forward to Monday.
     _selectedDate = now.weekday == DateTime.sunday
@@ -989,7 +990,7 @@ class _FullTimetableTabState extends ConsumerState<_FullTimetableTab> {
       }
     }
 
-    final today = DateTime.now();
+    final today = schoolNow();
     final isToday = _selectedDate.year == today.year &&
         _selectedDate.month == today.month &&
         _selectedDate.day == today.day;
@@ -1594,7 +1595,7 @@ class _WeekStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
+    final today = schoolNow();
     final days = List.generate(7, (i) => weekStart.add(Duration(days: i)));
     final monthLabel = DateFormat('MMMM yyyy').format(weekStart);
 

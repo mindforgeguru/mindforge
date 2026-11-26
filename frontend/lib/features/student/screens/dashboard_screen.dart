@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/school_time.dart';
 import '../../../core/api/websocket_client.dart';
 import '../../../core/models/attendance.dart';
 import '../../../core/models/grade.dart';
@@ -63,7 +64,7 @@ class _StudentDashboardScreenState
     with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _wsSub;
 
-  String get _todayString => _fmtYMD.format(DateTime.now());
+  String get _todayString => _fmtYMD.format(schoolNow());
 
   // Fires just after the next local midnight so the dashboard rolls over to
   // the new day while the app is left open (see _scheduleMidnightRollover).
@@ -83,11 +84,9 @@ class _StudentDashboardScreenState
   // the day-scoped provider and repaint, then arm again for the next day.
   void _scheduleMidnightRollover() {
     _midnightTimer?.cancel();
-    final now = DateTime.now();
-    // One minute past midnight — a small cushion so the clock is safely into
-    // the new day before we fetch its data.
-    final nextMidnight = DateTime(now.year, now.month, now.day + 1, 0, 1);
-    _midnightTimer = Timer(nextMidnight.difference(now), () {
+    // One minute past the school's midnight (IST) — a small cushion so the
+    // clock is safely into the new day before we fetch its data.
+    _midnightTimer = Timer(untilNextSchoolDay(), () {
       if (!mounted) return;
       ref.invalidate(studentDashboardSummaryProvider(_todayString));
       setState(() {}); // Re-key the watch and repaint today's date.
@@ -529,7 +528,7 @@ class _StudentDashboardScreenState
                     ),
                   ),
                   Text(
-                    _fmtEDMon.format(DateTime.now()),
+                    _fmtEDMon.format(schoolNow()),
                     style: GoogleFonts.poppins(
                         fontSize: _fs(context, 12, min: 10, max: 14),
                         color: AppColors.textMuted),
@@ -973,7 +972,7 @@ class _TimetableCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sw = MediaQuery.of(context).size.width;
-    final now = DateTime.now();
+    final now = schoolNow();
     bool isNow = false;
     if (!slot.isHoliday && slot.startTime != null && slot.endTime != null) {
       try {

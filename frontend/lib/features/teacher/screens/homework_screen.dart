@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/school_time.dart';
 import '../../../core/providers/school_grades_provider.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/theme/app_theme.dart';
@@ -489,9 +490,9 @@ class _CreateHomeworkDialogState extends ConsumerState<_CreateHomeworkDialog> {
                       final picked = await showDatePicker(
                         context: context,
                         initialDate:
-                            DateTime.now().add(const Duration(days: 1)),
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                            schoolNow().add(const Duration(days: 1)),
+                        firstDate: schoolNow(),
+                        lastDate: schoolNow().add(const Duration(days: 365)),
                       );
                       if (picked != null) {
                         setState(() => _dueDate = picked);

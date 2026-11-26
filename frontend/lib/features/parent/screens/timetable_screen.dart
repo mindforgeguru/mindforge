@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/school_time.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/responsive.dart';
@@ -31,7 +32,7 @@ class _ParentTimetableScreenState
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
+    final now = schoolNow();
     _calendarMonth = DateTime(now.year, now.month);
     // Saturday is a working day at our school; only Sunday (weekday 7) jumps
     // forward to Monday.
@@ -58,7 +59,7 @@ class _ParentTimetableScreenState
   @override
   Widget build(BuildContext context) {
     final timetableAsync = ref.watch(parentChildTimetableProvider(_dateString));
-    final today = DateTime.now();
+    final today = schoolNow();
     final isToday = _selectedDate.year == today.year &&
         _selectedDate.month == today.month &&
         _selectedDate.day == today.day;
