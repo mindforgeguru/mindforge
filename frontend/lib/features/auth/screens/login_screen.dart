@@ -82,7 +82,8 @@ class _Wp {
       );
 
   /// Running copy and field values.
-  static TextStyle text(double size, {Color color = body, FontWeight? weight}) =>
+  static TextStyle text(double size,
+          {Color color = body, FontWeight? weight}) =>
       GoogleFonts.instrumentSans(
         fontSize: size,
         fontWeight: weight ?? FontWeight.w400,
@@ -525,7 +526,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   static final ButtonStyle _linkStyle = TextButton.styleFrom(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_Wp.rField)),
+    shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(_Wp.rField)),
     minimumSize: const Size(0, 48),
     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
   );
@@ -553,9 +555,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       labelStyle: _Wp.text(15, color: _Wp.navyMid),
       floatingLabelStyle:
           _Wp.dim(12.5, color: _Wp.heatRead, weight: FontWeight.w700),
-      prefixIcon: icon == null
-          ? null
-          : Icon(icon, size: 19, color: _Wp.navyMid),
+      prefixIcon:
+          icon == null ? null : Icon(icon, size: 19, color: _Wp.navyMid),
       suffixIcon: suffix,
       filled: true,
       fillColor: _Wp.white,
@@ -595,8 +596,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon,
-                    size: 16, color: selected ? _Wp.scale : _Wp.navyMid),
+                Icon(icon, size: 16, color: selected ? _Wp.scale : _Wp.navyMid),
                 const SizedBox(width: 7),
               ],
               Text(
@@ -675,39 +675,48 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     // before, the strip behind them was the light page background, so the
     // clock and battery were white on near-white (run-log #3).
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-          statusBarColor: Colors.transparent),
+      value: SystemUiOverlayStyle.light
+          .copyWith(statusBarColor: Colors.transparent),
       child: Scaffold(
-      backgroundColor: _Wp.print_,
-      resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        top: false,
-        bottom: false, // card extends beneath the home indicator
-        child: Column(
-          children: [
-            ColoredBox(
-              color: _Wp.navy,
-              child: SafeArea(
-                bottom: false,
-                child: _mobileHeader(context, compact: compact),
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(
-                    hzPad, compact ? 14 : 18, hzPad, safeBottom),
-                child: _Entrance(
-                  child: _formCard(context, auth, compact: compact),
+        backgroundColor: _Wp.print_,
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          top: false,
+          bottom: false, // card extends beneath the home indicator
+          child: Column(
+            children: [
+              ColoredBox(
+                color: _Wp.navy,
+                child: SafeArea(
+                  bottom: false,
+                  child: _mobileHeader(context, compact: compact),
                 ),
               ),
-            ),
-          ],
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                      hzPad,
+                      _isShort(context) ? 10 : (compact ? 14 : 18),
+                      hzPad,
+                      safeBottom),
+                  child: _Entrance(
+                    child: _formCard(context, auth, compact: compact),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
+
+  /// Phones under ~700 pt tall (iPhone SE, 8, mini in zoom): even the compact
+  /// layout put the 0 key and Sign in below the fold, so the user had to
+  /// scroll mid-MPIN. These drop the heading and tighten the keypad.
+  bool _isShort(BuildContext context) =>
+      MediaQuery.sizeOf(context).height < 700;
 
   /// The navy header band: school (or MindForge) mark, wordmark, tagline.
   Widget _mobileHeader(BuildContext context, {required bool compact}) {
@@ -715,7 +724,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(color: _Wp.navy),
-      padding: EdgeInsets.fromLTRB(hz, compact ? 10 : 22, hz, compact ? 12 : 24),
+      padding: EdgeInsets.fromLTRB(
+          hz,
+          _isShort(context) ? 6 : (compact ? 10 : 22),
+          hz,
+          _isShort(context) ? 8 : (compact ? 12 : 24)),
       child: Row(
         children: [
           _logoTile(compact ? 40 : 44, logoUrl: _pickedSchoolLogoUrl),
@@ -816,13 +829,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                         // ── Capability list ──────────────────────────────
                         for (final f in const [
-                          (Icons.auto_awesome_outlined,
-                              'AI-generated tests & answer keys'),
-                          (Icons.how_to_reg_outlined,
-                              'Real-time attendance tracking'),
+                          (
+                            Icons.auto_awesome_outlined,
+                            'AI-generated tests & answer keys'
+                          ),
+                          (
+                            Icons.how_to_reg_outlined,
+                            'Real-time attendance tracking'
+                          ),
                           (Icons.insights_outlined, 'Smart grade analytics'),
-                          (Icons.receipt_long_outlined,
-                              'Fee management & receipts'),
+                          (
+                            Icons.receipt_long_outlined,
+                            'Fee management & receipts'
+                          ),
                         ])
                           Padding(
                             padding: const EdgeInsets.only(bottom: 18),
@@ -881,8 +900,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           boxShadow: _Wp.liftKey,
         ),
         padding: EdgeInsets.all(size * 0.16),
-        child: child ??
-            SchoolLogo(fit: BoxFit.contain, logoUrl: logoUrl),
+        child: child ?? SchoolLogo(fit: BoxFit.contain, logoUrl: logoUrl),
       );
 
   // ─── The form card ───────────────────────────────────────────────────────────
@@ -890,6 +908,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget _formCard(BuildContext context, AuthState auth,
       {required bool compact}) {
     final gap = compact ? 12.0 : 14.0;
+    final short = compact && _isShort(context);
+    // The navy header above already names the school; on a short phone the
+    // greeting is the cheapest space to give back to the keypad.
+    final showHeading = !(short && !_isRegister);
 
     return Container(
       decoration: BoxDecoration(
@@ -898,24 +920,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         boxShadow: _Wp.lift,
       ),
       padding: EdgeInsets.fromLTRB(
-          compact ? 18 : 26, compact ? 16 : 28, compact ? 18 : 26, compact ? 20 : 28),
+          compact ? 18 : 26,
+          short ? 14 : (compact ? 16 : 28),
+          compact ? 18 : 26,
+          compact ? 20 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
           // ── Header ──────────────────────────────────────────
-          Text(
-            _isRegister ? 'Request access' : 'Welcome back',
-            style: _Wp.disp(compact ? 28 : 32),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            _isRegister
-                ? 'Create your account — an admin approves it before you sign in.'
-                : 'Sign in to your school account.',
-            style: _Wp.text(14.5, color: _Wp.mute),
-          ),
-          SizedBox(height: compact ? 14 : 22),
+          if (showHeading) ...[
+            Text(
+              _isRegister ? 'Request access' : 'Welcome back',
+              style: _Wp.disp(compact ? 28 : 32),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              _isRegister
+                  ? 'Create your account — an admin approves it before you sign in.'
+                  : 'Sign in to your school account.',
+              style: _Wp.text(14.5, color: _Wp.mute),
+            ),
+            SizedBox(height: compact ? 14 : 22),
+          ],
 
           // ── Segmented toggle ────────────────────────────────
           Container(
@@ -1140,7 +1167,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ],
           ],
 
-          SizedBox(height: compact ? 18 : 22),
+          SizedBox(height: short ? 12 : (compact ? 18 : 22)),
 
           // ── MPIN ────────────────────────────────────────────
           Row(
@@ -1173,10 +1200,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
             ),
           ),
-          SizedBox(height: compact ? 14 : 16),
-          _buildPad(context, compact: compact),
+          SizedBox(height: short ? 10 : (compact ? 14 : 16)),
+          _buildPad(context, compact: compact, short: short),
 
-          SizedBox(height: compact ? 16 : 20),
+          SizedBox(height: short ? 8 : (compact ? 16 : 20)),
 
           // ── Submit ──────────────────────────────────────────
           SizedBox(
@@ -1246,7 +1273,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         // narrow phones. The gap tightens instead so the cells keep width.
         final gap = c.maxWidth < 260 ? 6.0 : 9.0;
         final cellW = ((c.maxWidth - gap * 5) / 6).clamp(0.0, 62.0);
-        final cellH = compact ? 50.0 : 54.0;
+        final cellH =
+            _isShort(context) && compact ? 44.0 : (compact ? 50.0 : 54.0);
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(6, (i) {
@@ -1305,8 +1333,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             const SizedBox(
               width: 15,
               height: 15,
-              child:
-                  CircularProgressIndicator(strokeWidth: 2, color: _Wp.heat),
+              child: CircularProgressIndicator(strokeWidth: 2, color: _Wp.heat),
             ),
             const SizedBox(width: 10),
             Text('LOADING SCHOOLS…', style: _Wp.dim(12)),
@@ -1319,33 +1346,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return KeyedSubtree(
       key: ValueKey(_schoolsVersion),
       child: DropdownButtonFormField<int>(
-      key: LoginKeys.school,
-      initialValue: _selectedSchoolId,
-      isExpanded: true,
-      style: _Wp.text(16, color: _Wp.navy),
-      dropdownColor: _Wp.white,
-      borderRadius: BorderRadius.circular(_Wp.rField),
-      decoration: _dec('School', icon: Icons.account_balance_outlined),
-      hint: Text('Select your school', style: _Wp.text(15.5, color: _Wp.mute)),
-      items: [
-        ..._schools.map((s) => DropdownMenuItem<int>(
-              value: s['id'] as int,
-              child: Text(s['name'] as String,
+        key: LoginKeys.school,
+        initialValue: _selectedSchoolId,
+        isExpanded: true,
+        style: _Wp.text(16, color: _Wp.navy),
+        dropdownColor: _Wp.white,
+        borderRadius: BorderRadius.circular(_Wp.rField),
+        decoration: _dec('School', icon: Icons.account_balance_outlined),
+        hint:
+            Text('Select your school', style: _Wp.text(15.5, color: _Wp.mute)),
+        items: [
+          ..._schools.map((s) => DropdownMenuItem<int>(
+                value: s['id'] as int,
+                child: Text(s['name'] as String,
+                    overflow: TextOverflow.ellipsis,
+                    style: _Wp.text(15.5, color: _Wp.navy)),
+              )),
+          // Platform owner belongs to no school; sending a school_id would make
+          // the backend miss the account entirely (401). Sign-in only.
+          if (!_isRegister)
+            DropdownMenuItem<int>(
+              value: _ownerSchoolSentinel,
+              child: Text('Platform owner (no school)',
                   overflow: TextOverflow.ellipsis,
-                  style: _Wp.text(15.5, color: _Wp.navy)),
-            )),
-        // Platform owner belongs to no school; sending a school_id would make
-        // the backend miss the account entirely (401). Sign-in only.
-        if (!_isRegister)
-          DropdownMenuItem<int>(
-            value: _ownerSchoolSentinel,
-            child: Text('Platform owner (no school)',
-                overflow: TextOverflow.ellipsis,
-                style: _Wp.text(15.5, color: _Wp.mute)
-                    .copyWith(fontStyle: FontStyle.italic)),
-          ),
-      ],
-      onChanged: (v) => setState(() => _selectedSchoolId = v),
+                  style: _Wp.text(15.5, color: _Wp.mute)
+                      .copyWith(fontStyle: FontStyle.italic)),
+            ),
+        ],
+        onChanged: (v) => setState(() => _selectedSchoolId = v),
       ),
     );
   }
@@ -1353,24 +1381,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   /// The keypad — rounded keys. Keys fill the available width (flex: 1) and
   /// never fall below a 48 logical-px tap target. The ground inverts to navy
   /// while pressed.
-  Widget _buildPad(BuildContext context, {bool compact = false}) {
+  Widget _buildPad(BuildContext context,
+      {bool compact = false, bool short = false}) {
     const rows = [
       ['1', '2', '3'],
       ['4', '5', '6'],
       ['7', '8', '9'],
       ['', '0', '⌫'],
     ];
-    final keyH = compact ? 48.0 : R.fluid(context, 52, min: 48, max: 60);
-    const gap = 9.0;
+    // 44 pt is Apple's minimum tap target; only short phones go that low.
+    final keyH = short
+        ? 44.0
+        : (compact ? 48.0 : R.fluid(context, 52, min: 48, max: 60));
+    final gap = short ? 6.0 : 9.0;
 
     return Column(
       children: rows.map((row) {
         return Padding(
-          padding: const EdgeInsets.only(bottom: gap),
+          padding: EdgeInsets.only(bottom: gap),
           child: Row(
             children: [
               for (int i = 0; i < row.length; i++) ...[
-                if (i > 0) const SizedBox(width: gap),
+                if (i > 0) SizedBox(width: gap),
                 Expanded(
                   child: row[i].isEmpty
                       // Invisible spacer — same flex weight as a real key.
@@ -1480,8 +1512,8 @@ class _PadKeyState extends State<_PadKey> {
           decoration: BoxDecoration(
             color: _down ? _Wp.navy : _Wp.white,
             borderRadius: BorderRadius.circular(_Wp.rKey),
-            border: Border.all(
-                color: _down ? _Wp.navy : _Wp.line, width: _Wp.rule),
+            border:
+                Border.all(color: _down ? _Wp.navy : _Wp.line, width: _Wp.rule),
             boxShadow: _down ? null : _Wp.liftKey,
           ),
           child: Center(
@@ -1702,8 +1734,7 @@ class _SecondFactorDialogState extends State<_SecondFactorDialog> {
               _useRecovery
                   ? 'Use my authenticator app instead'
                   : "I don't have my phone",
-              style: _Wp.text(14,
-                  color: _Wp.heatRead, weight: FontWeight.w600),
+              style: _Wp.text(14, color: _Wp.heatRead, weight: FontWeight.w600),
             ),
           ),
         ],

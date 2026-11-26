@@ -845,3 +845,20 @@ Two identical requests sent at once, or back to back, on Sunrise. The app's API 
   - **Note:** the school leaderboard shows every student's username, grade, level and profile photo to the whole school. That's a gamification choice, worth weighing with the open COPPA/GDPR-K item.
 - **Backend logs (24 h, 623 lines):** no MPINs (including the test accounts' known MPINs), no JWTs or Bearer tokens, no 10-digit phone numbers.
 - **Local-stack note:** the backend container runs with auto-reload on the mounted source, so edits take effect live without a rebuild.
+
+### 2026-11-26 — small-phone pass (iPhone SE, 375×667 pt)
+
+- **Bug fixed: Sign in was below the fold on the SE.** Even the compact login layout put the keypad's 0 key and the Sign in button about 125 pt below the fold, so users had to scroll in the middle of typing their MPIN.
+  - Phones under 700 pt tall now get a short layout:
+    - The "Welcome back" heading is dropped; the navy header already names the school.
+    - Keypad keys are 44 pt (Apple's minimum tap target) with a 6 pt gap.
+    - MPIN cells and the spacing between sections are tighter.
+  - Everything through Sign in now fits without scrolling. Signed in as aarav8 and das_sci from it.
+  - Phones 700 pt and taller (iPhone 17 Pro and up) are unchanged.
+- **Student screens fit at 375 pt:** home, Tests (Online and Offline) and Fees.
+- **Teacher screens fit at 375 pt:**
+  - home, including the workflow strip and all six tab labels;
+  - the Tests list and the generate form;
+  - the Timetable (My and Full).
+- **Not covered this pass:** parent and admin screens on the SE.
+- `flutter test`: 301 passed.
