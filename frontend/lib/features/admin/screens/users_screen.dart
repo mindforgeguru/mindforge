@@ -119,7 +119,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen>
     return AdminScaffold(
       showMobileBottomNav: false,
       appBar: AppBar(
-        title: const Text('User Management'),
+        title: const Text('Users'),
         actions: [
           if (_tabController.index == 0 && pendingCount > 0)
             IconButton(

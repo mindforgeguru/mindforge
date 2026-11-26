@@ -476,7 +476,14 @@ class _ProgressChart extends StatelessWidget {
                           1, (grades.length / 5).ceilToDouble()),
                       reservedSize: R.fluid(context, 26, min: 22, max: 32),
                       getTitlesWidget: (v, _) {
-                        final idx = v.toInt();
+                        // The chart also asks for labels at its padded ends
+                        // (minX -0.3, maxX n-0.7); toInt() truncated those
+                        // onto the first and last test, so their dates
+                        // printed twice and the last ran off the card.
+                        if ((v - v.roundToDouble()).abs() > 0.001) {
+                          return const SizedBox.shrink();
+                        }
+                        final idx = v.round();
                         if (idx < 0 || idx >= grades.length) {
                           return const SizedBox.shrink();
                         }

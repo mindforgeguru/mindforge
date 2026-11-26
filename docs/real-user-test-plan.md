@@ -860,5 +860,13 @@ Two identical requests sent at once, or back to back, on Sunrise. The app's API 
   - home, including the workflow strip and all six tab labels;
   - the Tests list and the generate form;
   - the Timetable (My and Full).
-- **Not covered this pass:** parent and admin screens on the SE.
+- **Parent screens fit at 375 pt:** home with the child switcher, Grades (Online, Offline, Analysis).
+  - **Bug fixed: the progress chart repeated its first and last dates.** With three tests the axis read "23 Oct 23 Oct … 25 Nov 25 Nov", and the last label ran past the card edge.
+    - Cause: the chart also asks for labels at its padded ends (-0.3 and n-0.7), and `toInt()` truncated those onto the first and last test.
+    - Labels are now drawn only at whole-number positions. The student grade chart had the same code and got the same fix.
+- **Admin screens:**
+  - **Bug fixed: the avatar covered the school name.** On a 375 pt phone, "Sunrise Public School" wraps to two lines beside the three header icons, and the avatar circle covered "Public School".
+    - The header now measures the name and lowers the navy band, and the card with it, by however much a wrapped name needs. Short names are unchanged.
+  - The Users screen title "User Management" was cut off as "User Managem…". It's now "Users", matching the bottom-nav label.
+  - Users (including a 60-character test username), Fees and Reports fit.
 - `flutter test`: 301 passed.

@@ -146,7 +146,30 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
     const double cardRadius = 24.0;
     const double cardHMargin = 16.0;
     final double cardIntoNavy = R.fluid(context, 56, min: 44, max: 64);
-    final double navyH = topPadding + R.fluid(context, 108, min: 90, max: 128);
+    final screenW = MediaQuery.sizeOf(context).width;
+    final nameStyle = GoogleFonts.poppins(
+        fontSize: 20, fontWeight: FontWeight.w800,
+        color: Colors.white, height: 1.1, letterSpacing: 1);
+    final nameMaxLines = screenW < 360 ? 1 : 2;
+    // A school name that wraps to two lines ran under the avatar on 375 pt
+    // phones (iPhone SE: "Public School" hidden). Measure it and drop the
+    // navy band, and the card with it, by however much the name needs.
+    // Row width left for the name: 22 + 6 side insets, 40 logo, 10 gap,
+    // three 48 px icon buttons.
+    final namePainter = TextPainter(
+      text: TextSpan(text: auth.schoolName ?? 'MIND FORGE', style: nameStyle),
+      maxLines: nameMaxLines,
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout(maxWidth: (screenW - 22 - 6 - 40 - 10 - 3 * 48).clamp(0.0, double.infinity));
+    final nameH = namePainter.height;
+    namePainter.dispose();
+    const double navRowH = 48; // the IconButtons set the row's height
+    final nameBottom = 14 + (nameH > navRowH ? nameH : (navRowH + nameH) / 2);
+    final baseNavy = R.fluid(context, 108, min: 90, max: 128);
+    final nameOverrun = nameBottom + 6 - (baseNavy - cardIntoNavy);
+    final double navyH =
+        topPadding + baseNavy + (nameOverrun > 0 ? nameOverrun : 0);
     final double cardInternalH = currentYear != null ? R.fluid(context, 155, min: 130, max: 175) : R.fluid(context, 130, min: 110, max: 150);
     final double headerH = navyH + cardInternalH - cardIntoNavy + avatarRadius;
 
@@ -227,12 +250,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                         Expanded(
                           child: Text(
                             auth.schoolName ?? 'MIND FORGE',
-                            maxLines:
-                                MediaQuery.sizeOf(context).width < 360 ? 1 : 2,
+                            maxLines: nameMaxLines,
                             overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.poppins(
-                                fontSize: 20, fontWeight: FontWeight.w800,
-                                color: Colors.white, height: 1.1, letterSpacing: 1)),
+                            style: nameStyle),
                         ),
                         IconButton(
                           icon: const Icon(Icons.bug_report_outlined,
