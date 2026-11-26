@@ -820,3 +820,18 @@ Two identical requests sent at once, or back to back, on Sunrise. The app's API 
   - **Already correct:** admins, students and the owner can't self-delete. A parent's deletion takes their one linked child with it, and is refused with two linked children so the school can choose. Records are soft-deleted (attendance, grades and fees stay). The current tokens and the push token are cleared, and the child's sessions fail because of `deleted_at`.
   - **Open (decision needed):** no MPIN is asked for; a live session is enough. The app's type-to-confirm dialog prevents accidents, but anyone holding an unlocked phone could delete the parent and child accounts. Requiring the MPIN needs the app and backend shipped together, because production's older app doesn't send it. Noted in the risk register.
 - **A teacher who leaves (#40):** a colleague can't publish another active teacher's test (403). After the admin deactivates that teacher, the listing marks their tests manageable (`can_manage`), and das_sci could publish and delete the test and delete their homework. **Works as designed.** The throwaway teacher was revoked afterwards.
+
+### 2026-11-26 — speed sweep (Sunrise size and 1,500 students)
+
+- **Sunrise (~145 users), median of 5, local stack:** every main screen's request for all four roles takes 4–11 ms (dashboards, tests, grades, fees, attendance, broadcasts, leaderboard, timetable, payments, users), and the pending-fees PDF report 28 ms. No errors.
+- **Throwaway "QA Scale" school (#974) bulk-filled through SQL** with 1,500 students (500 per grade), a payment each and 30 days of attendance (43,500 rows). Median of 3:
+  - Pending-fees PDF: **236 ms**.
+  - Fees summary: 68 ms (370 KB).
+  - Student list: 55 ms (505 KB).
+  - Attendance report, grade 8: 54 ms.
+  - Current year with unpaid totals: 17 ms.
+  - Marks report: 14 ms.
+  - A teacher's 500-student attendance roster: 10 ms.
+  - Teacher dashboard and workflow: 6–10 ms.
+
+  **No slow endpoints.** Note for very large schools: the student list and fees summary aren't paginated, about 0.5 MB per refresh on mobile data. The synthetic students and their rows were deleted afterwards, and school #974 (admin and teacher only) left suspended.
