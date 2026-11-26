@@ -192,7 +192,7 @@ async def get_current_academic_year_cached(
 ) -> Optional[str]:
     """Returns one school's current academic year label (e.g. '2025-26')."""
     from app.models.academic_year import AcademicYear
-    from datetime import date as _date
+    from app.core.school_time import school_today
 
     key = f"cache:academic_year_current:{school_id}"
     raw = await redis_manager.get_cache(key)
@@ -211,7 +211,7 @@ async def get_current_academic_year_cached(
         return ay.year_label
 
     # Fallback: derive from current date
-    today = _date.today()
+    today = school_today()
     year_start = today.year if today.month >= 6 else today.year - 1
     return f"{year_start}-{str(year_start + 1)[2:]}"
 

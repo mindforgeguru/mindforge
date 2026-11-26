@@ -33,3 +33,19 @@ def test_school_day_starts_at_ist_midnight():
     assert start.astimezone(timezone.utc) == datetime(
         2026, 10, 8, 18, 30, tzinfo=timezone.utc
     )
+
+
+def test_late_night_mark_falls_in_the_school_day_window():
+    # The marks report bounds a day range by school_day_start(start) and
+    # school_day_start(end + 1 day). A mark entered at 00:30 IST on 1 Dec
+    # (19:00 UTC on 30 Nov) belongs to December's window, not November's;
+    # date(created_at) in the UTC session had put it in November.
+    from datetime import date, timedelta
+
+    entered = datetime(2026, 11, 30, 19, 0, tzinfo=timezone.utc)
+
+    def in_window(start, end):
+        return school_day_start(start) <= entered < school_day_start(end + timedelta(days=1))
+
+    assert in_window(date(2026, 12, 1), date(2026, 12, 31))
+    assert not in_window(date(2026, 11, 1), date(2026, 11, 30))

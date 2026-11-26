@@ -870,3 +870,17 @@ Two identical requests sent at once, or back to back, on Sunrise. The app's API 
   - The Users screen title "User Management" was cut off as "User Managem…". It's now "Users", matching the bottom-nav label.
   - Users (including a 60-character test username), Fees and Reports fit.
 - `flutter test`: 301 passed.
+
+### 2026-11-26 — school-day boundaries (IST vs the server's UTC clock)
+
+The server and database run in UTC while every school is on IST (UTC+5:30), so between 00:00 and 05:30 IST the UTC date is still yesterday. Daily gates already use `school_today()`. This sweep found the places that still didn't.
+
+- **Bug fixed: the admin marks report put late-night marks in the wrong day, and at a month end the wrong month.**
+  - The filter used `date(Grade.created_at)`, which takes the UTC date.
+  - Proof: a test mark entered at 00:30 IST on 1 Dec (19:00 UTC on 30 Nov) counted toward 30 Nov under the old filter and toward 1 Dec under the new one.
+  - The report is now bounded by school-time midnights. The 1 Dec report PDF grew by the row and the 30 Nov one was empty.
+  - The report's default start, the year's start date, is now the school's calendar day as well.
+- **Fixed: PDF "Generated on" dates.** Question papers and the fee, ledger, attendance and marks reports showed yesterday's date when made before 05:30 IST.
+- **Fixed: the academic-year fallback.** When a school has no current year, its year label now flips on 1 June IST, not 1 June UTC.
+- No other server-side `date.today()` or UTC `.date()` on timestamps remains. The phone app uses the device clock, which is local.
+- Test: `test_late_night_mark_falls_in_the_school_day_window`. Backend: 702 passed. The test row was deleted afterwards.

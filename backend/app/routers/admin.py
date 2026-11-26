@@ -3,7 +3,7 @@ Admin router — all endpoints require admin role.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from pydantic import BaseModel
@@ -26,7 +26,7 @@ from app.core.redis_client import redis_manager
 from app.services.realtime_service import publish_to_school, publish_to_users
 from app.core.security import get_current_admin
 from app.core.upload_utils import reject_if_oversize, validate_and_strip_exif
-from app.core.school_time import parse_iso_date, school_today
+from app.core.school_time import parse_iso_date, school_day_start, school_today
 from app.core.mpin_guard import mpin_matches
 from app.core.fee_math import total_fee_for, balance_due, would_overpay
 from app.models.academic_year import AcademicYear
@@ -2085,7 +2085,8 @@ async def _report_window(db: AsyncSession, school_id: int,
             select(AcademicYear).where(AcademicYear.school_id == school_id,
                                        AcademicYear.is_current == True)
         )).scalar_one_or_none()
-        start = year.started_at.date() if year else end.replace(day=1)
+        # The school's calendar day the year started on, not the UTC one.
+        start = school_today(year.started_at) if year else end.replace(day=1)
     if start > end:
         raise HTTPException(status_code=422, detail="The start date is after the end date.")
     label = f"{start.strftime('%d %b %Y')} – {end.strftime('%d %b %Y')}"
@@ -2154,8 +2155,11 @@ async def download_marks_report(
         select(Grade.student_id, Grade.subject, Grade.marks_obtained, Grade.max_marks)
         .where(Grade.school_id == current_admin.school_id,
                Grade.student_id.in_(ids),
-               sqlfunc.date(Grade.created_at) >= start,
-               sqlfunc.date(Grade.created_at) <= end)
+               # Bounded by school-time midnights: date(created_at) took the
+               # UTC date, so marks entered 00:00-05:30 IST fell on the day
+               # (and at a month end, the report) before.
+               Grade.created_at >= school_day_start(start),
+               Grade.created_at < school_day_start(end + timedelta(days=1)))
     )).all() if ids else []
     by_subject, overall = marks_rows(students, [tuple(g) for g in grades])
     pdf = await pdf_service.generate_marks_report(

@@ -5,7 +5,7 @@ Generates printable offline test papers with MIND FORGE branding.
 
 import io
 import logging
-from datetime import date
+from app.core.school_time import school_today
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from xml.sax.saxutils import escape as _xml_escape
@@ -418,7 +418,7 @@ async def generate_offline_test_pdf(
         meta_items.append(f"Total Marks: {int(total_marks)}")
     if time_limit_minutes:
         meta_items.append(f"Time Allowed: {time_limit_minutes} minutes")
-    meta_items.append(f"Date: {date.today().strftime('%d %B %Y')}")
+    meta_items.append(f"Date: {school_today().strftime('%d %B %Y')}")
 
     if meta_items:
         story.append(Paragraph("  |  ".join(meta_items), styles["meta"]))
@@ -799,7 +799,7 @@ async def generate_pending_fees_report(summaries: List[Dict[str, Any]], academic
 
     _report_header(story, styles,
                    title=f"PENDING FEES REPORT — {academic_year}",
-                   subtitle=f"Generated on {date.today().strftime('%d %B %Y')}",
+                   subtitle=f"Generated on {school_today().strftime('%d %B %Y')}",
                    school=school)
 
     by_grade: Dict[int, list] = defaultdict(list)
@@ -866,7 +866,7 @@ async def generate_student_ledger_report(student: Dict[str, Any], academic_year:
 
     _report_header(story, styles,
                    title=f"STUDENT FEE LEDGER — {academic_year}",
-                   subtitle=f"Student: {student['username']}  |  Grade: {student['grade']}  |  Generated: {date.today().strftime('%d %B %Y')}",
+                   subtitle=f"Student: {student['username']}  |  Grade: {student['grade']}  |  Generated: {school_today().strftime('%d %B %Y')}",
                    school=school)
 
     # ── Fee Breakdown ─────────────────────────────────────────────────────────
@@ -1004,7 +1004,7 @@ async def generate_attendance_report(rows: List[Dict[str, Any]], grade: int, per
     story: list = []
     _report_header(story, styles,
                    title=f"ATTENDANCE REPORT — GRADE {grade}",
-                   subtitle=f"{period}  |  Generated on {date.today().strftime('%d %B %Y')}",
+                   subtitle=f"{period}  |  Generated on {school_today().strftime('%d %B %Y')}",
                    school=school)
     if not rows:
         story.append(Paragraph("No students in this grade.", styles["meta"]))
@@ -1032,7 +1032,7 @@ async def generate_marks_report(by_subject: Dict[str, List[Dict[str, Any]]],
     story: list = []
     _report_header(story, styles,
                    title=f"MARKS REPORT — GRADE {grade}",
-                   subtitle=f"{period}  |  Generated on {date.today().strftime('%d %B %Y')}",
+                   subtitle=f"{period}  |  Generated on {school_today().strftime('%d %B %Y')}",
                    school=school)
     if not by_subject:
         story.append(Paragraph("No marks recorded for this grade in this period.", styles["meta"]))

@@ -327,7 +327,7 @@ async def get_child_fees(
         if current_ay:
             academic_year = current_ay.year_label
         else:
-            today = date.today()
+            today = school_today()
             year_start = today.year if today.month >= 6 else today.year - 1
             academic_year = f"{year_start}-{str(year_start + 1)[2:]}"
 
@@ -626,7 +626,6 @@ async def get_parent_dashboard_summary(
 
     # Child's fees (skip presigned URL resolution — dashboard only needs amounts)
     from app.models.academic_year import AcademicYear
-    from datetime import date as _date
     ay_result = await db.execute(select(AcademicYear).where(
         AcademicYear.is_current == True,
         AcademicYear.school_id == profile.school_id,
@@ -635,7 +634,7 @@ async def get_parent_dashboard_summary(
     if current_ay:
         academic_year = current_ay.year_label
     else:
-        _today = _date.today()
+        _today = school_today()
         year_start = _today.year if _today.month >= 6 else _today.year - 1
         academic_year = f"{year_start}-{str(year_start + 1)[2:]}"
 
