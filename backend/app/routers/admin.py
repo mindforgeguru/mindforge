@@ -649,6 +649,9 @@ async def set_user_active(
         raise HTTPException(status_code=403, detail="Cannot modify admin account status.")
 
     user.is_active = payload.is_active
+    if not payload.is_active:
+        # Stop pushes to the deactivated account's phone (see push_recipients).
+        user.fcm_token = None
     await _audit(db, current_admin.id,
                  "activate_user" if payload.is_active else "deactivate_user",
                  "user", user.id,
@@ -680,6 +683,7 @@ async def set_user_active(
             parent = parent_result.scalar_one_or_none()
             if parent:
                 parent.is_active = False
+                parent.fcm_token = None
 
     await db.commit()
     await db.refresh(user)
@@ -1815,6 +1819,7 @@ async def start_new_academic_year(
         user.deleted_at = now
         user.is_active = False
         user.is_approved = False
+        user.fcm_token = None
 
     # 3. Clear this school's timetable slots (fresh slate for new year)
     slots_result = await db.execute(

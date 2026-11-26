@@ -22,6 +22,7 @@ from typing import Iterable, Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.push_recipients import can_receive_push
 from app.core.redis_client import redis_manager
 from app.models.user import StudentProfile, User, UserRole
 # Imported lazily inside the function that needs it: notification_service
@@ -196,7 +197,7 @@ async def announce_test_to_students(db: AsyncSession, test) -> None:
         row.id: row.fcm_token
         for row in (await db.execute(
             select(User.id, User.fcm_token)
-            .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
+            .where(User.id.in_(all_user_ids), can_receive_push())
         ))
     }
 

@@ -27,6 +27,7 @@ from fastapi import (
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.push_recipients import can_receive_push
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.redis_client import redis_manager
@@ -138,7 +139,7 @@ async def _notify_teacher(db: AsyncSession, teacher_id: int,
                           route: str = "/teacher/presentations") -> None:
     """Best-effort push to a single teacher (auto-quiz ready / failed)."""
     token = (await db.execute(
-        select(User.fcm_token).where(User.id == teacher_id)
+        select(User.fcm_token).where(User.id == teacher_id, can_receive_push())
     )).scalar_one_or_none()
     if token:
         try:

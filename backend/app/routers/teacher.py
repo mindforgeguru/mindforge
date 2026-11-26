@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, delete, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.core.push_recipients import can_receive_push
 from app.core.test_ownership import decide_test_change
 from app.core.config import settings
 from app.core.database import get_db
@@ -458,7 +459,7 @@ async def mark_attendance(
 
         token_result = await db.execute(
             select(User.id, User.fcm_token)
-            .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
+            .where(User.id.in_(all_user_ids), can_receive_push())
         )
         token_map = {row.id: row.fcm_token for row in token_result}
 
@@ -760,7 +761,7 @@ async def create_timetable_slot(
         if all_user_ids:
             token_result = await db.execute(
                 select(User.fcm_token)
-                .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
+                .where(User.id.in_(all_user_ids), can_receive_push())
             )
             tokens = [row.fcm_token for row in token_result]
             if tokens:
@@ -1268,7 +1269,7 @@ async def generate_test(
 
     token_result = await db.execute(
         select(User.id, User.fcm_token)
-        .where(User.id.in_(all_user_ids), User.fcm_token.isnot(None))
+        .where(User.id.in_(all_user_ids), can_receive_push())
     )
     token_map = {row.id: row.fcm_token for row in token_result}
 
@@ -2706,7 +2707,7 @@ async def send_broadcast(
         tokens = [
             row.fcm_token for row in (await db.execute(
                 select(User.fcm_token)
-                .where(User.id.in_(user_ids), User.fcm_token.isnot(None))
+                .where(User.id.in_(user_ids), can_receive_push())
             ))
         ]
         if tokens:

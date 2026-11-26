@@ -944,3 +944,20 @@ The server and database run in UTC while every school is on IST (UTC+5:30), so b
   - `test/school_time_test.dart` passes under both the local timezone and `TZ=America/New_York`.
 - **Left on the phone clock:** admin report and fee-date defaults, and badge timestamps. Admins are on site.
 - `flutter test`: 303 passed.
+
+### 2026-11-26 — push notifications: content and recipients
+
+- **Content:** pushes carry no marks, balances or other students' names.
+  - Absence alerts: "You were / Your child was marked absent on <date> (Period N)".
+  - Tests: the title, grade and subject.
+  - Timetable: the grade and date. Broadcasts: their own title.
+  - Logout and account deletion clear the device token. Registering a token removes it from any other account (earlier round).
+- **Bug fixed (privacy): deactivated parents kept getting their child's pushes.**
+  - Every recipient list is "active students in the grade" plus **each one's linked parent**, and the parent's account status was never checked. The token lookup didn't filter on it either.
+  - Example: a parent an admin had deactivated (a custody change, say) still got "Your child was marked absent", new-test and broadcast pushes.
+  - Proof: bulk8_32_p (inactive, linked to active bulk8_32) with a test token was returned by the code's exact lookup (`fcm_token IS NOT NULL` only).
+  - Fix: `app/core/push_recipients.can_receive_push()` requires a token, `is_active` and no `deleted_at`. It's used by all six token lookups: absence alerts, timetable published, new test (two sites), broadcasts, presentation auto-quiz, and the realtime test-published push.
+  - Run live in the backend container: old condition → `[(12008, 'bulk8_32_p')]`, new → `[]`.
+  - Belt and braces: deactivating a user, the automatic parent deactivation when their last child is deactivated, and the new-year reset now also clear `fcm_token`.
+  - `tests/test_push_recipients.py` (falsified by removing the `is_active` term → fails). Backend: 705 passed.
+  - The test token was removed afterwards. Pushes are disabled locally (no Firebase credentials), so the send itself wasn't observed; the recipient query is what changed.
