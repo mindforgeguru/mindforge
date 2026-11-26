@@ -835,3 +835,13 @@ Two identical requests sent at once, or back to back, on Sunrise. The app's API 
   - Teacher dashboard and workflow: 6–10 ms.
 
   **No slow endpoints.** Note for very large schools: the student list and fees summary aren't paginated, about 0.5 MB per refresh on mobile data. The synthetic students and their rows were deleted afterwards, and school #974 (admin and teacher only) left suspended.
+
+### 2026-11-26 — privacy sweep (personal data in responses and logs)
+
+- **Responses by role (Sunrise):**
+  - Teachers' student lists carry masked phones (`91***0001`) and emails (`a***@sunrise.test`), with no parent contact details.
+  - The teacher colleague list, the parent faculty view, broadcasts, dashboards, children lists and `/auth/me` carry no phone or email.
+  - **No unmasked contact details reach teachers, students or parents.**
+  - **Note:** the school leaderboard shows every student's username, grade, level and profile photo to the whole school. That's a gamification choice, worth weighing with the open COPPA/GDPR-K item.
+- **Backend logs (24 h, 623 lines):** no MPINs (including the test accounts' known MPINs), no JWTs or Bearer tokens, no 10-digit phone numbers.
+- **Local-stack note:** the backend container runs with auto-reload on the mounted source, so edits take effect live without a rebuild.
