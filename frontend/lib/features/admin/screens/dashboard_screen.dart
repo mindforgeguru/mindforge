@@ -7,6 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/reload_failed.dart';
+import '../../../core/providers/school_logo_provider.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/report_problem_dialog.dart';
@@ -69,6 +71,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
     ref.invalidate(feeStructuresProvider(null));
     ref.invalidate(paymentInfoProvider);
     ref.invalidate(adminSetupStatusProvider);
+    reloadFailed(ref, [currentSchoolProvider]); // the header logo
     await ref.read(pendingUsersProvider.future).catchError((_) => <UserModel>[]);
   }
 
@@ -356,8 +359,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
             ],
             // A transient status error must not lock the admin out — fall back
             // to the full dashboard.
-            error: (_, __) =>
-                _dashboardBodySlivers(context, pendingCount, cards),
+            // Say so, though: the setup road, year badge and approvals
+            // banner silently vanished, which read as lost setup.
+            error: (_, __) => [
+              SliverToBoxAdapter(
+                  child: _LoadFailedNotice(onRetry: _refreshDashboard)),
+              ..._dashboardBodySlivers(context, pendingCount, cards),
+            ],
             data: (status) {
               if (!status.allComplete) {
                 return [
@@ -378,6 +386,39 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
 }
 
 // ─── Shared Widgets ───────────────────────────────────────────────────────────
+
+/// Shown when the school's setup status couldn't be loaded (server
+/// unreachable), so the admin knows the missing sections are a load failure.
+class _LoadFailedNotice extends StatelessWidget {
+  final Future<void> Function() onRetry;
+  const _LoadFailedNotice({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.08),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_outlined, color: AppColors.error),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              "Can't reach MindForge, so school setup and approvals aren't shown.",
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+}
 
 class _ProfileAvatar extends StatelessWidget {
   final String username;

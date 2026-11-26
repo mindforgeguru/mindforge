@@ -904,3 +904,13 @@ The server and database run in UTC while every school is on IST (UTC+5:30), so b
 - **Fixed: unreadable status bar on the dashboard error page** (light page, white clock). The page now uses dark status-bar icons, for all three roles.
 - **Not exercised live:** parent and teacher cold starts with the server down. Same code paths, and no `.value` reads remain.
 - `flutter test`: 301 passed. The backend is back up (health 200).
+
+### 2026-11-26 — server down: admin and teacher cold starts (iPhone SE)
+
+- **Admin:** no crash, but the failure was silent. The School Setup road, the academic-year badge and the "users awaiting approval" banner just vanished, which reads as lost setup.
+  - Falling back to the full dashboard is deliberate, so the admin is never locked out.
+  - **Fixed:** it now also shows a notice: "Can't reach MindForge, so school setup and approvals aren't shown." with a Retry button.
+  - **Fixed:** the admin refresh now also reloads the school logo when it failed to load.
+  - Verified: server back → Retry restores the logo, year badge, setup road and the 16-pending banner.
+- **Teacher:** shows "Could not load dashboard" with Try Again. After the server is back, one Try Again restores the logo, workflow and presentation progress (last round's `reloadFailed`).
+- With the student run last round, every role is now covered for a cold start with the server down. `flutter test`: 301 passed. The backend is back up.
