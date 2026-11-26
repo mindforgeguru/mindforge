@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -17,6 +18,8 @@ import '../../../core/models/timetable.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/reload_failed.dart';
+import '../../../core/providers/school_logo_provider.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/widgets/school_title_block.dart';
 import '../../../core/widgets/badge_dot.dart';
@@ -113,6 +116,12 @@ class _ParentDashboardScreenState
     // A child linked since the app opened shows up in the switcher.
     ref.invalidate(parentChildrenProvider);
     ref.invalidate(parentDashboardSummaryProvider(_todayString));
+    reloadFailed(ref, [
+      parentChildPresentationsProvider,
+      parentChildAttendanceProvider,
+      parentChildHomeworkCompletionsProvider,
+      currentSchoolProvider, // the logo derives from it
+    ]);
     await ref
         .read(parentDashboardSummaryProvider(_todayString).future)
         .catchError((_) => <String, dynamic>{});
@@ -163,7 +172,12 @@ class _ParentDashboardScreenState
 
     // Full-screen error state with retry button.
     if (summaryAsync.hasError && !summaryAsync.hasValue) {
-      return ParentScaffold(
+      // Light page with no navy header: the app-wide light status bar
+      // would draw the clock white on near-white.
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.dark
+            .copyWith(statusBarColor: Colors.transparent),
+        child: ParentScaffold(
         backgroundColor: AppColors.background,
         body: Center(
           child: Padding(
@@ -200,6 +214,7 @@ class _ParentDashboardScreenState
             ),
           ),
         ),
+      ),
       );
     }
 

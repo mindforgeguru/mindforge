@@ -52,7 +52,7 @@ Widget parentErrorWidget(Object error, {String? context, VoidCallback? onRetry})
           const SizedBox(height: 16),
           Text(
             isConnection
-                ? 'No internet connection.\nPlease check your network and try again.'
+                ? "Can't reach MindForge right now.\nCheck your internet connection, or try again in a minute."
                 : 'Something went wrong.\nPlease try again.',
             style: const TextStyle(
               fontSize: 15,

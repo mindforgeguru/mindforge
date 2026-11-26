@@ -19,7 +19,7 @@ class ErrorView extends StatelessWidget {
     if (message != null) return message!;
     final s = error.toString().toLowerCase();
     if (s.contains('connection') || s.contains('socket') || s.contains('network')) {
-      return 'No internet connection.\nPlease check your network and try again.';
+      return "Can't reach MindForge right now.\nCheck your internet connection, or try again in a minute.";
     }
     if (s.contains('timeout')) {
       return 'The request timed out.\nPlease try again.';

@@ -884,3 +884,23 @@ The server and database run in UTC while every school is on IST (UTC+5:30), so b
 - **Fixed: the academic-year fallback.** When a school has no current year, its year label now flips on 1 June IST, not 1 June UTC.
 - No other server-side `date.today()` or UTC `.date()` on timestamps remains. The phone app uses the device clock, which is local.
 - Test: `test_late_night_mark_falls_in_the_school_day_window`. Backend: 702 passed. The test row was deleted afterwards.
+
+### 2026-11-26 — large text, and the server going away (iPhone SE)
+
+- **Large text:** the app caps the system text size at 1.1× (`main.dart`). At the cap, the login screen still fits through Sign in on the SE, and the admin header truncates a long school name rather than running it under the avatar.
+  - **Note:** the cap protects layouts but limits low-vision users. That's a product decision, not changed here.
+- **Server down mid-session** (local backend container stopped):
+  - Each screen retries for about 7 s (1 + 2 + 4 s backoff), then shows an error with Try Again.
+  - The session is kept; nobody is logged out.
+  - **Fixed: misleading message.** It said "No internet connection" when the internet was fine and the server was down, which sends a parent to toggle Wi-Fi. It now reads "Can't reach MindForge right now. Check your internet connection, or try again in a minute." This covers both cases, and the carrier-DNS problem too.
+- **Bug fixed: a cold start with the server down replaced the whole student screen with a raw error.** It read "DioException [connection error] … Connection refused"; a release build would show a blank grey screen with no way out.
+  - Cause: the student bottom nav's "new items" badge read `AsyncValue.value`, which in Riverpod 2 rethrows a failed load during build. It now uses `valueOrNull`.
+  - Result: the dashboard shows "Could not load dashboard" with Try Again, and the nav stays usable.
+  - No other `.value` reads on async values remain in `lib/`.
+- **Bug fixed: Try Again and pull-to-refresh brought back only half the dashboard.** The XP card, Class progress and the school logo had failed during the outage and hid themselves; the retry reloaded only the summary, so they stayed missing until the app was restarted.
+  - The new `reloadFailed()` helper also re-fetches any section whose load failed, and leaves healthy ones alone.
+  - It's wired into the student, parent and teacher dashboards. The logo is reloaded through `currentSchoolProvider`, which it derives from.
+  - Verified on the SE: server down → cold start → server back → one Try Again restores everything, logo included.
+- **Fixed: unreadable status bar on the dashboard error page** (light page, white clock). The page now uses dark status-bar icons, for all three roles.
+- **Not exercised live:** parent and teacher cold starts with the server down. Same code paths, and no `.value` reads remain.
+- `flutter test`: 301 passed. The backend is back up (health 200).

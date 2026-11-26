@@ -100,7 +100,10 @@ class StudentBottomNav extends ConsumerWidget {
 
   bool _hasNew(DateTime? lastSeen, List<dynamic> asyncValues) {
     for (final dynamic item in asyncValues) {
-      final list = (item as AsyncValue).value as List?;
+      // valueOrNull, not value: in Riverpod 2 `.value` rethrows a failed
+      // load, so with the server unreachable this badge check threw during
+      // build and the whole student screen became an error page.
+      final list = (item as AsyncValue).valueOrNull as List?;
       if (list == null || list.isEmpty) continue;
       try {
         final latest = list

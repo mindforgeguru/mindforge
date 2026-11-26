@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,6 +17,8 @@ import '../../../core/models/homework.dart';
 import '../../../core/models/timetable.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/reload_failed.dart';
+import '../../../core/providers/school_logo_provider.dart';
 import '../../../core/utils/logout_confirm.dart';
 import '../../../core/providers/badge_provider.dart';
 import '../../../core/widgets/school_title_block.dart';
@@ -158,6 +161,14 @@ class _StudentDashboardScreenState
 
   Future<void> _refreshDashboard() async {
     ref.invalidate(studentDashboardSummaryProvider(_todayString));
+    reloadFailed(ref, [
+      studentXpProvider,
+      studentPresentationsProvider,
+      studentAttendanceProvider,
+      studentGradeProvider,
+      studentHomeworkCompletionsProvider,
+      currentSchoolProvider, // the logo derives from it
+    ]);
     await ref
         .read(studentDashboardSummaryProvider(_todayString).future)
         .catchError((_) => <String, dynamic>{});
@@ -209,7 +220,12 @@ class _StudentDashboardScreenState
     // Full-screen error state — keeps the header rendered but shows a retry
     // button so users aren't silently stuck on a blank dashboard.
     if (summaryAsync.hasError && !summaryAsync.hasValue) {
-      return StudentScaffold(
+      // Light page with no navy header: the app-wide light status bar
+      // would draw the clock white on near-white.
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.dark
+            .copyWith(statusBarColor: Colors.transparent),
+        child: StudentScaffold(
         backgroundColor: AppColors.background,
         body: Center(
           child: Padding(
@@ -246,6 +262,7 @@ class _StudentDashboardScreenState
             ),
           ),
         ),
+      ),
       );
     }
 
